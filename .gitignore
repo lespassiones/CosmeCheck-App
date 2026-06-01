@@ -1,0 +1,37 @@
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+ios/
+android/
+
+# Metro
+.metro-health-check*
+
+# Env (local overrides — .env is committed since it only holds public keys)
+.env
+.env*.local
+
+# Logs / debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS / IDE
+.DS_Store
+*.pem
+.idea/
+.vscode/
+

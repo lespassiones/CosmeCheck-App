@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "Cosme Check",
+    "slug": "cosme-check",
+    "version": "1.0.0",
+    "scheme": "cosmecheck",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FAFAFA"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.cosmecheck.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "CosmeCheck utilise la caméra pour scanner les codes-barres et photographier les listes d'ingrédients.",
+        "NSPhotoLibraryUsageDescription": "CosmeCheck accède à vos photos pour analyser les emballages de produits.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.cosmecheck.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#FAFAFA"
+      },
+      "permissions": ["CAMERA", "VIBRATE"]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "CosmeCheck utilise la caméra pour scanner les codes-barres et photographier les listes d'ingrédients.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "CosmeCheck accède à vos photos pour analyser les emballages de produits.",
+          "cameraPermission": "CosmeCheck utilise la caméra pour photographier les listes d'ingrédients."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

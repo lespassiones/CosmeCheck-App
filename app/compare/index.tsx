@@ -1,0 +1,605 @@
+/**
+ * CompareScreen — comparaison côte à côte de deux analyses.
+ *
+ * Lit `?ids=a,b`, charge les deux lignes `analyses`, et rend :
+ *   - une carte par produit (ExposureBar + counts + ingrédients reconnus)
+ *   - le bloc narratif IA (CompareInsights, soft-fail)
+ *   - « À surveiller » : ingrédients pénalisants groupés par famille
+ *     (fallback v1 : primaryFunction, faute de table familles côté client)
+ *   - « Bon à savoir » : faits concrets dérivés des données (allergènes parfum,
+ *     chevauchement avec la routine)
+ *
+ * Twin mobile de CosmetWiki/app/compare/page.tsx. Jamais de crash : ids
+ * invalides / analyses introuvables → écran d'erreur doux.
+ */
+
+import { Fragment, useCallback, useEffect, useMemo, useState, type FC, type ReactNode } from 'react'
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
+import { router, useLocalSearchParams } from 'expo-router'
+import { SafeAreaView } from 'react-native-safe-area-context'
+
+import { CompareInsights } from '@/components/compare/CompareInsights'
+import { ExposureBar, ExposureCountsRow } from '@/components/compare/ExposureBar'
+import { BackgroundGlow } from '@/components/design/BackgroundGlow'
+import { GlassCard } from '@/components/design/GlassCard'
+import { colors } from '@/constants/colors'
+import { ROUTES } from '@/constants/routes'
+import { radius, spacing } from '@/constants/spacing'
+import { fontFamilies, typography } from '@/constants/typography'
+import { db } from '@/lib/supabase/client'
+import { useAuth } from '@/hooks/useAuth'
+import { parseAnalyseResponse, type AnalyseResponse } from '@/lib/analysis/types'
+import { compareAnalyses, shortenProductName, type CompareSide } from '@/lib/routine/compare'
+
+type Flagged = {
+  name: string
+  fn: string | null
+  color: 'Orange' | 'Rouge'
+}
+
+type FamilyGroup = {
+  label: string
+  color: 'Orange' | 'Rouge'
+  items: Flagged[]
+}
+
+const INCI_PER_GROUP = 4
+
+function flaggedFor(side: CompareSide): Flagged[] {
+  return side.result.items
+    .filter((i) => i.colorRating === 'Orange' || i.colorRating === 'Rouge')
+    .map((i) => ({
+      name: i.name ?? i.input,
+      fn: i.primaryFunction ?? null,
+      color: i.colorRating as 'Orange' | 'Rouge',
+    }))
+}
+
+/**
+ * Groupe les ingrédients pénalisants par fonction principale (fallback v1 :
+ * la table des familles n'est pas chargée côté client). Rouges d'abord, puis
+ * par nombre décroissant.
+ */
+function groupByFunction(items: Flagged[]): FamilyGroup[] {
+  const groups = new Map<string, FamilyGroup>()
+  for (const item of items) {
+    const label = item.fn ?? 'Autres'
+    const existing = groups.get(label) ?? { label, color: 'Orange' as const, items: [] }
+    existing.items.push(item)
+    if (item.color === 'Rouge') existing.color = 'Rouge'
+    groups.set(label, existing)
+  }
+  return Array.from(groups.values()).sort((a, b) => {
+    if (a.color !== b.color) return a.color === 'Rouge' ? -1 : 1
+    return b.items.length - a.items.length
+  })
+}
+
+type LoadState =
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  | {
+      status: 'ready'
+      a: CompareSide
+      b: CompareSide
+      flaggedA: Flagged[]
+      flaggedB: Flagged[]
+      bonASavoir: string[]
+      sameComposition: boolean
+    }
+
+type AnalysisLite = {
+  id: string
+  name: string | null
+  product_label: string | null
+  score: number | null
+  result_json: unknown
+}
+
+const CompareScreen: FC = () => {
+  const params = useLocalSearchParams<{ ids?: string }>()
+  const { user } = useAuth()
+  const [state, setState] = useState<LoadState>({ status: 'loading' })
+
+  const ids = useMemo(
+    () =>
+      (params.ids ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    [params.ids],
+  )
+
+  const load = useCallback(async () => {
+    setState({ status: 'loading' })
+
+    if (ids.length !== 2) {
+      setState({ status: 'error', message: 'Sélectionne exactement deux analyses à comparer.' })
+      return
+    }
+
+    try {
+      const { data, error } = await db()
+        .from('analyses')
+        .select('id, name, product_label, score, result_json')
+        .in('id', ids)
+      if (error) throw error
+
+      const rows = (data ?? []) as AnalysisLite[]
+      if (rows.length !== 2) {
+        setState({ status: 'error', message: 'Une des analyses est introuvable.' })
+        return
+      }
+
+      // Préserve l'ordre de l'URL (A/B comme choisi par l'utilisateur).
+      const ordered = ids
+        .map((id) => rows.find((r) => r.id === id))
+        .filter((r): r is AnalysisLite => Boolean(r))
+
+      const sides = ordered.map((r): CompareSide | null => {
+        const result = parseAnalyseResponse(r.result_json)
+        if (!result) return null
+        return {
+          id: r.id,
+          name: r.product_label?.trim() || r.name?.trim() || 'Analyse',
+          score: r.score,
+          result,
+        }
+      })
+
+      if (sides.length !== 2 || !sides[0] || !sides[1]) {
+        setState({ status: 'error', message: 'Le résultat de ces analyses est illisible.' })
+        return
+      }
+
+      const [a, b] = sides as [CompareSide, CompareSide]
+
+      // Contexte routine pour l'insight « bon à savoir » uniquement.
+      const routineSlugs = new Set<string>()
+      try {
+        const { data: routine } = await db()
+          .from('routine_items')
+          .select('analyses(id, result_json)')
+          .limit(30)
+        for (const it of (routine ?? []) as unknown as {
+          analyses: { id: string; result_json: unknown } | null
+        }[]) {
+          if (!it.analyses) continue
+          if (it.analyses.id === a.id || it.analyses.id === b.id) continue
+          const parsed = parseAnalyseResponse(it.analyses.result_json)
+          if (!parsed) continue
+          for (const ing of parsed.items) {
+            if (ing.slug) routineSlugs.add(ing.slug)
+          }
+        }
+      } catch {
+        // routine optionnelle — on continue sans.
+      }
+
+      const diff = compareAnalyses(a, b, { routineIngredientSlugs: routineSlugs })
+
+      // « Bon à savoir » — faits concrets, non-jugeants.
+      const bonASavoir: string[] = []
+      const slugs = Array.from(routineSlugs)
+      const aOverlap = slugs.filter((s) => a.result.items.some((i) => i.slug === s)).length
+      const bOverlap = slugs.filter((s) => b.result.items.some((i) => i.slug === s)).length
+      if (aOverlap >= 3) {
+        bonASavoir.push(
+          `${aOverlap} ingrédients de **${a.name}** se retrouvent déjà dans d'autres produits de ta routine - exposition cumulée à surveiller.`,
+        )
+      }
+      if (bOverlap >= 3) {
+        bonASavoir.push(
+          `${bOverlap} ingrédients de **${b.name}** se retrouvent déjà dans d'autres produits de ta routine - exposition cumulée à surveiller.`,
+        )
+      }
+      const allergensA = a.result.euFragranceAllergens?.total ?? 0
+      const allergensB = b.result.euFragranceAllergens?.total ?? 0
+      if (allergensA > 0 && allergensB === 0) {
+        bonASavoir.push(
+          `**${a.name}** contient ${allergensA} allergène${allergensA > 1 ? 's' : ''} de parfum déclaré${allergensA > 1 ? 's' : ''} (UE) - à éviter en cas de peau réactive.`,
+        )
+      } else if (allergensB > 0 && allergensA === 0) {
+        bonASavoir.push(
+          `**${b.name}** contient ${allergensB} allergène${allergensB > 1 ? 's' : ''} de parfum déclaré${allergensB > 1 ? 's' : ''} (UE) - à éviter en cas de peau réactive.`,
+        )
+      }
+
+      setState({
+        status: 'ready',
+        a,
+        b,
+        flaggedA: flaggedFor(a),
+        flaggedB: flaggedFor(b),
+        bonASavoir,
+        sameComposition: diff.uniqueToA.length + diff.uniqueToB.length === 0,
+      })
+    } catch (e) {
+      setState({
+        status: 'error',
+        message: e instanceof Error ? e.message : 'Impossible de charger la comparaison.',
+      })
+    }
+  }, [ids])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <BackgroundGlow variant="default" />
+
+      <View style={styles.topBar}>
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={12}
+          style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Retour"
+        >
+          <Ionicons name="chevron-back" size={22} color={colors.ink} />
+        </Pressable>
+        <Text style={styles.topTitle} numberOfLines={1}>
+          Comparer
+        </Text>
+        <View style={styles.backBtn} />
+      </View>
+
+      {state.status === 'loading' && (
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.accent} />
+        </View>
+      )}
+
+      {state.status === 'error' && (
+        <View style={styles.center}>
+          <GlassCard style={styles.errorCard} padding={spacing['2xl']}>
+            <Ionicons name="git-compare-outline" size={36} color={colors.inkLight} />
+            <Text style={styles.errorTitle}>Comparaison indisponible</Text>
+            <Text style={styles.errorMsg}>{state.message}</Text>
+            <Pressable
+              onPress={() => router.replace(ROUTES.TABS.HISTORY)}
+              style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
+              accessibilityRole="button"
+            >
+              <Text style={styles.ctaText}>Mon historique</Text>
+            </Pressable>
+          </GlassCard>
+        </View>
+      )}
+
+      {state.status === 'ready' && (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.h1}>Comparer 2 produits</Text>
+
+          {/* Hero — barres d'exposition empilées (une carte par produit). */}
+          <View style={styles.heroStack}>
+            {[state.a, state.b].map((side) => (
+              <GlassCard key={side.id} style={styles.heroCard} padding={spacing.base}>
+                <Text style={styles.heroName} numberOfLines={2}>
+                  {side.name}
+                </Text>
+                <View style={styles.heroBar}>
+                  <ExposureBar
+                    counts={{
+                      vert: side.result.counts.vert,
+                      jaune: side.result.counts.jaune,
+                      orange: side.result.counts.orange,
+                      rouge: side.result.counts.rouge,
+                    }}
+                  />
+                </View>
+                <View style={styles.heroFooter}>
+                  <Text style={styles.heroMatched}>
+                    {side.result.counts.matched} ingrédients reconnus
+                  </Text>
+                </View>
+                <ExposureCountsRow
+                  counts={{
+                    vert: side.result.counts.vert,
+                    jaune: side.result.counts.jaune,
+                    orange: side.result.counts.orange,
+                    rouge: side.result.counts.rouge,
+                  }}
+                />
+              </GlassCard>
+            ))}
+          </View>
+
+          {/* Portraits + commun + comment choisir (IA, soft-fail). */}
+          <CompareInsights
+            aId={state.a.id}
+            bId={state.b.id}
+            nameA={state.a.name}
+            nameB={state.b.name}
+            shortNameA={shortenProductName(state.a.name)}
+            shortNameB={shortenProductName(state.b.name)}
+          />
+
+          {/* À surveiller — une carte par produit, groupé par fonction. */}
+          {(state.flaggedA.length > 0 || state.flaggedB.length > 0) && (
+            <View style={styles.attentionStack}>
+              {state.flaggedA.length > 0 && (
+                <AttentionCard name={state.a.name} groups={groupByFunction(state.flaggedA)} />
+              )}
+              {state.flaggedB.length > 0 && (
+                <AttentionCard name={state.b.name} groups={groupByFunction(state.flaggedB)} />
+              )}
+            </View>
+          )}
+
+          {/* Bon à savoir */}
+          {state.bonASavoir.length > 0 && (
+            <GlassCard style={styles.block} padding={spacing.lg}>
+              <Text style={styles.blockLabel}>BON À SAVOIR</Text>
+              <View style={styles.bonList}>
+                {state.bonASavoir.map((t, i) => (
+                  <View key={i} style={styles.bonRow}>
+                    <View style={styles.bonDot} />
+                    <Text style={styles.bonText}>{renderBold(t)}</Text>
+                  </View>
+                ))}
+              </View>
+            </GlassCard>
+          )}
+
+          {state.sameComposition && (
+            <Text style={styles.sameComp}>
+              Les deux compositions ne diffèrent pas sur les ingrédients pénalisants.
+            </Text>
+          )}
+        </ScrollView>
+      )}
+    </SafeAreaView>
+  )
+}
+
+export default CompareScreen
+
+// ─── Cartes / helpers de rendu ───────────────────────────────────────────────
+
+const AttentionCard: FC<{ name: string; groups: FamilyGroup[] }> = ({ name, groups }) => (
+  <GlassCard style={styles.attentionCard} padding={spacing.base} opacity={0.82}>
+    <View style={styles.attentionHeader}>
+      <Ionicons name="warning-outline" size={18} color={colors.rose} style={styles.attentionIcon} />
+      <View style={styles.attentionHeaderText}>
+        <Text style={styles.attentionKicker}>À SURVEILLER</Text>
+        <Text style={styles.attentionName} numberOfLines={1}>
+          {name}
+        </Text>
+      </View>
+    </View>
+    <View style={styles.attentionList}>
+      {groups.map((g) => {
+        const visible = g.items.slice(0, INCI_PER_GROUP)
+        const extra = g.items.length - visible.length
+        return (
+          <Text key={g.label} style={styles.attentionLine}>
+            <Text style={{ color: g.color === 'Rouge' ? colors.rose : colors.rating.orange.DEFAULT }}>
+              {'● '}
+            </Text>
+            <Text style={styles.attentionGroup}>{g.label}</Text>
+            <Text style={styles.attentionDim}> ({g.items.length})</Text>
+            <Text style={styles.attentionDim}> : </Text>
+            <Text style={styles.attentionItems}>
+              {visible.map((i) => i.name).join(', ')}
+              {extra > 0 ? `, +${extra}` : ''}
+            </Text>
+          </Text>
+        )
+      })}
+    </View>
+  </GlassCard>
+)
+
+function renderBold(text: string): ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g)
+  return parts.map((p, i) =>
+    p.startsWith('**') && p.endsWith('**') ? (
+      <Text key={i} style={styles.bonBold}>
+        {p.slice(2, -2)}
+      </Text>
+    ) : (
+      <Fragment key={i}>{p}</Fragment>
+    ),
+  )
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topTitle: {
+    ...typography.h4,
+    color: colors.ink,
+  },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  errorCard: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  errorTitle: {
+    ...typography.h4,
+    color: colors.ink,
+    textAlign: 'center',
+    marginTop: spacing.base,
+    marginBottom: spacing.sm,
+  },
+  errorMsg: {
+    ...typography.body,
+    color: colors.inkMuted,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+  },
+  cta: {
+    backgroundColor: colors.ink,
+    borderRadius: radius.full,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+  },
+  ctaPressed: {
+    opacity: 0.85,
+  },
+  ctaText: {
+    ...typography.button,
+    color: colors.surface,
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing['3xl'],
+  },
+  h1: {
+    ...typography.h2,
+    color: colors.ink,
+    marginBottom: spacing.lg,
+  },
+  heroStack: {
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  heroCard: {},
+  heroName: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 15,
+    color: colors.ink,
+    marginBottom: spacing.md,
+  },
+  heroBar: {
+    marginBottom: spacing.md,
+  },
+  heroFooter: {
+    marginBottom: spacing.sm,
+  },
+  heroMatched: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 12,
+    color: colors.inkMuted,
+  },
+  attentionStack: {
+    gap: spacing.md,
+    marginBottom: spacing.base,
+  },
+  attentionCard: {},
+  attentionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  attentionIcon: {
+    marginTop: 1,
+  },
+  attentionHeaderText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  attentionKicker: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 10,
+    letterSpacing: 0.8,
+    color: colors.roseDeep,
+  },
+  attentionName: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 14,
+    color: '#7F1D1D',
+  },
+  attentionList: {
+    gap: 6,
+  },
+  attentionLine: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  attentionGroup: {
+    fontFamily: fontFamilies.semiBold,
+    color: '#7F1D1D',
+  },
+  attentionDim: {
+    color: colors.roseDeep,
+  },
+  attentionItems: {
+    color: '#9F1239',
+  },
+  block: {
+    marginBottom: spacing.base,
+  },
+  blockLabel: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 12,
+    letterSpacing: 0.5,
+    color: colors.inkMuted,
+    marginBottom: spacing.sm,
+  },
+  bonList: {
+    gap: spacing.sm,
+  },
+  bonRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  bonDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.info,
+    marginTop: 7,
+  },
+  bonText: {
+    flex: 1,
+    fontFamily: fontFamilies.regular,
+    fontSize: 14,
+    lineHeight: 22,
+    color: colors.ink,
+  },
+  bonBold: {
+    fontFamily: fontFamilies.semiBold,
+    color: colors.ink,
+  },
+  sameComp: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 12,
+    color: colors.inkMuted,
+    textAlign: 'center',
+    marginTop: spacing.base,
+  },
+})

@@ -1,0 +1,6 @@
+# Supabase Edge Functions (Deno)
+# Deno does not use node_modules, but keep local caches / env out of git.
+.env
+.env.local
+*.local
+.deno/
