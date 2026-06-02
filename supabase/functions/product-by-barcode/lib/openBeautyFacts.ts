@@ -129,6 +129,7 @@ export type OFFProduct = {
   brand: string | null;
   inci: string;
   sourceUrl: string;
+  imageUrl: string | null;
 };
 
 type OBFV2Response = {
@@ -142,6 +143,10 @@ type OBFV2Response = {
     ingredients_text?: string;
     ingredients_text_fr?: string;
     ingredients_text_en?: string;
+    image_front_small_url?: string;
+    image_front_url?: string;
+    image_small_url?: string;
+    image_url?: string;
   };
 };
 
@@ -162,11 +167,14 @@ export async function fetchOFFProduct(
     const p = data.product;
     const name = p.product_name_fr || p.product_name || p.product_name_en || null;
     const inci = p.ingredients_text_fr || p.ingredients_text || p.ingredients_text_en || "";
+    const imageUrl =
+      p.image_front_small_url || p.image_small_url || p.image_front_url || p.image_url || null;
     return {
       name,
       brand: p.brands ?? null,
       inci,
       sourceUrl: `https://${domain}/product/${barcode}`,
+      imageUrl,
     };
   } catch {
     return null;

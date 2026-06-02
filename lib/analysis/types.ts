@@ -58,12 +58,23 @@ export interface AnalyseItem {
 
 export type ObservationStatus = 'present' | 'absent' | 'info' | 'warn'
 
+/**
+ * Élément d'une observation. L'Edge Function `analyser` renvoie des objets
+ * `{ name, slug, colorRating }` ; on tolère aussi une simple chaîne (données
+ * historiques / défensif).
+ */
+export interface ObservationItem {
+  name: string
+  slug?: string | null
+  colorRating?: string | null
+}
+
 export interface Observation {
   tag: string
   label: string
   status: ObservationStatus
   count: number
-  items?: string[]
+  items?: (string | ObservationItem)[]
   message?: string
 }
 

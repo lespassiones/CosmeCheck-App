@@ -11,7 +11,7 @@
  *   4. AuthGuard : redirige selon session + onboarding/profil (voir docs/NAVIGATION.md).
  */
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { QueryClient } from '@tanstack/react-query'
@@ -42,6 +42,7 @@ import {
 } from '@/lib/storage/queryPersist'
 import { clearExpiredCache } from '@/lib/storage/session'
 import { clearExpiredAiCache } from '@/lib/storage/aiCache'
+import { getPreOnboardingCache, isPreOnboardingDone } from '@/lib/storage/preOnboarding'
 
 // Garde le splash natif visible jusqu'à ce qu'on soit prêts à afficher l'app.
 void SplashScreen.preventAutoHideAsync()
@@ -83,6 +84,19 @@ function AuthGuard() {
   const segments = useSegments()
   const router = useRouter()
 
+  // Flag device-level du pré-onboarding (carrousel 1er lancement). `null` = en
+  // cours de lecture. Relu à chaque bascule d'auth (ex. déconnexion).
+  const [preOnbDone, setPreOnbDone] = useState<boolean | null>(getPreOnboardingCache())
+  useEffect(() => {
+    let mounted = true
+    void isPreOnboardingDone().then((v) => {
+      if (mounted) setPreOnbDone(v)
+    })
+    return () => {
+      mounted = false
+    }
+  }, [isAuthenticated])
+
   useEffect(() => {
     // 1. Auth pas encore résolue : ne rien faire, le splash reste visible.
     if (authLoading) return
@@ -90,10 +104,16 @@ function AuthGuard() {
     const group = segments[0]
     const inAuthGroup = group === '(auth)'
     const inOnboarding = group === '(onboarding)'
+    const inPreOnboarding = group === '(preonboarding)'
 
-    // 2. Pas de session : tout le monde vers l'écran de connexion.
+    // 2. Pas de session.
     if (!isAuthenticated) {
-      if (!inAuthGroup) router.replace(ROUTES.AUTH.SIGN_IN)
+      // On laisse l'auth et le pré-onboarding s'afficher librement (évite toute
+      // boucle de redirection au moment où le carrousel marque le flag + route).
+      if (inAuthGroup || inPreOnboarding) return
+      // Sinon : 1er lancement → carrousel ; déjà vu → écran de connexion.
+      if (preOnbDone === null) return // flag encore en lecture
+      router.replace(preOnbDone ? ROUTES.AUTH.SIGN_IN : ROUTES.PREONBOARDING.INDEX)
       return
     }
 
@@ -103,8 +123,8 @@ function AuthGuard() {
 
     const needsOnboarding = !onboardingShown && !isProfileComplete
 
-    // 3. Sur une page auth alors qu'on est connecté → destination logique.
-    if (inAuthGroup) {
+    // 3. Sur une page auth/pré-onboarding alors qu'on est connecté → destination.
+    if (inAuthGroup || inPreOnboarding) {
       router.replace(needsOnboarding ? ROUTES.ONBOARDING.INDEX : ROUTES.TABS.HOME)
       return
     }
@@ -128,6 +148,7 @@ function AuthGuard() {
     profileLoading,
     onboardingShown,
     isProfileComplete,
+    preOnbDone,
     segments,
     router,
   ])
@@ -170,6 +191,7 @@ function RootNavigator() {
         animation: 'slide_from_right',
       }}
     >
+      <Stack.Screen name="(preonboarding)" options={{ animation: 'fade' }} />
       <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
       <Stack.Screen name="(onboarding)" />
       <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />

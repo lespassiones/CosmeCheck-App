@@ -92,7 +92,7 @@ export const Step2Concerns: FC<Props> = ({ value, onChange }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Ce qui te préoccupe</Text>
           <Text style={styles.sectionHint}>
-            Sélectionne tout ce qui te concerne — peau et cheveux.
+            Sélectionne tout ce qui te concerne : peau et cheveux.
           </Text>
           <View style={styles.chips}>
             {SKIN_CONCERNS.map((key) => (
@@ -119,7 +119,7 @@ export const Step2Concerns: FC<Props> = ({ value, onChange }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Allergies connues</Text>
           <Text style={styles.sectionHint}>
-            Indique les ingrédients à éviter — ça affine tes analyses.
+            Indique les ingrédients à éviter : ça affine tes analyses.
           </Text>
           <TextInput
             style={styles.textarea}

@@ -88,6 +88,7 @@ export async function upsertCatalogProduct(params: {
   scoreLabel?: string | null;
   scoreTone?: string | null;
   countTotal?: number | null;
+  imageUrl?: string | null;
 }): Promise<void> {
   try {
     const { error } = await serviceClient().rpc("cosme_check_upsert_catalog_product", {
@@ -101,6 +102,7 @@ export async function upsertCatalogProduct(params: {
       p_score_label: params.scoreLabel ?? null,
       p_score_tone: params.scoreTone ?? null,
       p_count_total: params.countTotal ?? null,
+      p_image_url: params.imageUrl ?? null,
     });
     if (error) console.warn("[catalog] upsert error:", error.message);
   } catch (err) {

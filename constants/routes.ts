@@ -12,6 +12,11 @@ export const ROUTES = {
     RESET_PASSWORD: '/(auth)/reset-password',
   },
 
+  // ── Pré-onboarding (carrousel 1er lancement, device-level) ──────
+  PREONBOARDING: {
+    INDEX: '/(preonboarding)',
+  },
+
   // ── Onboarding ──────────────────────────────────────────────────
   ONBOARDING: {
     INDEX: '/(onboarding)',

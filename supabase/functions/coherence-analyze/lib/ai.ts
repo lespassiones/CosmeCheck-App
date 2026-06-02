@@ -154,7 +154,66 @@ Si une phrase ne contient aucun de (a), (b), (c) → pas une promesse, passe.
 
 5. EXCERPT : verbatim exact (ou fragment fidèle), max 80 caractères.
 
-6. La description peut être en français ou en anglais.`;
+6. La description peut être en français ou en anglais.
+
+═══ EXEMPLE 1 (cheveux, claim pertinent) ═══
+
+Type : Cheveux
+Description : "Cette gelée hydrate les cheveux, fixe les boucles et limite les frisottis. Sans sulfate ni silicone, formulée à 96 % naturel, odeur de vanille."
+
+Sortie :
+- promises:
+  · {category_slug: "hydratation", label: "Hydratation", excerpt: "hydrate les cheveux"}
+  · {category_slug: "autre", label: "Fixation des boucles", excerpt: "fixe les boucles"}
+  · {category_slug: "anti_frisottis", label: "Anti-frisottis", excerpt: "limite les frisottis"}
+  · {category_slug: "absence_sulfate", label: "Sans sulfate", excerpt: "sans sulfate"}
+  · {category_slug: "absence_silicone", label: "Sans silicone", excerpt: "ni silicone"}
+- unverifiable:
+  · {excerpt: "formulée à 96 % naturel", reason: "composition"}
+  · {excerpt: "odeur de vanille", reason: "sensoriel"}
+- out_of_scope: []
+
+═══ EXEMPLE 2 (cheveux, claim hors-sujet biologique) ═══
+
+Type : Cheveux
+Description : "L'Huile Essentielle de Géranium Rosat contribue à la production de collagène dans le cheveu. Elle régénère les cellules pour maintenir la beauté de la chevelure. Sans paraben."
+
+Sortie :
+- promises:
+  · {category_slug: "absence_paraben", label: "Sans paraben", excerpt: "Sans paraben"}
+- unverifiable: []
+- out_of_scope:
+  · {excerpt: "production de collagène dans le cheveu", claimed_effect: "anti-âge cellulaire", reason: "Le cheveu mort ne contient pas de cellules vivantes ni de collagène - la production de collagène n'a pas de support biologique sur un produit capillaire."}
+  · {excerpt: "régénère les cellules", claimed_effect: "régénération cellulaire", reason: "Les cellules du cheveu kératinisé ne se régénèrent pas - promesse biologiquement non applicable à un produit capillaire."}
+
+═══ EXEMPLE 3 (parfum, dédup) ═══
+
+Type : Parfum
+Description : "Un parfum qui tient toute la journée. Sa tenue de 12 h est impressionnante. Sillage longue durée."
+
+Sortie :
+- promises:
+  · {category_slug: "autre", label: "Tenue longue durée", excerpt: "tient toute la journée"}  ← une seule entrée, on FUSIONNE "tient" + "tenue de 12 h" + "longue durée"
+- unverifiable: []
+- out_of_scope: []
+
+═══ EXEMPLE 4 (peau du corps, plusieurs "autre" distincts - excerpts VERBATIM) ═══
+
+Type : Peau du corps
+Description : "Crème pour les mains au parfum d'agrumes et de fleur d'oranger. Sa formule riche nourrit les mains et les rend douces. Pour des mains belles et soignées au quotidien. Confort longue durée après application. Cosmos Natural."
+
+Sortie :
+- promises:
+  · {category_slug: "hydratation", label: "Hydratation", excerpt: "nourrit les mains"}  ← "nourrit" implique apport hydratant/lipidique
+  · {category_slug: "autre", label: "Douceur de la peau", excerpt: "les rend douces"}  ← effet "douceur" - non listé dans les 12 catégories, va en "autre" avec label propre. NOTE : l'excerpt est verbatim ("les rend douces" est dans le texte).
+  · {category_slug: "autre", label: "Beauté de la peau", excerpt: "mains belles et soignées"}  ← effet "beauté" - encore "autre" avec un label différent. Excerpt verbatim.
+  · {category_slug: "autre", label: "Confort cutané", excerpt: "Confort longue durée après application"}  ← 3e "autre", label distinct
+- unverifiable:
+  · {excerpt: "parfum d'agrumes et de fleur d'oranger", reason: "sensoriel"}  ← odeur du produit, pas un effet sur la peau
+  · {excerpt: "Cosmos Natural", reason: "certification"}
+- out_of_scope: []
+
+(Note : 3 entrées "autre" coexistent avec 3 labels différents. Chaque effet biologique distinct mérite sa propre ligne. TOUS les excerpts sont des fragments VERBATIM de la description, jamais reformulés.)`;
 
   const user = `Description du produit (type: ${typeLabel}) à analyser :
 """

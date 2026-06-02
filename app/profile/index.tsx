@@ -20,6 +20,7 @@ import { spacing, radius } from '@/constants/spacing'
 import { fontFamilies, typography } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import type { SkinProfile } from '@/lib/skin/profile'
+import { resetPreOnboarding } from '@/lib/storage/preOnboarding'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
@@ -99,6 +100,13 @@ const ProfileScreen: FC = () => {
     setConfirmSignOut(false)
     await signOut()
     // Le guard racine redirige vers l'authentification.
+  }, [signOut])
+
+  // DEV uniquement : réinitialise le flag du pré-onboarding puis déconnecte, pour
+  // pouvoir revoir le carrousel de présentation (sinon invisible après 1er lancement).
+  const handleReplayPreOnboarding = useCallback(async () => {
+    await resetPreOnboarding()
+    await signOut()
   }, [signOut])
 
   // Suppression de compte : pas de RPC de suppression côté backend pour le
@@ -228,6 +236,17 @@ const ProfileScreen: FC = () => {
                 <Text style={styles.signOutText}>Se déconnecter</Text>
               </Pressable>
 
+              {__DEV__ && (
+                <Pressable
+                  style={styles.devBtn}
+                  onPress={() => void handleReplayPreOnboarding()}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="refresh-outline" size={15} color={colors.inkMuted} />
+                  <Text style={styles.devText}>Revoir l'onboarding (dev)</Text>
+                </Pressable>
+              )}
+
               <Pressable
                 style={styles.deleteBtn}
                 onPress={() => setConfirmDelete(true)}
@@ -337,6 +356,14 @@ const styles = StyleSheet.create({
   },
   signOutBtn: { alignItems: 'center', paddingVertical: spacing.base, marginTop: spacing.sm },
   signOutText: { ...typography.button, color: colors.error },
+  devBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+  },
+  devText: { ...typography.small, color: colors.inkMuted },
   deleteBtn: { alignItems: 'center', paddingVertical: spacing.sm },
   deleteText: { ...typography.small, color: colors.inkLight, textDecorationLine: 'underline' },
 })

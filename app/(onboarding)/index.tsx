@@ -46,8 +46,7 @@ const OnboardingScreen: FC = () => {
                 Bienvenue {firstName ? `${firstName} ` : ''}✨
               </Text>
               <Text style={styles.subtitle}>
-                Trois petites étapes pour personnaliser tes analyses et tes
-                conseils. Tu pourras tout modifier plus tard depuis ton profil.
+                Trois étapes rapides pour personnaliser tes analyses.
               </Text>
             </View>
 

@@ -49,6 +49,18 @@ function prettyName(s: string): string {
   return s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
+/**
+ * Les items d'observation peuvent être des objets `{ name, slug }` (forme
+ * renvoyée par l'Edge Function `analyser`) ou de simples chaînes (legacy).
+ * On normalise en { name, slug } pour un rendu uniforme.
+ */
+function normObsItem(
+  raw: string | { name?: string; slug?: string | null } | null | undefined,
+): { name: string; slug: string | null } {
+  if (typeof raw === 'string') return { name: raw, slug: null }
+  return { name: raw?.name ?? '', slug: raw?.slug ?? null }
+}
+
 const ObservationsCardBase: FC<Props> = ({ observations, slugByName, onIngredientPress }) => {
   const [expanded, setExpanded] = useState(false)
   const [openTags, setOpenTags] = useState<Set<string>>(new Set())
@@ -113,8 +125,12 @@ const ObservationsCardBase: FC<Props> = ({ observations, slugByName, onIngredien
 
               {expandable && isOpen ? (
                 <View style={styles.subList}>
-                  {items.map((name, idx) => {
-                    const slug = slugByName?.get(name.toLowerCase())
+                  {items.map((raw, idx) => {
+                    const { name, slug: ownSlug } = normObsItem(raw)
+                    if (!name) return null
+                    // Le slug de l'item prime (déjà résolu côté serveur),
+                    // sinon repli sur la map nom → slug.
+                    const slug = ownSlug ?? slugByName?.get(name.toLowerCase())
                     return (
                       <Pressable
                         key={idx}

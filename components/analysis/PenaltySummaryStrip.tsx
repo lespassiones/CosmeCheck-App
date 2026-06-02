@@ -37,6 +37,7 @@ const PenaltySummaryStripBase: FC<Props> = ({ counts }) => {
     icon: IoniconName
     iconColor: string
     iconBg: string
+    valueColor: string
     value: string
     label: string
   }[] = [
@@ -45,6 +46,7 @@ const PenaltySummaryStripBase: FC<Props> = ({ counts }) => {
       icon: 'shield-checkmark',
       iconColor: colors.rating.vert.text,
       iconBg: colors.rating.vert.bg,
+      valueColor: colors.rating.vert.text,
       value: `${pctSafe} %`,
       label: 'sans pénalité',
     },
@@ -53,6 +55,7 @@ const PenaltySummaryStripBase: FC<Props> = ({ counts }) => {
       icon: 'warning',
       iconColor: colors.rating.jaune.text,
       iconBg: colors.rating.jaune.bg,
+      valueColor: colors.rating.orange.text,
       value: `${pctPenalised} %`,
       label: 'avec pénalité',
     },
@@ -61,6 +64,7 @@ const PenaltySummaryStripBase: FC<Props> = ({ counts }) => {
       icon: 'close-circle',
       iconColor: colors.rating.rouge.text,
       iconBg: colors.rating.rouge.bg,
+      valueColor: colors.rating.rouge.text,
       value: `${atRisk}`,
       label: 'à risque fort',
     },
@@ -75,7 +79,7 @@ const PenaltySummaryStripBase: FC<Props> = ({ counts }) => {
               <Ionicons name={s.icon} size={16} color={s.iconColor} />
             </View>
             <View style={styles.statBody}>
-              <Text style={styles.value}>{s.value}</Text>
+              <Text style={[styles.value, { color: s.valueColor }]}>{s.value}</Text>
               <Text style={styles.label} numberOfLines={1}>
                 {s.label}
               </Text>
@@ -118,9 +122,9 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
   label: {
-    fontFamily: fontFamilies.regular,
+    fontFamily: fontFamilies.bold,
     fontSize: 10,
-    color: colors.inkLight,
+    color: colors.ink,
     marginTop: 2,
   },
 })

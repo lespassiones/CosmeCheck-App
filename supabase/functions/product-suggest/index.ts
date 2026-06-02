@@ -23,7 +23,7 @@ import { collectDuckDuckGoCandidates } from "./lib/duckduckgo.ts";
 import { collectOpenAIWebCandidates } from "./lib/openaiSearch.ts";
 import { prevalidateCandidates } from "./lib/prevalidate.ts";
 import { normalizeProductQuery } from "./lib/productNormalize.ts";
-import { fetchCatalogCandidates } from "./lib/catalog.ts";
+import { fetchCatalogCandidates, upsertCatalogProduct } from "./lib/catalog.ts";
 import { fetchCachedCandidates } from "./lib/cache.ts";
 import type { ProductCandidate } from "./lib/types.ts";
 
@@ -137,6 +137,24 @@ Deno.serve(async (req: Request) => {
       if (seen.has(key)) continue;
       seen.add(key);
       merged.push(c);
+    }
+  }
+
+  // Enrichissement catalogue (fire-and-forget) : persiste les produits trouvés
+  // HORS base qui ont un EAN + une image + un INCI exploitable, pour que la
+  // prochaine recherche du même produit sorte directement de notre catalogue
+  // (avec son image). Idempotent : upsert keyé par EAN. On stocke l'URL de
+  // l'image (OBF/ODbL), jamais le binaire.
+  for (const c of merged) {
+    if (c.source !== "catalog" && c.ean && c.imageUrl && c.ingredientsText) {
+      void upsertCatalogProduct({
+        ean: c.ean,
+        brand: c.brand,
+        name: c.productName,
+        ingredientsText: c.ingredientsText,
+        sourceUrl: c.sourceUrl,
+        imageUrl: c.imageUrl,
+      });
     }
   }
 

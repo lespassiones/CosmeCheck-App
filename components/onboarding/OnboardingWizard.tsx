@@ -199,7 +199,6 @@ export const OnboardingWizard: FC = () => {
             disabled={finishing}
             style={({ pressed }) => [
               styles.btnPrimary,
-              styles.btnFinish,
               pressed && styles.btnPrimaryPressed,
               finishing && { opacity: 0.7 },
             ]}
@@ -207,7 +206,7 @@ export const OnboardingWizard: FC = () => {
             {finishing ? (
               <ActivityIndicator color={colors.surface} />
             ) : (
-              <Text style={styles.btnPrimaryText}>Entrer dans Cosme Check</Text>
+              <Text style={styles.btnPrimaryText}>C&apos;est parti !</Text>
             )}
           </Pressable>
         )}
@@ -299,9 +298,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 4,
-  },
-  btnFinish: {
-    flex: 1,
   },
   btnPrimaryPressed: {
     backgroundColor: colors.roseDeep,

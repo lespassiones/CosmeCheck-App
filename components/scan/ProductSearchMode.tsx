@@ -21,8 +21,8 @@
 import { type FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -30,6 +30,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 
@@ -109,6 +110,25 @@ function iconFor(category: string): IoniconName {
   return CATEGORY_ICON[category] ?? DEFAULT_ICON
 }
 
+// ─── Pastille catégorie : couleur stable dérivée du libellé ─────────────────
+
+const PILL_PALETTE: { bg: string; text: string }[] = [
+  { bg: colors.rating.vert.bg, text: colors.rating.vert.text },
+  { bg: colors.rating.orange.bg, text: colors.rating.orange.text },
+  { bg: colors.accentSoft, text: colors.accent },
+  { bg: colors.roseSoft, text: colors.roseDeep },
+  { bg: colors.rating.jaune.bg, text: colors.rating.jaune.text },
+]
+
+/** Même libellé → même couleur (hash déterministe, pas de Math.random). */
+function pillColors(label: string): { bg: string; text: string } {
+  let hash = 0
+  for (let i = 0; i < label.length; i++) {
+    hash = (hash * 31 + label.charCodeAt(i)) >>> 0
+  }
+  return PILL_PALETTE[hash % PILL_PALETTE.length]
+}
+
 // ─── Props ──────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -133,6 +153,7 @@ export const ProductSearchMode: FC<Props> = ({
   disabled = false,
 }) => {
   const [query, setQuery] = useState('')
+  const [searchFocused, setSearchFocused] = useState(false)
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [searchResults, setSearchResults] = useState<CatalogRow[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
@@ -477,12 +498,18 @@ export const ProductSearchMode: FC<Props> = ({
   // ── Vue : barre de recherche (toujours visible en haut) ───────────────
 
   const searchBar = (
-    <View style={styles.searchBar}>
-      <Ionicons name="search" size={18} color={colors.inkMuted} />
+    <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
+      <Ionicons
+        name="search"
+        size={18}
+        color={searchFocused ? colors.accent : colors.inkMuted}
+      />
       <TextInput
         style={styles.searchInput}
         value={query}
         onChangeText={setQuery}
+        onFocus={() => setSearchFocused(true)}
+        onBlur={() => setSearchFocused(false)}
         placeholder="Rechercher un produit…"
         placeholderTextColor={colors.inkLight}
         selectionColor={colors.textSelection}
@@ -533,6 +560,7 @@ export const ProductSearchMode: FC<Props> = ({
           {searchResults.length > 0 && (
             <View style={styles.sectionGroup}>
               <Text style={styles.sectionKicker}>DANS NOTRE BASE</Text>
+              <Text style={styles.sectionSubtitle}>Les plus pertinents</Text>
               {searchResults.map((item, i) => {
                 const busy =
                   resolvingEan != null &&
@@ -541,6 +569,7 @@ export const ProductSearchMode: FC<Props> = ({
                   <ProductRow
                     key={item.ean ?? `${item.name ?? 'row'}-${i}`}
                     item={item}
+                    rank={i + 1}
                     busy={busy}
                     disabled={disabled || resolvingEan != null}
                     onPress={() => void pickCatalog(item)}
@@ -553,30 +582,33 @@ export const ProductSearchMode: FC<Props> = ({
           {/* Section "Trouvé sur internet" */}
           {showWebSection && (
             <View style={styles.sectionGroup}>
-              <View style={styles.sectionKickerRow}>
-                <Ionicons name="globe-outline" size={12} color={colors.accent} />
-                <Text style={[styles.sectionKicker, styles.sectionKickerAccent]}>
-                  TROUVÉ SUR INTERNET
-                </Text>
-                {webLoading && (
-                  <ActivityIndicator size="small" color={colors.accent} />
-                )}
-              </View>
               {webResults.length === 0 && webLoading ? (
-                <Text style={styles.webHint}>Recherche en cours…</Text>
+                <SearchingThinker />
               ) : (
-                webResults.map((c) => {
-                  const busy = resolvingWebId === c.id
-                  return (
-                    <WebCandidateRow
-                      key={c.id}
-                      candidate={c}
-                      busy={busy}
-                      disabled={disabled || resolvingWebId != null}
-                      onPress={() => void pickWebCandidate(c)}
-                    />
-                  )
-                })
+                <>
+                  <View style={styles.sectionKickerRow}>
+                    <Ionicons name="globe-outline" size={12} color={colors.accent} />
+                    <Text style={[styles.sectionKicker, styles.sectionKickerAccent]}>
+                      TROUVÉ SUR INTERNET
+                    </Text>
+                  </View>
+                  <Text style={styles.sectionSubtitle}>
+                    Résultats les plus pertinents
+                  </Text>
+                  {webResults.map((c, i) => {
+                    const busy = resolvingWebId === c.id
+                    return (
+                      <WebCandidateRow
+                        key={c.id || `web-${i}`}
+                        candidate={c}
+                        rank={i + 1}
+                        busy={busy}
+                        disabled={disabled || resolvingWebId != null}
+                        onPress={() => void pickWebCandidate(c)}
+                      />
+                    )
+                  })}
+                </>
               )}
             </View>
           )}
@@ -769,13 +801,79 @@ const Breadcrumb: FC<{
   </View>
 )
 
+/**
+ * Indicateur « thinking » pendant la recherche internet. Fait défiler des
+ * phrases liées à notre domaine (compositions, INCI, formules…) avec une
+ * pulsation douce, dans l'esprit des statuts animés des assistants IA.
+ */
+const THINKING_PHRASES = [
+  'On épluche les compositions…',
+  'On déchiffre les étiquettes…',
+  'On traque les ingrédients…',
+  'On interroge le web…',
+  'On compare les formules…',
+  'On lit les listes INCI…',
+  'On décode les promesses…',
+  'On fouille les rayons…',
+]
+
+const THINKING_INTERVAL_MS = 2200
+
+const SearchingThinker: FC = () => {
+  const [idx, setIdx] = useState(0)
+  const pulse = useRef(new Animated.Value(1)).current
+
+  // Pulsation continue (effet "vivant").
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 0.45, duration: 700, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+      ]),
+    )
+    loop.start()
+    return () => loop.stop()
+  }, [pulse])
+
+  // Rotation des phrases tant que la recherche tourne.
+  useEffect(() => {
+    const t = setInterval(() => {
+      setIdx((i) => (i + 1) % THINKING_PHRASES.length)
+    }, THINKING_INTERVAL_MS)
+    return () => clearInterval(t)
+  }, [])
+
+  return (
+    <View style={styles.thinkerRow}>
+      <Ionicons name="globe-outline" size={14} color={colors.accent} />
+      <Animated.Text
+        style={[styles.thinkerText, { opacity: pulse }]}
+        numberOfLines={1}
+      >
+        {THINKING_PHRASES[idx]}
+      </Animated.Text>
+    </View>
+  )
+}
+
+/** Pastille de rang (1, 2, 3…) avec une icône sur le premier résultat. */
+const RankBadge: FC<{ rank: number }> = ({ rank }) => (
+  <View style={[styles.rankBadge, rank === 1 && styles.rankBadgeTop]}>
+    {rank === 1 && (
+      <Ionicons name="sparkles" size={9} color="#fff" style={styles.rankIcon} />
+    )}
+    <Text style={styles.rankText}>{rank}</Text>
+  </View>
+)
+
 /** Ligne candidat internet — visuel distinct (badge + lien externe). */
 const WebCandidateRow: FC<{
   candidate: WebCandidate
+  rank?: number
   busy: boolean
   disabled: boolean
   onPress: () => void
-}> = ({ candidate, busy, disabled, onPress }) => {
+}> = ({ candidate, rank, busy, disabled, onPress }) => {
   const label =
     candidate.productName ?? candidate.title ?? 'Produit trouvé sur internet'
   return (
@@ -784,11 +882,14 @@ const WebCandidateRow: FC<{
       onPress={onPress}
       disabled={disabled || busy}
     >
+      {rank != null && <RankBadge rank={rank} />}
       {candidate.imageUrl ? (
         <Image
           source={{ uri: candidate.imageUrl }}
           style={styles.thumb}
-          resizeMode="contain"
+          contentFit="contain"
+          cachePolicy="memory-disk"
+          transition={150}
         />
       ) : (
         <View style={[styles.thumb, styles.thumbPlaceholder]}>
@@ -818,19 +919,28 @@ const WebCandidateRow: FC<{
 /** Ligne produit unifiée (résultats recherche OU browse sous-catégorie). */
 const ProductRow: FC<{
   item: CatalogRow | BrowseRow
+  rank?: number
   busy: boolean
   disabled: boolean
   onPress: () => void
-}> = ({ item, busy, disabled, onPress }) => {
+}> = ({ item, rank, busy, disabled, onPress }) => {
   const hasInci = Boolean(item.ingredients_text)
+  const category = 'category' in item ? item.category : null
   return (
     <Pressable
       style={[styles.resultRow, !hasInci && styles.resultRowDim]}
       onPress={onPress}
       disabled={disabled || (!hasInci && busy)}
     >
+      {rank != null && <RankBadge rank={rank} />}
       {item.image_url ? (
-        <Image source={{ uri: item.image_url }} style={styles.thumb} resizeMode="contain" />
+        <Image
+          source={{ uri: item.image_url }}
+          style={styles.thumb}
+          contentFit="contain"
+          cachePolicy="memory-disk"
+          transition={150}
+        />
       ) : (
         <View style={[styles.thumb, styles.thumbPlaceholder]}>
           <Ionicons name="image-outline" size={18} color={colors.inkLight} />
@@ -841,6 +951,16 @@ const ProductRow: FC<{
         <Text style={styles.resultName} numberOfLines={2}>
           {item.name ?? 'Produit'}
         </Text>
+        {category ? (
+          <View style={[styles.categoryPill, { backgroundColor: pillColors(category).bg }]}>
+            <Text
+              style={[styles.categoryPillText, { color: pillColors(category).text }]}
+              numberOfLines={1}
+            >
+              {category}
+            </Text>
+          </View>
+        ) : null}
         {!hasInci ? (
           <Text style={styles.resultNoInci}>Composition indisponible</Text>
         ) : null}
@@ -868,6 +988,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     paddingHorizontal: spacing.base,
     paddingVertical: 10,
+  },
+  searchBarFocused: {
+    borderColor: colors.accent,
+    shadowColor: colors.accent,
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 6,
   },
   searchInput: {
     ...typography.body,
@@ -981,17 +1109,59 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   sectionKickerAccent: { color: colors.accent },
+  sectionSubtitle: {
+    ...typography.caption,
+    color: colors.inkMuted,
+    marginBottom: spacing.sm,
+  },
+  // Badge de rang (1, 2, 3…)
+  rankBadge: {
+    minWidth: 24,
+    height: 24,
+    borderRadius: 8,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    flexDirection: 'row',
+    gap: 2,
+  },
+  rankBadgeTop: { backgroundColor: colors.roseDeep },
+  rankText: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 12,
+    color: '#fff',
+  },
+  rankIcon: { marginTop: -1 },
+  // Pastille catégorie
+  categoryPill: {
+    alignSelf: 'flex-start',
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    marginTop: 4,
+    maxWidth: '100%',
+  },
+  categoryPillText: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 11,
+  },
   sectionKickerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     marginBottom: spacing.xs,
   },
-  webHint: {
-    ...typography.xs,
-    color: colors.inkMuted,
-    fontStyle: 'italic',
+  thinkerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     paddingVertical: spacing.sm,
+  },
+  thinkerText: {
+    ...typography.smallSemiBold,
+    color: colors.accent,
+    flex: 1,
   },
   // Ligne candidat web
   webRow: {

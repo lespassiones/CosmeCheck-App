@@ -29,6 +29,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnalysisResultPanel } from '@/components/analysis/AnalysisResultPanel'
 import { VerdictGauge } from '@/components/analysis/VerdictGauge'
+import { PromesseFlowModal } from '@/components/promesses/PromesseFlowModal'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { GlassCard } from '@/components/design/GlassCard'
 import { colors } from '@/constants/colors'
@@ -59,6 +60,8 @@ type LoadState =
       categoryText: string | null
       brand: string | null
       productLabel: string | null
+      productType: string | null
+      inciText: string
     }
 
 const AnalyseDetailScreen: FC = () => {
@@ -110,6 +113,8 @@ const AnalyseDetailScreen: FC = () => {
         categoryText,
         brand: row.brand?.trim() || null,
         productLabel: row.product_label?.trim() || row.name?.trim() || null,
+        productType: row.product_type ?? result.productType ?? null,
+        inciText: row.input_text ?? '',
       }
     },
     [],
@@ -191,9 +196,12 @@ const AnalyseDetailScreen: FC = () => {
     }
   }, [id, alreadyInRoutine, routinePending, addToRoutine])
 
+  const [promesseModalOpen, setPromesseModalOpen] = useState(false)
+
   const handleVoirPromesse = useCallback(() => {
-    router.push(ROUTES.PROMESSES.NOUVELLE)
-  }, [])
+    if (state.status !== 'ready') return
+    setPromesseModalOpen(true)
+  }, [state.status])
 
   const handleShare = useCallback(async () => {
     if (state.status !== 'ready') return
@@ -213,7 +221,7 @@ const AnalyseDetailScreen: FC = () => {
       {/* Barre supérieure : pilule "< Retour" à gauche, espace libre à droite */}
       <View style={styles.topBar}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace(ROUTES.TABS.HOME))}
           hitSlop={12}
           style={styles.backPill}
           accessibilityRole="button"
@@ -336,6 +344,19 @@ const AnalyseDetailScreen: FC = () => {
           />
         </ScrollView>
       )}
+
+      {/* Modale "Analyser la promesse" — flow auto identify→fetch→coherence. */}
+      {state.status === 'ready' ? (
+        <PromesseFlowModal
+          visible={promesseModalOpen}
+          onClose={() => setPromesseModalOpen(false)}
+          inci={state.inciText}
+          productLabel={state.productLabel}
+          brand={state.brand}
+          productType={state.productType}
+          analysisId={id ?? null}
+        />
+      ) : null}
     </SafeAreaView>
   )
 }

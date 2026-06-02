@@ -68,7 +68,7 @@ export const Step3Goals: FC<Props> = ({ value, onChange }) => {
   return (
     <View style={styles.root}>
       <Text style={styles.intro}>
-        Choisis tes objectifs principaux — on personnalisera tes analyses et les
+        Choisis tes objectifs principaux : on personnalisera tes analyses et les
         conseils de ton Beauty Advisor.
       </Text>
 

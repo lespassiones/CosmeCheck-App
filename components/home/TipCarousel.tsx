@@ -128,8 +128,8 @@ export const TipCarousel: FC<Props> = ({ tips }) => {
       </View>
 
       {/* Astuce + illustration */}
-      <View style={styles.row} onLayout={onLayout}>
-        <View style={styles.viewport}>
+      <View style={styles.row}>
+        <View style={styles.viewport} onLayout={onLayout}>
           {width > 0 && (
             <ScrollView
               ref={scrollRef}

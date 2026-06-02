@@ -89,8 +89,19 @@ export const Step1Skin: FC<Props> = ({ value, onChange }) => {
   const [bodyOtherOpen, setBodyOtherOpen] = useState(
     () => Boolean(value.otherSkinTypeBody),
   )
+  const [hairOtherOpen, setHairOtherOpen] = useState(
+    () => Boolean(value.otherHair),
+  )
 
   const hairSelected = value.hairConcerns ?? []
+
+  const toggleHairOther = () => {
+    Haptics.selectionAsync().catch(() => {})
+    const next = !hairOtherOpen
+    setHairOtherOpen(next)
+    // Refermer « Autre » vide le texte libre associé.
+    if (!next) onChange({ otherHair: undefined })
+  }
 
   const toggleHair = (key: HairConcern) => {
     const set = new Set<HairConcern>(hairSelected)
@@ -207,7 +218,7 @@ export const Step1Skin: FC<Props> = ({ value, onChange }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>L&apos;état de tes cheveux</Text>
           <Text style={styles.sectionHint}>
-            Plusieurs choix possibles — laisse vide si tu n&apos;es pas concerné·e.
+            Plusieurs choix possibles, laisse vide si tu n&apos;es pas concerné·e.
           </Text>
           <View style={styles.chips}>
             {HAIR_STATE_CONCERNS.map((key) => (
@@ -219,7 +230,23 @@ export const Step1Skin: FC<Props> = ({ value, onChange }) => {
                 tone="rose"
               />
             ))}
+            <Chip
+              label="Autre"
+              selected={hairOtherOpen}
+              onPress={toggleHairOther}
+              tone="rose"
+            />
           </View>
+          {hairOtherOpen ? (
+            <TextInput
+              style={styles.input}
+              value={value.otherHair ?? ''}
+              onChangeText={(t) => onChange({ otherHair: t })}
+              placeholder="Décris l'état de tes cheveux"
+              placeholderTextColor={colors.inkLight}
+              maxLength={200}
+            />
+          ) : null}
         </View>
       </Reveal>
     </View>

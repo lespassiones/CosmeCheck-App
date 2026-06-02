@@ -103,6 +103,7 @@ Deno.serve(async (req: Request) => {
         name: obf.name,
         ingredientsText: obf.inci,
         sourceUrl: obf.sourceUrl,
+        imageUrl: obf.imageUrl,
       });
     }
     const payload = {
@@ -126,6 +127,7 @@ Deno.serve(async (req: Request) => {
         name: opf.name,
         ingredientsText: opf.inci,
         sourceUrl: opf.sourceUrl,
+        imageUrl: opf.imageUrl,
       });
     }
     const payload = {
@@ -154,6 +156,7 @@ Deno.serve(async (req: Request) => {
           name: cascadeResult.productName ?? partial.name,
           ingredientsText: cascadeResult.ingredientsText,
           sourceUrl: cascadeResult.sourceUrl ?? partial.sourceUrl,
+          imageUrl: partial.imageUrl,
         });
       }
       const payload = {
