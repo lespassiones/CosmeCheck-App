@@ -34,6 +34,7 @@ import { spacing, radius } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { db } from '@/lib/supabase/client'
+import { invalidateCachedAnalysisRow } from '@/lib/storage/session'
 import {
   parseAnalyseResponse,
   toneToColorRating,
@@ -206,7 +207,9 @@ const HistoryScreen: FC = () => {
       const { error } = await db().from('analyses').update({ name }).eq('id', id)
       if (error) throw error
     },
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
+      // Invalide aussi le cache local row (le titre a changé).
+      void invalidateCachedAnalysisRow(vars.id).catch(() => {})
       void queryClient.invalidateQueries({ queryKey })
     },
   })
@@ -219,6 +222,7 @@ const HistoryScreen: FC = () => {
     onSuccess: (_data, id) => {
       // Retire aussi la ligne de la sélection si besoin.
       setSelected((prev) => prev.filter((x) => x !== id))
+      void invalidateCachedAnalysisRow(id).catch(() => {})
       void queryClient.invalidateQueries({ queryKey })
     },
   })

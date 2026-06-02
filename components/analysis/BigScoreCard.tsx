@@ -10,7 +10,8 @@
  */
 
 import { memo, type FC } from 'react'
-import { Image, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
+import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 
 import { WhiteCard } from '@/components/design/WhiteCard'
@@ -49,7 +50,9 @@ const BigScoreCardBase: FC<Props> = ({
             <Image
               source={{ uri: imageUrl }}
               style={styles.image}
-              resizeMode="cover"
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={150}
               accessibilityIgnoresInvertColors
             />
           ) : (

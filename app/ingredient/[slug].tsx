@@ -17,7 +17,7 @@
  * (timeout dur), comme le web. États : chargement · introuvable · prêt.
  */
 
-import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
+import { useMemo, type FC } from 'react'
 import {
   ActivityIndicator,
   Pressable,
@@ -29,6 +29,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { useQuery } from '@tanstack/react-query'
 
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { ColorBadge } from '@/components/design/ColorBadge'
@@ -38,6 +39,12 @@ import { ExplainIngredient } from '@/components/ingredient/ExplainIngredient'
 import { IngredientProductRow } from '@/components/ingredient/IngredientProductRow'
 import { StatCard } from '@/components/ingredient/StatCard'
 import type { IngredientDetail, IngredientProductHit } from '@/components/ingredient/types'
+import {
+  deriveIngredientLoadState,
+  INGREDIENT_STALE_MS,
+  PRODUCTS_STALE_MS,
+  type IngredientLoadState,
+} from '@/components/ingredient/loadState'
 import { colors } from '@/constants/colors'
 import { ROUTES } from '@/constants/routes'
 import { radius, spacing } from '@/constants/spacing'
@@ -114,49 +121,59 @@ function rpcWithTimeout<T>(rpc: RpcLike<T>, ms: number): Promise<RaceResult<T>> 
   return Promise.race([wrapped, timeout])
 }
 
-type LoadState =
-  | { status: 'loading' }
-  | { status: 'notfound' }
-  | { status: 'ready'; ing: IngredientDetail; products: IngredientProductHit[] }
+type LoadState = IngredientLoadState
 
 const IngredientDetailScreen: FC = () => {
   const { slug } = useLocalSearchParams<{ slug: string }>()
-  const [state, setState] = useState<LoadState>({ status: 'loading' })
 
-  const load = useCallback(async () => {
-    if (!slug) {
-      setState({ status: 'notfound' })
-      return
-    }
-    setState({ status: 'loading' })
+  // Fiche INCI — très stable, cache 24h, persisté via le persister React Query.
+  const ingQuery = useQuery<IngredientDetail | null>({
+    queryKey: ['ingredient', slug],
+    enabled: Boolean(slug),
+    staleTime: INGREDIENT_STALE_MS,
+    gcTime: INGREDIENT_STALE_MS,
+    queryFn: async () => {
+      if (!slug) return null
+      const res = await rpcWithTimeout<IngredientDetail[]>(
+        callRpc<IngredientDetail[]>('cosme_check_get_ingredient', { p_slug: slug }),
+        RPC_TIMEOUT_MS,
+      )
+      if (res.error || !res.data || res.data.length === 0) return null
+      return res.data[0]
+    },
+  })
 
-    const ingRes = await rpcWithTimeout<IngredientDetail[]>(
-      callRpc<IngredientDetail[]>('cosme_check_get_ingredient', { p_slug: slug }),
-      RPC_TIMEOUT_MS,
-    )
+  const ing = ingQuery.data ?? null
+  const ingredientId = ing?.id ?? null
 
-    const ing = ingRes.error || !ingRes.data || ingRes.data.length === 0 ? null : ingRes.data[0]
-    if (!ing) {
-      setState({ status: 'notfound' })
-      return
-    }
+  // Produits — n'attaque que si on a l'ID ingrédient. Cache 1h.
+  const prodQuery = useQuery<IngredientProductHit[]>({
+    queryKey: ['ingredient-products', ingredientId],
+    enabled: Boolean(ingredientId),
+    staleTime: PRODUCTS_STALE_MS,
+    gcTime: PRODUCTS_STALE_MS,
+    queryFn: async () => {
+      if (!ingredientId) return []
+      const res = await rpcWithTimeout<IngredientProductHit[]>(
+        callRpc<IngredientProductHit[]>('cosme_check_products_for_ingredient', {
+          p_ingredient_id: ingredientId,
+          p_limit: 12,
+        }),
+        RPC_TIMEOUT_MS,
+      )
+      return res.error || !res.data ? [] : res.data
+    },
+  })
 
-    // Produits : best-effort, on n'échoue jamais la page là-dessus.
-    const prodRes = await rpcWithTimeout<IngredientProductHit[]>(
-      callRpc<IngredientProductHit[]>('cosme_check_products_for_ingredient', {
-        p_ingredient_id: ing.id,
-        p_limit: 12,
-      }),
-      RPC_TIMEOUT_MS,
-    )
-    const products = prodRes.error || !prodRes.data ? [] : prodRes.data
+  const state: LoadState = useMemo(
+    () => deriveIngredientLoadState(slug, ingQuery.isLoading, ing, prodQuery.data),
+    [slug, ingQuery.isLoading, ing, prodQuery.data],
+  )
 
-    setState({ status: 'ready', ing, products })
-  }, [slug])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  const load = () => {
+    void ingQuery.refetch()
+    if (ingredientId) void prodQuery.refetch()
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>

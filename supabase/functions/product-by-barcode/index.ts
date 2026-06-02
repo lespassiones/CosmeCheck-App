@@ -23,6 +23,7 @@ import { fetchOFFProduct } from "./lib/openBeautyFacts.ts";
 import { upsertCatalogProduct } from "./lib/catalog.ts";
 import { searchProductCascade } from "./lib/cascade.ts";
 import { searchProductByBarcode } from "./lib/barcodeWebSearch.ts";
+import { cacheBarcodeResult, getCachedBarcodeResult } from "./lib/barcodeCache.ts";
 
 const BARCODE_RE = /^\d{8,14}$/;
 
@@ -79,6 +80,13 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "Code-barres invalide." }, { status: 400 });
   }
 
+  // 0. Cache TTL 12h (KV Deno) — un même code-barres scanné plusieurs fois
+  // par jour évite 2 fetchs externes (OBF + OPF) qui prennent ~500ms chacun.
+  const cached = await getCachedBarcodeResult<Record<string, unknown>>(barcode);
+  if (cached) {
+    return jsonResponse(cached, { headers: { "X-Cache": "HIT" } });
+  }
+
   // 1. OBF + OPF in parallel — first with INCI ≥ 30 chars (OBF priority).
   const [obfResult, opfResult] = await Promise.allSettled([
     fetchOFFProduct("world.openbeautyfacts.org", barcode),
@@ -97,7 +105,7 @@ Deno.serve(async (req: Request) => {
         sourceUrl: obf.sourceUrl,
       });
     }
-    return jsonResponse({
+    const payload = {
       found: true,
       brand: obf.brand,
       productName: obf.name,
@@ -105,7 +113,9 @@ Deno.serve(async (req: Request) => {
       source: "openbeautyfacts",
       sourceUrl: obf.sourceUrl,
       confidence: 0.98,
-    });
+    };
+    void cacheBarcodeResult(barcode, payload);
+    return jsonResponse(payload);
   }
 
   if (opf && opf.inci.length >= 30) {
@@ -118,7 +128,7 @@ Deno.serve(async (req: Request) => {
         sourceUrl: opf.sourceUrl,
       });
     }
-    return jsonResponse({
+    const payload = {
       found: true,
       brand: opf.brand,
       productName: opf.name,
@@ -126,7 +136,9 @@ Deno.serve(async (req: Request) => {
       source: "openproductsfacts",
       sourceUrl: opf.sourceUrl,
       confidence: 0.95,
-    });
+    };
+    void cacheBarcodeResult(barcode, payload);
+    return jsonResponse(payload);
   }
 
   // 2. One source has a name but no INCI → cascade by name.
@@ -144,11 +156,13 @@ Deno.serve(async (req: Request) => {
           sourceUrl: cascadeResult.sourceUrl ?? partial.sourceUrl,
         });
       }
-      return jsonResponse({
+      const payload = {
         ...cascadeResult,
         brand: cascadeResult.brand ?? partial.brand,
         productName: cascadeResult.productName ?? partial.name,
-      });
+      };
+      void cacheBarcodeResult(barcode, payload);
+      return jsonResponse(payload);
     }
     return jsonResponse({
       found: false,
@@ -169,7 +183,7 @@ Deno.serve(async (req: Request) => {
         sourceUrl: webResult.sourceUrl,
       });
     }
-    return jsonResponse({
+    const payload = {
       found: true,
       brand: webResult.brand,
       productName: webResult.productName,
@@ -177,9 +191,14 @@ Deno.serve(async (req: Request) => {
       source: "web_search",
       sourceUrl: webResult.sourceUrl,
       confidence: webResult.confidence,
-    });
+    };
+    void cacheBarcodeResult(barcode, payload);
+    return jsonResponse(payload);
   }
 
-  // 4. Unknown across all sources.
+  // 4. Unknown across all sources. On cache aussi un NOT_FOUND avec TTL court
+  // (TTL_MS de la fonction reste à 12h ; le NOT_FOUND laisse à l'utilisateur
+  // la possibilité de coller l'INCI manuellement).
+  void cacheBarcodeResult(barcode, NOT_FOUND);
   return jsonResponse(NOT_FOUND);
 });

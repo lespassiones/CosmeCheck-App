@@ -45,6 +45,12 @@ import {
 } from '@/lib/routine/engine'
 import { useRoutine, type RoutineItem } from '@/hooks/useRoutine'
 import { useProfile } from '@/hooks/useProfile'
+import {
+  readAiCache,
+  routineSuggestKey,
+  writeAiCache,
+  TTL_ROUTINE_SUGGEST_MS,
+} from '@/lib/storage/aiCache'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { WhiteCard } from '@/components/design/WhiteCard'
 import { GlassCard } from '@/components/design/GlassCard'
@@ -190,7 +196,22 @@ const RoutineScreen: FC = () => {
   const loadSuggestions = useCallback(async () => {
     setAiPending(true)
     setAiUnavailable(false)
+    const cacheKey = routineSuggestKey(
+      products.map((p) => ({ id: p.id, frequency: p.frequency })),
+    )
     try {
+      // 1. Cache local (24h, clé = signature stable de la routine).
+      const cached = await readAiCache<Suggestion[]>(
+        'routine-suggest',
+        cacheKey,
+        TTL_ROUTINE_SUGGEST_MS,
+      )
+      if (Array.isArray(cached)) {
+        setSuggestions(cached)
+        return
+      }
+
+      // 2. Miss → invoke.
       const { data, error } = await supabase.functions.invoke('routine-suggest', {
         body: { products, metrics },
       })
@@ -199,7 +220,9 @@ const RoutineScreen: FC = () => {
         return
       }
       const list = (data as { suggestions?: Suggestion[] } | null)?.suggestions
-      setSuggestions(Array.isArray(list) ? list : [])
+      const suggestions = Array.isArray(list) ? list : []
+      setSuggestions(suggestions)
+      void writeAiCache('routine-suggest', cacheKey, suggestions)
     } catch {
       setAiUnavailable(true)
     } finally {

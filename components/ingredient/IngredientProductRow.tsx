@@ -7,7 +7,8 @@
  */
 
 import { memo, type FC } from 'react'
-import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 
 import { colors } from '@/constants/colors'
@@ -37,7 +38,13 @@ const IngredientProductRowBase: FC<Props> = ({ product, rating }) => {
     >
       <View style={styles.thumb}>
         {product.image_url ? (
-          <Image source={{ uri: product.image_url }} style={styles.thumbImg} resizeMode="cover" />
+          <Image
+            source={{ uri: product.image_url }}
+            style={styles.thumbImg}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={150}
+          />
         ) : (
           <Ionicons name="cube-outline" size={18} color={colors.inkLight} />
         )}

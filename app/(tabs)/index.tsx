@@ -37,6 +37,7 @@ import { ROUTES } from '@/constants/routes'
 import { db } from '@/lib/supabase/client'
 import type { AnalysisRow } from '@/lib/supabase/types'
 import { parseAnalyseResponse } from '@/lib/analysis/types'
+import { summarizeRoutine, type RoutineSummary } from '@/lib/routine/summary'
 import { tipsForCarousel } from '@/lib/tips'
 import type { BlobCounts } from '@/components/design/IngredientBlob'
 import { IngredientBlob } from '@/components/design/IngredientBlob'
@@ -48,6 +49,7 @@ import { TipCarousel } from '@/components/home/TipCarousel'
 import { DailyPicksCard } from '@/components/home/DailyPicksCard'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
+import { useRoutine } from '@/hooks/useRoutine'
 
 const EMPTY_COUNTS: BlobCounts = { vert: 0, jaune: 0, orange: 0, rouge: 0 }
 
@@ -60,11 +62,6 @@ type LastAnalysis = Pick<
   AnalysisRow,
   'id' | 'name' | 'product_label' | 'score' | 'result_json' | 'created_at'
 >
-
-interface RoutineSummary {
-  count: number
-  counts: BlobCounts
-}
 
 /** Extrait les `counts` (BlobCounts) du result_json d'une analyse. */
 function countsFromResultJson(json: unknown): BlobCounts | null {
@@ -262,47 +259,24 @@ const DashboardScreen: FC = () => {
     },
   })
 
-  const routineQuery = useQuery<RoutineSummary>({
-    queryKey: ['dashboard', 'routine-summary', userId],
-    enabled: Boolean(userId),
-    staleTime: 60 * 1000,
-    queryFn: async () => {
-      if (!userId) return { count: 0, counts: { ...EMPTY_COUNTS } }
-      const { data, error } = await db()
-        .from('routine_items')
-        .select('analysis_id, analyses(result_json)')
-        .eq('user_id', userId)
-      if (error) throw error
-      // L'embed `analyses(result_json)` peut être inféré comme objet ou tableau
-      // selon la relation : on normalise défensivement, puis on cumule les
-      // `counts` de chaque produit de la routine (même définition que le web).
-      const rows = (data ?? []) as {
-        analyses:
-          | { result_json: unknown }
-          | { result_json: unknown }[]
-          | null
-      }[]
-      const counts: BlobCounts = { ...EMPTY_COUNTS }
-      for (const row of rows) {
-        const a = Array.isArray(row.analyses) ? row.analyses[0] : row.analyses
-        const c = countsFromResultJson(a?.result_json)
-        if (c) {
-          counts.vert += c.vert
-          counts.jaune += c.jaune
-          counts.orange += c.orange
-          counts.rouge += c.rouge
-        }
-      }
-      return { count: rows.length, counts }
-    },
-  })
+  // Routine — on dérive du cache react-query `['routine', userId]` au lieu de
+  // re-requêter Supabase : `useRoutine()` charge déjà items + analyses jointes,
+  // et son cache est invalidé automatiquement à chaque add/remove/frequency.
+  const { items: routineItems } = useRoutine()
+  const routineSummary = useMemo<RoutineSummary>(
+    () => summarizeRoutine(routineItems.map((it) => ({ analysis: it.analysis }))),
+    [routineItems],
+  )
 
   const onRefresh = useCallback(async () => {
     if (!userId) return
     setRefreshing(true)
     try {
-      await queryClient.invalidateQueries({ queryKey: ['dashboard'] })
-      await queryClient.invalidateQueries({ queryKey: ['credits', userId] })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['routine', userId] }),
+        queryClient.invalidateQueries({ queryKey: ['credits', userId] }),
+      ])
     } finally {
       setRefreshing(false)
     }
@@ -366,7 +340,7 @@ const DashboardScreen: FC = () => {
               }
             />
             <RoutineCard
-              summary={routineQuery.data}
+              summary={routineSummary}
               onPress={() => router.push(ROUTES.TABS.ROUTINE)}
             />
           </View>
@@ -625,9 +599,9 @@ const styles = StyleSheet.create({
   },
   advisorImage: {
     position: 'absolute',
-    bottom: 0,
+    bottom: -10,
     left: 4,
-    height: '108%',
+    height: '115%',
     width: 100,
   },
   promoTextSlot: {

@@ -14,7 +14,10 @@
 import { useEffect } from 'react'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient } from '@tanstack/react-query'
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
@@ -31,19 +34,35 @@ import { ROUTES } from '@/constants/routes'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
 import { CreditsExhaustedModal } from '@/components/shared/CreditsExhaustedModal'
+import {
+  QUERY_PERSIST_BUSTER,
+  QUERY_PERSIST_KEY,
+  QUERY_PERSIST_MAX_AGE_MS,
+  shouldDehydrateQuery,
+} from '@/lib/storage/queryPersist'
+import { clearExpiredCache } from '@/lib/storage/session'
+import { clearExpiredAiCache } from '@/lib/storage/aiCache'
 
 // Garde le splash natif visible jusqu'à ce qu'on soit prêts à afficher l'app.
 void SplashScreen.preventAutoHideAsync()
 
 // Client React Query partagé pour toute l'app (niveau module).
+// `gcTime` doit être >= au max-age du persister, sinon les caches sont GC'd
+// avant d'être rechargés au cold start.
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 5 * 60 * 1000, // 5 min par défaut
+      gcTime: QUERY_PERSIST_MAX_AGE_MS,
       retry: 1,
       refetchOnWindowFocus: false,
     },
   },
+})
+
+const asyncStoragePersister = createAsyncStoragePersister({
+  storage: AsyncStorage,
+  key: QUERY_PERSIST_KEY,
 })
 
 /**
@@ -129,6 +148,19 @@ function SplashController() {
   return null
 }
 
+/**
+ * Garbage-collect des caches AsyncStorage au démarrage. Best-effort,
+ * non-bloquant : un fail ne doit jamais empêcher l'app de démarrer (critère
+ * App Store / Play Store : pas de hang au premier lancement).
+ */
+function CacheJanitor() {
+  useEffect(() => {
+    void clearExpiredCache().catch(() => {})
+    void clearExpiredAiCache().catch(() => {})
+  }, [])
+  return null
+}
+
 function RootNavigator() {
   return (
     <Stack
@@ -150,6 +182,10 @@ function RootNavigator() {
       <Stack.Screen name="profile/restrictions" />
       <Stack.Screen name="ingredient/[slug]" />
       <Stack.Screen name="offre/index" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="legal/cgu" />
+      <Stack.Screen name="legal/privacy" />
+      <Stack.Screen name="legal/mentions" />
+      <Stack.Screen name="legal/about" />
       <Stack.Screen name="+not-found" />
     </Stack>
   )
@@ -172,13 +208,22 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <QueryClientProvider client={queryClient}>
+        <PersistQueryClientProvider
+          client={queryClient}
+          persistOptions={{
+            persister: asyncStoragePersister,
+            maxAge: QUERY_PERSIST_MAX_AGE_MS,
+            buster: QUERY_PERSIST_BUSTER,
+            dehydrateOptions: { shouldDehydrateQuery },
+          }}
+        >
           <StatusBar style="dark" />
           <SplashController />
+          <CacheJanitor />
           <AuthGuard />
           <RootNavigator />
           <CreditsExhaustedModal />
-        </QueryClientProvider>
+        </PersistQueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   )

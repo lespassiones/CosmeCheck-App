@@ -12,31 +12,38 @@
  *   - 'cosmecheck:pending_product_name' — nom produit associé au scan en cours
  *   - 'cosmecheck:last_analysis_id' — UUID de la dernière analyse
  *   - 'cosmecheck:analysis_cache' — JSON: { [id]: { data: AnalyseResponse, cachedAt: timestamp } }
+ *   - 'cosmecheck:analysis_row_cache' — JSON: { [id]: { data: AnalysisRow, cachedAt: timestamp } }
  *
  * TTL cache analyses : 24 heures.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { AnalyseResponse } from '../analysis/types'
+import type { AnalysisRow } from '../supabase/types'
+import { isFresh, parseCacheMap, purgeExpired, type TimestampedEntry } from './cacheCore'
 
-type AnalysisSource = 'barcode' | 'ocr' | 'search' | 'manual'
+type AnalysisSource = 'barcode' | 'ocr' | 'search' | 'manual' | 'link'
 
 const K_PENDING_INCI = 'cosmecheck:pending_inci'
 const K_PENDING_SOURCE = 'cosmecheck:pending_source'
 const K_PENDING_PRODUCT_NAME = 'cosmecheck:pending_product_name'
 const K_LAST_ANALYSIS_ID = 'cosmecheck:last_analysis_id'
 const K_ANALYSIS_CACHE = 'cosmecheck:analysis_cache'
+const K_ANALYSIS_ROW_CACHE = 'cosmecheck:analysis_row_cache'
 
 const TTL_MS = 24 * 60 * 60 * 1000 // 24 heures
 
-type CacheEntry = { data: AnalyseResponse; cachedAt: number }
+type CacheEntry = TimestampedEntry<AnalyseResponse>
 type CacheMap = Record<string, CacheEntry>
+type RowCacheEntry = TimestampedEntry<AnalysisRow>
+type RowCacheMap = Record<string, RowCacheEntry>
 
 const SOURCES: ReadonlySet<AnalysisSource> = new Set<AnalysisSource>([
   'barcode',
   'ocr',
   'search',
   'manual',
+  'link',
 ])
 
 function isSource(v: string | null): v is AnalysisSource {
@@ -44,20 +51,21 @@ function isSource(v: string | null): v is AnalysisSource {
 }
 
 async function readCacheMap(): Promise<CacheMap> {
-  try {
-    const raw = await AsyncStorage.getItem(K_ANALYSIS_CACHE)
-    if (!raw) return {}
-    const parsed = JSON.parse(raw)
-    if (!parsed || typeof parsed !== 'object') return {}
-    return parsed as CacheMap
-  } catch {
-    // JSON corrompu / illisible → on repart d'un cache vide.
-    return {}
-  }
+  const raw = await AsyncStorage.getItem(K_ANALYSIS_CACHE)
+  return parseCacheMap<AnalyseResponse>(raw)
 }
 
 async function writeCacheMap(map: CacheMap): Promise<void> {
   await AsyncStorage.setItem(K_ANALYSIS_CACHE, JSON.stringify(map))
+}
+
+async function readRowCacheMap(): Promise<RowCacheMap> {
+  const raw = await AsyncStorage.getItem(K_ANALYSIS_ROW_CACHE)
+  return parseCacheMap<AnalysisRow>(raw)
+}
+
+async function writeRowCacheMap(map: RowCacheMap): Promise<void> {
+  await AsyncStorage.setItem(K_ANALYSIS_ROW_CACHE, JSON.stringify(map))
 }
 
 /**
@@ -140,27 +148,62 @@ export async function getCachedAnalysis(id: string): Promise<AnalyseResponse | n
   const map = await readCacheMap()
   const entry = map[id]
   if (!entry) return null
-  if (Date.now() - entry.cachedAt < TTL_MS) {
+  if (isFresh(entry.cachedAt, Date.now(), TTL_MS)) {
     return entry.data
   }
-  // Expirée → purge cette entrée.
   delete map[id]
   await writeCacheMap(map)
   return null
 }
 
 /**
+ * Cache une ligne `analyses` (row complet) localement avec timestamp.
+ * Sert à l'écran de détail pour éviter un fetch DB sur ré-ouverture.
+ */
+export async function cacheAnalysisRow(row: AnalysisRow): Promise<void> {
+  const map = await readRowCacheMap()
+  map[row.id] = { data: row, cachedAt: Date.now() }
+  await writeRowCacheMap(map)
+}
+
+/**
+ * Récupère une ligne `analyses` du cache si elle existe et est fraîche.
+ * Purge l'entrée si expirée.
+ */
+export async function getCachedAnalysisRow(id: string): Promise<AnalysisRow | null> {
+  const map = await readRowCacheMap()
+  const entry = map[id]
+  if (!entry) return null
+  if (isFresh(entry.cachedAt, Date.now(), TTL_MS)) {
+    return entry.data
+  }
+  delete map[id]
+  await writeRowCacheMap(map)
+  return null
+}
+
+/**
+ * Invalide une ligne `analyses` du cache local (à appeler après suppression /
+ * renommage côté DB pour éviter qu'un détail ne s'affiche stale).
+ */
+export async function invalidateCachedAnalysisRow(id: string): Promise<void> {
+  const map = await readRowCacheMap()
+  if (map[id]) {
+    delete map[id]
+    await writeRowCacheMap(map)
+  }
+}
+
+/**
  * Nettoie le cache des analyses expirées (appelé au démarrage).
  */
 export async function clearExpiredCache(): Promise<void> {
-  const map = await readCacheMap()
   const now = Date.now()
-  let mutated = false
-  for (const id of Object.keys(map)) {
-    if (now - map[id].cachedAt >= TTL_MS) {
-      delete map[id]
-      mutated = true
-    }
-  }
-  if (mutated) await writeCacheMap(map)
+  const [respMap, rowMap] = await Promise.all([readCacheMap(), readRowCacheMap()])
+  const respPurge = purgeExpired(respMap, now, TTL_MS)
+  const rowPurge = purgeExpired(rowMap, now, TTL_MS)
+  const ops: Promise<void>[] = []
+  if (respPurge.mutated) ops.push(writeCacheMap(respPurge.map))
+  if (rowPurge.mutated) ops.push(writeRowCacheMap(rowPurge.map))
+  if (ops.length > 0) await Promise.all(ops)
 }

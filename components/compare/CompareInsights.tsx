@@ -20,6 +20,12 @@ import { colors } from '@/constants/colors'
 import { spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 import { supabase } from '@/lib/supabase/client'
+import {
+  compareInsightsKey,
+  readAiCache,
+  writeAiCache,
+  TTL_COMPARE_INSIGHTS_MS,
+} from '@/lib/storage/aiCache'
 
 type Insights = {
   portraitA: string
@@ -49,8 +55,21 @@ export const CompareInsights: FC<Props> = ({ aId, bId, nameA, nameB, shortNameA,
     mounted.current = true
     setData(null)
     setError(false)
+    const cacheKey = compareInsightsKey(aId, bId)
     void (async () => {
       try {
+        // 1. Cache local (couple A→B, 30j).
+        const cached = await readAiCache<Insights>(
+          'compare-insights',
+          cacheKey,
+          TTL_COMPARE_INSIGHTS_MS,
+        )
+        if (cached && typeof cached.portraitA === 'string') {
+          if (mounted.current) setData(cached)
+          return
+        }
+
+        // 2. Miss → invoke.
         const { data: res, error: invokeError } = await supabase.functions.invoke<Insights>(
           'compare-insights',
           { body: { aId, bId } },
@@ -61,6 +80,7 @@ export const CompareInsights: FC<Props> = ({ aId, bId, nameA, nameB, shortNameA,
           return
         }
         setData(res)
+        void writeAiCache('compare-insights', cacheKey, res)
       } catch {
         if (mounted.current) setError(true)
       }

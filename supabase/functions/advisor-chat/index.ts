@@ -30,6 +30,7 @@ import {
   SKIN_TYPE_BODY_LABEL,
   SKIN_TYPE_FACE_LABEL,
 } from "./lib.ts";
+import { normalizeRoutineRows } from "./routineNormalize.ts";
 
 const MODEL = "gpt-4o-mini";
 const MISTRAL_MODEL = "mistral-small-latest";
@@ -37,14 +38,8 @@ const MAX_MESSAGES_PER_DAY = 30;
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
-/** Minimal item shape we read out of an analyse result_json. */
-type ResultItem = { tags?: string[] | null };
-type AnalyseRow = {
-  name: string | null;
-  product_label: string | null;
-  score: number | null;
-  result_json: { items?: ResultItem[] } | null;
-};
+// Le détail de la normalisation routine vit dans ./routineNormalize.ts (pur,
+// testé séparément en env node) — voir lib/__tests__/advisorRoutineNormalize.test.ts.
 
 function getClientIp(headers: Headers): string {
   const xff = headers.get("x-forwarded-for");
@@ -191,9 +186,15 @@ Deno.serve(async (req: Request) => {
   const { user, supabase: sb } = auth;
 
   // ── 5. Fan-out parallèle : cap quotidien + profil + routine ──────────────
+  //
+  // Optimisation : on essaie d'abord la RPC `cosme_check_get_routine_tags`,
+  // qui agrège les `tags` côté Postgres et ÉVITE de transférer `result_json`
+  // (gain : ~360 KB → ~3 KB par message). Si la RPC n'est pas déployée (ex.
+  // édition en cours, ancien projet), on retombe sur le select classique
+  // pour ne JAMAIS casser la fonction en prod.
   const since = new Date();
   since.setHours(0, 0, 0, 0);
-  const [usedTodayRes, profileRes, routineRes] = await Promise.all([
+  const [usedTodayRes, profileRes, routineRpcRes] = await Promise.all([
     sb
       .schema("cosme_check")
       .from("ai_logs")
@@ -207,13 +208,22 @@ Deno.serve(async (req: Request) => {
       .select("first_name, preferences")
       .eq("id", user.id)
       .maybeSingle(),
-    sb
+    sb.rpc("cosme_check_get_routine_tags", { p_limit: 12 }),
+  ]);
+
+  // Fallback gracieux : si la RPC n'existe pas (404) ou retourne une erreur,
+  // on relit la routine via le select classique avec result_json.
+  let routineRes: { data: unknown; error: unknown };
+  if (routineRpcRes.error) {
+    routineRes = await sb
       .schema("cosme_check")
       .from("routine_items")
       .select("frequency, analyses(name, product_label, score, result_json)")
       .eq("user_id", user.id)
-      .limit(12),
-  ]);
+      .limit(12);
+  } else {
+    routineRes = routineRpcRes;
+  }
 
   const usedToday = usedTodayRes.count;
   if ((usedToday ?? 0) > MAX_MESSAGES_PER_DAY) {
@@ -247,26 +257,10 @@ Deno.serve(async (req: Request) => {
       ].filter(Boolean).join("\n")
     : "Restrictions : aucune";
 
-  // Routine
-  const routineRows = (routineRes.data ?? []) as unknown as {
-    frequency: string;
-    analyses: AnalyseRow | null;
-  }[];
-  const routineFacts = routineRows
-    .filter((r) => r.analyses)
-    .slice(0, 12)
-    .map((r) => {
-      const tags = new Set<string>();
-      for (const it of r.analyses!.result_json?.items ?? []) {
-        for (const t of it.tags ?? []) tags.add(t);
-      }
-      return {
-        name: r.analyses!.product_label ?? r.analyses!.name ?? "Analyse",
-        score: r.analyses!.score,
-        frequency: r.frequency,
-        tags: Array.from(tags).slice(0, 6),
-      };
-    });
+  // Routine — normalise les 2 formes possibles :
+  //   A) Rows RPC          : { name, product_label, score, frequency, tags: string[] }
+  //   B) Rows embed legacy : { frequency, analyses: { name, product_label, score, result_json } }
+  const routineFacts = normalizeRoutineRows(routineRes.data);
 
   const faceLabel = skin.skinTypeFace
     ? SKIN_TYPE_FACE_LABEL[skin.skinTypeFace]

@@ -20,7 +20,7 @@
  * parent (app/analyse/[id].tsx) au-dessus du panel.
  */
 
-import { useMemo, useRef, useState, type FC } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react'
 import {
   Modal,
   Pressable,
@@ -53,24 +53,26 @@ import { IngredientSpectrum } from './IngredientSpectrum'
 import { ObservationsCard } from './ObservationsCard'
 import { PenaltySummaryStrip } from './PenaltySummaryStrip'
 import { ProductRow } from './ProductRow'
-import { RestrictionWarning } from './RestrictionWarning'
+import { RestrictionWarning, RestrictionsOkBadge } from './RestrictionWarning'
 import { SynthesisCard } from './SynthesisCard'
+import { supabase } from '@/lib/supabase/client'
 import type { EssentielData } from '@/lib/essentiel/engine'
 
 interface Props {
+  /** ID de l'analyse Supabase — nécessaire pour générer la synthèse lazy. */
+  analysisId?: string
   result: AnalyseResponse
   essentiel: EssentielData
   /** Navigue vers la fiche ingrédient (/ingredient/[slug]). */
   onIngredientPress: (slug: string) => void
   /** Navigue vers /profile/restrictions. */
   onViewRestrictionsPress: () => void
-  /** Demandé par le SynthesisCard quand la synthèse est absente (no-op
-   *  gracieux tant que l'Edge Function n'est pas déployée). */
-  onRequestSynthesis?: () => void
   /** Le parent fournit un scroll vers une coordonnée Y (dans le panel) — utilisé
    *  par le spectre pour amener l'ingrédient ciblé à l'écran. */
   onRequestScrollTo?: (y: number) => void
   reduceMotion?: boolean
+  /** URL de l'image produit (catalogue / OBF / web). Passée à BigScoreCard. */
+  productImageUrl?: string | null
 }
 
 type TabKey = 'all' | ColorRating | 'unknown'
@@ -85,18 +87,82 @@ const TAB_LABELS: Record<TabKey, string> = {
 }
 
 export const AnalysisResultPanel: FC<Props> = ({
+  analysisId,
   result,
   essentiel,
   onIngredientPress,
   onViewRestrictionsPress,
-  onRequestSynthesis,
   onRequestScrollTo,
   reduceMotion,
+  productImageUrl,
 }) => {
   const [detailsExpanded, setDetailsExpanded] = useState(false)
   const [filter, setFilter] = useState<TabKey>('all')
   const [listModalOpen, setListModalOpen] = useState(false)
   const modalScrollRef = useRef<ScrollView>(null)
+
+  // ── Synthèse lazy ─────────────────────────────────────────────────────
+  // result.synthesis peut être déjà présent (analyses récentes / générées
+  // précédemment) → on l'utilise. Sinon, on la génère à la demande au moment
+  // où l'utilisateur déplie "Voir l'analyse complète".
+  const [lazySynthesis, setLazySynthesis] = useState<string | null>(null)
+  const [synthesisLoading, setSynthesisLoading] = useState(false)
+  const synthesisFetchedRef = useRef(false)
+
+  // Synthèse effective : celle stockée dans result_json, ou celle qu'on vient
+  // de générer dynamiquement. Sinon null → SynthesisCard montre l'état "indisponible".
+  const effectiveSynthesis = result.synthesis ?? lazySynthesis
+
+  // Déclenche la génération à la première ouverture du détail, si on n'a pas
+  // déjà la synthèse en row ET qu'on a un analysisId.
+  useEffect(() => {
+    if (!detailsExpanded) return
+    if (effectiveSynthesis) return
+    if (synthesisFetchedRef.current) return
+    if (!analysisId) return
+    synthesisFetchedRef.current = true
+    setSynthesisLoading(true)
+    void (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('synthesis', {
+          body: { analysisId },
+        })
+        if (error) return
+        const res = data as { synthesis?: string | null } | null
+        if (res?.synthesis) {
+          setLazySynthesis(res.synthesis)
+        }
+      } catch {
+        // Best-effort : erreur silencieuse, l'UI continue d'afficher
+        // "Synthèse indisponible" avec le bouton de retry.
+      } finally {
+        setSynthesisLoading(false)
+      }
+    })()
+  }, [detailsExpanded, analysisId, effectiveSynthesis])
+
+  /** Bouton "Réessayer" dans SynthesisCard quand l'auto-trigger a échoué. */
+  const handleRequestSynthesis = useCallback(() => {
+    if (!analysisId || synthesisLoading) return
+    synthesisFetchedRef.current = false
+    // Re-déclencher : on remet le flag à false → l'effet re-tirera l'appel
+    // au prochain render (puisque effectiveSynthesis est toujours null).
+    setSynthesisLoading(true)
+    void (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('synthesis', {
+          body: { analysisId },
+        })
+        if (error) return
+        const res = data as { synthesis?: string | null } | null
+        if (res?.synthesis) setLazySynthesis(res.synthesis)
+      } catch {
+        /* silent */
+      } finally {
+        setSynthesisLoading(false)
+      }
+    })()
+  }, [analysisId, synthesisLoading])
 
   // Couleur tonale du score (seuils web : tone du serveur prioritaire, sinon
   // dérivé du score).
@@ -215,26 +281,32 @@ export const AnalysisResultPanel: FC<Props> = ({
             score={result.score}
             scoreLabel={result.scoreLabel}
             rating={rating}
+            imageUrl={productImageUrl}
             reduceMotion={reduceMotion}
           />
 
-          {/* 3. Restrictions */}
+          {/* 3. Restrictions — bandeau rose si un ingrédient matche tes
+              restrictions, sinon pilule verte « tout va bien » qui renvoie
+              quand même à la page Gérer. */}
           {restrictedItems.length > 0 ? (
             <RestrictionWarning
               restrictedIngredients={restrictedItems}
               onIngredientPress={onIngredientPress}
               onViewRestrictionsPress={onViewRestrictionsPress}
             />
-          ) : null}
+          ) : (
+            <RestrictionsOkBadge onPress={onViewRestrictionsPress} />
+          )}
 
           {/* 4. Le verdict en chiffres */}
           <PenaltySummaryStrip counts={counts} />
 
-          {/* 5. Synthèse */}
+          {/* 5. Synthèse — générée lazy au déploiement du détail */}
           <SynthesisCard
-            synthesis={result.synthesis}
+            synthesis={effectiveSynthesis}
             items={result.items}
-            onRequestSynthesis={onRequestSynthesis}
+            loading={synthesisLoading}
+            onRequestSynthesis={handleRequestSynthesis}
           />
 
           {/* 6. Spectre positionnel */}

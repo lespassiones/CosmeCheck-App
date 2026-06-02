@@ -62,6 +62,14 @@ export const ROUTES = {
   OFFRE: {
     INDEX: '/offre',
   },
+
+  // ── Mentions légales / RGPD / CGU / À propos ──────────────────────
+  LEGAL: {
+    CGU: '/legal/cgu',
+    PRIVACY: '/legal/privacy',
+    MENTIONS: '/legal/mentions',
+    ABOUT: '/legal/about',
+  },
 } as const
 
 /**

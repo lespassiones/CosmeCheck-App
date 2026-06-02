@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons'
 
 import { colors } from '@/constants/colors'
 import { spacing, radius } from '@/constants/spacing'
-import { typography } from '@/constants/typography'
+import { fontFamilies, typography } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import type { SkinProfile } from '@/lib/skin/profile'
 import { useAuth } from '@/hooks/useAuth'
@@ -63,6 +63,33 @@ const ProfileScreen: FC = () => {
         icon: 'diamond-outline',
         label: 'Passer Premium',
         onPress: () => router.push(ROUTES.OFFRE.INDEX),
+      },
+    ],
+    [],
+  )
+
+  /** Bloc « Informations légales » — exigé par Apple §3.1.2 et Play Policy §4.8. */
+  const legalLinks: LinkRow[] = useMemo(
+    () => [
+      {
+        icon: 'document-text-outline',
+        label: "Conditions d'utilisation",
+        onPress: () => router.push(ROUTES.LEGAL.CGU),
+      },
+      {
+        icon: 'lock-closed-outline',
+        label: 'Politique de confidentialité',
+        onPress: () => router.push(ROUTES.LEGAL.PRIVACY),
+      },
+      {
+        icon: 'business-outline',
+        label: 'Mentions légales',
+        onPress: () => router.push(ROUTES.LEGAL.MENTIONS),
+      },
+      {
+        icon: 'information-circle-outline',
+        label: 'À propos & avertissement médical',
+        onPress: () => router.push(ROUTES.LEGAL.ABOUT),
       },
     ],
     [],
@@ -166,6 +193,37 @@ const ProfileScreen: FC = () => {
                 ))}
               </NeuCard>
 
+              {/* Section « Informations légales » — exigence Apple §3.1.2 +
+                  Google Play Policy §4.8 : les CGU et la politique de
+                  confidentialité doivent être accessibles depuis l'app. */}
+              <Text style={styles.sectionKicker}>Informations légales</Text>
+              <NeuCard padding={0} interactive={false} style={styles.linksCard}>
+                {legalLinks.map((link, i) => (
+                  <Pressable
+                    key={link.label}
+                    onPress={link.onPress}
+                    style={[styles.linkRow, i > 0 && styles.linkRowBorder]}
+                    accessibilityRole="link"
+                    accessibilityLabel={link.label}
+                  >
+                    <Ionicons name={link.icon} size={20} color={colors.inkMuted} />
+                    <Text style={styles.linkLabel}>{link.label}</Text>
+                    <Ionicons name="chevron-forward" size={18} color={colors.inkLight} />
+                  </Pressable>
+                ))}
+              </NeuCard>
+
+              {/* Mini-disclaimer médical inline — visible sans cliquer pour
+                  satisfaire les reviewers stores qui scannent vite. */}
+              <View style={styles.medicalNote}>
+                <Ionicons name="information-circle-outline" size={16} color={colors.inkMuted} />
+                <Text style={styles.medicalNoteText}>
+                  Cosme Check est un outil pédagogique. Les analyses ne
+                  constituent pas un avis médical. En cas de doute, consulte un
+                  professionnel de santé.
+                </Text>
+              </View>
+
               <Pressable style={styles.signOutBtn} onPress={() => setConfirmSignOut(true)}>
                 <Text style={styles.signOutText}>Se déconnecter</Text>
               </Pressable>
@@ -255,6 +313,28 @@ const styles = StyleSheet.create({
   },
   linkRowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
   linkLabel: { ...typography.bodyMedium, color: colors.ink, flex: 1 },
+  sectionKicker: {
+    ...typography.xsSemiBold,
+    color: colors.inkLight,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: spacing.sm,
+    marginBottom: -spacing.xs,
+  },
+  medicalNote: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.xs,
+  },
+  medicalNoteText: {
+    flex: 1,
+    fontFamily: fontFamilies.regular,
+    fontSize: 11,
+    lineHeight: 16,
+    color: colors.inkMuted,
+    fontStyle: 'italic',
+  },
   signOutBtn: { alignItems: 'center', paddingVertical: spacing.base, marginTop: spacing.sm },
   signOutText: { ...typography.button, color: colors.error },
   deleteBtn: { alignItems: 'center', paddingVertical: spacing.sm },

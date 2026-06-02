@@ -14,7 +14,7 @@
  */
 
 import { memo, useMemo, useState, type FC, type ReactNode } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
 import { WhiteCard } from '@/components/design/WhiteCard'
@@ -26,8 +26,9 @@ import { normalizeColor, type AnalyseItem, type ColorRating } from '@/lib/analys
 interface Props {
   synthesis: string | null
   items: AnalyseItem[]
-  /** Appelé par le bouton stub quand la synthèse est absente. No-op gracieux
-   *  tant que l'Edge Function n'est pas déployée. */
+  /** `true` pendant la génération via l'Edge Function `synthesis`. */
+  loading?: boolean
+  /** Bouton "Réessayer" affiché quand la synthèse est absente ET non chargée. */
   onRequestSynthesis?: () => void
 }
 
@@ -104,7 +105,12 @@ function renderBold(s: string, colorByName: Map<string, ColorRating>, keyPrefix:
   })
 }
 
-const SynthesisCardBase: FC<Props> = ({ synthesis, items, onRequestSynthesis }) => {
+const SynthesisCardBase: FC<Props> = ({
+  synthesis,
+  items,
+  loading = false,
+  onRequestSynthesis,
+}) => {
   const [expanded, setExpanded] = useState(false)
 
   const colorByName = useMemo(() => {
@@ -168,6 +174,19 @@ const SynthesisCardBase: FC<Props> = ({ synthesis, items, onRequestSynthesis }) 
             </Pressable>
           ) : null}
         </>
+      ) : loading ? (
+        <View style={styles.unavailable}>
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color={colors.accent} />
+            <Text style={styles.loadingText}>
+              Génération de la synthèse personnalisée…
+            </Text>
+          </View>
+          <Text style={styles.loadingHint}>
+            On adapte la synthèse à ton profil (type de peau, préoccupations,
+            restrictions). Quelques secondes.
+          </Text>
+        </View>
       ) : (
         <View style={styles.unavailable}>
           <Text style={styles.unavailableText}>
@@ -181,7 +200,7 @@ const SynthesisCardBase: FC<Props> = ({ synthesis, items, onRequestSynthesis }) 
               style={({ pressed }) => [styles.stubBtn, pressed && styles.stubBtnPressed]}
             >
               <Ionicons name="sparkles-outline" size={14} color={colors.accent} />
-              <Text style={styles.stubText}>Générer la synthèse</Text>
+              <Text style={styles.stubText}>Réessayer</Text>
             </Pressable>
           ) : null}
         </View>
@@ -266,6 +285,23 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.semiBold,
     fontSize: 13,
     color: colors.accent,
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  loadingText: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 14,
+    color: colors.accent,
+  },
+  loadingHint: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.inkMuted,
+    marginTop: 8,
   },
   moreBtn: {
     alignSelf: 'flex-start',

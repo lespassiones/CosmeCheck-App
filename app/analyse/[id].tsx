@@ -40,6 +40,12 @@ import { parseAnalyseResponse, type AnalyseResponse } from '@/lib/analysis/types
 import { isProductCategory } from '@/lib/ai/categorize'
 import { categoryLabel } from '@/lib/categoryLabel'
 import { computeEssentiel, type EssentielData } from '@/lib/essentiel/engine'
+import {
+  cacheAnalysisRow,
+  getCachedAnalysisRow,
+} from '@/lib/storage/session'
+import { resolveAndCacheProductImage } from '@/lib/storage/productImageCache'
+import type { AnalysisRow } from '@/lib/supabase/types'
 import { useRoutine } from '@/hooks/useRoutine'
 
 type LoadState =
@@ -51,32 +57,43 @@ type LoadState =
       essentiel: EssentielData
       title: string
       categoryText: string | null
+      brand: string | null
+      productLabel: string | null
     }
 
 const AnalyseDetailScreen: FC = () => {
   const { id } = useLocalSearchParams<{ id: string }>()
   const [state, setState] = useState<LoadState>({ status: 'loading' })
+  const [productImageUrl, setProductImageUrl] = useState<string | null>(null)
   const scrollRef = useRef<ScrollView>(null)
   const reduceMotion = useReducedMotion()
   const { addToRoutine, isInRoutine } = useRoutine()
   const [routinePending, setRoutinePending] = useState(false)
 
-  const load = useCallback(async () => {
-    if (!id) {
-      setState({ status: 'error', message: "Identifiant d'analyse manquant." })
-      return
+  // Hydrate l'URL image produit :
+  //   1. cache AsyncStorage (instantané, mis en place au pick depuis catalogue
+  //      / lien / web)
+  //   2. fallback catalogue via brand+name (RPC ILIKE) → 1 seul appel DB par
+  //      analyse historique, puis re-cachée pour les prochaines fois
+  // Le schéma `analyses` n'a pas de colonne image_url, d'où ce mécanisme.
+  useEffect(() => {
+    if (!id || state.status !== 'ready') return
+    let cancelled = false
+    void resolveAndCacheProductImage(id, state.brand, state.productLabel).then(
+      (url) => {
+        if (!cancelled) setProductImageUrl(url)
+      },
+    )
+    return () => {
+      cancelled = true
     }
-    setState({ status: 'loading' })
-    try {
-      const row = await getAnalysisById(id)
-      if (!row) {
-        setState({ status: 'error', message: "Cette analyse est introuvable." })
-        return
-      }
+  }, [id, state])
+
+  const buildReadyState = useCallback(
+    (row: AnalysisRow): LoadState => {
       const result = parseAnalyseResponse(row.result_json)
       if (!result) {
-        setState({ status: 'error', message: "Le résultat de cette analyse est illisible." })
-        return
+        return { status: 'error', message: "Le résultat de cette analyse est illisible." }
       }
       const category = isProductCategory(result.category) ? result.category : null
       const essentiel = computeEssentiel(result, {
@@ -85,7 +102,48 @@ const AnalyseDetailScreen: FC = () => {
       })
       const title = row.product_label?.trim() || row.name?.trim() || 'Analyse de votre liste'
       const categoryText = categoryLabel(category) ?? row.product_type ?? null
-      setState({ status: 'ready', result, essentiel, title, categoryText })
+      return {
+        status: 'ready',
+        result,
+        essentiel,
+        title,
+        categoryText,
+        brand: row.brand?.trim() || null,
+        productLabel: row.product_label?.trim() || row.name?.trim() || null,
+      }
+    },
+    [],
+  )
+
+  const load = useCallback(async () => {
+    if (!id) {
+      setState({ status: 'error', message: "Identifiant d'analyse manquant." })
+      return
+    }
+    setState({ status: 'loading' })
+    // 1. Cache local d'abord (TTL 24h, hydrate instantanément).
+    try {
+      const cached = await getCachedAnalysisRow(id)
+      if (cached) {
+        setState(buildReadyState(cached))
+        return
+      }
+    } catch {
+      // AsyncStorage indisponible : on tombe sur la branche réseau.
+    }
+    // 2. Miss → fetch DB.
+    try {
+      const row = await getAnalysisById(id)
+      if (!row) {
+        setState({ status: 'error', message: "Cette analyse est introuvable." })
+        return
+      }
+      const ready = buildReadyState(row)
+      setState(ready)
+      if (ready.status === 'ready') {
+        // Best-effort : on n'attend pas la fin de l'écriture pour répondre.
+        void cacheAnalysisRow(row).catch(() => {})
+      }
     } catch (e) {
       setState({
         status: 'error',
@@ -93,7 +151,7 @@ const AnalyseDetailScreen: FC = () => {
           e instanceof Error ? e.message : "Impossible de charger l'analyse.",
       })
     }
-  }, [id])
+  }, [id, buildReadyState])
 
   useEffect(() => {
     void load()
@@ -267,12 +325,14 @@ const AnalyseDetailScreen: FC = () => {
           </View>
 
           <AnalysisResultPanel
+            analysisId={id}
             result={state.result}
             essentiel={state.essentiel}
             onIngredientPress={handleIngredientPress}
             onViewRestrictionsPress={handleViewRestrictions}
             onRequestScrollTo={handleRequestScrollTo}
             reduceMotion={reduceMotion}
+            productImageUrl={productImageUrl}
           />
         </ScrollView>
       )}

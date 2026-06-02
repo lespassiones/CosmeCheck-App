@@ -22,6 +22,12 @@ import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
 import { spacing } from '@/constants/spacing'
 import { supabase } from '@/lib/supabase/client'
+import {
+  readAiCache,
+  writeAiCache,
+  TTL_INGREDIENT_EXPLAIN_MS,
+  TTL_INGREDIENT_EXPOSURE_MS,
+} from '@/lib/storage/aiCache'
 
 interface Props {
   slug: string
@@ -56,8 +62,22 @@ export const ExplainIngredient: FC<Props> = ({ slug }) => {
     setPhase('loading')
     setPersonalLine(null)
 
-    // Les deux appels sont tirés EN PARALLÈLE. `exposure` est best-effort :
-    // on l'enveloppe pour qu'un échec ne fasse jamais rejeter le Promise.all.
+    // 1. Cache local : explain (30j) + exposure (1h). On peut afficher dès que
+    // l'explain est trouvé — l'exposure est bonus.
+    const [cachedExplain, cachedExposure] = await Promise.all([
+      readAiCache<string>('ingredient-explain', slug, TTL_INGREDIENT_EXPLAIN_MS),
+      readAiCache<string>('ingredient-exposure', slug, TTL_INGREDIENT_EXPOSURE_MS),
+    ])
+    if (cachedExplain) {
+      setText(cachedExplain)
+      if (cachedExposure) setPersonalLine(cachedExposure)
+      setPhase('ready')
+      return
+    }
+
+    // 2. Miss → invoke. Les deux appels sont tirés EN PARALLÈLE. `exposure`
+    // est best-effort : on l'enveloppe pour qu'un échec ne fasse jamais
+    // rejeter le Promise.all.
     const [explainRes, exposureRes] = await Promise.all([
       supabase.functions
         .invoke('ingredient-explain', { body: { slug } })
@@ -78,10 +98,14 @@ export const ExplainIngredient: FC<Props> = ({ slug }) => {
     }
 
     setText(explanation)
+    void writeAiCache('ingredient-explain', slug, explanation)
 
     if (!exposureRes.error) {
       const line = extractPersonalLine(exposureRes.data)
-      if (line) setPersonalLine(line)
+      if (line) {
+        setPersonalLine(line)
+        void writeAiCache('ingredient-exposure', slug, line)
+      }
     }
 
     setPhase('ready')

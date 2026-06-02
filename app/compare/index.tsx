@@ -36,8 +36,13 @@ import { radius, spacing } from '@/constants/spacing'
 import { fontFamilies, typography } from '@/constants/typography'
 import { db } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
+import { useRoutine } from '@/hooks/useRoutine'
 import { parseAnalyseResponse, type AnalyseResponse } from '@/lib/analysis/types'
 import { compareAnalyses, shortenProductName, type CompareSide } from '@/lib/routine/compare'
+import {
+  buildCompareBonASavoir,
+  routineOverlapSlugs,
+} from '@/lib/routine/compareOverlap'
 
 type Flagged = {
   name: string
@@ -83,18 +88,16 @@ function groupByFunction(items: Flagged[]): FamilyGroup[] {
   })
 }
 
+/**
+ * Le state stocke uniquement les analyses chargées. Les dérivés (flagged,
+ * bonASavoir, sameComposition) sont recalculés en `useMemo` à partir de
+ * `useRoutine()` → ils se mettent à jour automatiquement quand la routine
+ * du cache react-query arrive (même après le 1er render).
+ */
 type LoadState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | {
-      status: 'ready'
-      a: CompareSide
-      b: CompareSide
-      flaggedA: Flagged[]
-      flaggedB: Flagged[]
-      bonASavoir: string[]
-      sameComposition: boolean
-    }
+  | { status: 'ready'; a: CompareSide; b: CompareSide }
 
 type AnalysisLite = {
   id: string
@@ -107,6 +110,7 @@ type AnalysisLite = {
 const CompareScreen: FC = () => {
   const params = useLocalSearchParams<{ ids?: string }>()
   const { user } = useAuth()
+  const { items: routineItems } = useRoutine()
   const [state, setState] = useState<LoadState>({ status: 'loading' })
 
   const ids = useMemo(
@@ -161,67 +165,7 @@ const CompareScreen: FC = () => {
       }
 
       const [a, b] = sides as [CompareSide, CompareSide]
-
-      // Contexte routine pour l'insight « bon à savoir » uniquement.
-      const routineSlugs = new Set<string>()
-      try {
-        const { data: routine } = await db()
-          .from('routine_items')
-          .select('analyses(id, result_json)')
-          .limit(30)
-        for (const it of (routine ?? []) as unknown as {
-          analyses: { id: string; result_json: unknown } | null
-        }[]) {
-          if (!it.analyses) continue
-          if (it.analyses.id === a.id || it.analyses.id === b.id) continue
-          const parsed = parseAnalyseResponse(it.analyses.result_json)
-          if (!parsed) continue
-          for (const ing of parsed.items) {
-            if (ing.slug) routineSlugs.add(ing.slug)
-          }
-        }
-      } catch {
-        // routine optionnelle — on continue sans.
-      }
-
-      const diff = compareAnalyses(a, b, { routineIngredientSlugs: routineSlugs })
-
-      // « Bon à savoir » — faits concrets, non-jugeants.
-      const bonASavoir: string[] = []
-      const slugs = Array.from(routineSlugs)
-      const aOverlap = slugs.filter((s) => a.result.items.some((i) => i.slug === s)).length
-      const bOverlap = slugs.filter((s) => b.result.items.some((i) => i.slug === s)).length
-      if (aOverlap >= 3) {
-        bonASavoir.push(
-          `${aOverlap} ingrédients de **${a.name}** se retrouvent déjà dans d'autres produits de ta routine - exposition cumulée à surveiller.`,
-        )
-      }
-      if (bOverlap >= 3) {
-        bonASavoir.push(
-          `${bOverlap} ingrédients de **${b.name}** se retrouvent déjà dans d'autres produits de ta routine - exposition cumulée à surveiller.`,
-        )
-      }
-      const allergensA = a.result.euFragranceAllergens?.total ?? 0
-      const allergensB = b.result.euFragranceAllergens?.total ?? 0
-      if (allergensA > 0 && allergensB === 0) {
-        bonASavoir.push(
-          `**${a.name}** contient ${allergensA} allergène${allergensA > 1 ? 's' : ''} de parfum déclaré${allergensA > 1 ? 's' : ''} (UE) - à éviter en cas de peau réactive.`,
-        )
-      } else if (allergensB > 0 && allergensA === 0) {
-        bonASavoir.push(
-          `**${b.name}** contient ${allergensB} allergène${allergensB > 1 ? 's' : ''} de parfum déclaré${allergensB > 1 ? 's' : ''} (UE) - à éviter en cas de peau réactive.`,
-        )
-      }
-
-      setState({
-        status: 'ready',
-        a,
-        b,
-        flaggedA: flaggedFor(a),
-        flaggedB: flaggedFor(b),
-        bonASavoir,
-        sameComposition: diff.uniqueToA.length + diff.uniqueToB.length === 0,
-      })
+      setState({ status: 'ready', a, b })
     } catch (e) {
       setState({
         status: 'error',
@@ -229,6 +173,29 @@ const CompareScreen: FC = () => {
       })
     }
   }, [ids])
+
+  // Dérivés routine-dépendants : recalculés quand `useRoutine()` arrive (ou
+  // change). Tant que la routine n'est pas chargée, on rend avec un overlap
+  // vide — ça n'altère QUE l'insight « bon à savoir », pas la comparaison.
+  const routineSlugs = useMemo(() => {
+    if (state.status !== 'ready') return new Set<string>()
+    return routineOverlapSlugs(
+      routineItems.map((it) => ({ analysis: it.analysis })),
+      [state.a.id, state.b.id],
+    )
+  }, [state, routineItems])
+
+  const derived = useMemo(() => {
+    if (state.status !== 'ready') return null
+    const { a, b } = state
+    const diff = compareAnalyses(a, b, { routineIngredientSlugs: routineSlugs })
+    return {
+      flaggedA: flaggedFor(a),
+      flaggedB: flaggedFor(b),
+      bonASavoir: buildCompareBonASavoir({ a, b, routineSlugs }),
+      sameComposition: diff.uniqueToA.length + diff.uniqueToB.length === 0,
+    }
+  }, [state, routineSlugs])
 
   useEffect(() => {
     void load()
@@ -330,23 +297,23 @@ const CompareScreen: FC = () => {
           />
 
           {/* À surveiller — une carte par produit, groupé par fonction. */}
-          {(state.flaggedA.length > 0 || state.flaggedB.length > 0) && (
+          {derived && (derived.flaggedA.length > 0 || derived.flaggedB.length > 0) && (
             <View style={styles.attentionStack}>
-              {state.flaggedA.length > 0 && (
-                <AttentionCard name={state.a.name} groups={groupByFunction(state.flaggedA)} />
+              {derived.flaggedA.length > 0 && (
+                <AttentionCard name={state.a.name} groups={groupByFunction(derived.flaggedA)} />
               )}
-              {state.flaggedB.length > 0 && (
-                <AttentionCard name={state.b.name} groups={groupByFunction(state.flaggedB)} />
+              {derived.flaggedB.length > 0 && (
+                <AttentionCard name={state.b.name} groups={groupByFunction(derived.flaggedB)} />
               )}
             </View>
           )}
 
           {/* Bon à savoir */}
-          {state.bonASavoir.length > 0 && (
+          {derived && derived.bonASavoir.length > 0 && (
             <GlassCard style={styles.block} padding={spacing.lg}>
               <Text style={styles.blockLabel}>BON À SAVOIR</Text>
               <View style={styles.bonList}>
-                {state.bonASavoir.map((t, i) => (
+                {derived.bonASavoir.map((t, i) => (
                   <View key={i} style={styles.bonRow}>
                     <View style={styles.bonDot} />
                     <Text style={styles.bonText}>{renderBold(t)}</Text>
@@ -356,7 +323,7 @@ const CompareScreen: FC = () => {
             </GlassCard>
           )}
 
-          {state.sameComposition && (
+          {derived?.sameComposition && (
             <Text style={styles.sameComp}>
               Les deux compositions ne diffèrent pas sur les ingrédients pénalisants.
             </Text>

@@ -30,10 +30,14 @@ export interface RunAnalysisParams {
   productName?: string
   brand?: string
   barcode?: string
-  source: 'barcode' | 'ocr' | 'search' | 'manual'
+  /** URL source du produit (ex: page e-commerce d'origine). */
+  sourceUrl?: string
+  source: 'barcode' | 'ocr' | 'search' | 'manual' | 'link'
   userId: string
   userRestrictions?: UserRestrictions
-  /** Génère la synthèse IA (coûteux). Défaut: false. */
+  /** Si `true`, génère la synthèse pendant l'analyse initiale (coûteux).
+   *  Défaut: false. La synthèse est générée à la demande via l'Edge Function
+   *  `synthesis` quand l'utilisateur ouvre l'analyse complète. */
   withSynthesis?: boolean
   /** Ajoute directement le produit à la routine côté serveur. */
   addToRoutine?: boolean
@@ -205,6 +209,12 @@ export async function runAnalysis(params: RunAnalysisParams): Promise<RunAnalysi
     productName,
     brand,
     barcode,
+    sourceUrl,
+    // Par défaut on NE GÉNÈRE PAS la synthèse pendant l'analyse initiale.
+    // Elle est générée à la demande quand l'utilisateur clique "Voir l'analyse
+    // complète" (Edge Function `synthesis` séparée, persiste dans la row).
+    // Ça réduit la latence de l'analyse initiale et évite un coût LLM pour
+    // les utilisateurs qui ne déplient jamais le détail.
     withSynthesis = false,
     addToRoutine,
     productType,
@@ -221,6 +231,7 @@ export async function runAnalysis(params: RunAnalysisParams): Promise<RunAnalysi
   if (productType) body.productType = productType
   if (addToRoutine != null) body.addToRoutine = addToRoutine
   if (barcode) body.productEan = barcode
+  if (sourceUrl) body.sourceUrl = sourceUrl
 
   const { data, error, response } = await supabase.functions.invoke('analyser', { body })
 

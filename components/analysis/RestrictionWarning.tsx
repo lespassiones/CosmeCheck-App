@@ -83,6 +83,67 @@ const RestrictionWarningBase: FC<Props> = ({
 
 export const RestrictionWarning = memo(RestrictionWarningBase)
 
+/**
+ * RestrictionsOkBadge — pendant vert du `RestrictionWarning` : pilule discrète
+ * « Aucune restriction détectée — Gérer › » à afficher quand AUCUN ingrédient
+ * de l'analyse ne tombe dans les restrictions de l'utilisateur. Tap sur la
+ * carte (ou le lien Gérer) → /profile/restrictions ; quand l'utilisateur
+ * ajoute une restriction qui matche un ingrédient de l'analyse en cours, le
+ * parent bascule naturellement vers `RestrictionWarning`.
+ */
+export const RestrictionsOkBadge: FC<{ onPress: () => void }> = ({ onPress }) => {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Aucune restriction détectée. Gérer mes restrictions."
+      style={({ pressed }) => [okStyles.card, pressed && okStyles.cardPressed]}
+    >
+      <Ionicons name="shield-checkmark" size={16} color={colors.rating.vert.text} />
+      <Text style={okStyles.label} numberOfLines={1}>
+        Aucune restriction détectée
+      </Text>
+      <View style={okStyles.actionRow}>
+        <Text style={okStyles.actionText}>Gérer</Text>
+        <Ionicons name="chevron-forward" size={13} color={colors.rating.vert.text} />
+      </View>
+    </Pressable>
+  )
+}
+
+const okStyles = StyleSheet.create({
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.rating.vert.bg,
+    borderWidth: 1,
+    borderColor: 'rgba(22,163,74,0.20)',
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.base,
+    paddingVertical: 10,
+  },
+  cardPressed: {
+    opacity: 0.85,
+  },
+  label: {
+    flex: 1,
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 13,
+    color: colors.rating.vert.text,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  actionText: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 12,
+    color: colors.rating.vert.text,
+  },
+})
+
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.roseSoft,

@@ -88,22 +88,17 @@ const OffreScreen: FC = () => {
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero */}
-        <LinearGradient
-          colors={[colors.rose, colors.accent]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.hero}
-        >
+        {/* Hero — fond crème doux, look « cosmétique haut de gamme ». */}
+        <View style={styles.hero}>
           <View style={styles.heroBadge}>
-            <Ionicons name="diamond" size={14} color={colors.surface} />
+            <Ionicons name="diamond" size={14} color={colors.roseDeep} />
             <Text style={styles.heroBadgeText}>PREMIUM</Text>
           </View>
           <Text style={styles.heroTitle}>Passe à Premium</Text>
           <Text style={styles.heroTagline}>
             Analyse sans limites et débloque tout le potentiel de Cosme Check.
           </Text>
-        </LinearGradient>
+        </View>
 
         {/* Plans */}
         <View style={styles.section}>
@@ -229,12 +224,17 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     marginBottom: spacing.xl,
     overflow: 'hidden',
+    backgroundColor: '#FDF6EC',
+    borderWidth: 1,
+    borderColor: 'rgba(190,18,60,0.10)',
   },
   heroBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(190,18,60,0.18)',
     borderRadius: radius.full,
     paddingVertical: 4,
     paddingHorizontal: 10,
@@ -242,18 +242,18 @@ const styles = StyleSheet.create({
   },
   heroBadgeText: {
     ...typography.xsSemiBold,
-    color: colors.surface,
+    color: colors.roseDeep,
     marginLeft: 4,
     letterSpacing: 1,
   },
   heroTitle: {
     ...typography.h1,
-    color: colors.surface,
+    color: colors.roseDeep,
     marginBottom: spacing.sm,
   },
   heroTagline: {
     ...typography.body,
-    color: 'rgba(255,255,255,0.92)',
+    color: '#7C2D12',
   },
 
   // Sections

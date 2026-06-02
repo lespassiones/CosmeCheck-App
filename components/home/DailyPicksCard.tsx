@@ -80,18 +80,22 @@ export const DailyPicksCard: FC = () => {
     }
   }, [])
 
-  // Catalogue du jour — récupéré via supabase (cache 1h).
-  const { data, isLoading, error } = useQuery<DailyPickItem[]>({
-    queryKey: ['dailyPicks', todayKey()],
-    staleTime: 60 * 60 * 1000,
+  // Catalogue STABLE (queryKey sans date) — persisté à travers les sessions par
+  // le persister AsyncStorage (cf. `lib/storage/queryPersist`). Le slicing
+  // « 10 items du jour » est dérivé en local via `select`, donc la rotation
+  // quotidienne ne déclenche aucun nouveau fetch.
+  const { data, isLoading, error } = useQuery<DailyPickItem[], Error, DailyPickItem[]>({
+    queryKey: ['dailyPicksCatalog'],
+    staleTime: 24 * 60 * 60 * 1000, // 24h — catalogue quasi-statique
     queryFn: async () => {
       const { data: rows, error: e } = await db()
         .from('daily_picks')
         .select('id, kind, order_index, question, options, correct_index, reveal, category')
         .order('order_index', { ascending: true })
       if (e) throw e
-      return pickTodaysItems((rows as DailyPickItem[] | null) ?? [])
+      return (rows as DailyPickItem[] | null) ?? []
     },
+    select: (rows) => pickTodaysItems(rows),
   })
 
   function next(wasCorrect: boolean) {
