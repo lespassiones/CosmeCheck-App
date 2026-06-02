@@ -17,7 +17,7 @@
 import { useState, type FC } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { GlassCard } from '@/components/design/GlassCard'
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
 import { spacing } from '@/constants/spacing'
@@ -90,7 +90,7 @@ export const ExplainIngredient: FC<Props> = ({ slug }) => {
   if (phase === 'ready' && text) {
     const paragraphs = text.split('\n').filter((l) => l.trim().length > 0)
     return (
-      <GlassCard style={styles.card} padding={spacing.lg} opacity={0.72}>
+      <WhiteCard style={styles.card} padding={spacing.lg}>
         <View style={styles.headRow}>
           <Text style={styles.sparkle}>✨</Text>
           <Text style={styles.headTitle}>Expliqué simplement</Text>
@@ -107,7 +107,7 @@ export const ExplainIngredient: FC<Props> = ({ slug }) => {
             <Text style={styles.personalText}>🧴 {personalLine}</Text>
           </View>
         ) : null}
-      </GlassCard>
+      </WhiteCard>
     )
   }
 

@@ -31,7 +31,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
-import { NeuCard } from '@/components/design/NeuCard'
+import { WhiteCard } from '@/components/design/WhiteCard'
 
 const AUTO_ROTATE_MS = 10_000
 const RESUME_DELAY_MS = 2_000
@@ -118,7 +118,7 @@ export const TipCarousel: FC<Props> = ({ tips }) => {
   const dotsToShow = Math.min(total, MAX_DOTS)
 
   return (
-    <NeuCard style={styles.card} padding={spacing.base} interactive={false}>
+    <WhiteCard style={styles.card} padding={spacing.base}>
       {/* En-tête */}
       <View style={styles.head}>
         <Text style={styles.kicker}>Astuce du jour</Text>
@@ -196,7 +196,7 @@ export const TipCarousel: FC<Props> = ({ tips }) => {
           </Pressable>
         </View>
       )}
-    </NeuCard>
+    </WhiteCard>
   )
 }
 

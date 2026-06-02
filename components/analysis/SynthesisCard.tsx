@@ -13,11 +13,11 @@
  * gracieusement (ne plante jamais).
  */
 
-import { memo, useMemo, type FC, type ReactNode } from 'react'
+import { memo, useMemo, useState, type FC, type ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
-import { GlassCard } from '@/components/design/GlassCard'
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
 import { spacing } from '@/constants/spacing'
@@ -105,6 +105,8 @@ function renderBold(s: string, colorByName: Map<string, ColorRating>, keyPrefix:
 }
 
 const SynthesisCardBase: FC<Props> = ({ synthesis, items, onRequestSynthesis }) => {
+  const [expanded, setExpanded] = useState(false)
+
   const colorByName = useMemo(() => {
     const m = new Map<string, ColorRating>()
     for (const it of items) {
@@ -117,36 +119,55 @@ const SynthesisCardBase: FC<Props> = ({ synthesis, items, onRequestSynthesis }) 
   }, [items])
 
   const blocks = useMemo(() => (synthesis ? parseSynthesisBlocks(synthesis) : []), [synthesis])
+  const visibleBlocks = expanded ? blocks : blocks.slice(0, 1)
+  const isCollapsible = blocks.length > 1
 
   return (
-    <GlassCard padding={spacing.lg}>
+    <WhiteCard padding={spacing.lg}>
       <View style={styles.header}>
         <Ionicons name="sparkles" size={16} color={colors.accent} />
         <Text style={styles.h2}>Synthèse</Text>
       </View>
 
       {synthesis && blocks.length > 0 ? (
-        <View style={styles.body}>
-          {blocks.map((block, i) => {
-            if (block.type === 'p') {
+        <>
+          <View style={styles.body}>
+            {visibleBlocks.map((block, i) => {
+              if (block.type === 'p') {
+                return (
+                  <Text key={i} style={styles.paragraph}>
+                    {renderBold(block.text, colorByName, `p${i}`)}
+                  </Text>
+                )
+              }
               return (
-                <Text key={i} style={styles.paragraph}>
-                  {renderBold(block.text, colorByName, `p${i}`)}
-                </Text>
+                <View key={i} style={styles.ul}>
+                  {block.items.map((item, j) => (
+                    <View key={j} style={styles.li}>
+                      <View style={styles.bullet} />
+                      <Text style={styles.liText}>
+                        {renderBold(item, colorByName, `li${i}-${j}`)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
               )
-            }
-            return (
-              <View key={i} style={styles.ul}>
-                {block.items.map((item, j) => (
-                  <View key={j} style={styles.li}>
-                    <View style={styles.bullet} />
-                    <Text style={styles.liText}>{renderBold(item, colorByName, `li${i}-${j}`)}</Text>
-                  </View>
-                ))}
-              </View>
-            )
-          })}
-        </View>
+            })}
+          </View>
+
+          {isCollapsible ? (
+            <Pressable
+              onPress={() => setExpanded((v) => !v)}
+              accessibilityRole="button"
+              accessibilityState={{ expanded }}
+              style={({ pressed }) => [styles.moreBtn, pressed && styles.moreBtnPressed]}
+            >
+              <Text style={styles.moreText}>
+                {expanded ? 'Réduire' : 'Voir la synthèse complète'} {'->'}
+              </Text>
+            </Pressable>
+          ) : null}
+        </>
       ) : (
         <View style={styles.unavailable}>
           <Text style={styles.unavailableText}>
@@ -165,7 +186,7 @@ const SynthesisCardBase: FC<Props> = ({ synthesis, items, onRequestSynthesis }) 
           ) : null}
         </View>
       )}
-    </GlassCard>
+    </WhiteCard>
   )
 }
 
@@ -242,6 +263,19 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   stubText: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 13,
+    color: colors.accent,
+  },
+  moreBtn: {
+    alignSelf: 'flex-start',
+    marginTop: spacing.md,
+    paddingVertical: 4,
+  },
+  moreBtnPressed: {
+    opacity: 0.7,
+  },
+  moreText: {
     fontFamily: fontFamilies.semiBold,
     fontSize: 13,
     color: colors.accent,

@@ -163,6 +163,12 @@ const styles = StyleSheet.create({
     position: 'relative',
     borderRadius: radius.lg,
     overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 6,
   },
   actionLayer: {
     ...StyleSheet.absoluteFillObject,

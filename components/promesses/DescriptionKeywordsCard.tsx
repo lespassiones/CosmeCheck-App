@@ -10,7 +10,7 @@
 import { type FC } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
-import { GlassCard } from '@/components/design/GlassCard'
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { colors } from '@/constants/colors'
 import { spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
@@ -24,7 +24,7 @@ export const DescriptionKeywordsCard: FC<{
   if (promises.length === 0 && unverifiable.length === 0) return null
 
   return (
-    <GlassCard padding={spacing.lg}>
+    <WhiteCard padding={spacing.lg}>
       <Text style={styles.title}>Ce qu&apos;on a lu sur l&apos;emballage</Text>
       <Text style={styles.subtitle}>
         Les promesses extraites (avec leur verdict) et les mentions non analysables côté formule.
@@ -64,7 +64,7 @@ export const DescriptionKeywordsCard: FC<{
           ))}
         </View>
       )}
-    </GlassCard>
+    </WhiteCard>
   )
 }
 

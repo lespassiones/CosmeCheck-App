@@ -12,7 +12,7 @@
 import { type FC } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
-import { GlassCard } from '@/components/design/GlassCard'
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { colors } from '@/constants/colors'
 import { spacing, radius } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
@@ -63,7 +63,7 @@ export const IngredientsPositionChart: FC<{ snapshot: CoherenceResult['positionS
   const thresholdLabel = firstFragrancePos !== null ? 'Parfum' : 'Conservateur'
 
   return (
-    <GlassCard padding={spacing.lg}>
+    <WhiteCard padding={spacing.lg}>
       <Text style={styles.title}>Où se trouvent les ingrédients clés ?</Text>
       <Text style={styles.subtitle}>
         Tout ce qui est après le parfum (ou le 1ᵉʳ conservateur) est dosé à moins de 1 %, donc avec peu
@@ -112,7 +112,7 @@ export const IngredientsPositionChart: FC<{ snapshot: CoherenceResult['positionS
           )}
         </View>
       </View>
-    </GlassCard>
+    </WhiteCard>
   )
 }
 

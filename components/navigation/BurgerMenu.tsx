@@ -40,7 +40,7 @@ import {
   HomeIcon,
   LayersIcon,
   LogoutIcon,
-  MenuIcon,
+  MoreVerticalIcon,
   PromisesIcon,
   SparklesIcon,
   UserIcon,
@@ -50,6 +50,7 @@ import { easings } from '@/constants/motion'
 import { radius } from '@/constants/spacing'
 import { ROUTES } from '@/constants/routes'
 import { useAuth } from '@/hooks/useAuth'
+import { CreditsPill } from '@/components/shared/CreditsPill'
 
 type IconCmp = FC<{ size?: number; color?: string }>
 
@@ -156,15 +157,15 @@ export const BurgerMenu: FC = () => {
 
   return (
     <>
-      {/* Bouton burger flottant — haut-droite, au-dessus du contenu. */}
+      {/* Bouton menu flottant — haut-droite, 3 points verticaux discrets. */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Ouvrir le menu"
         onPress={openDrawer}
-        style={[styles.burger, { top: insets.top + 8 }]}
-        hitSlop={6}
+        style={[styles.burger, { top: insets.top + 14 }]}
+        hitSlop={10}
       >
-        <MenuIcon size={20} color={colors.ink} />
+        <MoreVerticalIcon size={20} color={colors.ink} />
       </Pressable>
 
       <Modal
@@ -286,41 +287,15 @@ export const BurgerMenu: FC = () => {
   )
 }
 
-/**
- * CreditsPill — pilule de crédits style pièce d'or, twin du web CreditsPill.
- * Sans backend branché ici (pas d'/api/credits côté mobile) on affiche un
- * placeholder neutre ; le composant se câblera quand l'API crédits existera.
- */
-const CreditsPill: FC = () => (
-  <View style={styles.pill}>
-    <View style={styles.coin}>
-      <Text style={styles.coinText}>C</Text>
-    </View>
-    <Text style={styles.pillCount}>—</Text>
-    <View style={styles.pillPlus}>
-      <Text style={styles.pillPlusText}>+</Text>
-    </View>
-  </View>
-)
-
 const styles = StyleSheet.create({
   burger: {
     position: 'absolute',
-    right: 12,
+    right: 8,
     zIndex: 40,
-    height: 44,
-    width: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
+    height: 32,
+    width: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    elevation: 5,
   },
   overlay: {
     flex: 1,
@@ -421,51 +396,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     color: colors.inkMuted,
-  },
-  // ── CreditsPill ──
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: radius.full,
-    backgroundColor: '#18181B',
-    borderWidth: 1,
-    borderColor: 'rgba(251,191,36,0.30)',
-    paddingLeft: 6,
-    paddingRight: 4,
-    paddingVertical: 4,
-  },
-  coin: {
-    height: 18,
-    width: 18,
-    borderRadius: 9,
-    backgroundColor: '#F59E0B',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  coinText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#7C2D12',
-  },
-  pillCount: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FFFBEB',
-  },
-  pillPlus: {
-    height: 22,
-    width: 22,
-    borderRadius: 11,
-    backgroundColor: '#F59E0B',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pillPlusText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#451A03',
-    lineHeight: 16,
   },
   // ── Premium upsell ──
   premiumCard: {

@@ -10,13 +10,12 @@
 import { type FC } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { colors } from '@/constants/colors'
-import { spacing, radius } from '@/constants/spacing'
+import { spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 import type { CoherenceResult } from '@/lib/coherence/types'
 
-const ROSE_BG = 'rgba(255,241,242,0.7)'
-const ROSE_RING = '#FFE4E6'
 const ROSE_DEEP = '#BE123C'
 const ROSE_TEXT = '#9F1239'
 
@@ -34,7 +33,7 @@ export const MarketingIndexCard: FC<{ metrics: CoherenceResult['metrics'] }> = (
   ].filter((b) => b.count > 0)
 
   return (
-    <View style={styles.card}>
+    <WhiteCard padding={spacing.lg}>
       <Text style={styles.kicker}>INDICE MARKETING</Text>
       <Text style={styles.big}>{idx} %</Text>
       <Text style={styles.subCount}>
@@ -67,18 +66,11 @@ export const MarketingIndexCard: FC<{ metrics: CoherenceResult['metrics'] }> = (
           ))}
         </View>
       ) : null}
-    </View>
+    </WhiteCard>
   )
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: ROSE_BG,
-    borderWidth: 1,
-    borderColor: ROSE_RING,
-    borderRadius: radius.card,
-    padding: spacing.lg,
-  },
   kicker: { fontFamily: fontFamilies.semiBold, fontSize: 11, letterSpacing: 1, color: ROSE_DEEP, marginBottom: 4 },
   big: { fontFamily: fontFamilies.bold, fontSize: 48, lineHeight: 52, color: ROSE_DEEP, letterSpacing: -1 },
   subCount: { fontFamily: fontFamilies.regular, fontSize: 11, color: ROSE_TEXT, opacity: 0.85, marginTop: 4 },

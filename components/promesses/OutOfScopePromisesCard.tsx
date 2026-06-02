@@ -10,13 +10,13 @@ import { type FC } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { colors } from '@/constants/colors'
 import { spacing, radius } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 import { PRODUCT_TYPE_LABELS, type OutOfScopePromise, type ProductType } from '@/lib/coherence/types'
 
-const AMBER_BG = 'rgba(255,251,235,0.7)'
-const AMBER_RING = '#FDE68A'
+const AMBER_SOFT = '#FFFBEB'
 const AMBER_TEXT = '#B45309'
 
 export const OutOfScopePromisesCard: FC<{
@@ -27,7 +27,7 @@ export const OutOfScopePromisesCard: FC<{
   const typeLabel = productType ? PRODUCT_TYPE_LABELS[productType] : null
 
   return (
-    <View style={styles.card}>
+    <WhiteCard padding={spacing.lg}>
       <View style={styles.header}>
         <View style={styles.iconCircle}>
           <Ionicons name="information-circle-outline" size={16} color={AMBER_TEXT} />
@@ -59,20 +59,17 @@ export const OutOfScopePromisesCard: FC<{
           </View>
         ))}
       </View>
-    </View>
+    </WhiteCard>
   )
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: AMBER_BG, borderWidth: 1, borderColor: AMBER_RING, borderRadius: radius.card, padding: spacing.lg },
   header: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.base },
   iconCircle: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: AMBER_RING,
+    backgroundColor: AMBER_SOFT,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -81,7 +78,7 @@ const styles = StyleSheet.create({
   count: { fontFamily: fontFamilies.medium, fontSize: 11, color: AMBER_TEXT },
   intro: { fontFamily: fontFamilies.regular, fontSize: 12, lineHeight: 18, color: colors.inkMuted, marginTop: 4 },
   list: { gap: spacing.md },
-  item: { backgroundColor: colors.surface, borderWidth: 1, borderColor: AMBER_RING, borderRadius: radius.md, padding: spacing.md },
+  item: { backgroundColor: AMBER_SOFT, borderRadius: radius.md, padding: spacing.md },
   itemHead: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, marginBottom: 6 },
   effectChip: { backgroundColor: '#FEF3C7', borderRadius: 9999, paddingHorizontal: 9, paddingVertical: 2 },
   effectChipText: { fontFamily: fontFamilies.medium, fontSize: 11, color: '#92400E' },

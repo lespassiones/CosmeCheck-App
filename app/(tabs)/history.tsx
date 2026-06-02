@@ -43,6 +43,7 @@ import {
 import { categoryLabel, type ProductCategory } from '@/lib/categoryLabel'
 import { useAuth } from '@/hooks/useAuth'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
+import { ScreenHeader } from '@/components/shared/ScreenHeader'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { HistoryRowCard, type HistoryItemView } from '@/components/history/HistoryRowCard'
 import { HistoryItemActions } from '@/components/history/HistoryItemActions'
@@ -316,18 +317,11 @@ const HistoryScreen: FC = () => {
   return (
     <View style={styles.root}>
       <BackgroundGlow variant="minimal" />
-      <SafeAreaView style={styles.safe} edges={['top']}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Historique</Text>
-          {items.length > 0 ? (
-            <Text style={styles.count}>
-              {items.length} analyse{items.length > 1 ? 's' : ''}
-            </Text>
-          ) : null}
-        </View>
-
-        {/* Barre d'outils : entrée "Comparer" au repos, contrôles en mode select */}
-        {items.length >= 2 ? (
+      <ScreenHeader title="Historique" />
+      <SafeAreaView style={styles.safe} edges={[]}>
+        {/* Ligne unique : compteur d'analyses + bouton "Comparer 2 analyses"
+            (ou contrôles du mode sélection) */}
+        {items.length > 0 ? (
           <View style={styles.toolbar}>
             {selectMode ? (
               <>
@@ -347,11 +341,15 @@ const HistoryScreen: FC = () => {
               </>
             ) : (
               <>
-                <View />
-                <Pressable onPress={startSelect} style={styles.compareEntry}>
-                  <Text style={styles.compareEntryText}>Comparer 2 analyses</Text>
-                  <Ionicons name="swap-horizontal" size={15} color={colors.surface} />
-                </Pressable>
+                <Text style={styles.count}>
+                  {items.length} analyse{items.length > 1 ? 's' : ''}
+                </Text>
+                {items.length >= 2 ? (
+                  <Pressable onPress={startSelect} style={styles.compareEntry}>
+                    <Text style={styles.compareEntryText}>Comparer 2 analyses</Text>
+                    <Ionicons name="swap-horizontal" size={15} color={colors.surface} />
+                  </Pressable>
+                ) : null}
               </>
             )}
           </View>
@@ -409,18 +407,13 @@ const HistoryScreen: FC = () => {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   safe: { flex: 1 },
-  header: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.base,
-    paddingBottom: spacing.sm,
-  },
-  title: { ...typography.h1, color: colors.ink },
-  count: { ...typography.small, color: colors.inkMuted, marginTop: spacing.xs },
+  count: { ...typography.small, color: colors.inkMuted },
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
     minHeight: 36,
   },
@@ -447,12 +440,12 @@ const styles = StyleSheet.create({
   },
   compareEntryText: { ...typography.xsSemiBold, color: colors.surface },
   searchWrap: {
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.sm,
     paddingBottom: spacing.md,
   },
   searchCount: { ...typography.xs, color: colors.inkMuted, marginTop: spacing.sm },
   listContent: {
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.sm,
     paddingTop: spacing.xs,
   },
   listContentEmpty: { flexGrow: 1 },

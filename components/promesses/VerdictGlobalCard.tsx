@@ -12,7 +12,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import { useReducedMotion } from 'react-native-reanimated'
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg'
 
-import { GlassCard } from '@/components/design/GlassCard'
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { colors } from '@/constants/colors'
 import { spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
@@ -51,7 +51,7 @@ export const VerdictGlobalCard: FC<{ metrics: CoherenceResult['metrics'] }> = ({
   const animatedPct = Math.round(pct * progress)
 
   return (
-    <GlassCard style={styles.card} padding={spacing.xl}>
+    <WhiteCard style={styles.card} padding={spacing.xl}>
       <Text style={styles.kicker}>VERDICT GLOBAL</Text>
       <View style={styles.row}>
         <View style={styles.left}>
@@ -100,7 +100,7 @@ export const VerdictGlobalCard: FC<{ metrics: CoherenceResult['metrics'] }> = ({
           </View>
         </View>
       </View>
-    </GlassCard>
+    </WhiteCard>
   )
 }
 

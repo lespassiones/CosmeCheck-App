@@ -13,7 +13,7 @@ import { memo, type FC } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
-import { GlassCard } from '@/components/design/GlassCard'
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
 import { spacing } from '@/constants/spacing'
@@ -67,7 +67,7 @@ const PenaltySummaryStripBase: FC<Props> = ({ counts }) => {
   ]
 
   return (
-    <GlassCard padding={spacing.md}>
+    <WhiteCard padding={spacing.md}>
       <View style={styles.row}>
         {stats.map((s) => (
           <View key={s.key} style={styles.stat}>
@@ -83,7 +83,7 @@ const PenaltySummaryStripBase: FC<Props> = ({ counts }) => {
           </View>
         ))}
       </View>
-    </GlassCard>
+    </WhiteCard>
   )
 }
 

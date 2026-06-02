@@ -32,11 +32,11 @@ import { ManualInciInput } from './ManualInciInput'
 import { PhotoOcrFlow } from './PhotoOcrFlow'
 import { ProductSearchMode } from './ProductSearchMode'
 
-type Mode = 'photo' | 'barcode' | 'search' | 'manual'
+export type ScanMode = 'photo' | 'barcode' | 'search' | 'manual'
 
 type IoniconName = keyof typeof Ionicons.glyphMap
 
-const TABS: { mode: Mode; label: string; icon: IoniconName }[] = [
+const TABS: { mode: ScanMode; label: string; icon: IoniconName }[] = [
   { mode: 'photo', label: 'Photo', icon: 'camera-outline' },
   { mode: 'barcode', label: 'Code-barres', icon: 'barcode-outline' },
   { mode: 'search', label: 'Recherche', icon: 'search-outline' },
@@ -46,10 +46,12 @@ const TABS: { mode: Mode; label: string; icon: IoniconName }[] = [
 interface Props {
   /** Appelé après une analyse réussie (le parent navigue vers /analyse/[id]). */
   onAnalysisComplete: (analysisId: string) => void
+  /** Mode initial sélectionné (par défaut 'photo'). */
+  initialMode?: ScanMode
 }
 
-export const ScanSheet: FC<Props> = ({ onAnalysisComplete }) => {
-  const [mode, setMode] = useState<Mode>('photo')
+export const ScanSheet: FC<Props> = ({ onAnalysisComplete, initialMode = 'photo' }) => {
+  const [mode, setMode] = useState<ScanMode>(initialMode)
   const { user } = useAuth()
   const { restrictions } = useProfile()
   const { runAnalysis, isAnalyzing, error } = useAnalysis()

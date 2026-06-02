@@ -14,7 +14,7 @@ import { memo, useState, type FC } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
-import { GlassCard } from '@/components/design/GlassCard'
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
 import { spacing } from '@/constants/spacing'
@@ -66,7 +66,7 @@ const ObservationsCardBase: FC<Props> = ({ observations, slugByName, onIngredien
   if (observations.length === 0) return null
 
   return (
-    <GlassCard padding={spacing.lg}>
+    <WhiteCard padding={spacing.lg}>
       <Text style={styles.h2}>Observations</Text>
 
       <View style={styles.list}>
@@ -146,7 +146,7 @@ const ObservationsCardBase: FC<Props> = ({ observations, slugByName, onIngredien
           </Text>
         </Pressable>
       ) : null}
-    </GlassCard>
+    </WhiteCard>
   )
 }
 

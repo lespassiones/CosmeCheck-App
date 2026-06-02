@@ -15,10 +15,8 @@
  * (Historique), document/ribbon (Promesses).
  */
 
-import { type FC, useMemo } from 'react'
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
-import { BlurView } from 'expo-blur'
-import { LinearGradient } from 'expo-linear-gradient'
+import { type FC, useCallback, useMemo, useState } from 'react'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import * as Haptics from 'expo-haptics'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
@@ -30,8 +28,7 @@ import {
   PromisesIcon,
 } from '@/components/navigation/NavIcons'
 import { ScanFAB } from '@/components/navigation/ScanFAB'
-import { colors } from '@/constants/colors'
-import { gradients } from '@/constants/gradients'
+import { ScanMethodSheet, type ScanMethod } from '@/components/scan/ScanMethodSheet'
 import { surfaceShadows } from '@/constants/shadows'
 import { radius } from '@/constants/spacing'
 
@@ -51,6 +48,7 @@ const INACTIVE = '#4B5563'
 
 export const BottomTabBar: FC<BottomTabBarProps> = ({ state, navigation }) => {
   const insets = useSafeAreaInsets()
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   const activeName = state.routes[state.index]?.name
 
@@ -106,10 +104,20 @@ export const BottomTabBar: FC<BottomTabBarProps> = ({ state, navigation }) => {
     )
   }
 
-  const goToScan = () => {
-    const scanRoute = state.routes.find((r) => r.name === 'scan')
-    if (scanRoute) navigation.navigate(scanRoute.name)
+  const openMethodPicker = () => {
+    setPickerOpen(true)
   }
+
+  const handleMethodSelect = useCallback(
+    (method: ScanMethod) => {
+      setPickerOpen(false)
+      const scanRoute = state.routes.find((r) => r.name === 'scan')
+      if (scanRoute) {
+        navigation.navigate(scanRoute.name, { mode: method })
+      }
+    },
+    [navigation, state.routes],
+  )
 
   const scanFocused = activeName === 'scan'
 
@@ -119,18 +127,9 @@ export const BottomTabBar: FC<BottomTabBarProps> = ({ state, navigation }) => {
       pointerEvents="box-none"
     >
       <View style={styles.centered} pointerEvents="box-none">
-        {/* La pilule de verre — teinte rose/pink pour matcher la palette. */}
+        {/* La pilule — fond blanc opaque, pas de blur ni gradient. */}
         <View style={styles.pillShadow}>
           <View style={styles.pillClip}>
-            {Platform.OS === 'ios' && (
-              <BlurView intensity={40} tint="light" style={StyleSheet.absoluteFill} />
-            )}
-            <LinearGradient
-              colors={gradients.bottomNavPill.colors}
-              start={gradients.bottomNavPill.start}
-              end={gradients.bottomNavPill.end}
-              style={StyleSheet.absoluteFill}
-            />
             <View style={styles.row}>
               {left.map((r) => renderTab(r.name, r.key))}
               {/* Réserve la place du FAB central (le FAB lui-même flotte au-dessus). */}
@@ -142,14 +141,20 @@ export const BottomTabBar: FC<BottomTabBarProps> = ({ state, navigation }) => {
 
         {/* FAB central « Décode » — surélevé, chevauche le haut de la pilule. */}
         <View style={styles.fabLift} pointerEvents="box-none">
-          <ScanFAB onPress={goToScan} focused={scanFocused} />
+          <ScanFAB onPress={openMethodPicker} focused={scanFocused} />
         </View>
       </View>
+
+      <ScanMethodSheet
+        visible={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onSelect={handleMethodSelect}
+      />
     </View>
   )
 }
 
-const PILL_HEIGHT = 60
+const PILL_HEIGHT = 66
 const PILL_MAX_WIDTH = 420 // ~ max-w-md du web
 
 const styles = StyleSheet.create({
@@ -171,7 +176,7 @@ const styles = StyleSheet.create({
   pillShadow: {
     width: '100%',
     borderRadius: radius.full,
-    backgroundColor: 'transparent',
+    backgroundColor: '#FFFFFF',
     ...surfaceShadows.bottomNavPill,
   },
   pillClip: {
@@ -179,8 +184,9 @@ const styles = StyleSheet.create({
     height: PILL_HEIGHT,
     borderRadius: radius.full,
     overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.70)',
+    borderColor: 'rgba(0,0,0,0.06)',
   },
   row: {
     flex: 1,
@@ -203,15 +209,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Pilule rose givrée de l'item actif (#FFD1DC + ombre néomorphique sombre).
-  // RN ne rend qu'une ombre : on garde la face sombre (3px,3px,#E8A8B4) du web.
+  // Bulle ronde rose givrée pour l'item actif — vrai cercle surélevé,
+  // ombre douce et symétrique pour un effet "soft button" (pas carré).
   iconWrapActive: {
+    height: 40,
+    width: 40,
+    borderRadius: 20,
     backgroundColor: '#FFD1DC',
     shadowColor: '#E8A8B4',
-    shadowOffset: { width: 3, height: 3 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.55,
+    shadowRadius: 8,
+    elevation: 5,
   },
   label: {
     fontSize: 10,

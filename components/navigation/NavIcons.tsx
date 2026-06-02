@@ -99,6 +99,15 @@ export const MenuIcon: FC<Props> = ({ size = DEFAULT_SIZE, color = DEFAULT_COLOR
   </Svg>
 )
 
+/** Trois points verticaux — variante "kebab" du menu burger. */
+export const MoreVerticalIcon: FC<Props> = ({ size = DEFAULT_SIZE, color = DEFAULT_COLOR }) => (
+  <Svg {...base(size)} fill={color} stroke="none">
+    <Circle cx={12} cy={5} r={1.7} />
+    <Circle cx={12} cy={12} r={1.7} />
+    <Circle cx={12} cy={19} r={1.7} />
+  </Svg>
+)
+
 /** Croix — ferme le drawer burger. */
 export const CloseIcon: FC<Props> = ({ size = DEFAULT_SIZE, color = DEFAULT_COLOR }) => (
   <Svg {...base(size)} fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">

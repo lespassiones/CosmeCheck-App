@@ -18,9 +18,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   AI_MODEL,
+  callWithFallback,
   getCached,
   hasOpenAI,
-  logAI,
   openai,
   setCached,
   sha256Hex,
@@ -90,7 +90,7 @@ export async function validateOcrText(sb: SupabaseClient, text: string): Promise
       matched,
       rate,
       level: "low_match",
-      message: `Seulement ${matched}/${total} ingrédients reconnus. La photo est peut-être floue ou l'OCR a inventé des noms, vérifie le résultat ou reprends une photo plus nette.`,
+      message: `Seulement ${matched}/${total} ingrédients reconnus. La photo est peut-être floue ou l'OCR a inventé des noms - vérifie le résultat ou reprends une photo plus nette.`,
     };
   }
   return {
@@ -98,7 +98,7 @@ export async function validateOcrText(sb: SupabaseClient, text: string): Promise
     matched,
     rate,
     level: "very_low_match",
-    message: `Très peu d'ingrédients reconnus (${matched}/${total}). La photo est trop floue ou ne montre pas le bloc INGREDIENTS, reprends-la, cadrée et avec un bon éclairage.`,
+    message: `Très peu d'ingrédients reconnus (${matched}/${total}). La photo est trop floue ou ne montre pas le bloc INGREDIENTS - reprends-la, cadrée et avec un bon éclairage.`,
   };
 }
 
@@ -204,49 +204,51 @@ export async function ocrFromImageBase64(
 
   // Pas de downscale/locate/crop (Sharp Node indisponible ; le client a déjà
   // redimensionné à 1600px). Passe OCR directe sur l'image fournie.
-  const t0 = Date.now();
+  // Ordre provider + sémantique logAI IDENTIQUES au web : OpenAI primaire
+  // (timeout 20 s), fallback "tesseract" (le client basculera Tesseract.js).
   let value: OcrResult;
   try {
-    const r = await Promise.race([
-      openai().chat.completions.create({
-        model: AI_MODEL,
-        temperature: 0,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM_BACK },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: USER_BACK },
-              { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}`, detail: "high" } },
-            ],
-          },
-        ],
-      }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("ocr timeout")), 20_000)),
-    ]);
-    const raw = r.choices?.[0]?.message?.content ?? "{}";
-    const parsed = JSON.parse(raw) as { found?: boolean; text?: string; uncertain?: string[]; reason?: string };
-    if (parsed.found && typeof parsed.text === "string") {
-      value = {
-        found: true,
-        text: parsed.text.trim(),
-        uncertain: Array.isArray(parsed.uncertain) ? parsed.uncertain : [],
-      };
-    } else {
-      value = { found: false, reason: parsed.reason ?? "no_list_detected" };
-    }
-    logAI({
+    value = await callWithFallback<OcrResult>({
       feature: "ocr",
-      provider: "openai",
-      status: "success",
-      tokens_in: r.usage?.prompt_tokens ?? null,
-      tokens_out: r.usage?.completion_tokens ?? null,
-      duration_ms: Date.now() - t0,
-      user_id: userId ?? null,
+      userId: userId ?? null,
+      timeoutMs: 20_000,
+      primary: async () => {
+        const r = await openai().chat.completions.create({
+          model: AI_MODEL,
+          temperature: 0,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: SYSTEM_BACK },
+            {
+              role: "user",
+              content: [
+                { type: "text", text: USER_BACK },
+                { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}`, detail: "high" } },
+              ],
+            },
+          ],
+        });
+        const raw = r.choices?.[0]?.message?.content ?? "{}";
+        const parsed = JSON.parse(raw) as { found?: boolean; text?: string; uncertain?: string[]; reason?: string };
+        let result: OcrResult;
+        if (parsed.found && typeof parsed.text === "string") {
+          result = {
+            found: true,
+            text: parsed.text.trim(),
+            uncertain: Array.isArray(parsed.uncertain) ? parsed.uncertain : [],
+          };
+        } else {
+          result = { found: false, reason: parsed.reason ?? "no_list_detected" };
+        }
+        return { value: result, tokensIn: r.usage?.prompt_tokens, tokensOut: r.usage?.completion_tokens };
+      },
+      // Pas de fallback serveur : le navigateur/mobile lancera Tesseract.js.
+      fallback: async () => ({
+        value: { found: false, reason: "openai_failed" } as OcrResult,
+        provider: "tesseract",
+      }),
     });
   } catch {
-    logAI({ feature: "ocr", provider: "openai", status: "error", duration_ms: Date.now() - t0, user_id: userId ?? null });
     return { found: false, reason: "openai_failed" };
   }
 
@@ -309,65 +311,67 @@ export async function ocrFrontFromImageBase64(
 
   if (!hasOpenAI()) return { found: false, reason: "openai_unavailable" };
 
-  const t0 = Date.now();
+  // Ordre provider + sémantique logAI IDENTIQUES au web : OpenAI primaire
+  // (timeout 15 s), fallback "tesseract".
   let value: OcrFrontResult;
   try {
-    const r = await Promise.race([
-      openai().chat.completions.create({
-        model: AI_MODEL,
-        temperature: 0,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM_FRONT },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: USER_FRONT },
-              { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}`, detail: "high" } },
-            ],
-          },
-        ],
-      }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("ocr-front timeout")), 15_000)),
-    ]);
-    const raw = r.choices?.[0]?.message?.content ?? "{}";
-    const parsed = JSON.parse(raw) as Partial<{
-      found: boolean;
-      brand: string | null;
-      productName: string | null;
-      productType: string | null;
-      reason: string;
-    }>;
-    const cleanField = (v: unknown): string | null => {
-      if (typeof v !== "string") return null;
-      const t = v.trim();
-      if (t.length === 0 || t.toLowerCase() === "null" || t === "-") return null;
-      return t.slice(0, 200);
-    };
-    if (parsed.found === true) {
-      value = {
-        found: true,
-        brand: cleanField(parsed.brand),
-        productName: cleanField(parsed.productName),
-        productType: cleanField(parsed.productType),
-      };
-      if (!value.brand && !value.productName && !value.productType) {
-        value = { found: false, reason: "no_text_extracted" };
-      }
-    } else {
-      value = { found: false, reason: parsed.reason ?? "front_not_detected" };
-    }
-    logAI({
+    value = await callWithFallback<OcrFrontResult>({
       feature: "ocr",
-      provider: "openai",
-      status: "success",
-      tokens_in: r.usage?.prompt_tokens ?? null,
-      tokens_out: r.usage?.completion_tokens ?? null,
-      duration_ms: Date.now() - t0,
-      user_id: userId ?? null,
+      userId: userId ?? null,
+      timeoutMs: 15_000,
+      primary: async () => {
+        const r = await openai().chat.completions.create({
+          model: AI_MODEL,
+          temperature: 0,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: SYSTEM_FRONT },
+            {
+              role: "user",
+              content: [
+                { type: "text", text: USER_FRONT },
+                { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}`, detail: "high" } },
+              ],
+            },
+          ],
+        });
+        const raw = r.choices?.[0]?.message?.content ?? "{}";
+        const parsed = JSON.parse(raw) as Partial<{
+          found: boolean;
+          brand: string | null;
+          productName: string | null;
+          productType: string | null;
+          reason: string;
+        }>;
+        const cleanField = (v: unknown): string | null => {
+          if (typeof v !== "string") return null;
+          const t = v.trim();
+          if (t.length === 0 || t.toLowerCase() === "null" || t === "-") return null;
+          return t.slice(0, 200);
+        };
+        let result: OcrFrontResult;
+        if (parsed.found === true) {
+          result = {
+            found: true,
+            brand: cleanField(parsed.brand),
+            productName: cleanField(parsed.productName),
+            productType: cleanField(parsed.productType),
+          };
+          // Tout-null = échec, le caller doit ignorer.
+          if (!result.brand && !result.productName && !result.productType) {
+            result = { found: false, reason: "no_text_extracted" };
+          }
+        } else {
+          result = { found: false, reason: parsed.reason ?? "front_not_detected" };
+        }
+        return { value: result, tokensIn: r.usage?.prompt_tokens, tokensOut: r.usage?.completion_tokens };
+      },
+      fallback: async () => ({
+        value: { found: false, reason: "openai_failed" } as OcrFrontResult,
+        provider: "tesseract",
+      }),
     });
   } catch {
-    logAI({ feature: "ocr", provider: "openai", status: "error", duration_ms: Date.now() - t0, user_id: userId ?? null });
     return { found: false, reason: "openai_failed" };
   }
 

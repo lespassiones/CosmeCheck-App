@@ -46,10 +46,11 @@ import {
 import { useRoutine, type RoutineItem } from '@/hooks/useRoutine'
 import { useProfile } from '@/hooks/useProfile'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
-import { NeuCard } from '@/components/design/NeuCard'
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { GlassCard } from '@/components/design/GlassCard'
 import { Reveal } from '@/components/design/Reveal'
 import { IngredientBlob, type BlobCounts } from '@/components/design/IngredientBlob'
+import { ScreenHeader } from '@/components/shared/ScreenHeader'
 import { TagExposureBar } from '@/components/routine/TagExposureBar'
 import { RoutineProductCard } from '@/components/routine/RoutineProductCard'
 import { AddProductModal } from '@/components/routine/AddProductModal'
@@ -211,9 +212,12 @@ const RoutineScreen: FC = () => {
     return (
       <View style={styles.root}>
         <BackgroundGlow variant="minimal" />
-        <SafeAreaView style={styles.safe} edges={['top']}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Ma routine</Text>
+        <ScreenHeader
+          title="Ma routine"
+          titleAdornment={<Ionicons name="leaf-outline" size={20} color={colors.success} />}
+        />
+        <SafeAreaView style={styles.safe} edges={[]}>
+          <View style={styles.emptyChipRow}>
             <RestrictionsChip count={restrictionsCount} />
           </View>
           <View style={styles.emptyWrap}>
@@ -242,17 +246,11 @@ const RoutineScreen: FC = () => {
   return (
     <View style={styles.root}>
       <BackgroundGlow variant="minimal" />
-      <SafeAreaView style={styles.safe} edges={['top']}>
-        <View style={styles.header}>
-          <View style={styles.titleRow}>
-            <Text style={styles.title}>Ma routine</Text>
-            <Ionicons name="leaf-outline" size={20} color={colors.success} />
-          </View>
-          <Pressable style={styles.addBtn} onPress={() => setAddOpen(true)} hitSlop={8}>
-            <Ionicons name="add" size={22} color="#FFFFFF" />
-          </Pressable>
-        </View>
-
+      <ScreenHeader
+        title="Ma routine"
+        titleAdornment={<Ionicons name="leaf-outline" size={20} color={colors.success} />}
+      />
+      <SafeAreaView style={styles.safe} edges={[]}>
         {isLoading ? (
           <View style={styles.center}>
             <ActivityIndicator color={colors.rose} />
@@ -265,16 +263,37 @@ const RoutineScreen: FC = () => {
             ]}
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.subHeaderRow}>
-              <Text style={styles.subtitle}>
-                Suis l’exposition cumulée de ta routine et repère les produits à ajuster.
-              </Text>
-              <RestrictionsChip count={restrictionsCount} />
+            <Text style={styles.subtitle}>
+              Suis l’exposition cumulée de ta routine et repère les produits à ajuster.
+            </Text>
+            <View style={styles.actionRow}>
+              <View style={styles.actionSlot}>
+                <Pressable
+                  style={styles.addBtn}
+                  onPress={() => setAddOpen(true)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ajouter un produit"
+                >
+                  <Ionicons name="add" size={15} color="#FFFFFF" />
+                  <Text
+                    style={styles.addBtnText}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.85}
+                  >
+                    Ajouter un produit
+                  </Text>
+                </Pressable>
+              </View>
+              <View style={styles.actionSlot}>
+                <RestrictionsChip count={restrictionsCount} fill />
+              </View>
             </View>
 
             <Reveal stagger={70}>
               {/* ── Carte exposition cumulée ── */}
-              <NeuCard padding={spacing.lg} interactive={false} style={styles.statCard}>
+              <WhiteCard padding={spacing.lg} style={styles.statCard}>
                 <View style={styles.exposureRow}>
                   <View style={styles.exposureMain}>
                     <Text style={styles.statLabel}>EXPOSITION CUMULÉE</Text>
@@ -297,24 +316,23 @@ const RoutineScreen: FC = () => {
                     />
                   </View>
                 </View>
-              </NeuCard>
+              </WhiteCard>
 
               {/* ── Actifs + pénalisants ── */}
               <View style={styles.statPair}>
-                <NeuCard padding={spacing.base} interactive={false} style={styles.statHalf}>
+                <WhiteCard padding={spacing.base} style={styles.statHalf}>
                   <Text style={styles.statLabel}>PRODUITS ACTIFS</Text>
                   <Text style={styles.statNum}>{products.length}</Text>
                   <Text style={styles.statSub}>{metrics.totalUseUnits.toFixed(1)} u/jour</Text>
-                </NeuCard>
+                </WhiteCard>
 
-                <NeuCard
+                <WhiteCard
                   padding={spacing.base}
                   onPress={
                     metrics.penalizingProductsCount > 0
                       ? () => setPenalizingOpen(true)
                       : undefined
                   }
-                  interactive={metrics.penalizingProductsCount > 0}
                   style={styles.statHalf}
                 >
                   <Text style={styles.statLabel}>PRODUITS PÉNALISANTS</Text>
@@ -332,12 +350,12 @@ const RoutineScreen: FC = () => {
                     )}
                   </View>
                   <Text style={styles.statSub}>score &lt; 13/20</Text>
-                </NeuCard>
+                </WhiteCard>
               </View>
             </Reveal>
 
             {/* ── Exposition par catégorie d'ingrédients ── */}
-            <NeuCard padding={spacing.lg} interactive={false} style={styles.sectionCard}>
+            <WhiteCard padding={spacing.lg} style={styles.sectionCard}>
               <Text style={styles.sectionTitle}>
                 Exposition cumulée par catégorie d’ingrédients
               </Text>
@@ -362,7 +380,7 @@ const RoutineScreen: FC = () => {
                   ))}
                 </View>
               )}
-            </NeuCard>
+            </WhiteCard>
 
             {/* ── Mes produits ── */}
             <View style={styles.sectionCard}>
@@ -397,7 +415,7 @@ const RoutineScreen: FC = () => {
 
             {/* ── Simulation ── */}
             {metrics.simulation.removableCount > 0 && (
-              <NeuCard padding={spacing.lg} interactive={false} style={styles.sectionCard}>
+              <WhiteCard padding={spacing.lg} style={styles.sectionCard}>
                 <Text style={styles.sectionTitle}>Simulation</Text>
                 <Text style={styles.sectionHint}>
                   {metrics.simulation.removableCount === 1
@@ -425,7 +443,7 @@ const RoutineScreen: FC = () => {
                     <Ionicons name="chevron-forward" size={16} color="#FFFFFF" />
                   </Pressable>
                 </View>
-              </NeuCard>
+              </WhiteCard>
             )}
 
             {/* ── Allergènes en doublon ── */}
@@ -447,7 +465,7 @@ const RoutineScreen: FC = () => {
             )}
 
             {/* ── Suggestions IA ── */}
-            <NeuCard padding={spacing.lg} interactive={false} style={styles.sectionCard}>
+            <WhiteCard padding={spacing.lg} style={styles.sectionCard}>
               <View style={styles.aiHeader}>
                 <View style={styles.aiHeaderMain}>
                   <Text style={styles.sectionTitle}>✨ Suggestions intelligentes</Text>
@@ -499,7 +517,7 @@ const RoutineScreen: FC = () => {
                   ))}
                 </View>
               )}
-            </NeuCard>
+            </WhiteCard>
           </ScrollView>
         )}
       </SafeAreaView>
@@ -531,10 +549,10 @@ const RoutineScreen: FC = () => {
 }
 
 /** Chip « Mes restrictions » avec badge de compte → écran restrictions. */
-function RestrictionsChip({ count }: { count: number }) {
+function RestrictionsChip({ count, fill }: { count: number; fill?: boolean }) {
   return (
     <Pressable
-      style={styles.restrictChip}
+      style={[styles.restrictChip, fill && styles.restrictChipFill]}
       onPress={() => router.push(ROUTES.PROFILE.RESTRICTIONS)}
       hitSlop={6}
     >
@@ -609,38 +627,42 @@ function PenalizingDetailModal({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   safe: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.base,
-    paddingBottom: spacing.sm,
-  },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  title: { ...typography.h1, color: colors.ink },
   addBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.full,
-    backgroundColor: colors.rose,
+    width: '100%',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 3,
+    backgroundColor: colors.rose,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 8,
   },
-  scrollContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs },
-  subHeaderRow: {
+  addBtnText: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 12,
+    color: '#FFFFFF',
+    flexShrink: 1,
+  },
+  actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
+    gap: spacing.sm,
     marginBottom: spacing.base,
   },
-  subtitle: { ...typography.xs, color: colors.inkLight, flex: 1 },
+  actionSlot: { flex: 1 },
+  scrollContent: { paddingHorizontal: spacing.sm, paddingTop: spacing.xs },
+  emptyChipRow: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    alignItems: 'flex-start',
+  },
+  subtitle: { ...typography.xs, color: colors.inkLight, marginBottom: spacing.md },
   center: { paddingTop: spacing['3xl'], alignItems: 'center', flex: 1 },
 
   // Stat cards
-  statCard: { marginBottom: spacing.md },
-  statPair: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
+  statCard: { marginBottom: spacing.base },
+  statPair: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.base },
   statHalf: { flex: 1 },
   exposureRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   exposureMain: { flex: 1 },
@@ -661,7 +683,7 @@ const styles = StyleSheet.create({
   penalizingLine: { flexDirection: 'row', alignItems: 'center', gap: 4 },
 
   // Sections
-  sectionCard: { marginBottom: spacing.md },
+  sectionCard: { marginBottom: spacing.base },
   sectionTitle: { fontFamily: fontFamilies.semiBold, fontSize: 15, color: colors.ink },
   sectionTitleStandalone: {
     fontFamily: fontFamilies.semiBold,
@@ -678,7 +700,7 @@ const styles = StyleSheet.create({
   },
   mutedText: { fontFamily: fontFamilies.regular, fontSize: 13, color: colors.inkMuted },
   tagList: { marginTop: 2 },
-  productList: { gap: spacing.sm },
+  productList: { gap: spacing.base },
 
   // Simulation
   simRow: {
@@ -767,12 +789,13 @@ const styles = StyleSheet.create({
   restrictChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 3,
     backgroundColor: colors.accentSoft,
     borderRadius: radius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 8,
   },
+  restrictChipFill: { width: '100%', justifyContent: 'center' },
   restrictText: { fontFamily: fontFamilies.semiBold, fontSize: 12, color: colors.accent },
   restrictBadge: {
     minWidth: 18,

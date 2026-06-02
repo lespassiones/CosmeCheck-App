@@ -46,12 +46,12 @@ export const CreditsPill: FC = () => {
 
   return (
     <GlassCard
-      padding={spacing.xs}
+      padding={2}
       borderRadius={radius.full}
       style={styles.card}
       contentStyle={styles.content}
     >
-      <Ionicons name="star" size={14} color={tint} />
+      <Ionicons name="star" size={11} color={tint} />
       <Text style={[styles.count, { color: tint }]} allowFontScaling={false}>
         {remaining} {remaining === 1 ? 'crédit' : 'crédits'}
       </Text>
@@ -67,7 +67,7 @@ export const CreditsPill: FC = () => {
           pressed && styles.plusPressed,
         ]}
       >
-        <Ionicons name="add" size={15} color={tint} />
+        <Ionicons name="add" size={12} color={tint} />
       </Pressable>
     </GlassCard>
   )
@@ -80,18 +80,18 @@ const styles = StyleSheet.create({
   content: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
-    paddingLeft: spacing.sm,
-    paddingRight: spacing.xs,
+    gap: 4,
+    paddingLeft: 8,
+    paddingRight: 3,
   },
   count: {
     fontFamily: fontFamilies.bold,
-    fontSize: 13,
+    fontSize: 11,
     letterSpacing: -0.2,
   },
   plus: {
-    width: 22,
-    height: 22,
+    width: 17,
+    height: 17,
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',

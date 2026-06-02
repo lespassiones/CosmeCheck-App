@@ -10,14 +10,14 @@
  */
 
 import { memo, type FC } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { Image, StyleSheet, Text, View } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 
-import { ColorBadge } from '@/components/design/ColorBadge'
-import { GlassCard } from '@/components/design/GlassCard'
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { IngredientBlob, type BlobCounts } from '@/components/design/IngredientBlob'
 import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
-import { spacing } from '@/constants/spacing'
+import { radius, spacing } from '@/constants/spacing'
 import type { ColorRating } from '@/lib/analysis/types'
 
 interface Props {
@@ -27,6 +27,8 @@ interface Props {
   score: number
   scoreLabel: string
   rating: ColorRating
+  /** URL de l'image produit (si disponible) — sinon un placeholder est affiché. */
+  imageUrl?: string | null
   /** Désactive l'animation pop du blob (reduce-motion). */
   reduceMotion?: boolean
 }
@@ -35,81 +37,85 @@ const BigScoreCardBase: FC<Props> = ({
   counts,
   matched,
   total,
-  score,
-  scoreLabel,
-  rating,
+  imageUrl,
   reduceMotion,
 }) => {
-  const pctSansPenalite = matched > 0 ? Math.round((counts.vert / matched) * 100) : null
-  const tone = colors.rating[rating]
-
   return (
-    <GlassCard padding={spacing.lg} contentStyle={styles.content}>
-      <IngredientBlob counts={counts} variant="md" showCenter animate reduceMotion={reduceMotion} />
+    <WhiteCard padding={spacing.lg}>
+      <View style={styles.row}>
+        {/* Emplacement image produit (placeholder générique tant qu'on n'a pas d'URL) */}
+        <View style={styles.imageSlot}>
+          {imageUrl ? (
+            <Image
+              source={{ uri: imageUrl }}
+              style={styles.image}
+              resizeMode="cover"
+              accessibilityIgnoresInvertColors
+            />
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <Ionicons name="image-outline" size={28} color={colors.inkLight} />
+            </View>
+          )}
+        </View>
 
-      {pctSansPenalite !== null ? (
-        <Text style={styles.pct}>
-          <Text style={styles.pctValue}>{pctSansPenalite} %</Text> sans pénalité
-        </Text>
-      ) : null}
-
-      {/* Score /20 + libellé tonal */}
-      <View style={styles.scoreRow}>
-        <Text style={styles.scoreNumber}>
-          <Text style={[styles.scoreBig, { color: tone.text }]}>{score.toFixed(1)}</Text>
-          <Text style={styles.scoreOutOf}> /20</Text>
-        </Text>
-        <ColorBadge rating={rating} variant="chip" label={scoreLabel} size="md" />
+        {/* Bloc droit : demi-donut + ratio */}
+        <View style={styles.donutSlot}>
+          <IngredientBlob
+            counts={counts}
+            variant="md"
+            width={160}
+            animate
+            reduceMotion={reduceMotion}
+          />
+          <Text style={styles.ratio}>
+            <Text style={styles.ratioStrong}>{matched}</Text> / {total} ingrédients reconnus
+          </Text>
+        </View>
       </View>
-
-      <Text style={styles.ratio}>
-        <Text style={styles.ratioStrong}>{matched}</Text> / {total} ingrédients reconnus
-      </Text>
-    </GlassCard>
+    </WhiteCard>
   )
 }
 
 export const BigScoreCard = memo(BigScoreCardBase)
 
+const IMAGE_SIZE = 110
+
 const styles = StyleSheet.create({
-  content: {
-    alignItems: 'center',
-  },
-  pct: {
-    fontFamily: fontFamilies.regular,
-    fontStyle: 'italic',
-    fontSize: 13,
-    color: colors.rating.vert.text,
-    marginTop: spacing.sm,
-  },
-  pctValue: {
-    fontFamily: fontFamilies.semiBold,
-    fontStyle: 'normal',
-  },
-  scoreRow: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    marginTop: spacing.md,
   },
-  scoreNumber: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
+  imageSlot: {
+    width: IMAGE_SIZE,
+    height: IMAGE_SIZE,
+    flexShrink: 0,
   },
-  scoreBig: {
-    fontFamily: fontFamilies.bold,
-    fontSize: 32,
+  image: {
+    width: '100%',
+    height: '100%',
+    borderRadius: radius.md,
+    backgroundColor: colors.gray100,
   },
-  scoreOutOf: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 16,
-    color: colors.inkMuted,
+  imagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    borderRadius: radius.md,
+    backgroundColor: colors.gray100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  donutSlot: {
+    flex: 1,
+    alignItems: 'center',
   },
   ratio: {
     fontFamily: fontFamilies.regular,
     fontSize: 12,
     color: colors.inkLight,
     marginTop: spacing.sm,
+    textAlign: 'center',
   },
   ratioStrong: {
     fontFamily: fontFamilies.semiBold,

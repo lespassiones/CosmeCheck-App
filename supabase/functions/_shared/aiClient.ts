@@ -128,6 +128,7 @@ export async function mistralChat(opts: {
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
   model?: string;
   temperature?: number;
+  topP?: number;
   maxTokens?: number;
   responseFormat?: { type: "json_object" | "text" };
 }): Promise<string> {
@@ -142,6 +143,7 @@ export async function mistralChat(opts: {
       model: opts.model ?? MISTRAL_MODEL,
       messages: opts.messages,
       temperature: opts.temperature ?? 0.3,
+      ...(opts.topP !== undefined ? { top_p: opts.topP } : {}),
       ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}),
       ...(opts.responseFormat ? { response_format: opts.responseFormat } : {}),
     }),

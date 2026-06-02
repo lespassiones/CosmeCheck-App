@@ -10,13 +10,13 @@ import { type FC } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { colors } from '@/constants/colors'
 import { spacing, radius } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 import type { CoherencePromise } from '@/lib/coherence/types'
 
-const EMERALD_BG = 'rgba(236,253,245,0.7)'
-const EMERALD_RING = '#A7F3D0'
+const EMERALD_SOFT = '#ECFDF5'
 const EMERALD_TEXT = '#047857'
 
 export const InferredPromisesCard: FC<{ promises: CoherencePromise[] }> = ({ promises }) => {
@@ -24,7 +24,7 @@ export const InferredPromisesCard: FC<{ promises: CoherencePromise[] }> = ({ pro
   if (inferred.length === 0) return null
 
   return (
-    <View style={styles.card}>
+    <WhiteCard padding={spacing.lg}>
       <View style={styles.header}>
         <View style={styles.iconCircle}>
           <Ionicons name="checkmark" size={16} color={EMERALD_TEXT} />
@@ -62,20 +62,17 @@ export const InferredPromisesCard: FC<{ promises: CoherencePromise[] }> = ({ pro
           )
         })}
       </View>
-    </View>
+    </WhiteCard>
   )
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: EMERALD_BG, borderWidth: 1, borderColor: EMERALD_RING, borderRadius: radius.card, padding: spacing.lg },
   header: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.base },
   iconCircle: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: EMERALD_RING,
+    backgroundColor: EMERALD_SOFT,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -84,10 +81,10 @@ const styles = StyleSheet.create({
   count: { fontFamily: fontFamilies.medium, fontSize: 11, color: EMERALD_TEXT },
   intro: { fontFamily: fontFamilies.regular, fontSize: 12, lineHeight: 18, color: colors.inkMuted, marginTop: 4 },
   list: { gap: spacing.sm },
-  item: { backgroundColor: colors.surface, borderWidth: 1, borderColor: EMERALD_RING, borderRadius: radius.md, padding: spacing.md },
+  item: { backgroundColor: EMERALD_SOFT, borderRadius: radius.md, padding: spacing.md },
   itemHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginBottom: 6 },
   itemLabel: { flex: 1, fontFamily: fontFamilies.semiBold, fontSize: 14, color: '#065F46' },
-  deducedChip: { backgroundColor: '#D1FAE5', borderWidth: 1, borderColor: EMERALD_RING, borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 2 },
+  deducedChip: { backgroundColor: '#D1FAE5', borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 2 },
   deducedChipText: { fontFamily: fontFamilies.semiBold, fontSize: 10, color: '#065F46' },
   support: { fontFamily: fontFamilies.regular, fontSize: 12, color: EMERALD_TEXT },
   supportName: { fontFamily: fontFamilies.medium },
@@ -97,8 +94,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontStyle: 'italic',
     color: colors.inkMuted,
-    borderLeftWidth: 2,
-    borderLeftColor: EMERALD_RING,
     paddingLeft: spacing.sm,
     marginTop: 6,
   },

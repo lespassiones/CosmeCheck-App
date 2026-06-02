@@ -487,12 +487,12 @@ function formatSkinProfileForPrompt(skin: SkinProfile): string | null {
   const faceParts: string[] = [];
   if (skin.skinTypeFace) faceParts.push(SKIN_TYPE_FACE_LABEL[skin.skinTypeFace] ?? skin.skinTypeFace);
   if (skin.otherSkinTypeFace) faceParts.push(`précision : ${skin.otherSkinTypeFace}`);
-  if (faceParts.length > 0) lines.push(`- Type de peau visage : ${faceParts.join(" , ")}`);
+  if (faceParts.length > 0) lines.push(`- Type de peau visage : ${faceParts.join(" — ")}`);
 
   const bodyParts: string[] = [];
   if (skin.skinTypeBody) bodyParts.push(SKIN_TYPE_BODY_LABEL[skin.skinTypeBody] ?? skin.skinTypeBody);
   if (skin.otherSkinTypeBody) bodyParts.push(`précision : ${skin.otherSkinTypeBody}`);
-  if (bodyParts.length > 0) lines.push(`- Type de peau corps : ${bodyParts.join(" , ")}`);
+  if (bodyParts.length > 0) lines.push(`- Type de peau corps : ${bodyParts.join(" — ")}`);
 
   const concernParts: string[] = [];
   if (skin.concerns && skin.concerns.length > 0) {

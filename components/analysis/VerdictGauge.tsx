@@ -112,9 +112,9 @@ interface Props {
 }
 
 // Empreinte stable d'un slot (la barre ne saute jamais quand l'index change).
-const SLOT = 36
-const INACTIVE = 28
-const ACTIVE = 48
+const SLOT = 42
+const INACTIVE = 32
+const ACTIVE = 52
 const RING = 4
 
 export const VerdictGauge = memo(function VerdictGauge({
@@ -270,7 +270,12 @@ function VerdictIcon({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center' },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flex: 1,
+  },
   col: { flexDirection: 'column' },
   slot: {
     width: SLOT,

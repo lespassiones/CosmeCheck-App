@@ -40,12 +40,12 @@ import { parseAnalyseResponse } from '@/lib/analysis/types'
 import { tipsForCarousel } from '@/lib/tips'
 import type { BlobCounts } from '@/components/design/IngredientBlob'
 import { IngredientBlob } from '@/components/design/IngredientBlob'
-import { NeuCard } from '@/components/design/NeuCard'
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { Reveal } from '@/components/design/Reveal'
-import { PenaltyPill } from '@/components/shared/PenaltyPill'
-import { CreditsPill } from '@/components/shared/CreditsPill'
+import { ScreenHeader } from '@/components/shared/ScreenHeader'
 import { TipCarousel } from '@/components/home/TipCarousel'
+import { DailyPicksCard } from '@/components/home/DailyPicksCard'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
 
@@ -108,7 +108,7 @@ const LastAnalysisCard: FC<{ last: LastAnalysis | null; onPress: () => void }> =
 
   if (!last) {
     return (
-      <NeuCard style={styles.gridCard} padding={spacing.lg} onPress={onPress}>
+      <WhiteCard onPress={onPress}>
         <View style={styles.cardHeadEmerald}>
           <Ionicons name="shield-checkmark" size={16} color="#16A34A" />
           <Text style={styles.kickerEmerald}>Dernière analyse</Text>
@@ -116,7 +116,7 @@ const LastAnalysisCard: FC<{ last: LastAnalysis | null; onPress: () => void }> =
         <Text style={styles.emptyBody}>
           Aucune analyse pour le moment. Lance ta première analyse via le bouton scan.
         </Text>
-      </NeuCard>
+      </WhiteCard>
     )
   }
 
@@ -126,7 +126,7 @@ const LastAnalysisCard: FC<{ last: LastAnalysis | null; onPress: () => void }> =
     matched > 0 ? Math.round((counts.vert / matched) * 100) : null
 
   return (
-    <NeuCard style={styles.gridCard} padding={spacing.lg} onPress={onPress}>
+    <WhiteCard onPress={onPress}>
       <View style={styles.cardHeadRow}>
         <View style={styles.cardHeadEmerald}>
           <Ionicons name="shield-checkmark" size={16} color="#16A34A" />
@@ -141,16 +141,18 @@ const LastAnalysisCard: FC<{ last: LastAnalysis | null; onPress: () => void }> =
             {title}
           </Text>
           {pctSansPenalite !== null && (
-            <View style={styles.pillWrap}>
-              <PenaltyPill pct={pctSansPenalite} label="sans pénalité" tone="emerald" />
+            <View style={styles.penaltyInline}>
+              <Ionicons name="leaf" size={12} color="#16A34A" />
+              <Text style={styles.penaltyPct}>{pctSansPenalite} %</Text>
+              <Text style={styles.penaltyLabel}>sans pénalité</Text>
             </View>
           )}
         </View>
         <View style={styles.blobSlot}>
-          <IngredientBlob counts={counts} variant="md" neumorphic width={140} />
+          <IngredientBlob counts={counts} variant="md" neumorphic width={170} />
         </View>
       </View>
-    </NeuCard>
+    </WhiteCard>
   )
 }
 
@@ -165,7 +167,7 @@ const RoutineCard: FC<{ summary: RoutineSummary | undefined; onPress: () => void
 
   if (count === 0) {
     return (
-      <NeuCard style={styles.gridCard} padding={spacing.lg} onPress={onPress}>
+      <WhiteCard onPress={onPress}>
         <View style={styles.cardHeadRose}>
           <Ionicons name="heart" size={16} color={colors.rose} />
           <Text style={styles.kickerRose}>Ta routine</Text>
@@ -174,7 +176,7 @@ const RoutineCard: FC<{ summary: RoutineSummary | undefined; onPress: () => void
           Crée ta routine pour suivre ton exposition cumulée.
         </Text>
         <Text style={styles.seeMoreStart}>Commencer →</Text>
-      </NeuCard>
+      </WhiteCard>
     )
   }
 
@@ -182,15 +184,15 @@ const RoutineCard: FC<{ summary: RoutineSummary | undefined; onPress: () => void
   const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0)
   const breakdown = (
     [
-      { pct: pct(counts.vert), label: 'sans pénalité', tone: 'emerald' as const },
-      { pct: pct(counts.jaune), label: 'pén. faible', tone: 'amber' as const },
-      { pct: pct(counts.orange), label: 'pén. moyenne', tone: 'orange' as const },
-      { pct: pct(counts.rouge), label: 'pén. forte', tone: 'rose' as const },
+      { pct: pct(counts.vert), label: 'sans pénalité', dot: '#22C55E' },
+      { pct: pct(counts.jaune), label: 'pén. faible', dot: '#FACC15' },
+      { pct: pct(counts.orange), label: 'pén. moyenne', dot: '#F97316' },
+      { pct: pct(counts.rouge), label: 'pén. forte', dot: '#EF4444' },
     ] as const
   ).filter((b) => b.pct > 0)
 
   return (
-    <NeuCard style={styles.gridCard} padding={spacing.lg} onPress={onPress}>
+    <WhiteCard onPress={onPress}>
       <View style={styles.cardHeadRow}>
         <View style={styles.cardHeadRose}>
           <Ionicons name="heart" size={16} color={colors.rose} />
@@ -205,24 +207,25 @@ const RoutineCard: FC<{ summary: RoutineSummary | undefined; onPress: () => void
             {count} produit{count > 1 ? 's' : ''} actif{count > 1 ? 's' : ''}
           </Text>
           {breakdown.length > 0 && (
-            <View style={styles.pillsWrap}>
-              {breakdown.map((b) => (
-                <PenaltyPill
-                  key={b.label}
-                  pct={b.pct}
-                  label={b.label}
-                  tone={b.tone}
-                  size="sm"
-                />
+            <View style={styles.breakdownList}>
+              {breakdown.map((b, i) => (
+                <View key={b.label}>
+                  {i > 0 && <View style={styles.breakdownSep} />}
+                  <View style={styles.breakdownRow}>
+                    <View style={[styles.breakdownDot, { backgroundColor: b.dot }]} />
+                    <Text style={styles.breakdownPct}>{b.pct} %</Text>
+                    <Text style={styles.breakdownLabel}>{b.label}</Text>
+                  </View>
+                </View>
               ))}
             </View>
           )}
         </View>
         <View style={styles.blobSlot}>
-          <IngredientBlob counts={counts} variant="md" neumorphic width={140} />
+          <IngredientBlob counts={counts} variant="md" neumorphic width={170} />
         </View>
       </View>
-    </NeuCard>
+    </WhiteCard>
   )
 }
 
@@ -317,10 +320,16 @@ const DashboardScreen: FC = () => {
   return (
     <View style={styles.root}>
       <BackgroundGlow variant="dashboard" />
+
+      {/* En-tête commun : titre + CreditsPill + filet. */}
+      <ScreenHeader
+        title={greetingName ? `Bonjour ${greetingName} 👋` : 'Bienvenue 👋'}
+      />
+
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + spacing.base, paddingBottom: insets.bottom + 96 },
+          { paddingTop: spacing.md, paddingBottom: insets.bottom + 96 },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -328,17 +337,6 @@ const DashboardScreen: FC = () => {
         }
       >
         <Reveal stagger={70}>
-          {/* En-tête : salutation statique + CreditsPill */}
-          <View style={styles.header}>
-            <Text style={styles.greeting} numberOfLines={1}>
-              {greetingName ? `Bonjour ${greetingName} 👋` : 'Bienvenue 👋'}
-            </Text>
-            <CreditsPill />
-          </View>
-
-          {/* Filet hairline */}
-          <View style={styles.hairline} />
-
           {/* Sous-titre + soulignement ondulé */}
           <Text style={styles.subtitle}>
             Décrypte tes cosmétiques{' '}
@@ -440,6 +438,11 @@ const DashboardScreen: FC = () => {
               </View>
             </LinearGradient>
           </Pressable>
+
+          {/* Quizz & idées reçues du jour */}
+          <View style={styles.dailyPicksWrap}>
+            <DailyPicksCard />
+          </View>
         </Reveal>
       </ScrollView>
     </View>
@@ -456,29 +459,13 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.base,
   },
-  // En-tête
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  greeting: {
-    ...typography.h2,
-    flex: 1,
-    color: colors.ink,
-  },
-  hairline: {
-    height: 1,
-    backgroundColor: '#c5ccd6',
-    marginTop: spacing.md,
-    // Le filet déborde la marge horizontale comme le web (-mx-5).
-    marginHorizontal: -spacing.base,
-  },
   subtitle: {
     ...typography.small,
     color: colors.inkMuted,
     marginTop: spacing.md,
+  },
+  dailyPicksWrap: {
+    marginTop: spacing.base,
   },
   subtitleStrong: {
     fontFamily: fontFamilies.medium,
@@ -494,9 +481,6 @@ const styles = StyleSheet.create({
   grid: {
     marginTop: spacing.base,
     gap: spacing.md,
-  },
-  gridCard: {
-    width: '100%',
   },
   cardHeadRow: {
     flexDirection: 'row',
@@ -559,17 +543,54 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: '#111111',
   },
-  pillWrap: {
+  penaltyInline: {
     marginTop: spacing.sm,
-  },
-  pillsWrap: {
-    marginTop: 2,
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
     gap: 4,
   },
+  penaltyPct: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 12,
+    color: '#16A34A',
+  },
+  penaltyLabel: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 12,
+    color: '#16A34A',
+    fontStyle: 'italic',
+  },
+  breakdownList: {
+    marginTop: spacing.sm,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
+  },
+  breakdownSep: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  breakdownDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  breakdownPct: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 12,
+    color: '#374151',
+  },
+  breakdownLabel: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 12,
+    color: '#6B7280',
+    fontStyle: 'italic',
+  },
   blobSlot: {
-    width: 140,
+    width: 170,
     flexShrink: 0,
     // Annule le padding droit de la carte pour aligner le donut sur le bord
     // (comme le `-mr-5` du web).
@@ -580,18 +601,17 @@ const styles = StyleSheet.create({
     color: colors.inkMuted,
     marginTop: spacing.sm,
   },
-  // Cartes promo
+  // Cartes promo — même drop shadow que WhiteCard pour rester homogène.
   promoCard: {
     marginTop: spacing.base,
     borderRadius: radius.card,
     overflow: 'hidden',
-    ...{
-      shadowColor: colors.neu.shadowDark,
-      shadowOffset: { width: 6, height: 6 },
-      shadowOpacity: 0.5,
-      shadowRadius: 14,
-      elevation: 6,
-    },
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 6,
   },
   promoGradient: {
     flexDirection: 'row',

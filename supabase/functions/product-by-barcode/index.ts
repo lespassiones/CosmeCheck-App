@@ -51,6 +51,18 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "Méthode non autorisée." }, { status: 405 });
   }
 
+  // Web order: IP rate-limit FIRST (429), then body parse (400), then honeypot
+  // (403), then input validation (400). The gate bundles auth (mobile-only
+  // addition) + the IP rate-limit; web used 20/min/IP.
+  const g = await gate(req, {
+    feature: "product_by_barcode",
+    costCredits: 0,
+    rateMax: 20,
+    rateWindowSec: 60,
+    rateLimitMessage: "Trop de scans récents. Patiente une minute.",
+  });
+  if (!g.ok) return g.response;
+
   let body: RequestBody;
   try {
     body = (await req.json()) as RequestBody;
@@ -61,14 +73,6 @@ Deno.serve(async (req: Request) => {
   if (body.hp && body.hp.length > 0) {
     return jsonResponse({ error: "Forbidden" }, { status: 403 });
   }
-
-  const g = await gate(req, {
-    feature: "product_by_barcode",
-    costCredits: 0,
-    rateMax: 20,
-    rateWindowSec: 60,
-  });
-  if (!g.ok) return g.response;
 
   const barcode = (body.barcode ?? "").trim();
   if (!BARCODE_RE.test(barcode)) {

@@ -8,12 +8,13 @@
  *
  * Pipeline (ordre IDENTIQUE au web) :
  *   1. Gate : auth Bearer + rate-limit IP + débit de 1 crédit (feature "ocr").
- *   2. Si pas de clé OpenAI → 503 { error } (l'OCR a réellement besoin de la
- *      vision ; pas de fallback serveur, le client peut basculer sur Tesseract).
- *   3. Valide les images (mime allowlist + taille décodée ≤ 6 Mo).
- *   4. Lance back (requis) + front (optionnel) en parallèle. La validation des
+ *   2. Parse body + valide les images (mime allowlist + taille décodée ≤ 6 Mo).
+ *      Pas de court-circuit 503 : comme le web, l'absence de clé OpenAI N'est
+ *      PAS gérée ici ; `ocrFromImageBase64` renvoie { found:false,
+ *      reason:"openai_unavailable" } (réponse 200) → le client bascule Tesseract.
+ *   3. Lance back (requis) + front (optionnel) en parallèle. La validation des
  *      tokens passe par cosme_check_match_inci_batch (service-role) pour le flag.
- *   5. Réponse rétro-compatible : top-level found/text/uncertain/validation
+ *   4. Réponse rétro-compatible : top-level found/text/uncertain/validation
  *      reflètent l'OCR dos ; `front` exposé en plus.
  *
  * Entrée : { image_back: base64, image_front?: base64, mimeType: string }
@@ -24,7 +25,6 @@
 import { handleOptions, jsonResponse } from "../_shared/cors.ts";
 import { gate } from "../_shared/gate.ts";
 import { serviceClient } from "../_shared/auth.ts";
-import { hasOpenAI } from "../_shared/aiClient.ts";
 import {
   ocrFrontFromImageBase64,
   ocrFromImageBase64,
@@ -93,15 +93,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (!g.ok) return g.response;
   const userId = g.user.id;
 
-  // ── 2. Pas de clé OpenAI → 503 (OCR a besoin de la vision). ───────────────
-  if (!hasOpenAI()) {
-    return jsonResponse(
-      { error: "Scan indisponible : service de reconnaissance d'image non configuré." },
-      { status: 503 },
-    );
-  }
-
-  // ── 3. Parse body + validation images. ────────────────────────────────────
+  // ── 2. Parse body + validation images. ────────────────────────────────────
+  // NOTE parité web : pas de court-circuit 503 ici. Comme `app/api/ocr/route.ts`,
+  // l'absence de clé OpenAI N'est PAS gérée au niveau route ; c'est
+  // `ocrFromImageBase64` qui renvoie { found:false, reason:"openai_unavailable" }
+  // (réponse 200), pour que le client puisse basculer sur Tesseract.
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -125,7 +121,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (frontCheck.ok) frontBase64 = frontCheck.base64;
   }
 
-  // ── 4. OCR dos (requis) + avant (optionnel) en parallèle. ─────────────────
+  // ── 3. OCR dos (requis) + avant (optionnel) en parallèle. ─────────────────
   // Le lookup catalogue (validation) tourne en service-role (catalogue public,
   // comme supabaseAnon côté web).
   const svc = serviceClient();
@@ -138,7 +134,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         : Promise.resolve(null as OcrFrontResult | null),
     ]);
 
-    // ── 5. Réponse rétro-compatible. ────────────────────────────────────────
+    // ── 4. Réponse rétro-compatible. ────────────────────────────────────────
     if (back.found) {
       return jsonResponse({
         found: true,

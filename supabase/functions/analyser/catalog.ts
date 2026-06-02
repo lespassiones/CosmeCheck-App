@@ -30,6 +30,53 @@ export async function upsertProductAnalysis(params: {
   }
 }
 
+/**
+ * Normalise une requête produit (port verbatim de
+ * CosmetWiki/lib/productSearch/normalize.ts). Sert de clé du cache name-search.
+ */
+const NORMALIZE_DIACRITICS_RE = new RegExp("[\\u0300-\\u036f]", "g");
+export function normalizeQuery(q: string): string {
+  return q
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(NORMALIZE_DIACRITICS_RE, "")
+    .replace(/[^a-z0-9+\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter((w) => w.length > 1)
+    .sort()
+    .join(" ");
+}
+
+/**
+ * Écrit dans product_inci_cache via la RPC SECURITY DEFINER (service-role).
+ * Port de CosmetWiki/lib/productSearch/cache.ts → setProductCache. Best-effort.
+ */
+export async function setProductCache(input: {
+  queryNorm: string;
+  brand: string | null;
+  productName: string | null;
+  ingredientsText: string;
+  source: string;
+  sourceUrl: string | null;
+  confidence: number;
+}): Promise<void> {
+  try {
+    await serviceClient().rpc("cosme_check_set_product_cache", {
+      p_query_norm: input.queryNorm,
+      p_brand: input.brand,
+      p_product_name: input.productName,
+      p_ingredients_text: input.ingredientsText,
+      p_source: input.source,
+      p_source_url: input.sourceUrl,
+      p_confidence: input.confidence,
+    });
+  } catch (err) {
+    console.warn("[productSearch] cache write failed:", err);
+  }
+}
+
 export async function upsertCatalogProduct(params: {
   ean: string;
   brand?: string | null;

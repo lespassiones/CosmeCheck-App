@@ -9,20 +9,41 @@
  * scan plutôt qu'à un écran de chargement intermédiaire.
  */
 
-import { type FC, useCallback } from 'react'
+import { type FC, useCallback, useMemo } from 'react'
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 
 import { colors } from '@/constants/colors'
 import { spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
-import { ScanSheet } from '@/components/scan/ScanSheet'
+import { ScanSheet, type ScanMode } from '@/components/scan/ScanSheet'
 
 const ScanScreen: FC = () => {
   const router = useRouter()
+  const params = useLocalSearchParams<{ mode?: string }>()
+
+  // Mappe le `mode` issu de la sheet → mode interne du ScanSheet.
+  // - barcode → barcode, photo → photo, search → search
+  // - manual ("Coller la composition") et link ("Coller le lien") → manual
+  //   (le lien réutilise l'éditeur manuel tant que la feature dédiée n'est pas livrée).
+  const initialMode = useMemo<ScanMode>(() => {
+    switch (params.mode) {
+      case 'barcode':
+        return 'barcode'
+      case 'photo':
+        return 'photo'
+      case 'search':
+        return 'search'
+      case 'manual':
+      case 'link':
+        return 'manual'
+      default:
+        return 'photo'
+    }
+  }, [params.mode])
 
   const handleComplete = useCallback(
     (analysisId: string) => {
@@ -46,7 +67,7 @@ const ScanScreen: FC = () => {
             </Text>
           </View>
           <View style={styles.content}>
-            <ScanSheet onAnalysisComplete={handleComplete} />
+            <ScanSheet initialMode={initialMode} onAnalysisComplete={handleComplete} />
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>

@@ -42,7 +42,7 @@ function formatSkinProfile(prefs: Prefs): string | null {
   if (typeof r.skinTypeFace === "string" && r.skinTypeFace) faceParts.push(r.skinTypeFace);
   const otherFace = readShort(r, "otherSkinTypeFace", 120);
   if (otherFace) faceParts.push(`précision : ${otherFace}`);
-  if (faceParts.length > 0) lines.push(`- Type de peau visage : ${faceParts.join(" ; ")}`);
+  if (faceParts.length > 0) lines.push(`- Type de peau visage : ${faceParts.join(" — ")}`);
 
   const bodyParts: string[] = [];
   const bodyType =
@@ -52,7 +52,7 @@ function formatSkinProfile(prefs: Prefs): string | null {
   if (bodyType) bodyParts.push(bodyType);
   const otherBody = readShort(r, "otherSkinTypeBody", 120) ?? readShort(r, "otherSkinType", 120);
   if (otherBody) bodyParts.push(`précision : ${otherBody}`);
-  if (bodyParts.length > 0) lines.push(`- Type de peau corps : ${bodyParts.join(" ; ")}`);
+  if (bodyParts.length > 0) lines.push(`- Type de peau corps : ${bodyParts.join(" — ")}`);
 
   const concernParts: string[] = [];
   const concerns = strArray(r.concerns);

@@ -20,8 +20,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
-import { NeuCard } from '@/components/design/NeuCard'
-import { ColorBadge } from '@/components/design/ColorBadge'
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { IngredientBlob } from '@/components/design/IngredientBlob'
 import type { ColorRating } from '@/lib/analysis/types'
 
@@ -57,16 +56,17 @@ export const HistoryRowCard = memo(function HistoryRowCard({
 }: Props) {
   if (selectMode) {
     return (
-      <NeuCard
+      <WhiteCard
         onPress={onToggleSelect}
         padding={spacing.base}
-        style={[styles.card, selected && styles.cardSelected]}
+        borderRadius={radius.lg}
+        style={selected ? styles.cardSelected : undefined}
       >
         <View style={styles.row}>
           <View style={[styles.checkbox, selected && styles.checkboxOn]}>
             {selected && <Ionicons name="checkmark" size={14} color={colors.surface} />}
           </View>
-          <View style={styles.blobWrap}>
+          <View style={styles.blobWrapSm}>
             <IngredientBlob counts={item.counts} variant="sm" width={56} />
           </View>
           <View style={styles.main}>
@@ -76,81 +76,97 @@ export const HistoryRowCard = memo(function HistoryRowCard({
             <Text style={styles.date}>{item.dateLabel}</Text>
           </View>
         </View>
-      </NeuCard>
+      </WhiteCard>
     )
   }
 
   const hasCoherence = Boolean(item.latestCoherenceId)
 
   return (
-    <NeuCard onPress={onPress} padding={spacing.base} style={styles.card}>
+    <WhiteCard onPress={onPress} padding={spacing.base} borderRadius={radius.lg}>
       <View style={styles.row}>
         <View style={styles.blobWrap}>
-          <IngredientBlob counts={item.counts} variant="sm" width={56} />
+          <IngredientBlob counts={item.counts} variant="sm" width={88} />
         </View>
         <View style={styles.main}>
-          <Text style={styles.title} numberOfLines={1}>
-            {item.title}
-          </Text>
-          {item.category ? (
-            <View style={styles.categoryChip}>
-              <Text style={styles.categoryText}>{item.category}</Text>
+          <View style={styles.titleRow}>
+            <View style={styles.titleCol}>
+              <Text style={styles.title} numberOfLines={1}>
+                {item.title}
+              </Text>
+              {item.category ? (
+                <Text style={styles.subtitle} numberOfLines={1}>
+                  {item.category}
+                </Text>
+              ) : null}
             </View>
-          ) : null}
-          <Text style={styles.date}>{item.dateLabel}</Text>
-        </View>
-        <ColorBadge rating={item.rating} variant="full" score={item.score ?? undefined} size="sm" />
-        <Pressable
-          onPress={onOpenActions}
-          hitSlop={8}
-          style={styles.kebab}
-          accessibilityRole="button"
-          accessibilityLabel="Plus d'actions"
-        >
-          <Ionicons name="ellipsis-vertical" size={18} color={colors.inkMuted} />
-        </Pressable>
-      </View>
+            <Text style={styles.date} numberOfLines={1}>
+              {item.dateLabel}
+            </Text>
+          </View>
 
-      <Pressable
-        onPress={onAnalysePromesse}
-        style={styles.promesseCta}
-        accessibilityRole="button"
-      >
-        <Ionicons
-          name="sparkles"
-          size={13}
-          color={hasCoherence ? colors.success : colors.accent}
-        />
-        <Text
-          style={[
-            styles.promesseText,
-            { color: hasCoherence ? colors.success : colors.accent },
-          ]}
-        >
-          {hasCoherence ? "Voir l'analyse de la promesse" : 'Analyser la promesse'}
-        </Text>
-      </Pressable>
-    </NeuCard>
+          <View style={styles.bottomRow}>
+            <Pressable
+              onPress={onAnalysePromesse}
+              style={[
+                styles.promesseCta,
+                { borderColor: hasCoherence ? colors.success : colors.accent },
+              ]}
+              accessibilityRole="button"
+            >
+              <Ionicons
+                name="sparkles"
+                size={13}
+                color={hasCoherence ? colors.success : colors.accent}
+              />
+              <Text
+                style={[
+                  styles.promesseText,
+                  { color: hasCoherence ? colors.success : colors.accent },
+                ]}
+              >
+                {hasCoherence ? "Voir l'analyse de la promesse" : 'Analyser la promesse'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={onOpenActions}
+              hitSlop={8}
+              style={styles.kebab}
+              accessibilityRole="button"
+              accessibilityLabel="Plus d'actions"
+            >
+              <Ionicons name="ellipsis-vertical" size={18} color={colors.inkMuted} />
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </WhiteCard>
   )
 })
 
 const styles = StyleSheet.create({
-  card: { borderRadius: radius.lg },
   cardSelected: { borderWidth: 2, borderColor: colors.ink },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  blobWrap: { width: 56, justifyContent: 'center' },
+  blobWrap: { width: 88, justifyContent: 'center' },
+  blobWrapSm: { width: 56, justifyContent: 'center' },
   main: { flex: 1, minWidth: 0 },
-  title: { ...typography.bodySemiBold, color: colors.ink },
-  date: { ...typography.xs, color: colors.inkMuted, marginTop: 2 },
-  categoryChip: {
-    alignSelf: 'flex-start',
-    marginTop: 3,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 1,
-    borderRadius: radius.full,
-    backgroundColor: colors.borderMuted,
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
   },
-  categoryText: { ...typography.caption, color: colors.inkMuted },
+  titleCol: { flex: 1, minWidth: 0 },
+  title: { ...typography.bodySemiBold, color: colors.ink },
+  subtitle: { ...typography.xs, color: colors.inkMuted, marginTop: 2 },
+  date: { ...typography.xs, color: colors.inkLight, flexShrink: 0 },
+  bottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
   kebab: {
     width: 32,
     height: 32,
@@ -170,13 +186,12 @@ const styles = StyleSheet.create({
   promesseCta: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
     gap: 5,
-    marginTop: spacing.md,
     paddingHorizontal: spacing.md,
     paddingVertical: 5,
     borderRadius: radius.full,
-    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    backgroundColor: 'transparent',
   },
   promesseText: { ...typography.xsSemiBold },
 })

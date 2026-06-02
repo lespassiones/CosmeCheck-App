@@ -7,18 +7,18 @@ import { type FC } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { colors } from '@/constants/colors'
-import { spacing, radius } from '@/constants/spacing'
+import { spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 
-const SKY_BG = 'rgba(240,249,255,0.7)'
-const SKY_RING = '#E0F2FE'
+const SKY_SOFT = '#F0F9FF'
 const SKY_TEXT = '#0284C7'
 
 export const ConclusionCard: FC<{ conclusion: string }> = ({ conclusion }) => {
   if (!conclusion) return null
   return (
-    <View style={styles.card}>
+    <WhiteCard padding={spacing.lg}>
       <View style={styles.header}>
         <View style={styles.iconCircle}>
           <Ionicons name="bulb-outline" size={16} color={SKY_TEXT} />
@@ -26,26 +26,17 @@ export const ConclusionCard: FC<{ conclusion: string }> = ({ conclusion }) => {
         <Text style={styles.kicker}>CONCLUSION</Text>
       </View>
       <Text style={styles.body}>{conclusion}</Text>
-    </View>
+    </WhiteCard>
   )
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: SKY_BG,
-    borderWidth: 1,
-    borderColor: SKY_RING,
-    borderRadius: radius.card,
-    padding: spacing.lg,
-  },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   iconCircle: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: SKY_RING,
+    backgroundColor: SKY_SOFT,
     alignItems: 'center',
     justifyContent: 'center',
   },

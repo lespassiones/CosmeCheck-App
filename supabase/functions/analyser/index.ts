@@ -42,6 +42,11 @@ import {
   splitInciWithGpt,
   validateInciInput,
 } from "./ai.ts";
+import {
+  checkRestrictions,
+  loadProfileForPrompt,
+  loadRestrictionsContext,
+} from "./personalization.ts";
 
 type MatchRow = {
   input_token: string;
@@ -615,9 +620,39 @@ Deno.serve(async (req: Request) => {
   const spectrumTop5: (ColorRating | null)[] = Array.from({ length: 5 }, (_, i) => byPosition[i]?.effective_color ?? null);
   const spectrumTop10: (ColorRating | null)[] = Array.from({ length: 10 }, (_, i) => byPosition[i]?.effective_color ?? null);
 
-  // Synthèse LLM optionnelle (dégrade en null sans clé IA).
+  // Synthèse LLM optionnelle (GPT-4o-mini primaire, Mistral fallback, cachée).
+  // PERSONNALISÉE : le profil peau de l'utilisateur (s'il existe) est injecté
+  // dans le system prompt et entre dans la cache key, donc deux utilisateurs
+  // avec des profils différents obtiennent des synthèses distinctes sur la même
+  // liste INCI. Mirror EXACT de app/api/analyser/route.ts.
   let synthesis: string | null = null;
   if (body.withSynthesis !== false) {
+    const [profileBlock, restrictionsCtx] = await Promise.all([
+      loadProfileForPrompt(sbAuth, user.id),
+      loadRestrictionsContext(sbAuth, user.id),
+    ]);
+
+    // Pré-calcule les matchs de restriction par ingrédient pour que le LLM
+    // n'ait pas à recouper manuellement le bloc restrictions.
+    const checkItems = enriched.map((r) => ({
+      position: r.position_idx + 1,
+      input: r.input_raw,
+      slug: r.slug,
+      name: r.effective_name,
+      tags: r.effective_tags ?? null,
+    }));
+    const restrictionMatches = checkRestrictions(
+      checkItems,
+      restrictionsCtx.restrictions,
+      restrictionsCtx.families,
+    );
+    const reasonByPosition = new Map<number, string>();
+    for (const m of restrictionMatches) {
+      if (!reasonByPosition.has(m.position)) {
+        reasonByPosition.set(m.position, m.label);
+      }
+    }
+
     synthesis = await generateSynthesis({
       enriched: enriched.map((r) => ({
         input_raw: r.input_raw,
@@ -627,13 +662,16 @@ Deno.serve(async (req: Request) => {
         tags: r.effective_tags,
         position_idx: r.position_idx,
         threshold_label: thresholdFor(r.position_idx).label,
+        restriction_reason: reasonByPosition.get(r.position_idx + 1) ?? null,
       })),
       counts,
       score,
       scoreLabel: scoreLabelText,
-      observations: observations.map((o) => ({ label: o.label, status: o.status, count: o.count })),
+      observations,
       productLabel: body.productLabel?.slice(0, 200) ?? null,
       userId: user.id,
+      profileBlock,
+      restrictionsBlock: restrictionsCtx.block,
     });
   }
 
@@ -764,6 +802,28 @@ Deno.serve(async (req: Request) => {
         scoreLabel: scoreLabelText,
         scoreTone,
         countTotal: itemsResponse.length,
+      });
+    })();
+  }
+
+  // Action 2 : produit issu d'un OCR (pas d'EAN) mais marque + libellé connus →
+  // on alimente product_inci_cache pour que les recherches par nom futures
+  // touchent le cache au lieu de relancer toute la cascade web. Mirror web.
+  if (!productEan && body.brand && body.productLabel && body.text && body.text.length > 30) {
+    const ocrBrand = body.brand;
+    const ocrLabel = body.productLabel;
+    const ocrText = body.text;
+    void (async () => {
+      const { setProductCache, normalizeQuery } = await import("./catalog.ts");
+      const queryNorm = normalizeQuery(`${ocrBrand} ${ocrLabel}`);
+      await setProductCache({
+        queryNorm,
+        brand: ocrBrand,
+        productName: ocrLabel,
+        ingredientsText: ocrText,
+        source: "photo_ocr",
+        sourceUrl: null,
+        confidence: 0.90,
       });
     })();
   }

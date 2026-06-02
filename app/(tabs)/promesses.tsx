@@ -4,9 +4,11 @@
  * Liste les analyses de cohérence marketing/formule. Pour chaque ligne, on
  * RECALCULE les métriques sur lecture (computeMetrics) — les `metrics` stockés
  * sont un instantané du moment du calcul ; on les ignore pour que les
- * changements de formule s'appliquent rétroactivement. Affiche un badge %
- * (verdict global) façon web. Tap → détail. Appui long / bouton menu →
- * feuille d'action (supprimer). CTA « + Nouvelle analyse ».
+ * changements de formule s'appliquent rétroactivement.
+ *
+ * Carte = anneau circulaire de progression (verdict %) + nom produit + marque
+ * + "X/X promesses soutenues" + indice marketing + date courte. Tap → détail,
+ * appui long → confirmation de suppression. CTA « + Nouvelle analyse ».
  */
 
 import { type FC, useState } from 'react'
@@ -18,10 +20,11 @@ import {
   Text,
   View,
 } from 'react-native'
+import Svg, { Circle } from 'react-native-svg'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { formatDistanceToNow } from 'date-fns'
+import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
@@ -35,8 +38,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { computeMetrics } from '@/lib/coherence/engine'
 import type { CoherenceResult } from '@/lib/coherence/types'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
-import { NeuCard } from '@/components/design/NeuCard'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { ScreenHeader } from '@/components/shared/ScreenHeader'
 
 interface CoherenceRow {
   id: string
@@ -44,15 +47,79 @@ interface CoherenceRow {
   description: string
   result_json: CoherenceResult
   created_at: string
-  analyses?: { name: string | null; product_label: string | null } | null
+  analyses?: {
+    name: string | null
+    product_label: string | null
+    brand: string | null
+  } | null
 }
 
-/** Couleur du badge % selon le verdict global (vert → rose). */
-function badgeTone(pct: number): { bg: string; text: string } {
-  if (pct >= 67) return { bg: colors.verdict.tenue.soft, text: colors.verdict.tenue.text }
-  if (pct >= 34) return { bg: colors.verdict.partielle.soft, text: colors.verdict.partielle.text }
-  return { bg: colors.verdict.non_demontree.soft, text: colors.verdict.non_demontree.text }
+// ─── Anneau de progression (verdict %) ────────────────────────────────────────
+
+const RING_SIZE = 56
+const RING_STROKE = 5
+const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
+
+/** Couleur de l'anneau selon le verdict %. */
+function ringColor(pct: number): string {
+  if (pct >= 80) return '#16A34A' // vert
+  if (pct >= 60) return '#F97316' // orange
+  if (pct >= 35) return '#F59E0B' // ambre
+  return '#F43F5E' // rose
 }
+
+const PromesseRing: FC<{ pct: number }> = ({ pct }) => {
+  const safePct = Math.min(100, Math.max(0, pct))
+  const color = ringColor(safePct)
+  const offset = RING_CIRCUMFERENCE * (1 - safePct / 100)
+
+  return (
+    <View style={styles.ring}>
+      <Svg width={RING_SIZE} height={RING_SIZE} style={StyleSheet.absoluteFill}>
+        <Circle
+          cx={RING_SIZE / 2}
+          cy={RING_SIZE / 2}
+          r={RING_RADIUS}
+          stroke="#E5E7EB"
+          strokeWidth={RING_STROKE}
+          fill="none"
+        />
+        <Circle
+          cx={RING_SIZE / 2}
+          cy={RING_SIZE / 2}
+          r={RING_RADIUS}
+          stroke={color}
+          strokeWidth={RING_STROKE}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={`${RING_CIRCUMFERENCE} ${RING_CIRCUMFERENCE}`}
+          strokeDashoffset={offset}
+          transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
+        />
+      </Svg>
+      <View style={styles.ringTextRow}>
+        <Text style={styles.ringPct}>{safePct}</Text>
+        <Text style={styles.ringUnit}>%</Text>
+      </View>
+    </View>
+  )
+}
+
+// ─── Format date court : "Aujourd'hui" / "Hier" / "10 mai" ───────────────────
+
+function formatItemDate(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const today = new Date()
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const days = Math.round((startOf(today) - startOf(d)) / 86_400_000)
+  if (days <= 0) return "Aujourd'hui"
+  if (days === 1) return 'Hier'
+  return format(d, 'd MMM', { locale: fr })
+}
+
+// ─── Écran ────────────────────────────────────────────────────────────────────
 
 const PromessesScreen: FC = () => {
   const { user } = useAuth()
@@ -74,7 +141,9 @@ const PromessesScreen: FC = () => {
       if (!userId) return []
       const { data, error } = await db()
         .from('coherence_analyses')
-        .select('id,analysis_id,description,result_json,created_at,analyses(name,product_label)')
+        .select(
+          'id,analysis_id,description,result_json,created_at,analyses(name,product_label,brand)',
+        )
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(50)
@@ -95,49 +164,55 @@ const PromessesScreen: FC = () => {
   })
 
   const renderItem = ({ item }: { item: CoherenceRow }) => {
-    const relative = formatDistanceToNow(new Date(item.created_at), { addSuffix: true, locale: fr })
+    const dateLabel = formatItemDate(item.created_at)
     const productName =
-      item.analyses?.product_label ??
-      item.analyses?.name ??
-      (item.description.trim().slice(0, 48) || 'Analyse de cohérence')
+      item.analyses?.product_label?.trim() ||
+      item.analyses?.name?.trim() ||
+      item.description.trim().slice(0, 48) ||
+      'Analyse de cohérence'
+    const brand = item.analyses?.brand?.trim() || null
     const metrics = computeMetrics(item.result_json?.promises ?? [])
     const supported = metrics.tenueCount + metrics.partielleCount
-    const tone = badgeTone(metrics.tenuePct)
 
     return (
-      <NeuCard
+      <Pressable
         onPress={() => router.push(ROUTES.PROMESSES.DETAIL(item.id))}
-        padding={spacing.base}
-        style={styles.itemCard}
+        onPressIn={() => {
+          Haptics.selectionAsync().catch(() => {})
+        }}
+        onLongPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {})
+          setPendingDelete(item)
+        }}
+        delayLongPress={350}
+        style={({ pressed }) => [
+          styles.card,
+          pressed && styles.cardPressed,
+        ]}
       >
-        <View style={styles.itemRow}>
-          <View style={[styles.badge, { backgroundColor: tone.bg }]}>
-            <Text style={[styles.badgePct, { color: tone.text }]}>{metrics.tenuePct}</Text>
-            <Text style={[styles.badgeUnit, { color: tone.text }]}>%</Text>
-          </View>
-          <View style={styles.itemMain}>
-            <Text style={styles.itemTitle} numberOfLines={1}>
-              {productName}
+        <PromesseRing pct={metrics.tenuePct} />
+
+        <View style={styles.itemMain}>
+          <Text style={styles.itemTitle} numberOfLines={1}>
+            {productName}
+          </Text>
+          {brand ? (
+            <Text style={styles.itemBrand} numberOfLines={1}>
+              {brand}
             </Text>
-            <Text style={styles.itemMeta} numberOfLines={2}>
-              {supported} / {metrics.totalPromises} promesse{metrics.totalPromises > 1 ? 's' : ''}{' '}
-              soutenue{supported > 1 ? 's' : ''} · indice marketing {metrics.marketingIndex} % · {relative}
-            </Text>
-          </View>
-          <Pressable
-            onPress={() => {
-              Haptics.selectionAsync().catch(() => {})
-              setPendingDelete(item)
-            }}
-            hitSlop={10}
-            style={styles.menuBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Supprimer cette analyse"
-          >
-            <Ionicons name="trash-outline" size={18} color={colors.inkLight} />
-          </Pressable>
+          ) : null}
+          <Text style={styles.itemMetaPrimary} numberOfLines={1}>
+            {supported}/{metrics.totalPromises} promesse
+            {metrics.totalPromises > 1 ? 's' : ''} soutenue
+            {supported > 1 ? 's' : ''}
+          </Text>
+          <Text style={styles.itemMetaSecondary} numberOfLines={1}>
+            indice marketing {metrics.marketingIndex} % · {dateLabel}
+          </Text>
         </View>
-      </NeuCard>
+
+        <Ionicons name="chevron-forward" size={18} color={colors.inkLight} />
+      </Pressable>
     )
   }
 
@@ -168,19 +243,19 @@ const PromessesScreen: FC = () => {
   return (
     <View style={styles.root}>
       <BackgroundGlow variant="minimal" />
-      <SafeAreaView style={styles.safe} edges={['top']}>
-        <View style={styles.header}>
-          <View style={styles.headerText}>
-            <Text style={styles.title}>Promesses</Text>
-            <Text style={styles.subtitle}>Promesses du produit vs formule réelle</Text>
-          </View>
+      <ScreenHeader title="Promesses" />
+      <SafeAreaView style={styles.safe} edges={[]}>
+        <View style={styles.subHeader}>
+          <Text style={styles.subtitle}>Promesses du produit vs formule réelle</Text>
           <Pressable
             style={styles.addBtn}
             onPress={() => router.push(ROUTES.PROMESSES.NOUVELLE)}
             hitSlop={8}
+            accessibilityRole="button"
             accessibilityLabel="Nouvelle analyse"
           >
-            <Ionicons name="add" size={22} color="#FFFFFF" />
+            <Ionicons name="add" size={16} color="#FFFFFF" />
+            <Text style={styles.addBtnText}>Nouvelle analyse</Text>
           </Pressable>
         </View>
 
@@ -221,49 +296,103 @@ const PromessesScreen: FC = () => {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   safe: { flex: 1 },
-  header: {
+  subHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.base,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.md,
+    gap: spacing.md,
   },
-  headerText: { flex: 1, minWidth: 0 },
-  title: { ...typography.h1, color: colors.ink },
-  subtitle: { ...typography.xs, color: colors.inkMuted, marginTop: 2 },
+  subtitle: { ...typography.xs, color: colors.inkMuted, flex: 1 },
   addBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.full,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
     backgroundColor: colors.rose,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+  },
+  addBtnText: { fontFamily: fontFamilies.semiBold, fontSize: 13, color: '#FFFFFF' },
+  listContent: { paddingHorizontal: spacing.base, paddingTop: spacing.xs },
+  listContentEmpty: { flexGrow: 1 },
+
+  // ── Carte ──
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: '#FFFFFF',
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.base,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.07,
+    shadowRadius: 18,
+    elevation: 4,
+  },
+  cardPressed: {
+    opacity: 0.96,
+    transform: [{ scale: 0.99 }],
+  },
+
+  // ── Anneau ──
+  ring: {
+    width: RING_SIZE,
+    height: RING_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  listContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs },
-  listContentEmpty: { flexGrow: 1 },
-  itemCard: { borderRadius: radius.lg },
-  itemRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  badge: {
-    width: 52,
-    height: 52,
-    borderRadius: radius.md,
+  ringTextRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    justifyContent: 'center',
   },
-  badgePct: { fontFamily: fontFamilies.bold, fontSize: 16 },
-  badgeUnit: { fontFamily: fontFamilies.medium, fontSize: 10 },
-  itemMain: { flex: 1, minWidth: 0 },
-  itemTitle: { ...typography.bodyMedium, color: colors.ink },
-  itemMeta: { ...typography.xs, color: colors.inkMuted, marginTop: 2 },
-  menuBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
+  ringPct: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 16,
+    color: colors.ink,
+    lineHeight: 18,
+    includeFontPadding: false,
   },
+  ringUnit: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 9,
+    color: colors.ink,
+    marginLeft: 1,
+    includeFontPadding: false,
+  },
+
+  // ── Texte ──
+  itemMain: { flex: 1, minWidth: 0, gap: 1 },
+  itemTitle: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 15,
+    color: colors.ink,
+    letterSpacing: -0.1,
+  },
+  itemBrand: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 12,
+    color: colors.inkMuted,
+  },
+  itemMetaPrimary: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 11,
+    color: '#F59E0B',
+    marginTop: 4,
+  },
+  itemMetaSecondary: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 11,
+    color: colors.inkMuted,
+    marginTop: 1,
+  },
+
   center: { paddingTop: spacing['3xl'], alignItems: 'center' },
   emptyWrap: {
     flex: 1,

@@ -14,8 +14,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react'
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -38,6 +40,7 @@ import { parseAnalyseResponse, type AnalyseResponse } from '@/lib/analysis/types
 import { isProductCategory } from '@/lib/ai/categorize'
 import { categoryLabel } from '@/lib/categoryLabel'
 import { computeEssentiel, type EssentielData } from '@/lib/essentiel/engine'
+import { useRoutine } from '@/hooks/useRoutine'
 
 type LoadState =
   | { status: 'loading' }
@@ -55,6 +58,8 @@ const AnalyseDetailScreen: FC = () => {
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const scrollRef = useRef<ScrollView>(null)
   const reduceMotion = useReducedMotion()
+  const { addToRoutine, isInRoutine } = useRoutine()
+  const [routinePending, setRoutinePending] = useState(false)
 
   const load = useCallback(async () => {
     if (!id) {
@@ -114,25 +119,51 @@ const AnalyseDetailScreen: FC = () => {
     [state],
   )
 
+  const alreadyInRoutine = id ? isInRoutine(id) : false
+
+  const handleAddRoutine = useCallback(async () => {
+    if (!id || alreadyInRoutine || routinePending) return
+    setRoutinePending(true)
+    try {
+      await addToRoutine(id, 'daily')
+    } catch {
+      Alert.alert('Erreur', "Impossible d'ajouter ce produit à ta routine.")
+    } finally {
+      setRoutinePending(false)
+    }
+  }, [id, alreadyInRoutine, routinePending, addToRoutine])
+
+  const handleVoirPromesse = useCallback(() => {
+    router.push(ROUTES.PROMESSES.NOUVELLE)
+  }, [])
+
+  const handleShare = useCallback(async () => {
+    if (state.status !== 'ready') return
+    try {
+      await Share.share({
+        message: `${state.title} — analyse CosmeCheck`,
+      })
+    } catch {
+      /* user cancelled */
+    }
+  }, [state])
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <BackgroundGlow variant="default" />
 
-      {/* Barre supérieure : retour + titre court */}
+      {/* Barre supérieure : pilule "< Retour" à gauche, espace libre à droite */}
       <View style={styles.topBar}>
         <Pressable
           onPress={() => router.back()}
           hitSlop={12}
-          style={styles.backBtn}
+          style={styles.backPill}
           accessibilityRole="button"
           accessibilityLabel="Retour"
         >
-          <Ionicons name="chevron-back" size={22} color={colors.ink} />
+          <Ionicons name="chevron-back" size={16} color={colors.ink} />
+          <Text style={styles.backPillText}>Retour</Text>
         </Pressable>
-        <Text style={styles.topTitle} numberOfLines={1}>
-          Analyse
-        </Text>
-        <View style={styles.backBtn} />
       </View>
 
       {state.status === 'loading' ? (
@@ -173,17 +204,66 @@ const AnalyseDetailScreen: FC = () => {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* En-tête produit */}
+          {/* En-tête produit : titre pleine largeur, catégorie, CTAs, partage + jauge */}
           <View style={styles.header}>
-            <View style={styles.headerText}>
-              <Text style={styles.title}>{state.title}</Text>
-              {state.categoryText ? (
-                <View style={styles.categoryChip}>
-                  <Text style={styles.categoryText}>{state.categoryText}</Text>
-                </View>
-              ) : null}
+            <Text style={styles.title}>{state.title}</Text>
+            {state.categoryText ? (
+              <View style={styles.categoryChip}>
+                <Text style={styles.categoryText}>{state.categoryText}</Text>
+              </View>
+            ) : null}
+
+            <View style={styles.ctaRow}>
+              <Pressable
+                onPress={handleVoirPromesse}
+                style={({ pressed }) => [
+                  styles.ctaBtn,
+                  styles.ctaBtnGreen,
+                  pressed && styles.btnPressed,
+                ]}
+                accessibilityRole="button"
+              >
+                <Ionicons name="sparkles" size={14} color="#FFFFFF" />
+                <Text style={styles.ctaText} numberOfLines={1}>
+                  Voir l&apos;analyse de la promesse
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={handleAddRoutine}
+                disabled={alreadyInRoutine || routinePending}
+                style={({ pressed }) => [
+                  styles.ctaBtn,
+                  styles.ctaBtnRose,
+                  (alreadyInRoutine || routinePending) && styles.ctaBtnDisabled,
+                  pressed && styles.btnPressed,
+                ]}
+                accessibilityRole="button"
+              >
+                <Ionicons
+                  name={alreadyInRoutine ? 'checkmark' : 'add'}
+                  size={14}
+                  color="#FFFFFF"
+                />
+                <Text style={styles.ctaText} numberOfLines={1}>
+                  {alreadyInRoutine ? 'Dans ma routine' : 'Ajouter à ma routine'}
+                </Text>
+              </Pressable>
             </View>
-            <VerdictGauge tone={verdictTone} orientation="horizontal" style={styles.gauge} />
+
+            <View style={styles.shareRow}>
+              <Pressable
+                onPress={handleShare}
+                style={({ pressed }) => [styles.shareBtn, pressed && styles.btnPressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Partager"
+                hitSlop={6}
+              >
+                <Ionicons name="share-social-outline" size={16} color={colors.inkMuted} />
+                <Text style={styles.shareText}>Partager</Text>
+              </Pressable>
+              <VerdictGauge tone={verdictTone} orientation="horizontal" style={styles.gauge} />
+            </View>
           </View>
 
           <AnalysisResultPanel
@@ -214,22 +294,25 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: spacing.base,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.full,
+  backPill: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: radius.full,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  topTitle: {
-    ...typography.h4,
-    color: colors.ink,
-  },
+  backPillText: { fontFamily: fontFamilies.semiBold, fontSize: 13, color: colors.ink },
   center: {
     flex: 1,
     justifyContent: 'center',
@@ -250,15 +333,8 @@ const styles = StyleSheet.create({
     gap: spacing.base,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.md,
     paddingTop: spacing.sm,
-  },
-  headerText: {
-    flex: 1,
-    minWidth: 0,
+    gap: spacing.md,
   },
   title: {
     ...typography.h2,
@@ -269,8 +345,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.06)',
     borderRadius: 9999,
     paddingHorizontal: 10,
-    paddingVertical: 2,
-    marginTop: spacing.sm,
+    paddingVertical: 3,
+    marginTop: -spacing.xs,
   },
   categoryText: {
     fontFamily: fontFamilies.medium,
@@ -278,8 +354,61 @@ const styles = StyleSheet.create({
     color: colors.inkMuted,
     textTransform: 'capitalize',
   },
-  gauge: {
+  ctaRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  ctaBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 12,
+    borderRadius: radius.full,
+  },
+  ctaBtnGreen: { backgroundColor: colors.success },
+  ctaBtnRose: { backgroundColor: colors.rose },
+  ctaBtnDisabled: { opacity: 0.7 },
+  ctaText: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 12,
+    color: '#FFFFFF',
+    flexShrink: 1,
+  },
+  // Pilule blanche regroupant "Partager" + la jauge des 5 pastilles
+  // (NB : pas d'overflow:hidden — laisse le halo de la pastille active déborder).
+  shareRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: '#FFFFFF',
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 2,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    elevation: 3,
+  },
+  shareBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
     flexShrink: 0,
+  },
+  shareText: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 13,
+    color: colors.inkMuted,
+  },
+  gauge: {
+    // La jauge prend la place restante et distribue les pastilles (flex+space-between
+    // gérés en interne par VerdictGauge.styles.row).
   },
   errorCard: {
     alignItems: 'center',

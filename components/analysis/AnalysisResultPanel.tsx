@@ -21,12 +21,22 @@
  */
 
 import { useMemo, useRef, useState, type FC } from 'react'
-import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
+import {
+  Modal,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+} from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 
-import { GlassCard } from '@/components/design/GlassCard'
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
-import { spacing } from '@/constants/spacing'
+import { radius, spacing } from '@/constants/spacing'
 import { getEuFragranceAllergen } from '@/lib/euAllergens'
 import {
   getColorRatingFromScore,
@@ -85,6 +95,8 @@ export const AnalysisResultPanel: FC<Props> = ({
 }) => {
   const [detailsExpanded, setDetailsExpanded] = useState(false)
   const [filter, setFilter] = useState<TabKey>('all')
+  const [listModalOpen, setListModalOpen] = useState(false)
+  const modalScrollRef = useRef<ScrollView>(null)
 
   // Couleur tonale du score (seuils web : tone du serveur prioritaire, sinon
   // dérivé du score).
@@ -155,13 +167,14 @@ export const AnalysisResultPanel: FC<Props> = ({
   }
 
   function handleSpectrumPress(position: number) {
-    // Ouvre la liste si repliée, puis scrolle vers la ligne (au prochain frame
-    // pour laisser le layout se faire).
+    // Ouvre la modale "Liste des ingrédients" et scrolle vers la ligne ciblée
+    // (au prochain frame pour laisser le layout interne de la modale se faire).
     if (!detailsExpanded) setDetailsExpanded(true)
+    setListModalOpen(true)
     requestAnimationFrame(() => {
       const y = itemOffsets.current.get(position)
-      if (y != null && onRequestScrollTo) {
-        onRequestScrollTo(Math.max(0, listTop.current + y - 24))
+      if (y != null) {
+        modalScrollRef.current?.scrollTo({ y: Math.max(0, y - 24), animated: true })
       }
     })
   }
@@ -217,7 +230,14 @@ export const AnalysisResultPanel: FC<Props> = ({
           {/* 4. Le verdict en chiffres */}
           <PenaltySummaryStrip counts={counts} />
 
-          {/* 5. Spectre positionnel */}
+          {/* 5. Synthèse */}
+          <SynthesisCard
+            synthesis={result.synthesis}
+            items={result.items}
+            onRequestSynthesis={onRequestSynthesis}
+          />
+
+          {/* 6. Spectre positionnel */}
           {result.spectrum ? (
             <IngredientSpectrum
               spectrum={result.spectrum}
@@ -226,70 +246,110 @@ export const AnalysisResultPanel: FC<Props> = ({
             />
           ) : null}
 
-          {/* 6. Observations */}
+          {/* 7. Observations */}
           <ObservationsCard
             observations={result.observations}
             slugByName={slugByName}
             onIngredientPress={onIngredientPress}
           />
 
-          {/* 7. Allergènes de contact UE */}
+          {/* 8. Allergènes de contact UE */}
           <EuAllergensCard allergens={euAllergens} />
 
-          {/* 8. Synthèse */}
-          <SynthesisCard
-            synthesis={result.synthesis}
-            items={result.items}
-            onRequestSynthesis={onRequestSynthesis}
-          />
-
-          {/* 9. Liste complète des ingrédients */}
-          <GlassCard padding={0}>
-            <View onLayout={handleListLayout}>
-              <View style={styles.listHeader}>
-                <Text style={styles.listTitle}>Liste des ingrédients</Text>
-                <View style={styles.tabs}>
-                  {tabs.map((t) => {
-                    const active = t === filter
-                    const count = tabCount(counts, t)
-                    return (
-                      <FilterChip
-                        key={t}
-                        label={TAB_LABELS[t]}
-                        count={count}
-                        active={active}
-                        tone={t}
-                        onPress={() => setFilter(t)}
-                      />
-                    )
-                  })}
+          {/* 9. Liste complète — preview qui ouvre la modale dédiée */}
+          <Pressable
+            onPress={() => setListModalOpen(true)}
+            style={({ pressed }) => pressed && styles.previewPressed}
+            accessibilityRole="button"
+            accessibilityLabel="Ouvrir la liste des ingrédients"
+          >
+            <WhiteCard padding={spacing.lg}>
+              <View style={styles.previewRow}>
+                <View style={styles.previewText}>
+                  <Text style={styles.listTitle}>Liste des ingrédients</Text>
+                  <Text style={styles.previewSubtitle}>
+                    Voir les <Text style={styles.previewStrong}>{counts.total}</Text> ingrédients
+                    avec couleur, fonction et fiche détaillée.
+                  </Text>
+                </View>
+                <View style={styles.previewArrow}>
+                  <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
                 </View>
               </View>
-
-              <View>
-                {filteredItems.length === 0 ? (
-                  <Text style={styles.emptyList}>
-                    Aucun ingrédient ne correspond à ce filtre.
-                  </Text>
-                ) : (
-                  filteredItems.map((item) => (
-                    <View
-                      key={`${item.position}-${item.input}`}
-                      onLayout={(e) => registerItemOffset(item.position, e.nativeEvent.layout.y)}
-                    >
-                      <ProductRow
-                        item={item}
-                        onPress={onIngredientPress}
-                        isRestricted={(item as AnalyseItemWithRestriction).is_restricted}
-                      />
-                    </View>
-                  ))
-                )}
-              </View>
-            </View>
-          </GlassCard>
+            </WhiteCard>
+          </Pressable>
         </View>
       ) : null}
+
+      {/* Modale plein écran : liste complète des ingrédients */}
+      <Modal
+        visible={listModalOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setListModalOpen(false)}
+      >
+        <SafeAreaView style={styles.modalSafe}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Liste des ingrédients</Text>
+            <Pressable
+              onPress={() => setListModalOpen(false)}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Fermer"
+              style={styles.modalClose}
+            >
+              <Ionicons name="close" size={22} color={colors.ink} />
+            </Pressable>
+          </View>
+
+          <View style={styles.modalTabs} onLayout={handleListLayout}>
+            <View style={styles.tabs}>
+              {tabs.map((t) => {
+                const active = t === filter
+                const count = tabCount(counts, t)
+                return (
+                  <FilterChip
+                    key={t}
+                    label={TAB_LABELS[t]}
+                    count={count}
+                    active={active}
+                    tone={t}
+                    onPress={() => setFilter(t)}
+                  />
+                )
+              })}
+            </View>
+          </View>
+
+          <ScrollView
+            ref={modalScrollRef}
+            style={styles.modalScroll}
+            contentContainerStyle={styles.modalContent}
+          >
+            {filteredItems.length === 0 ? (
+              <Text style={styles.emptyList}>
+                Aucun ingrédient ne correspond à ce filtre.
+              </Text>
+            ) : (
+              filteredItems.map((item) => (
+                <View
+                  key={`${item.position}-${item.input}`}
+                  onLayout={(e) => registerItemOffset(item.position, e.nativeEvent.layout.y)}
+                >
+                  <ProductRow
+                    item={item}
+                    onPress={(slug) => {
+                      setListModalOpen(false)
+                      onIngredientPress(slug)
+                    }}
+                    isRestricted={(item as AnalyseItemWithRestriction).is_restricted}
+                  />
+                </View>
+              ))
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </View>
   )
 }
@@ -299,7 +359,7 @@ export const AnalysisResultPanel: FC<Props> = ({
 function EuAllergensCard({ allergens }: { allergens: { label: string; note?: string }[] }) {
   const has = allergens.length > 0
   return (
-    <GlassCard padding={spacing.lg}>
+    <WhiteCard padding={spacing.lg}>
       <Text style={styles.listTitle}>Allergènes de contact UE</Text>
       {has ? (
         <View style={styles.allergenChips}>
@@ -314,7 +374,7 @@ function EuAllergensCard({ allergens }: { allergens: { label: string; note?: str
       ) : (
         <Text style={styles.allergenNone}>Aucun allergène de contact UE détecté.</Text>
       )}
-    </GlassCard>
+    </WhiteCard>
   )
 }
 
@@ -381,12 +441,54 @@ const styles = StyleSheet.create({
   details: {
     gap: spacing.base,
   },
-  listHeader: {
-    padding: spacing.base,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderMuted,
+  // Preview "Liste des ingrédients" (carte qui ouvre la modale)
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing.md,
   },
+  previewText: { flex: 1, minWidth: 0 },
+  previewSubtitle: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.inkMuted,
+    marginTop: 4,
+  },
+  previewStrong: { fontFamily: fontFamilies.semiBold, color: colors.ink },
+  previewArrow: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.ink,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  previewPressed: { opacity: 0.85 },
+  // Modale liste des ingrédients
+  modalSafe: { flex: 1, backgroundColor: colors.bg },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderMuted,
+  },
+  modalTitle: { fontFamily: fontFamilies.semiBold, fontSize: 18, color: colors.ink },
+  modalClose: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.gray100,
+  },
+  modalTabs: { padding: spacing.base },
+  modalScroll: { flex: 1 },
+  modalContent: { paddingBottom: spacing.xl },
   listTitle: {
     fontFamily: fontFamilies.semiBold,
     fontSize: 16,

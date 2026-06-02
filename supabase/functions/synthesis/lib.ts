@@ -20,10 +20,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   AI_MODEL,
+  callWithFallback,
   getCached,
   hasMistral,
   hasOpenAI,
-  logAI,
   mistralChat,
   openai,
   setCached,
@@ -170,12 +170,12 @@ export function formatSkinProfileForPrompt(skin: SkinProfile): string | null {
   const faceParts: string[] = [];
   if (skin.skinTypeFace) faceParts.push(SKIN_TYPE_FACE_LABEL[skin.skinTypeFace]);
   if (skin.otherSkinTypeFace) faceParts.push(`précision : ${skin.otherSkinTypeFace}`);
-  if (faceParts.length > 0) lines.push(`- Type de peau visage : ${faceParts.join(" , ")}`);
+  if (faceParts.length > 0) lines.push(`- Type de peau visage : ${faceParts.join(" — ")}`);
 
   const bodyParts: string[] = [];
   if (skin.skinTypeBody) bodyParts.push(SKIN_TYPE_BODY_LABEL[skin.skinTypeBody]);
   if (skin.otherSkinTypeBody) bodyParts.push(`précision : ${skin.otherSkinTypeBody}`);
-  if (bodyParts.length > 0) lines.push(`- Type de peau corps : ${bodyParts.join(" , ")}`);
+  if (bodyParts.length > 0) lines.push(`- Type de peau corps : ${bodyParts.join(" — ")}`);
 
   const concernParts: string[] = [];
   if (skin.concerns && skin.concerns.length > 0) {
@@ -574,7 +574,7 @@ CONTEXTE :
 STRUCTURE OBLIGATOIRE (deux blocs séparés par une ligne vide) :
 
 BLOC 1 (prose, 2 à 3 phrases, pas de puce) :
-- Phrase 1 (OUVERTURE) , règle :
+- Phrase 1 (OUVERTURE) — règle :
   ${openingRule}
 - Phrase 2 (CONSTAT CHIFFRÉ, naturel) : ${total === 0 ? "Aucun ingrédient n'a pu être reconnu dans la liste fournie. Dis-le simplement, sans utiliser de chiffres comme \"0 sur 0\" ou \"0 ingrédient\". Exemple : \"Aucun ingrédient de cette liste n'est dans notre base, difficile d'aller plus loin.\" ou \"La formule n'a pas pu être lue, les ingrédients sont peut-être mal orthographiés ou trop fragmentés.\" (adapte selon le contexte)." : `"Sur les ${total} ingrédients identifiés, ${input.counts.Vert ?? 0} sont sans risque connu et ${(input.counts.Jaune ?? 0) + (input.counts.Orange ?? 0) + (input.counts.Rouge ?? 0)} méritent un coup d'œil." (varie la formulation, garde les chiffres).`}
 - Phrase 3 (TRANSITION, courte) : "Voici ce qui mérite ton attention :" ou similaire.
@@ -595,16 +595,16 @@ BLOC 2 (puces, chaque ligne commence par "- ", 4 à 7 puces max) :
 
 4. BONUS optionnel (max 1) :
 - "Bon à savoir" sur UN VERT notable (Niacinamide, Acide Hyaluronique, Panthénol, Centella Asiatica). Ignore eau / glycérine / propanediol / sodium hydroxide / pH ajusteurs.
-- INTERDIT : ne jamais énumérer ce qui est absent (style "Sans parabens, sans sulfates..."). Cette information est déjà affichée dans le panneau Observations.
+- INTERDIT : ne jamais énumérer ce qui est absent (style "Sans parabens, sans sulfates..."). Cette information est déjà affichée dans le panneau Observations, la répéter ici alourdit la synthèse.
 
-5. CLOSING (DERNIÈRE PUCE, obligatoire) , règle :
+5. CLOSING (DERNIÈRE PUCE, obligatoire) — règle :
    ${closingRule}
 
 CONTRAINTES STRICTES :
 - Total puces (bloc 2) : 4 à 7 max, closing comprise.
 - Chaque puce : 1 à 2 phrases courtes. Pas de pavé.
 - Pas de jargon médical (dermatite, eczéma, comédogène, sébo-régulateur). Préfère "peut irriter", "peut boucher les pores".
-- INTERDIT absolu : les verbes "soigne", "traite", "guérit", "cicatrise", "régénère", "répare", "restaure" , réservés aux médicaments (Règlement CE 1223/2009). Utilise à la place : "entretient la peau", "maintient en bon état", "hydrate", "adoucit", "protège", "reconstitue".
+- INTERDIT absolu : les verbes "soigne", "traite", "guérit", "cicatrise", "régénère", "répare", "restaure" — réservés aux médicaments (Règlement CE 1223/2009). Utilise à la place : "entretient la peau", "maintient en bon état", "hydrate", "adoucit", "protège", "reconstitue".
 - Pas d'emoji, pas d'astérisque autre que les **gras INCI**.
 - AUCUN tiret cadratin (—) ni demi-cadratin (–). Utilise virgule, deux-points ou nouvelle phrase.
 - VARIE l'attaque du bloc 1 d'une analyse à l'autre.
@@ -635,69 +635,81 @@ ${greenWithFunction.length ? greenWithFunction.join("\n") : "(aucun avec fonctio
   return { system, user };
 }
 
+/**
+ * Fallback Mistral (port byte-for-byte de callMistralFallback côté web).
+ * Renvoie null si Mistral indisponible OU si l'appel échoue silencieusement.
+ */
+async function callMistralFallback(input: SynthesisInput): Promise<string | null> {
+  if (!hasMistral()) return null;
+  const { system, user } = buildPrompt(input);
+  try {
+    const raw = await mistralChat({
+      model: MISTRAL_MODEL,
+      temperature: 0.55,
+      maxTokens: 900,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    });
+    return raw?.trim() ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function generateSynthesis(input: SynthesisInput): Promise<string | null> {
   const cacheKey = await makeCacheKey(input);
   const cached = await getCached<{ text: string }>(cacheKey);
   if (cached?.text) return cached.text;
 
+  // Aucun provider IA → null gracieux (parité web).
   if (!hasOpenAI() && !hasMistral()) return null;
 
   const { system, user } = buildPrompt(input);
-  const t0 = Date.now();
 
-  // 1) OpenAI primaire
-  if (hasOpenAI()) {
-    try {
-      const resp = await openai().chat.completions.create({
-        model: AI_MODEL,
-        temperature: 0.55,
-        top_p: 0.95,
-        max_tokens: 900,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-      });
-      const raw = resp.choices?.[0]?.message?.content?.trim() ?? null;
-      const value = raw ? stripLongDashes(raw) : null;
-      logAI({
-        feature: "synthesis",
-        provider: "openai",
-        status: "success",
-        tokens_in: resp.usage?.prompt_tokens ?? null,
-        tokens_out: resp.usage?.completion_tokens ?? null,
-        duration_ms: Date.now() - t0,
-        user_id: input.userId ?? null,
-      });
-      if (value) void setCached(cacheKey, { text: value });
-      return value;
-    } catch {
-      logAI({ feature: "synthesis", provider: "openai", status: "fallback", duration_ms: Date.now() - t0, user_id: input.userId ?? null });
-    }
+  try {
+    // Ordre provider IDENTIQUE au web : OpenAI primaire, Mistral fallback.
+    // callWithFallback applique le timeout 25 s sur le primaire et la même
+    // sémantique de logAI (success / fallback / error) que lib/ai/client.ts.
+    const text = await callWithFallback<string | null>({
+      feature: "synthesis",
+      userId: input.userId ?? null,
+      timeoutMs: 25_000,
+      primary: async () => {
+        if (!hasOpenAI()) throw new Error("openai disabled");
+        const resp = await openai().chat.completions.create({
+          model: AI_MODEL,
+          temperature: 0.55,
+          top_p: 0.95,
+          max_tokens: 900,
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: user },
+          ],
+        });
+        const raw = resp.choices?.[0]?.message?.content?.trim() ?? null;
+        const value = raw ? stripLongDashes(raw) : null;
+        return {
+          value,
+          tokensIn: resp.usage?.prompt_tokens,
+          tokensOut: resp.usage?.completion_tokens,
+        };
+      },
+      fallback: async () => {
+        const raw = await callMistralFallback(input);
+        return {
+          value: raw ? stripLongDashes(raw) : null,
+          provider: "mistral" as const,
+        };
+      },
+    });
+
+    if (text) void setCached(cacheKey, { text });
+    return text;
+  } catch {
+    return null;
   }
-
-  // 2) Mistral fallback
-  if (hasMistral()) {
-    try {
-      const raw = await mistralChat({
-        model: MISTRAL_MODEL,
-        temperature: 0.55,
-        maxTokens: 900,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-      });
-      const value = raw ? stripLongDashes(raw.trim()) : null;
-      logAI({ feature: "synthesis", provider: "mistral", status: "fallback", duration_ms: Date.now() - t0, user_id: input.userId ?? null });
-      if (value) void setCached(cacheKey, { text: value });
-      return value;
-    } catch {
-      logAI({ feature: "synthesis", provider: "mistral", status: "error", duration_ms: Date.now() - t0, user_id: input.userId ?? null });
-    }
-  }
-
-  return null;
 }
 
 // ─── stripAbsencesParagraph (port byte-for-byte de _shared/sanitize web) ─────

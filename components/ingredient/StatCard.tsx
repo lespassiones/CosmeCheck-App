@@ -8,7 +8,7 @@ import { type FC, type ReactNode } from 'react'
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
-import { GlassCard } from '@/components/design/GlassCard'
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
 
@@ -23,7 +23,7 @@ export const StatCard: FC<Props> = ({ label, children, cta, href }) => {
   const showLink = Boolean(cta && href)
 
   return (
-    <GlassCard style={styles.card} padding={16} opacity={0.72}>
+    <WhiteCard style={styles.card} padding={16}>
       <View style={styles.labelRow}>
         <Ionicons name="pricetag-outline" size={11} color={colors.inkLight} />
         <Text style={styles.label}>{label.toUpperCase()}</Text>
@@ -42,7 +42,7 @@ export const StatCard: FC<Props> = ({ label, children, cta, href }) => {
           <Text style={styles.cta}>{cta} →</Text>
         </Pressable>
       ) : null}
-    </GlassCard>
+    </WhiteCard>
   )
 }
 

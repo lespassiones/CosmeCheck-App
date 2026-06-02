@@ -27,6 +27,8 @@ export type GateOptions = {
   /** Limite burst (IP, par minute). Défaut 30/min. */
   rateMax?: number;
   rateWindowSec?: number;
+  /** Message 429 rate-limit spécifique (sinon message générique web). */
+  rateLimitMessage?: string;
 };
 
 export type CreditsState = { used: number; limit: number; remaining: number };
@@ -98,7 +100,7 @@ export async function gate(req: Request, opts: GateOptions): Promise<GateOk | Ga
     return {
       ok: false,
       response: jsonError(
-        { error: "Trop de requêtes. Réessaye dans un instant." },
+        { error: opts.rateLimitMessage ?? "Trop de requêtes. Réessaye dans un instant." },
         429,
         { "Retry-After": String(retrySec) },
       ),

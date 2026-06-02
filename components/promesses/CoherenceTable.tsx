@@ -13,9 +13,9 @@ import { type FC, useState } from 'react'
 import { LayoutAnimation, Platform, Pressable, StyleSheet, Text, UIManager, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
-import { GlassCard } from '@/components/design/GlassCard'
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { colors } from '@/constants/colors'
-import { spacing, radius } from '@/constants/spacing'
+import { spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 import type { CoherencePromise } from '@/lib/coherence/types'
 import type { AnalyseItem, DbColorRating } from '@/lib/analysis/types'
@@ -68,7 +68,7 @@ export const CoherenceTable: FC<{ promises: CoherencePromise[]; items?: AnalyseI
 
   if (directPromises.length === 0) {
     return (
-      <GlassCard padding={spacing.lg}>
+      <WhiteCard padding={spacing.lg}>
         <Text style={styles.emptyTitle}>
           Aucune promesse vérifiable n&apos;a été détectée dans la description.
         </Text>
@@ -76,12 +76,12 @@ export const CoherenceTable: FC<{ promises: CoherencePromise[]; items?: AnalyseI
           La description ne contient peut-être que des mentions générales (composition, certification,
           sensorialité…).
         </Text>
-      </GlassCard>
+      </WhiteCard>
     )
   }
 
   return (
-    <GlassCard padding={spacing.lg}>
+    <WhiteCard padding={spacing.lg}>
       <Text style={styles.title}>Tableau de cohérence</Text>
       <Text style={styles.subtitle}>
         Pour chaque promesse : le verdict de la formule et les ingrédients trouvés.
@@ -91,7 +91,7 @@ export const CoherenceTable: FC<{ promises: CoherencePromise[]; items?: AnalyseI
           <PromiseAccordion key={p.slug + p.excerpt} promise={p} colorMap={colorMap} />
         ))}
       </View>
-    </GlassCard>
+    </WhiteCard>
   )
 }
 
@@ -108,7 +108,7 @@ const PromiseAccordion: FC<{
   }
 
   return (
-    <View style={[styles.accordion, { borderColor: tone.ring }]}>
+    <View style={styles.accordion}>
       <Pressable onPress={toggle} style={styles.accHeader} accessibilityRole="button">
         <View style={styles.accHeaderLeft}>
           {promise.verdict !== 'tenue' ? (
@@ -119,7 +119,7 @@ const PromiseAccordion: FC<{
           </Text>
         </View>
         <View style={styles.accHeaderRight}>
-          <View style={[styles.badge, { backgroundColor: tone.soft, borderColor: tone.ring }]}>
+          <View style={[styles.badge, { backgroundColor: tone.soft }]}>
             <Text style={[styles.badgeText, { color: tone.text }]}>{tone.label}</Text>
           </View>
           <Ionicons
@@ -131,7 +131,7 @@ const PromiseAccordion: FC<{
       </Pressable>
 
       {open ? (
-        <View style={[styles.accBody, { borderTopColor: tone.ring }]}>
+        <View style={styles.accBody}>
           <FoundList promise={promise} colorMap={colorMap} />
         </View>
       ) : null}
@@ -210,18 +210,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
   },
-  list: { gap: spacing.sm },
+  list: { marginTop: 2 },
   accordion: {
-    borderWidth: 1,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surface,
-    overflow: 'hidden',
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
   },
   accHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     gap: spacing.sm,
   },
@@ -229,9 +226,9 @@ const styles = StyleSheet.create({
   leadDot: { width: 8, height: 8, borderRadius: 4, marginTop: 5 },
   accLabel: { flex: 1, fontFamily: fontFamilies.semiBold, fontSize: 14, color: colors.ink, lineHeight: 19 },
   accHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  badge: { borderRadius: 9999, borderWidth: 1, paddingHorizontal: 9, paddingVertical: 2 },
+  badge: { borderRadius: 9999, paddingHorizontal: 9, paddingVertical: 3 },
   badgeText: { fontFamily: fontFamilies.semiBold, fontSize: 11 },
-  accBody: { paddingHorizontal: spacing.md, paddingBottom: spacing.md, borderTopWidth: 1 },
+  accBody: { paddingBottom: spacing.md },
   chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: spacing.md },
   foundChip: {
     flexDirection: 'row',
@@ -249,8 +246,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     backgroundColor: colors.verdict.contredite.soft,
-    borderWidth: 1,
-    borderColor: colors.verdict.contredite.ring,
     borderRadius: 9999,
     paddingHorizontal: 9,
     paddingVertical: 4,

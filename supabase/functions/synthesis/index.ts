@@ -9,7 +9,8 @@
  * complète ("Voir l'analyse complète").
  *
  * Pipeline (ordre IDENTIQUE au web) :
- *   1. Auth Bearer (gate, costCredits:0 — synthèse gratuite). RLS appliquée.
+ *   1. Auth Bearer SEULE (pas d'apiGate côté web : ni rate-limit IP ni crédit ;
+ *      message 401 exact "Non authentifié."). RLS appliquée via client token.
  *   2. Charge la ligne analyses (client lié au user → RLS borne au propriétaire ;
  *      on vérifie aussi user_id explicitement pour renvoyer 403 vs 404).
  *   3. Court-circuit si result_json.synthesis existe déjà (passe par
@@ -25,7 +26,7 @@
  * Crédit : 0.
  */
 import { handleOptions, jsonResponse } from "../_shared/cors.ts";
-import { gate } from "../_shared/gate.ts";
+import { getBearerToken, unauthorizedResponse, userClient } from "../_shared/auth.ts";
 import { stripAbsencesParagraph } from "../_shared/sanitize.ts";
 import {
   type CheckableItem,
@@ -83,10 +84,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return jsonResponse({ error: "analysisId manquant." }, { status: 400 });
   }
 
-  // ── 2. Auth + rate-limit (gate). Crédit 0 : synthèse gratuite. ────────────
-  const g = await gate(req, { feature: "synthesis", costCredits: 0 });
-  if (!g.ok) return g.response;
-  const { user, supabase } = g;
+  // ── 2. Auth Bearer SEULE (parité web). ─────────────────────────────────────
+  // La route web `app/api/synthesis/route.ts` n'utilise PAS apiGate : pas de
+  // rate-limit IP, pas de débit de crédit (même à coût 0). Juste getUser() avec
+  // le message exact "Non authentifié.". On reproduit ça à l'identique : auth
+  // Bearer brute via un client lié au token (RLS = ce user), AUCUN gate.
+  const token = getBearerToken(req);
+  const supabase = userClient(token);
+  if (!token) {
+    return unauthorizedResponse("Non authentifié.");
+  }
+  const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+  const user = userData?.user;
+  if (userErr || !user) {
+    return unauthorizedResponse("Non authentifié.");
+  }
 
   // ── 3. Charge la ligne (RLS via client user). ─────────────────────────────
   const { data: row, error: rowError } = await supabase

@@ -18,7 +18,7 @@ import { memo, type FC } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
-import { NeuCard } from '@/components/design/NeuCard'
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
 import { spacing } from '@/constants/spacing'
@@ -73,7 +73,7 @@ export const EssentielToggleButton: FC<{ expanded: boolean; onToggle: () => void
 function VerdictCard({ verdict }: { verdict: EssentielData['verdict'] }) {
   const v = VERDICT_VISUAL[verdict.tone]
   return (
-    <NeuCard interactive={false} padding={spacing.base} style={styles.cardRow}>
+    <WhiteCard padding={spacing.base} style={styles.cardRow}>
       <View style={styles.cardInner}>
         <View style={[styles.iconCircle, { backgroundColor: v.badgeBg }]}>
           <Ionicons name={v.icon} size={20} color={v.iconColor} />
@@ -83,13 +83,13 @@ function VerdictCard({ verdict }: { verdict: EssentielData['verdict'] }) {
           <Text style={styles.verdictPhrase}>{verdict.phrase}</Text>
         </View>
       </View>
-    </NeuCard>
+    </WhiteCard>
   )
 }
 
 function PositivesCard({ positives }: { positives: EssentielData['positives'] }) {
   return (
-    <NeuCard interactive={false} padding={spacing.base}>
+    <WhiteCard padding={spacing.base}>
       <View style={styles.cardInnerTop}>
         <View style={[styles.iconCircle, { backgroundColor: colors.rating.vert.bg }]}>
           <Ionicons name="leaf-outline" size={20} color={colors.rating.vert.text} />
@@ -114,7 +114,7 @@ function PositivesCard({ positives }: { positives: EssentielData['positives'] })
           </View>
         </View>
       </View>
-    </NeuCard>
+    </WhiteCard>
   )
 }
 
@@ -122,7 +122,7 @@ function ConcernsCard({ concerns }: { concerns: EssentielData['concerns'] }) {
   const worst = concerns[0]
   const v = CONCERN_VISUAL[worst.tier]
   return (
-    <NeuCard interactive={false} padding={spacing.base}>
+    <WhiteCard padding={spacing.base}>
       <View style={styles.cardInnerTop}>
         <View style={[styles.iconCircle, { backgroundColor: v.badgeBg }]}>
           <Ionicons name={v.icon} size={20} color={v.iconColor} />
@@ -145,13 +145,13 @@ function ConcernsCard({ concerns }: { concerns: EssentielData['concerns'] }) {
           </View>
         </View>
       </View>
-    </NeuCard>
+    </WhiteCard>
   )
 }
 
 function AllClearCard() {
   return (
-    <NeuCard interactive={false} padding={spacing.base} style={styles.cardRow}>
+    <WhiteCard padding={spacing.base} style={styles.cardRow}>
       <View style={styles.cardInner}>
         <View style={[styles.iconCircle, { backgroundColor: colors.rating.vert.bg }]}>
           <Ionicons name="checkmark" size={20} color={colors.rating.vert.text} />
@@ -161,7 +161,7 @@ function AllClearCard() {
           <Text style={styles.verdictPhrase}>Aucun ingrédient à signaler dans cette formule.</Text>
         </View>
       </View>
-    </NeuCard>
+    </WhiteCard>
   )
 }
 

@@ -9,7 +9,6 @@
 
 import { type FC, useState } from 'react'
 import {
-  Platform,
   Pressable,
   StyleSheet,
   TextInput,
@@ -46,14 +45,7 @@ export const SearchBar: FC<Props> = ({
   }
 
   return (
-    <View
-      style={[
-        styles.container,
-        Platform.OS === 'ios' ? styles.inset : styles.insetAndroid,
-        isFocused && styles.focused,
-        style,
-      ]}
-    >
+    <View style={[styles.container, isFocused && styles.focused, style]}>
       <Ionicons name="search" size={18} color={colors.inkMuted} style={styles.leadingIcon} />
       <TextInput
         value={value}
@@ -78,32 +70,27 @@ export const SearchBar: FC<Props> = ({
 }
 
 const styles = StyleSheet.create({
+  // Look "carte propre" : fond blanc, fine bordure et drop shadow doux comme WhiteCard.
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 46,
-    paddingHorizontal: 14,
-    borderRadius: radius.lg,
-    backgroundColor: colors.neu.bg,
-  },
-  // Effet enfoncé (inset) simulé par des ombres internes côté iOS.
-  inset: {
-    shadowColor: colors.neu.shadowDark,
-    shadowOffset: { width: 2, height: 2 },
-    shadowOpacity: 0.6,
-    shadowRadius: 4,
+    height: 48,
+    paddingHorizontal: 16,
+    borderRadius: radius.full,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
-  },
-  insetAndroid: {
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: 'rgba(15,23,42,0.06)',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    elevation: 3,
   },
   focused: {
     borderColor: colors.accent,
   },
   leadingIcon: {
-    marginRight: 8,
+    marginRight: 10,
   },
   input: {
     flex: 1,

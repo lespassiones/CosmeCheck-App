@@ -186,16 +186,19 @@ Donne 2-3 suggestions concrètes${profileBlock || restrictionsBlock ? ", adapté
       user_id: userId,
     });
   } catch {
-    // Échec/timeout OpenAI → on dégrade sur les suggestions moteur. On loggue
-    // un fallback côté moteur (pas de provider IA externe ici).
+    // Échec/timeout OpenAI → on dégrade sur les suggestions moteur. Mirror
+    // exact du web : `callWithFallback` exécute le fallback (qui renvoie les
+    // suggestions moteur avec provider "openai") et loggue un `fallback`
+    // (PAS un `error`). On enchaîne ensuite sur le MÊME merge + setCached que
+    // le chemin nominal pour rester identique au web.
     logAI({
       feature: "synthesis",
       provider: "openai",
-      status: "error",
+      status: "fallback",
       duration_ms: Date.now() - t0,
       user_id: userId,
     });
-    return { suggestions: engineSuggestions, cached: false };
+    aiSuggestions = engineSuggestions;
   }
 
   // Merge : on garde la formulation IA mais on conserve l'impact CHIFFRÉ du

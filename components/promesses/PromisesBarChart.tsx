@@ -10,7 +10,7 @@ import { type FC, useEffect, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { useReducedMotion } from 'react-native-reanimated'
 
-import { GlassCard } from '@/components/design/GlassCard'
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { colors } from '@/constants/colors'
 import { spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
@@ -42,7 +42,7 @@ export const PromisesBarChart: FC<{ promises: CoherencePromise[] }> = ({ promise
   if (promises.length === 0) return null
 
   return (
-    <GlassCard style={styles.card} padding={spacing.lg}>
+    <WhiteCard style={styles.card} padding={spacing.lg}>
       <Text style={styles.title}>Détail par promesse</Text>
       <Text style={styles.subtitle}>
         Plus la barre est remplie, plus la promesse est documentée par les ingrédients de la formule.
@@ -70,7 +70,7 @@ export const PromisesBarChart: FC<{ promises: CoherencePromise[] }> = ({ promise
           )
         })}
       </View>
-    </GlassCard>
+    </WhiteCard>
   )
 }
 
