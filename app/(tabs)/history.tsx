@@ -49,11 +49,15 @@ import { ScreenHeader } from '@/components/shared/ScreenHeader'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { HistoryRowCard, type HistoryItemView } from '@/components/history/HistoryRowCard'
 import { HistoryItemActions } from '@/components/history/HistoryItemActions'
+import { PromesseFlowModal } from '@/components/promesses/PromesseFlowModal'
 
 interface AnalysisRow {
   id: string
   name: string | null
   product_label: string | null
+  brand: string | null
+  product_type: string | null
+  input_text: string | null
   score: number | null
   result_json: unknown
   category: string | null
@@ -68,10 +72,13 @@ interface CoherenceRow {
 
 /** Modèle de vue enrichi consommé par la liste + filtrage. */
 interface HistoryItem extends HistoryItemView {
-  /** Tokens (nom produit + ingrédients) pour la recherche, déjà en minuscules. */
   searchTokens: string[]
-  /** Nom brut (pour pré-remplir le champ "Renommer"). */
   rawName: string
+  // Données nécessaires à la PromesseFlowModal (flow auto depuis l'historique).
+  brand: string | null
+  productLabel: string | null
+  productType: string | null
+  inciText: string
 }
 
 type CountsTuple = { vert: number; jaune: number; orange: number; rouge: number }
@@ -133,6 +140,10 @@ function buildItem(row: AnalysisRow, latestCoherenceId: string | null): HistoryI
     dateLabel,
     latestCoherenceId,
     searchTokens: Array.from(tokenSet),
+    brand: row.brand?.trim() || null,
+    productLabel: row.product_label?.trim() || row.name?.trim() || null,
+    productType: row.product_type ?? parsed?.productType ?? null,
+    inciText: row.input_text ?? '',
   }
 }
 
@@ -145,6 +156,7 @@ const HistoryScreen: FC = () => {
   const [search, setSearch] = useState('')
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
+  const [promesseModalFor, setPromesseModalFor] = useState<HistoryItem | null>(null)
   const [actionsFor, setActionsFor] = useState<HistoryItem | null>(null)
 
   const queryKey = ['history', userId] as const
@@ -165,7 +177,7 @@ const HistoryScreen: FC = () => {
       const [analysesRes, coherencesRes] = await Promise.all([
         db()
           .from('analyses')
-          .select('id,name,product_label,score,result_json,category,created_at')
+          .select('id,name,product_label,brand,product_type,input_text,score,result_json,category,created_at')
           .eq('user_id', userId)
           .order('created_at', { ascending: false })
           .limit(50),
@@ -260,7 +272,8 @@ const HistoryScreen: FC = () => {
     if (item.latestCoherenceId) {
       router.push(ROUTES.PROMESSES.DETAIL(item.latestCoherenceId))
     } else {
-      router.push(`${ROUTES.PROMESSES.NOUVELLE}?analysisId=${item.id}` as never)
+      // Ouvre le flow auto (PromesseFlowModal) comme sur l'écran d'analyse.
+      setPromesseModalFor(item)
     }
   }, [])
 
@@ -406,6 +419,16 @@ const HistoryScreen: FC = () => {
         onDelete={async () => {
           if (actionsFor) await deleteMutation.mutateAsync(actionsFor.id)
         }}
+      />
+
+      <PromesseFlowModal
+        visible={promesseModalFor !== null}
+        onClose={() => setPromesseModalFor(null)}
+        analysisId={promesseModalFor?.id ?? null}
+        inci={promesseModalFor?.inciText ?? ''}
+        productLabel={promesseModalFor?.productLabel ?? null}
+        brand={promesseModalFor?.brand ?? null}
+        productType={promesseModalFor?.productType ?? null}
       />
     </View>
   )
