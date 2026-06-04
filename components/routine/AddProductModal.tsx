@@ -151,7 +151,13 @@ export const AddProductModal = memo(function AddProductModal({
           <View style={styles.handle} />
           <View style={styles.header}>
             {mode === 'history' ? (
-              <Pressable onPress={() => setMode('choice')} hitSlop={8} style={styles.backBtn}>
+              <Pressable
+                onPress={() => setMode('choice')}
+                hitSlop={8}
+                style={styles.backBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Retour"
+              >
                 <Ionicons name="chevron-back" size={20} color={colors.inkMuted} />
               </Pressable>
             ) : (

@@ -38,6 +38,7 @@ import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography, fontFamilies } from '@/constants/typography'
 import { supabase } from '@/lib/supabase/client'
+import { useAndroidBack } from '@/hooks/useAndroidBack'
 
 type IoniconName = keyof typeof Ionicons.glyphMap
 
@@ -493,6 +494,26 @@ export const ProductSearchMode: FC<Props> = ({
   const goSubcategory = (sub: string) => {
     setSelectedSubcategory(sub)
   }
+
+  // Bouton retour Android : remonte d'un niveau dans le drill-down plutôt que
+  // de quitter l'écran de scan. Ordre : recherche → sous-catégorie → catégorie.
+  useAndroidBack(
+    useCallback(() => {
+      if (query.length > 0) {
+        setQuery('')
+        return true
+      }
+      if (selectedSubcategory) {
+        setSelectedSubcategory(null)
+        return true
+      }
+      if (selectedCategory) {
+        setSelectedCategory(null)
+        return true
+      }
+      return false
+    }, [query, selectedSubcategory, selectedCategory]),
+  )
 
   // ── Vue : barre de recherche (toujours visible en haut) ───────────────
 

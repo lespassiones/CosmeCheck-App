@@ -625,7 +625,12 @@ function PenalizingDetailModal({
           <View style={styles.handle} />
           <View style={styles.detailHeader}>
             <Text style={styles.detailTitle}>Produits pénalisants</Text>
-            <Pressable onPress={onClose} hitSlop={8}>
+            <Pressable
+              onPress={onClose}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Fermer"
+            >
               <Ionicons name="close" size={20} color={colors.inkMuted} />
             </Pressable>
           </View>

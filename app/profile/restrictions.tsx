@@ -263,7 +263,13 @@ const RestrictionsScreen: FC = () => {
       <BackgroundGlow variant="minimal" />
       <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.header}>
-          <Pressable style={styles.backBtn} onPress={() => router.back()} hitSlop={8}>
+          <Pressable
+            style={styles.backBtn}
+            onPress={() => router.back()}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Retour"
+          >
             <Ionicons name="chevron-back" size={24} color={colors.ink} />
           </Pressable>
           <Text style={styles.headerTitle}>Mes restrictions</Text>
@@ -329,7 +335,13 @@ const RestrictionsScreen: FC = () => {
                 {restrictions.families.map((slug) => (
                   <View key={slug} style={styles.chip}>
                     <Text style={styles.chipText}>{familyName(slug)}</Text>
-                    <Pressable hitSlop={8} disabled={isSaving} onPress={() => void removeFamily(slug)}>
+                    <Pressable
+                      hitSlop={8}
+                      disabled={isSaving}
+                      onPress={() => void removeFamily(slug)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Retirer ${familyName(slug)}`}
+                    >
                       <Ionicons name="close" size={16} color={colors.inkMuted} />
                     </Pressable>
                   </View>
@@ -494,7 +506,13 @@ const IngredientsPanel: FC<{
             {ingredients.map((ing) => (
               <View key={ing.slug} style={styles.chip}>
                 <Text style={styles.chipText}>{ing.name}</Text>
-                <Pressable hitSlop={8} disabled={disabled} onPress={() => void onRemove(ing.slug)}>
+                <Pressable
+                  hitSlop={8}
+                  disabled={disabled}
+                  onPress={() => void onRemove(ing.slug)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Retirer ${ing.name}`}
+                >
                   <Ionicons name="close" size={16} color={colors.inkMuted} />
                 </Pressable>
               </View>
