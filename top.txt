@@ -1,1 +1,9 @@
 npx expo start -c
+
+
+Quand tu voudras refaire un APK après d'autres modifs, ce sera juste :
+
+
+npx eas-cli build -p android --profile preview
+(plus aucune question : projet lié, keystore et variables déjà en place).
+

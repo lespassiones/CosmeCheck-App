@@ -155,6 +155,7 @@ const ProfileScreen: FC = () => {
           ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
         >
           {editing ? (
             <BeautyProfileForm

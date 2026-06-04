@@ -23,6 +23,8 @@ import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
 import { Reveal } from '@/components/design/Reveal'
+import { WhiteCard } from '@/components/design/WhiteCard'
+import { PackedChips } from '@/components/onboarding/PackedChips'
 
 interface Props {
   value: SkinProfile
@@ -74,9 +76,9 @@ export const Step3Goals: FC<Props> = ({ value, onChange }) => {
 
       <Reveal stagger={80}>
         {PROFILE_GOAL_GROUPS.map((group) => (
-          <View key={group.label} style={styles.section}>
+          <WhiteCard key={group.label} style={styles.section}>
             <Text style={styles.sectionTitle}>{group.label}</Text>
-            <View style={styles.chips}>
+            <PackedChips>
               {group.goals.map((key) => (
                 <Chip
                   key={key}
@@ -85,11 +87,11 @@ export const Step3Goals: FC<Props> = ({ value, onChange }) => {
                   onPress={() => toggleGoal(key)}
                 />
               ))}
-            </View>
-          </View>
+            </PackedChips>
+          </WhiteCard>
         ))}
 
-        <View style={styles.section}>
+        <WhiteCard style={styles.section}>
           <Text style={styles.sectionTitle}>Autre objectif</Text>
           <TextInput
             style={styles.input}
@@ -99,7 +101,7 @@ export const Step3Goals: FC<Props> = ({ value, onChange }) => {
             placeholderTextColor={colors.inkLight}
             maxLength={300}
           />
-        </View>
+        </WhiteCard>
       </Reveal>
     </View>
   )
@@ -115,7 +117,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
   section: {
-    marginBottom: spacing['2xl'],
+    marginBottom: spacing.md,
   },
   sectionTitle: {
     ...typography.h4,

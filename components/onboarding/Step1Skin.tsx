@@ -34,6 +34,8 @@ import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
 import { Reveal } from '@/components/design/Reveal'
+import { WhiteCard } from '@/components/design/WhiteCard'
+import { PackedChips } from '@/components/onboarding/PackedChips'
 
 const OTHER = '__other__'
 
@@ -153,10 +155,10 @@ export const Step1Skin: FC<Props> = ({ value, onChange }) => {
     <View style={styles.root}>
       <Reveal stagger={70}>
         {/* ── Visage ───────────────────────────────────────────── */}
-        <View style={styles.section}>
+        <WhiteCard style={styles.section}>
           <Text style={styles.sectionTitle}>Ton type de peau (visage)</Text>
           <Text style={styles.sectionHint}>Choisis ce qui te ressemble le plus.</Text>
-          <View style={styles.chips}>
+          <PackedChips>
             {SKIN_TYPES_FACE.map((key) => (
               <Chip
                 key={key}
@@ -166,11 +168,12 @@ export const Step1Skin: FC<Props> = ({ value, onChange }) => {
               />
             ))}
             <Chip
+              key="__other__"
               label="Autre"
               selected={faceOtherOpen}
               onPress={() => selectFace(OTHER)}
             />
-          </View>
+          </PackedChips>
           {faceOtherOpen ? (
             <TextInput
               style={styles.input}
@@ -181,13 +184,13 @@ export const Step1Skin: FC<Props> = ({ value, onChange }) => {
               maxLength={120}
             />
           ) : null}
-        </View>
+        </WhiteCard>
 
         {/* ── Corps ────────────────────────────────────────────── */}
-        <View style={styles.section}>
+        <WhiteCard style={styles.section}>
           <Text style={styles.sectionTitle}>Ton type de peau (corps)</Text>
           <Text style={styles.sectionHint}>Comment se comporte la peau de ton corps ?</Text>
-          <View style={styles.chips}>
+          <PackedChips>
             {SKIN_TYPES_BODY.map((key) => (
               <Chip
                 key={key}
@@ -197,11 +200,12 @@ export const Step1Skin: FC<Props> = ({ value, onChange }) => {
               />
             ))}
             <Chip
+              key="__other__"
               label="Autre"
               selected={bodyOtherOpen}
               onPress={() => selectBody(OTHER)}
             />
-          </View>
+          </PackedChips>
           {bodyOtherOpen ? (
             <TextInput
               style={styles.input}
@@ -212,15 +216,15 @@ export const Step1Skin: FC<Props> = ({ value, onChange }) => {
               maxLength={120}
             />
           ) : null}
-        </View>
+        </WhiteCard>
 
         {/* ── Cheveux (état) ───────────────────────────────────── */}
-        <View style={styles.section}>
+        <WhiteCard style={styles.section}>
           <Text style={styles.sectionTitle}>L&apos;état de tes cheveux</Text>
           <Text style={styles.sectionHint}>
             Plusieurs choix possibles, laisse vide si tu n&apos;es pas concerné·e.
           </Text>
-          <View style={styles.chips}>
+          <PackedChips>
             {HAIR_STATE_CONCERNS.map((key) => (
               <Chip
                 key={key}
@@ -231,12 +235,13 @@ export const Step1Skin: FC<Props> = ({ value, onChange }) => {
               />
             ))}
             <Chip
+              key="__other__"
               label="Autre"
               selected={hairOtherOpen}
               onPress={toggleHairOther}
               tone="rose"
             />
-          </View>
+          </PackedChips>
           {hairOtherOpen ? (
             <TextInput
               style={styles.input}
@@ -247,7 +252,7 @@ export const Step1Skin: FC<Props> = ({ value, onChange }) => {
               maxLength={200}
             />
           ) : null}
-        </View>
+        </WhiteCard>
       </Reveal>
     </View>
   )
@@ -258,7 +263,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   section: {
-    marginBottom: spacing['2xl'],
+    marginBottom: spacing.md,
   },
   sectionTitle: {
     ...typography.h4,

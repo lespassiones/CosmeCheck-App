@@ -31,6 +31,8 @@ import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
 import { Reveal } from '@/components/design/Reveal'
+import { WhiteCard } from '@/components/design/WhiteCard'
+import { PackedChips } from '@/components/onboarding/PackedChips'
 
 interface Props {
   value: SkinProfile
@@ -89,12 +91,12 @@ export const Step2Concerns: FC<Props> = ({ value, onChange }) => {
     <View style={styles.root}>
       <Reveal stagger={70}>
         {/* ── Grille unifiée peau + problèmes cheveux ──────────── */}
-        <View style={styles.section}>
+        <WhiteCard style={styles.section}>
           <Text style={styles.sectionTitle}>Ce qui te préoccupe</Text>
           <Text style={styles.sectionHint}>
             Sélectionne tout ce qui te concerne : peau et cheveux.
           </Text>
-          <View style={styles.chips}>
+          <PackedChips>
             {SKIN_CONCERNS.map((key) => (
               <Chip
                 key={key}
@@ -112,11 +114,11 @@ export const Step2Concerns: FC<Props> = ({ value, onChange }) => {
                 tone="rose"
               />
             ))}
-          </View>
-        </View>
+          </PackedChips>
+        </WhiteCard>
 
         {/* ── Allergies connues ────────────────────────────────── */}
-        <View style={styles.section}>
+        <WhiteCard style={styles.section}>
           <Text style={styles.sectionTitle}>Allergies connues</Text>
           <Text style={styles.sectionHint}>
             Indique les ingrédients à éviter : ça affine tes analyses.
@@ -130,10 +132,10 @@ export const Step2Concerns: FC<Props> = ({ value, onChange }) => {
             multiline
             maxLength={500}
           />
-        </View>
+        </WhiteCard>
 
         {/* ── Autre préoccupation ──────────────────────────────── */}
-        <View style={styles.section}>
+        <WhiteCard style={styles.section}>
           <Text style={styles.sectionTitle}>Autre préoccupation</Text>
           <Text style={styles.sectionHint}>Un point pas listé ci-dessus ?</Text>
           <TextInput
@@ -144,7 +146,7 @@ export const Step2Concerns: FC<Props> = ({ value, onChange }) => {
             placeholderTextColor={colors.inkLight}
             maxLength={300}
           />
-        </View>
+        </WhiteCard>
       </Reveal>
     </View>
   )
@@ -155,7 +157,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   section: {
-    marginBottom: spacing['2xl'],
+    marginBottom: spacing.md,
   },
   sectionTitle: {
     ...typography.h4,

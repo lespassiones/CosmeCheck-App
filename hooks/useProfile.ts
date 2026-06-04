@@ -39,6 +39,13 @@ interface UseProfileReturn {
   error: string | null
   saveSkin: (patch: Partial<SkinProfile>) => Promise<void>
   markOnboardingShown: () => Promise<void>
+  /**
+   * Termine l'onboarding en UNE seule écriture : merge le dernier patch skin
+   * (optionnel) + `onboardingShown: true`. Met à jour le cache de façon
+   * OPTIMISTE et SYNCHRONE (avant le premier await) pour que l'AuthGuard ne
+   * rebondisse pas vers l'onboarding pendant que la requête réseau est en vol.
+   */
+  completeOnboarding: (patch?: Partial<SkinProfile>) => Promise<void>
   refresh: () => void
 }
 
@@ -157,6 +164,36 @@ export function useProfile(): UseProfileReturn {
     await mutation.mutateAsync(next)
   }, [userId, queryClient, queryKey, profile?.preferences, mutation])
 
+  const completeOnboarding = useCallback(
+    async (patch?: Partial<SkinProfile>) => {
+      if (!userId) return
+      const current = asPrefsObject(
+        queryClient.getQueryData<UserProfileRow | null>(queryKey)?.preferences ??
+          profile?.preferences,
+      )
+      const currentSkin =
+        current.skin && typeof current.skin === 'object'
+          ? (current.skin as Record<string, unknown>)
+          : {}
+      const next: Record<string, unknown> = {
+        ...current,
+        skin: { ...currentSkin, ...(patch ?? {}) },
+        onboardingShown: true,
+      }
+      // Optimiste + SYNCHRONE : le flag est vrai dans le cache immédiatement,
+      // avant toute navigation, donc l'AuthGuard ne renvoie pas à l'onboarding.
+      const nextPreferences = next as UserProfileRow['preferences']
+      queryClient.setQueryData<UserProfileRow | null>(queryKey, (old) =>
+        old
+          ? { ...old, preferences: nextPreferences }
+          : ({ id: userId, preferences: nextPreferences } as UserProfileRow),
+      )
+      // Persistance réseau (une seule écriture, pas de course concurrente).
+      await mutation.mutateAsync(next)
+    },
+    [userId, queryClient, queryKey, profile?.preferences, mutation],
+  )
+
   const refresh = useCallback(() => {
     void refetch()
   }, [refetch])
@@ -175,6 +212,7 @@ export function useProfile(): UseProfileReturn {
     error,
     saveSkin,
     markOnboardingShown,
+    completeOnboarding,
     refresh,
   }
 }

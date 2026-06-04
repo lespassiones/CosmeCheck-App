@@ -12,7 +12,7 @@
  *   - "Suivant" passe à l'item suivant. Après le 10ème : écran "Reviens demain".
  */
 
-import { type FC, useEffect, useState } from 'react'
+import { type FC, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useQuery } from '@tanstack/react-query'
@@ -59,11 +59,28 @@ async function writeLocalState(state: DailyState): Promise<void> {
   }
 }
 
-export const DailyPicksCard: FC = () => {
+interface Props {
+  /** Appelé quand l'utilisateur répond (réponse révélée) — le parent scrolle
+   *  pour faire apparaître la réponse + le bouton « Suivant ». */
+  onReveal?: () => void
+}
+
+export const DailyPicksCard: FC<Props> = ({ onReveal }) => {
   const [hydrated, setHydrated] = useState(false)
   const [index, setIndex] = useState(0)
   const [score, setScore] = useState(0)
   const [picked, setPicked] = useState<number | null>(null)
+
+  // Auto-scroll vers la réponse + bouton à la réponse. Ref pour ne dépendre
+  // QUE de `picked` (sinon le callback inline du parent re-déclenche à chaque
+  // render). Petit délai pour laisser le panneau réponse se mettre en page.
+  const onRevealRef = useRef(onReveal)
+  onRevealRef.current = onReveal
+  useEffect(() => {
+    if (picked === null) return
+    const t = setTimeout(() => onRevealRef.current?.(), 80)
+    return () => clearTimeout(t)
+  }, [picked])
 
   // Hydratation : lit AsyncStorage au montage (asynchrone).
   useEffect(() => {

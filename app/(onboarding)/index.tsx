@@ -6,7 +6,7 @@
  * pour que les champs texte restent visibles quand le clavier s'ouvre.
  */
 
-import { type FC } from 'react'
+import { useRef, type FC } from 'react'
 import {
   KeyboardAvoidingView,
   Platform,
@@ -26,6 +26,7 @@ import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard'
 
 const OnboardingScreen: FC = () => {
   const { firstName } = useProfile()
+  const scrollRef = useRef<ScrollView>(null)
 
   return (
     <View style={styles.root}>
@@ -36,10 +37,12 @@ const OnboardingScreen: FC = () => {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <ScrollView
+            ref={scrollRef}
             style={styles.flex}
             contentContainerStyle={styles.content}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
+            automaticallyAdjustKeyboardInsets
           >
             <View style={styles.header}>
               <Text style={styles.welcome}>
@@ -50,7 +53,11 @@ const OnboardingScreen: FC = () => {
               </Text>
             </View>
 
-            <OnboardingWizard />
+            <OnboardingWizard
+              onStepChange={() =>
+                scrollRef.current?.scrollTo({ y: 0, animated: true })
+              }
+            />
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>

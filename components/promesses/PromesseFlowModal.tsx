@@ -44,9 +44,36 @@ import { radius, spacing } from '@/constants/spacing'
 import { fontFamilies, typography } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { supabase } from '@/lib/supabase/client'
+import { ThinkingPhrases } from '@/components/shared/ThinkingPhrases'
 
 const MIN_MANUAL_DESC = 30
 const MAX_MANUAL_DESC = 4000
+
+/** Phrases « thinking » affichées pendant l'analyse de cohérence. */
+const COHERENCE_PHRASES = [
+  'On confronte chaque promesse à la formule…',
+  'On cherche les actifs qui tiennent la promesse…',
+  'On démêle le marketing de la réalité…',
+  'On vérifie ce que la composition permet vraiment…',
+  'On traque les promesses non tenues…',
+  'On pèse chaque ingrédient face aux allégations…',
+]
+
+/** Phrases pendant la recherche du produit sur internet. */
+const IDENTIFY_PHRASES = [
+  'On parcourt le web à la recherche du produit…',
+  'On recoupe la marque et la composition…',
+  'On compare les fiches produit…',
+  'On vérifie les sources officielles…',
+]
+
+/** Phrases pendant la récupération de la description marketing. */
+const FETCH_PHRASES = [
+  'On lit la fiche produit…',
+  'On extrait les promesses marketing…',
+  'On isole les bénéfices revendiqués…',
+  'On nettoie le texte de la marque…',
+]
 
 type Step =
   | 'identifying'
@@ -240,6 +267,7 @@ export const PromesseFlowModal: FC<Props> = ({
         On cherche {productLabel ?? 'ce produit'} sur internet pour récupérer la
         description marketing.
       </Text>
+      <ThinkingPhrases phrases={IDENTIFY_PHRASES} />
     </View>
   )
 
@@ -300,6 +328,7 @@ export const PromesseFlowModal: FC<Props> = ({
       <Text style={styles.loadingHint}>
         On lit la page produit pour extraire les promesses marketing.
       </Text>
+      <ThinkingPhrases phrases={FETCH_PHRASES} />
     </View>
   )
 
@@ -310,6 +339,7 @@ export const PromesseFlowModal: FC<Props> = ({
       <Text style={styles.loadingHint}>
         On compare chaque promesse à la composition INCI réelle du produit.
       </Text>
+      <ThinkingPhrases phrases={COHERENCE_PHRASES} />
     </View>
   )
 

@@ -122,14 +122,17 @@ export const BeautyProfileForm: FC<Props> = ({
       </View>
 
       {/* ── Type de peau ─────────────────────────────────────── */}
+      <Text style={styles.sectionHeader}>Ta peau</Text>
       <Step1Skin value={skin} onChange={handleChange} />
       <View style={styles.divider} />
 
       {/* ── Préoccupations & allergies ───────────────────────── */}
+      <Text style={styles.sectionHeader}>Tes préoccupations</Text>
       <Step2Concerns value={skin} onChange={handleChange} />
       <View style={styles.divider} />
 
       {/* ── Objectifs ────────────────────────────────────────── */}
+      <Text style={styles.sectionHeader}>Tes objectifs</Text>
       <Step3Goals value={skin} onChange={handleChange} />
 
       <View style={styles.actions}>
@@ -181,6 +184,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   title: { ...typography.h3, color: colors.ink },
+  sectionHeader: {
+    ...typography.h3,
+    color: colors.rose,
+    textAlign: 'center',
+    marginTop: spacing.lg,
+    marginBottom: spacing.md,
+  },
   savedPill: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,

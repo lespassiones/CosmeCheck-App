@@ -135,8 +135,11 @@ function AuthGuard() {
       return
     }
 
-    // 5. Onboarding plus nécessaire mais on y est encore → tabs.
-    if (!needsOnboarding && inOnboarding) {
+    // 5. On quitte l'onboarding UNIQUEMENT quand il a été explicitement terminé
+    //    (onboardingShown=true via « C'est parti »/« Passer »). On NE se base PAS
+    //    sur isProfileComplete : sinon remplir 2 sections en cours de
+    //    questionnaire éjecterait l'utilisateur vers le dashboard avant la fin.
+    if (onboardingShown && inOnboarding) {
       router.replace(ROUTES.TABS.HOME)
       return
     }
@@ -156,15 +159,23 @@ function AuthGuard() {
   return null
 }
 
-/** Cache le splash une fois polices chargées + auth résolue. */
+/**
+ * Cache le splash quand l'auth est résolue ET, pour un utilisateur connecté,
+ * quand son profil est chargé. Ainsi la décision de routage de l'AuthGuard
+ * (onboarding vs dashboard) est prise DERRIÈRE le splash → aucun flash d'écran
+ * intermédiaire au démarrage à froid (le profil n'étant plus persisté disque).
+ */
 function SplashController() {
-  const { isLoading: authLoading } = useAuth()
+  const { isLoading: authLoading, isAuthenticated } = useAuth()
+  const { isLoading: profileLoading } = useProfile()
+
+  const ready = !authLoading && (!isAuthenticated || !profileLoading)
 
   useEffect(() => {
-    if (!authLoading) {
+    if (ready) {
       void SplashScreen.hideAsync()
     }
-  }, [authLoading])
+  }, [ready])
 
   return null
 }

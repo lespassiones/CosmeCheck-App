@@ -288,6 +288,7 @@ const DashboardScreen: FC = () => {
     setUnderlineWidth(e.nativeEvent.layout.width)
   }, [])
 
+  const scrollRef = useRef<ScrollView>(null)
   const lastAnalysis = lastAnalysisQuery.data ?? null
   const greetingName = firstName?.trim()
 
@@ -301,6 +302,7 @@ const DashboardScreen: FC = () => {
       />
 
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={[
           styles.content,
           { paddingTop: spacing.md, paddingBottom: insets.bottom + 96 },
@@ -415,7 +417,9 @@ const DashboardScreen: FC = () => {
 
           {/* Quizz & idées reçues du jour */}
           <View style={styles.dailyPicksWrap}>
-            <DailyPicksCard />
+            <DailyPicksCard
+              onReveal={() => scrollRef.current?.scrollToEnd({ animated: true })}
+            />
           </View>
         </Reveal>
       </ScrollView>

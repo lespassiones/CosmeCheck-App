@@ -23,17 +23,24 @@ function rootKey(queryKey: unknown): string | null {
  * Décide si une `queryKey` doit être persistée à travers les sessions.
  *
  * BLACKLIST :
+ *  - 'profile'           — pilote la porte d'onboarding ; ne doit jamais être
+ *                          servi périmé au cold start (sinon flash dashboard).
  *  - 'credits'           — solde quotidien, doit toujours repartir frais.
  *  - 'ingredient-explain', 'compare-insights', 'routine-suggest'
  *                          — réponses IA cachées séparément avec leur TTL.
  *
- * Tout le reste est persisté (profile, routine, dashboard, history,
- * ingredient, dailyPicks, etc.).
+ * Tout le reste est persisté (routine, dashboard, history, ingredient,
+ * dailyPicks, etc.).
  */
 export function shouldPersistQueryKey(queryKey: unknown): boolean {
   const k = rootKey(queryKey)
   if (k == null) return false
   const BLACKLIST = new Set<string>([
+    // Le profil pilote la porte d'onboarding (AuthGuard). Le persister sur
+    // disque risque de router sur un `onboardingShown` PÉRIMÉ au cold start
+    // (flash dashboard → retour onboarding). On le recharge frais à chaque
+    // lancement (1 requête, négligeable) plutôt que de servir un état stale.
+    'profile',
     'credits',
     'ingredient-explain',
     'compare-insights',

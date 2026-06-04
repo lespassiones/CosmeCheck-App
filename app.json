@@ -13,7 +13,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#FAFAFA"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.cosmecheck.app",
@@ -25,11 +27,19 @@
     },
     "android": {
       "package": "com.cosmecheck.app",
+      "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#FAFAFA"
       },
-      "permissions": ["CAMERA", "VIBRATE"]
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.VIBRATE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.VIBRATE",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -57,6 +67,18 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "17bf525d-eff2-4a63-a42f-eaa886a7b8b8"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/17bf525d-eff2-4a63-a42f-eaa886a7b8b8"
     }
   }
 }

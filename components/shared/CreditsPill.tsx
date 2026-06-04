@@ -51,10 +51,18 @@ export const CreditsPill: FC = () => {
       style={styles.card}
       contentStyle={styles.content}
     >
-      <Ionicons name="star" size={11} color={tint} />
-      <Text style={[styles.count, { color: tint }]} allowFontScaling={false}>
-        {remaining} {remaining === 1 ? 'crédit' : 'crédits'}
-      </Text>
+      <Pressable
+        onPress={goToOffre}
+        accessibilityRole="button"
+        accessibilityLabel="Voir l'offre Premium et mes crédits"
+        hitSlop={6}
+        style={({ pressed }) => [styles.label, pressed && styles.plusPressed]}
+      >
+        <Ionicons name="star" size={11} color={tint} />
+        <Text style={[styles.count, { color: tint }]} allowFontScaling={false}>
+          {remaining} {remaining === 1 ? 'crédit' : 'crédits'}
+        </Text>
+      </Pressable>
 
       <Pressable
         onPress={goToOffre}
@@ -83,6 +91,11 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingLeft: 8,
     paddingRight: 3,
+  },
+  label: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   count: {
     fontFamily: fontFamilies.bold,

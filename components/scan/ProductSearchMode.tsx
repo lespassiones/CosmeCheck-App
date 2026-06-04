@@ -153,7 +153,6 @@ export const ProductSearchMode: FC<Props> = ({
   disabled = false,
 }) => {
   const [query, setQuery] = useState('')
-  const [searchFocused, setSearchFocused] = useState(false)
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [searchResults, setSearchResults] = useState<CatalogRow[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
@@ -498,18 +497,12 @@ export const ProductSearchMode: FC<Props> = ({
   // ── Vue : barre de recherche (toujours visible en haut) ───────────────
 
   const searchBar = (
-    <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
-      <Ionicons
-        name="search"
-        size={18}
-        color={searchFocused ? colors.accent : colors.inkMuted}
-      />
+    <View style={[styles.searchBar, styles.searchBarFocused]}>
+      <Ionicons name="search" size={18} color={colors.accent} />
       <TextInput
         style={styles.searchInput}
         value={query}
         onChangeText={setQuery}
-        onFocus={() => setSearchFocused(true)}
-        onBlur={() => setSearchFocused(false)}
         placeholder="Rechercher un produit…"
         placeholderTextColor={colors.inkLight}
         selectionColor={colors.textSelection}

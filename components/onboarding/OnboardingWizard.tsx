@@ -43,9 +43,14 @@ const STEP_TITLES: Record<StepIndex, string> = {
   3: 'Tes objectifs',
 }
 
-export const OnboardingWizard: FC = () => {
+interface Props {
+  /** Appelé à chaque changement d'étape — l'écran parent remonte le ScrollView. */
+  onStepChange?: () => void
+}
+
+export const OnboardingWizard: FC<Props> = ({ onStepChange }) => {
   const router = useRouter()
-  const { skin, saveSkin, markOnboardingShown } = useProfile()
+  const { skin, saveSkin, completeOnboarding } = useProfile()
 
   const [step, setStep] = useState<StepIndex>(1)
   const [profile, setProfile] = useState<SkinProfile>(skin)
@@ -74,21 +79,14 @@ export const OnboardingWizard: FC = () => {
     [],
   )
 
-  const flushPending = useCallback(async () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-    const patch = pendingRef.current
-    pendingRef.current = null
-    if (patch) {
-      try {
-        await saveSkin(patch)
-      } catch {
-        // best-effort : on n'empêche pas l'utilisateur d'avancer si le save échoue.
-      }
-    }
-  }, [saveSkin])
+  // Remonte en haut à chaque changement d'étape (Suivant / Précédent). On passe
+  // par une ref pour ne dépendre QUE de `step` : sinon l'identité changeante du
+  // callback inline ferait scroller à chaque frappe dans un champ texte.
+  const onStepChangeRef = useRef(onStepChange)
+  onStepChangeRef.current = onStepChange
+  useEffect(() => {
+    onStepChangeRef.current?.()
+  }, [step])
 
   const handleChange = useCallback(
     (patch: Partial<SkinProfile>) => {
@@ -116,20 +114,25 @@ export const OnboardingWizard: FC = () => {
     setStep((s) => (s < TOTAL_STEPS ? ((s + 1) as StepIndex) : s))
   }, [])
 
-  const finish = useCallback(async () => {
+  const finish = useCallback(() => {
     if (finishing) return
     setFinishing(true)
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
       () => {},
     )
-    await flushPending()
-    try {
-      await markOnboardingShown()
-    } catch {
-      // on redirige quand même
+    // Draine le dernier patch en attente (synchrone, sans attendre le réseau).
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
     }
+    const pending = pendingRef.current
+    pendingRef.current = null
+    // `completeOnboarding` marque le cache de façon optimiste ET SYNCHRONE
+    // (flag onboardingShown=true) avant le premier await, puis persiste en
+    // arrière-plan. On NE bloque PAS la navigation sur le réseau.
+    void completeOnboarding(pending ?? undefined).catch(() => {})
     router.replace(ROUTES.TABS.HOME)
-  }, [finishing, flushPending, markOnboardingShown, router])
+  }, [finishing, completeOnboarding, router])
 
   return (
     <View style={styles.root}>
