@@ -36,7 +36,15 @@ export type OcrValidation = {
 };
 
 export type OcrResult =
-  | { found: true; text: string; uncertain: string[]; validation?: OcrValidation }
+  | {
+      found: true;
+      text: string;
+      uncertain: string[];
+      validation?: OcrValidation;
+      source?: "ocr" | "internet_fallback";
+      brand?: string | null;
+      productName?: string | null;
+    }
   | { found: false; reason: string };
 
 export type OcrFrontResult =
@@ -110,6 +118,168 @@ export async function validateOcrText(sb: SupabaseClient, text: string): Promise
 function shouldTriggerSecondPass(text: string): boolean {
   const tokens = parseInciList(text);
   return tokens.length >= 6 && tokens.length < 18;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mode 2 : fallback internet quand l'OCR donne un résultat very_low_match.
+// GPT-4o Vision identifie le produit (marque + nom) → recherche OBF → INCI.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Parse la réponse JSON de GPT-4o pour en extraire la marque et le nom produit.
+ * Retourne null si le JSON est invalide ou si les champs sont absents / vides.
+ *
+ * Exportée pour les tests Jest (module pur, sans dépendance Deno).
+ */
+export function parseProductIdentification(
+  jsonStr: string,
+): { brand: string; name: string } | null {
+  try {
+    const obj = JSON.parse(jsonStr) as Record<string, unknown>;
+    const brand =
+      typeof obj.brand === "string" ? obj.brand.trim() : null;
+    const name =
+      typeof obj.name === "string" ? obj.name.trim() : null;
+    if (!brand && !name) return null;
+    return { brand: brand ?? "", name: name ?? "" };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse la réponse de l'API OBF (Open Beauty Facts) et retourne le premier
+ * résultat qui contient un `ingredients_text` de plus de 30 caractères.
+ * Retourne null si aucun résultat valide n'est trouvé.
+ *
+ * Exportée pour les tests Jest (module pur, sans dépendance Deno).
+ */
+export function parseOBFProduct(
+  data: unknown,
+): { ingredientsText: string; ean?: string } | null {
+  try {
+    const d = data as {
+      products?: Array<{
+        ingredients_text?: string;
+        code?: string;
+      }>;
+    };
+    if (!Array.isArray(d?.products)) return null;
+    for (const p of d.products) {
+      const txt =
+        typeof p?.ingredients_text === "string"
+          ? p.ingredients_text.trim()
+          : "";
+      if (txt.length > 30) {
+        return {
+          ingredientsText: txt,
+          ean: typeof p.code === "string" ? p.code : undefined,
+        };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Mode 2 : GPT-4o Vision identifie le produit sur la photo, puis on cherche
+ * son INCI sur Open Beauty Facts.
+ *
+ * - Timeout global 10s (catch silencieux → null).
+ * - Ne throw jamais : retourne null sur tout échec.
+ */
+async function identifyAndFetchInci(
+  imageBase64: string,
+  openaiKey: string,
+): Promise<{
+  found: true;
+  text: string;
+  uncertain: string[];
+  brand?: string;
+  productName?: string;
+  source: "internet_fallback";
+} | null> {
+  try {
+    const result = await Promise.race<{
+      found: true;
+      text: string;
+      uncertain: string[];
+      brand?: string;
+      productName?: string;
+      source: "internet_fallback";
+    } | null>([
+      (async () => {
+        // ── Étape 1 : GPT-4o Vision → identification du produit ──────────────
+        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${openaiKey}`,
+          },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            temperature: 0,
+            response_format: { type: "json_object" },
+            messages: [
+              {
+                role: "user",
+                content: [
+                  {
+                    type: "text",
+                    text: 'Quel est ce produit cosmétique ? Réponds uniquement en JSON: {"brand": "...", "name": "..."}',
+                  },
+                  {
+                    type: "image_url",
+                    image_url: {
+                      url: `data:image/jpeg;base64,${imageBase64}`,
+                      detail: "low",
+                    },
+                  },
+                ],
+              },
+            ],
+          }),
+        });
+        if (!res.ok) return null;
+        const json = await res.json() as {
+          choices?: Array<{ message?: { content?: string } }>;
+        };
+        const raw = json.choices?.[0]?.message?.content ?? "";
+        const identified = parseProductIdentification(raw);
+        if (!identified) return null;
+
+        const { brand, name } = identified;
+        const query = `${brand} ${name}`.trim();
+        if (!query) return null;
+
+        // ── Étape 2 : recherche sur Open Beauty Facts ─────────────────────
+        const obfUrl =
+          `https://world.openbeautyfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=5`;
+        const obfRes = await fetch(obfUrl, {
+          headers: { "User-Agent": "CosmeCheck-App/1.0" },
+        });
+        if (!obfRes.ok) return null;
+        const obfData = await obfRes.json();
+        const found = parseOBFProduct(obfData);
+        if (!found) return null;
+
+        return {
+          found: true as const,
+          text: found.ingredientsText,
+          uncertain: [] as string[],
+          brand: brand || undefined,
+          productName: name || undefined,
+          source: "internet_fallback" as const,
+        };
+      })(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 10_000)),
+    ]);
+    return result;
+  } catch {
+    return null;
+  }
 }
 
 const SYSTEM_BACK = [
@@ -272,6 +442,24 @@ export async function ocrFromImageBase64(
         }
       } catch {
         // ignore : on garde la 1re passe
+      }
+    }
+
+    // ── Mode 2 : si la qualité reste très faible après toutes les passes OCR,
+    // on tente d'identifier le produit via GPT-4o Vision puis de récupérer
+    // l'INCI sur Open Beauty Facts. Comportement opt-in silencieux : si l'appel
+    // échoue ou que le produit n'est pas trouvé, on retourne le résultat OCR
+    // partiel tel quel.
+    if (value.validation?.level === "very_low_match") {
+      const openaiKey =
+        (globalThis as { Deno?: { env?: { get?: (k: string) => string | undefined } } })
+          ?.Deno?.env?.get?.("OPENAI_API_KEY") ?? "";
+      if (openaiKey) {
+        const mode2 = await identifyAndFetchInci(imageBase64, openaiKey);
+        if (mode2) {
+          void setCached(cacheKey, mode2);
+          return mode2;
+        }
       }
     }
   }

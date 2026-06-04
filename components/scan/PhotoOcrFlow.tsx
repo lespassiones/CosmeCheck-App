@@ -10,8 +10,7 @@
  *                image_front?, mimeType }). L'Edge Function renvoie le texte
  *                de la composition + les métadonnées détectées sur la photo
  *                front (marque, nom produit, type) pour pré-remplir l'analyse.
- *   4. review  : texte reconnu éditable (TextInput) → confirmer → onInciReady
- *                avec les métadonnées front.
+ *                → onInciReady appelé directement après OCR réussi (pas de step review).
  *
  * Thème sombre (`theme="dark"`) utilisé sur mobile par défaut quand le flow est
  * monté dans le ScanFrame dark.
@@ -28,7 +27,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
@@ -38,7 +36,6 @@ import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography, fontFamilies } from '@/constants/typography'
-import { parseInciList } from '@/lib/inci/parser'
 
 interface Props {
   /** Le 3e paramètre brand vient de la détection de la photo "front" (option). */
@@ -48,7 +45,7 @@ interface Props {
   theme?: 'light' | 'dark'
 }
 
-type Step = 'capture' | 'processing' | 'review' | 'error'
+type Step = 'capture' | 'processing' | 'error'
 type Side = 'front' | 'back'
 
 const MAX_WIDTH = 1600
@@ -73,16 +70,9 @@ interface Palette {
   zoneBg: string
   zoneLabel: string
   zoneHint: string
-  inputBg: string
-  inputBorder: string
-  inputColor: string
   ctaBg: string
   ctaText: string
-  ctaSecondaryText: string
   linkText: string
-  reviewBadge: string
-  detectedBg: string
-  detectedKicker: string
 }
 
 const LIGHT_PALETTE: Palette = {
@@ -94,16 +84,9 @@ const LIGHT_PALETTE: Palette = {
   zoneBg: colors.gray50,
   zoneLabel: colors.ink,
   zoneHint: colors.inkLight,
-  inputBg: colors.surface,
-  inputBorder: colors.border,
-  inputColor: colors.ink,
   ctaBg: colors.rose,
   ctaText: '#FFFFFF',
-  ctaSecondaryText: colors.ink,
   linkText: colors.rose,
-  reviewBadge: colors.success,
-  detectedBg: colors.accentSoft,
-  detectedKicker: colors.accent,
 }
 
 const DARK_PALETTE: Palette = {
@@ -115,16 +98,9 @@ const DARK_PALETTE: Palette = {
   zoneBg: 'rgba(255,255,255,0.04)',
   zoneLabel: '#FFFFFF',
   zoneHint: 'rgba(255,255,255,0.50)',
-  inputBg: 'rgba(255,255,255,0.06)',
-  inputBorder: 'rgba(255,255,255,0.15)',
-  inputColor: '#FFFFFF',
   ctaBg: '#FFFFFF',
   ctaText: '#0B0B0F',
-  ctaSecondaryText: '#FFFFFF',
   linkText: '#F87171', // rose-400 plus lumineux sur fond sombre
-  reviewBadge: '#34D399', // emerald-400
-  detectedBg: 'rgba(167,139,250,0.18)', // violet/15
-  detectedKicker: '#C4B5FD', // violet-300
 }
 
 export const PhotoOcrFlow: FC<Props> = ({
@@ -139,9 +115,6 @@ export const PhotoOcrFlow: FC<Props> = ({
   const [step, setStep] = useState<Step>('capture')
   const [frontUri, setFrontUri] = useState<string | null>(null)
   const [backUri, setBackUri] = useState<string | null>(null)
-  const [extractedText, setExtractedText] = useState('')
-  const [detectedName, setDetectedName] = useState<string | null>(null)
-  const [detectedBrand, setDetectedBrand] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   /** Envoie les 2 photos (back obligatoire, front optionnelle) à l'Edge Function. */
@@ -196,15 +169,9 @@ export const PhotoOcrFlow: FC<Props> = ({
         setStep('error')
         return
       }
-      if (res.front?.found) {
-        setDetectedName(res.front.productName?.trim() || null)
-        setDetectedBrand(res.front.brand?.trim() || null)
-      } else {
-        setDetectedName(null)
-        setDetectedBrand(null)
-      }
-      setExtractedText(text)
-      setStep('review')
+      const productName = res.front?.found ? res.front.productName?.trim() || undefined : undefined
+      const brand = res.front?.found ? res.front.brand?.trim() || undefined : undefined
+      onInciReady(text, productName, brand)
     } catch {
       setErrorMsg('Une erreur est survenue pendant le traitement. Réessaie.')
       setStep('error')
@@ -247,14 +214,8 @@ export const PhotoOcrFlow: FC<Props> = ({
     setStep('capture')
     setFrontUri(null)
     setBackUri(null)
-    setExtractedText('')
-    setDetectedName(null)
-    setDetectedBrand(null)
     setErrorMsg(null)
   }
-
-  const tokenCount = parseInciList(extractedText).length
-  const canConfirm = extractedText.trim().length >= 10 && !disabled
 
   // ── Capture (2 emplacements côte à côte) ─────────────────────────────
   if (step === 'capture') {
@@ -289,7 +250,7 @@ export const PhotoOcrFlow: FC<Props> = ({
         </View>
 
         <Text style={styles.hint}>
-          Le dos est obligatoire. Sans le devant, l’analyse reste possible mais
+          Le dos est obligatoire. Sans le devant, l'analyse reste possible mais
           on ne pourra pas pré-remplir le nom et la marque automatiquement.
         </Text>
 
@@ -325,90 +286,17 @@ export const PhotoOcrFlow: FC<Props> = ({
   }
 
   // ── Error ────────────────────────────────────────────────────────────
-  if (step === 'error') {
-    return (
-      <View style={styles.centered}>
-        <Ionicons name="alert-circle-outline" size={40} color={colors.warning} />
-        <Text style={styles.errorText}>{errorMsg}</Text>
-        <Pressable style={styles.cta} onPress={reset}>
-          <Text style={styles.ctaText}>Reprendre les photos</Text>
-        </Pressable>
-        <Pressable style={styles.linkBtn} onPress={onFallbackToManual}>
-          <Text style={styles.linkText}>Coller la liste INCI</Text>
-        </Pressable>
-      </View>
-    )
-  }
-
-  // ── Review ───────────────────────────────────────────────────────────
   return (
-    <ScrollView
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.reviewBadgeRow}>
-        <Ionicons name="checkmark-circle" size={16} color={palette.reviewBadge} />
-        <Text style={styles.reviewBadgeText}>Texte reconnu — vérifie-le avant l’analyse</Text>
-      </View>
-
-      {(detectedName || detectedBrand) && (
-        <View style={styles.detectedBox}>
-          <Text style={styles.detectedKicker}>DÉTECTÉ SUR LA PHOTO DE DEVANT</Text>
-          {detectedName ? (
-            <Text style={styles.detectedLine}>
-              <Text style={styles.detectedLabel}>Produit : </Text>
-              {detectedName}
-            </Text>
-          ) : null}
-          {detectedBrand ? (
-            <Text style={styles.detectedLine}>
-              <Text style={styles.detectedLabel}>Marque : </Text>
-              {detectedBrand}
-            </Text>
-          ) : null}
-        </View>
-      )}
-
-      <View style={styles.inciWrap}>
-        <TextInput
-          style={styles.inciInput}
-          value={extractedText}
-          onChangeText={setExtractedText}
-          placeholder="Texte des ingrédients…"
-          placeholderTextColor={palette.fgLight}
-          selectionColor={colors.textSelection}
-          multiline
-          textAlignVertical="top"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-      </View>
-      <Text style={styles.counterOk}>
-        {tokenCount} ingrédient{tokenCount > 1 ? 's' : ''} détecté{tokenCount > 1 ? 's' : ''}
-      </Text>
-      <Text style={styles.tip}>
-        Astuce : assure-toi que les ingrédients sont bien séparés par des virgules.
-      </Text>
-
-      <Pressable
-        style={[styles.cta, !canConfirm && styles.ctaDisabled]}
-        disabled={!canConfirm}
-        onPress={() =>
-          onInciReady(
-            extractedText.trim(),
-            detectedName ?? undefined,
-            detectedBrand ?? undefined,
-          )
-        }
-      >
-        <Ionicons name="sparkles" size={18} color={palette.ctaText} />
-        <Text style={styles.ctaText}>Analyser</Text>
+    <View style={styles.centered}>
+      <Ionicons name="alert-circle-outline" size={40} color={colors.warning} />
+      <Text style={styles.errorText}>{errorMsg}</Text>
+      <Pressable style={styles.cta} onPress={reset}>
+        <Text style={styles.ctaText}>Reprendre les photos</Text>
       </Pressable>
-      <Pressable style={styles.linkBtn} onPress={reset}>
-        <Text style={styles.linkText}>Reprendre les photos</Text>
+      <Pressable style={styles.linkBtn} onPress={onFallbackToManual}>
+        <Text style={styles.linkText}>Coller la liste INCI</Text>
       </Pressable>
-    </ScrollView>
+    </View>
   )
 }
 
@@ -530,48 +418,6 @@ function buildStyles(p: Palette) {
       textAlign: 'center',
       paddingHorizontal: spacing.lg,
     },
-    reviewBadgeRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.sm,
-      marginBottom: spacing.md,
-    },
-    reviewBadgeText: { ...typography.xsSemiBold, color: p.reviewBadge },
-    detectedBox: {
-      backgroundColor: p.detectedBg,
-      borderRadius: radius.md,
-      padding: spacing.md,
-      marginBottom: spacing.md,
-    },
-    detectedKicker: {
-      ...typography.caption,
-      color: p.detectedKicker,
-      fontWeight: '700',
-      letterSpacing: 0.8,
-      marginBottom: spacing.xs,
-    },
-    detectedLine: { ...typography.small, color: p.fg, marginTop: 2 },
-    detectedLabel: {
-      color: p.fgMuted,
-      fontFamily: typography.smallSemiBold.fontFamily,
-    },
-    inciWrap: {
-      backgroundColor: p.inputBg,
-      borderWidth: 1,
-      borderColor: p.inputBorder,
-      borderRadius: radius.md,
-    },
-    inciInput: {
-      ...typography.small,
-      color: p.inputColor,
-      minHeight: 160,
-      maxHeight: 300,
-      paddingHorizontal: spacing.base,
-      paddingVertical: spacing.md,
-      lineHeight: 22,
-    },
-    counterOk: { ...typography.xsSemiBold, color: p.reviewBadge, marginTop: spacing.sm },
-    tip: { ...typography.xs, color: p.fgMuted, marginTop: spacing.xs },
     linkBtn: { paddingVertical: spacing.md, alignItems: 'center' },
     linkText: { ...typography.smallSemiBold, color: p.linkText },
   })

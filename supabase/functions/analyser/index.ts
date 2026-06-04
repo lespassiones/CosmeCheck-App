@@ -21,6 +21,7 @@
 import { handleOptions, jsonResponse } from "../_shared/cors.ts";
 import { gate } from "../_shared/gate.ts";
 import { serviceClient } from "../_shared/auth.ts";
+import { lookupEanByName } from "../_shared/eanLookup.ts";
 import { sha256Hex } from "../_shared/aiClient.ts";
 import { type ColorRating, computeScore, type ScoreTone, scoreLabel } from "./score.ts";
 import { isCleanInciInput, parseInciList } from "./parse.ts";
@@ -826,6 +827,30 @@ Deno.serve(async (req: Request) => {
         confidence: 0.90,
       });
     })();
+  }
+
+  // EAN lookup fire-and-forget : si brand+nom connus mais EAN inconnu, cherche sur OBF
+  if (!productEan && body.brand && body.productLabel) {
+    const eanBrand = body.brand;
+    const eanLabel = body.productLabel;
+    void lookupEanByName(eanBrand, eanLabel).then(async (result) => {
+      if (!result) return;
+      try {
+        await serviceClient().rpc("cosme_check_upsert_catalog_product", {
+          p_ean: result.ean,
+          p_brand: eanBrand,
+          p_name: eanLabel,
+          p_ingredients_text: result.ingredientsText,
+          p_source_url: null,
+          p_category: null,
+          p_score: null,
+          p_score_label: null,
+          p_score_tone: null,
+          p_count_total: null,
+          p_image_url: null,
+        });
+      } catch { /* silent */ }
+    });
   }
 
   const finalBody = { ...responsePayload, analysisId: savedAnalysisId, addedToRoutine };

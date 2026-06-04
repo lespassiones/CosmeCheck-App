@@ -80,11 +80,19 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "Code-barres invalide." }, { status: 400 });
   }
 
+  const ENABLE_INTERNET_FALLBACK = true;
+  // Mettre false pour désactiver la recherche internet (catalog only)
+
   // 0. Cache TTL 12h (KV Deno) — un même code-barres scanné plusieurs fois
   // par jour évite 2 fetchs externes (OBF + OPF) qui prennent ~500ms chacun.
   const cached = await getCachedBarcodeResult<Record<string, unknown>>(barcode);
   if (cached) {
     return jsonResponse(cached, { headers: { "X-Cache": "HIT" } });
+  }
+
+  if (!ENABLE_INTERNET_FALLBACK) {
+    // Catalog-only mode : on ne tente aucune source externe.
+    return jsonResponse({ found: false, source: "catalog_miss" });
   }
 
   // 1. OBF + OPF in parallel — first with INCI ≥ 30 chars (OBF priority).
