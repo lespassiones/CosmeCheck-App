@@ -12,6 +12,8 @@
 import { useCallback, useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
+import { showToast } from '@/components/shared/Toast'
+
 import { db } from '@/lib/supabase/client'
 import type { RoutineItemRow, RoutineFrequency } from '@/lib/supabase/types'
 import { useAuth } from '@/hooks/useAuth'
@@ -106,6 +108,7 @@ export function useRoutine(): UseRoutineReturn {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey })
     },
+    onError: () => showToast("Ajout à la routine impossible. Réessaie.", 'error'),
   })
 
   const removeMutation = useMutation<void, Error, string>({
@@ -116,6 +119,7 @@ export function useRoutine(): UseRoutineReturn {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey })
     },
+    onError: () => showToast('Suppression impossible. Réessaie.', 'error'),
   })
 
   const frequencyMutation = useMutation<void, Error, { itemId: string; frequency: RoutineFrequency }>({
@@ -126,6 +130,7 @@ export function useRoutine(): UseRoutineReturn {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey })
     },
+    onError: () => showToast('Mise à jour impossible. Réessaie.', 'error'),
   })
 
   const addToRoutine = useCallback(

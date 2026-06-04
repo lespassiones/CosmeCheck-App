@@ -18,7 +18,7 @@
  * la fiche. ProcessingOverlay est rendu globalement pendant l'analyse.
  */
 
-import { type FC, useCallback, useMemo, useRef, useState } from 'react'
+import { type FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   KeyboardAvoidingView,
   Platform,
@@ -40,6 +40,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
 import type { RunAnalysisParams } from '@/lib/analysis/analyser'
 import { cacheProductImage } from '@/lib/storage/productImageCache'
+import { clearPendingInci, getPendingInci } from '@/lib/storage/session'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { ProcessingOverlay } from '@/components/shared/ProcessingOverlay'
 import { ScanFrame } from '@/components/scan/ScanFrame'
@@ -121,6 +122,43 @@ const ScanScreen: FC = () => {
     },
     [user?.id, restrictions, runAnalysis, router],
   )
+
+  // ── Reprise d'une analyse interrompue (crash / échec réseau) ────────────
+  // Le pending est posé avant chaque analyse et purgé au succès ; s'il subsiste
+  // sur le landing, c'est qu'une analyse a échoué → on propose de la relancer.
+  const [pending, setPending] = useState<{
+    inci: string
+    source: RunAnalysisParams['source']
+    productName: string | null
+  } | null>(null)
+
+  useEffect(() => {
+    if (mode) return
+    let cancelled = false
+    void getPendingInci().then((p) => {
+      if (cancelled) return
+      if (p.inci && p.inci.trim().length >= 10 && p.source) {
+        setPending({ inci: p.inci, source: p.source, productName: p.productName })
+      } else {
+        setPending(null)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [mode])
+
+  const resumePending = useCallback(() => {
+    if (!pending) return
+    void launch(pending.source, pending.inci, {
+      productName: pending.productName ?? undefined,
+    })
+  }, [pending, launch])
+
+  const dismissPending = useCallback(() => {
+    setPending(null)
+    void clearPendingInci().catch(() => {})
+  }, [])
 
   const retry = useCallback(() => {
     const last = lastParamsRef.current
@@ -323,6 +361,36 @@ const ScanScreen: FC = () => {
             Appuie sur le bouton Décode en bas pour choisir une méthode :
             code-barres, photo, lien e-commerce, recherche ou saisie manuelle.
           </Text>
+
+          {pending ? (
+            <View style={styles.resumeCard}>
+              <Text style={styles.resumeTitle}>Reprendre la dernière analyse ?</Text>
+              <Text style={styles.resumeSub} numberOfLines={2}>
+                {pending.productName?.trim()
+                  ? pending.productName
+                  : 'Une analyse n’a pas pu se terminer.'}
+              </Text>
+              <View style={styles.resumeBtns}>
+                <Pressable
+                  onPress={dismissPending}
+                  style={({ pressed }) => [styles.resumeGhost, pressed && { opacity: 0.6 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ignorer l'analyse en attente"
+                >
+                  <Text style={styles.resumeGhostText}>Ignorer</Text>
+                </Pressable>
+                <Pressable
+                  onPress={resumePending}
+                  disabled={isAnalyzing}
+                  style={({ pressed }) => [styles.resumePrimary, pressed && { opacity: 0.85 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Reprendre l'analyse"
+                >
+                  <Text style={styles.resumePrimaryText}>Reprendre</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
         </View>
       </SafeAreaView>
       <ProcessingOverlay visible={isAnalyzing} message="On décode la composition…" />
@@ -385,6 +453,34 @@ const styles = StyleSheet.create({
     color: colors.inkMuted,
     textAlign: 'center',
   },
+  resumeCard: {
+    width: '100%',
+    marginTop: spacing.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: spacing.base,
+    gap: spacing.xs,
+  },
+  resumeTitle: { ...typography.smallSemiBold, color: colors.ink },
+  resumeSub: { ...typography.xs, color: colors.inkMuted },
+  resumeBtns: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  resumeGhost: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
+  resumeGhostText: { ...typography.smallMedium, color: colors.inkMuted },
+  resumePrimary: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.full,
+    backgroundColor: colors.rose,
+  },
+  resumePrimaryText: { ...typography.smallSemiBold, color: colors.surface },
 })
 
 export default ScanScreen

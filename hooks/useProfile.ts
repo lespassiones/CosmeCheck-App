@@ -26,6 +26,7 @@ import {
   type SkinProfile,
 } from '@/lib/skin/profile'
 import { useAuth } from '@/hooks/useAuth'
+import { showToast } from '@/components/shared/Toast'
 
 interface UseProfileReturn {
   profile: UserProfileRow | null
@@ -131,6 +132,7 @@ export function useProfile(): UseProfileReturn {
     },
     onError: (err) => {
       setSaveError(err.message)
+      showToast('Enregistrement impossible. Réessaie.', 'error')
     },
   })
 

@@ -35,6 +35,7 @@ import { typography } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { db } from '@/lib/supabase/client'
 import { invalidateCachedAnalysisRow } from '@/lib/storage/session'
+import { showToast } from '@/components/shared/Toast'
 import {
   parseAnalyseResponse,
   toneToColorRating,
@@ -212,6 +213,7 @@ const HistoryScreen: FC = () => {
       void invalidateCachedAnalysisRow(vars.id).catch(() => {})
       void queryClient.invalidateQueries({ queryKey })
     },
+    onError: () => showToast('Renommage impossible. Réessaie.', 'error'),
   })
 
   const deleteMutation = useMutation({
@@ -225,6 +227,7 @@ const HistoryScreen: FC = () => {
       void invalidateCachedAnalysisRow(id).catch(() => {})
       void queryClient.invalidateQueries({ queryKey })
     },
+    onError: () => showToast('Suppression impossible. Réessaie.', 'error'),
   })
 
   // ── Sélection / comparaison ─────────────────────────────────────────────────

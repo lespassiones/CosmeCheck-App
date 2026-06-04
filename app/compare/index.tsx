@@ -39,6 +39,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useRoutine } from '@/hooks/useRoutine'
 import { parseAnalyseResponse, type AnalyseResponse } from '@/lib/analysis/types'
 import { compareAnalyses, shortenProductName, type CompareSide } from '@/lib/routine/compare'
+import { withTimeout } from '@/lib/utils/withTimeout'
 import {
   buildCompareBonASavoir,
   routineOverlapSlugs,
@@ -131,10 +132,16 @@ const CompareScreen: FC = () => {
     }
 
     try {
-      const { data, error } = await db()
-        .from('analyses')
-        .select('id, name, product_label, score, result_json')
-        .in('id', ids)
+      const { data, error } = await withTimeout(
+        Promise.resolve(
+          db()
+            .from('analyses')
+            .select('id, name, product_label, score, result_json')
+            .in('id', ids),
+        ),
+        12000,
+        'Le chargement a pris trop de temps. Vérifie ta connexion et réessaie.',
+      )
       if (error) throw error
 
       const rows = (data ?? []) as AnalysisLite[]
