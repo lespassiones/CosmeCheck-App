@@ -61,7 +61,8 @@
           "photosPermission": "CosmeCheck accède à vos photos pour analyser les emballages de produits.",
           "cameraPermission": "CosmeCheck utilise la caméra pour photographier les listes d'ingrédients."
         }
-      ]
+      ],
+      "@sentry/react-native"
     ],
     "experiments": {
       "typedRoutes": true

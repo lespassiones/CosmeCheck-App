@@ -47,9 +47,13 @@ import { queryClient } from '@/lib/storage/queryClient'
 import { AppErrorBoundary } from '@/components/shared/AppErrorBoundary'
 import { ToastHost } from '@/components/shared/Toast'
 import { OfflineBanner } from '@/components/shared/OfflineBanner'
+import { initSentry } from '@/lib/reporting/report'
 
 // Garde le splash natif visible jusqu'à ce qu'on soit prêts à afficher l'app.
 void SplashScreen.preventAutoHideAsync()
+
+// Sentry initialisé le plus tôt possible pour capturer les erreurs au boot.
+initSentry()
 
 const asyncStoragePersister = createAsyncStoragePersister({
   storage: AsyncStorage,
