@@ -20,6 +20,7 @@
 import { handleOptions, jsonResponse } from "../_shared/cors.ts";
 import { gate } from "../_shared/gate.ts";
 import { getCached, setCached, sha256Hex } from "../_shared/aiClient.ts";
+import { sanitizePromptValue } from "../_shared/sanitizePrompt.ts";
 import { extractJsonBlock, webSearchComplete } from "./lib.ts";
 
 type IdentifyPayload = {
@@ -120,9 +121,10 @@ Deno.serve(async (req: Request) => {
   if (!inci) {
     return jsonResponse({ error: "Liste INCI manquante." }, { status: 400 });
   }
-  const productLabel = (body.productLabel ?? "").trim().slice(0, 200);
-  const brand = (body.brand ?? "").trim().slice(0, 120);
-  const productType = (body.productType ?? "").trim().slice(0, 120);
+  // Sanitize les indices texte libres injectés dans le prompt (anti-injection).
+  const productLabel = sanitizePromptValue(body.productLabel ?? "", 200);
+  const brand = sanitizePromptValue(body.brand ?? "", 120);
+  const productType = sanitizePromptValue(body.productType ?? "", 120);
 
   // ── 2. Cache lookup AVANT débit. ─────────────────────────────────────────
   const cacheKey = await identifyCacheKey({ inci, productLabel, brand, productType });

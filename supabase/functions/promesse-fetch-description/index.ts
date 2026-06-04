@@ -22,6 +22,7 @@
 import { handleOptions, jsonResponse } from "../_shared/cors.ts";
 import { gate } from "../_shared/gate.ts";
 import { getCached, setCached, sha256Hex } from "../_shared/aiClient.ts";
+import { sanitizePromptValue } from "../_shared/sanitizePrompt.ts";
 import { extractJsonBlock, webSearchComplete } from "./lib.ts";
 
 type FetchPayload = {
@@ -121,9 +122,10 @@ Deno.serve(async (req: Request) => {
   }
 
   const sourceUrl = (body.sourceUrl ?? "").trim();
-  const candidateName = (body.candidateName ?? "").trim().slice(0, 200);
-  const brand = (body.brand ?? "").trim().slice(0, 120);
-  const productType = (body.productType ?? "").trim().slice(0, 120);
+  // Sanitize les champs texte libres injectés dans le prompt (anti-injection).
+  const candidateName = sanitizePromptValue(body.candidateName ?? "", 200);
+  const brand = sanitizePromptValue(body.brand ?? "", 120);
+  const productType = sanitizePromptValue(body.productType ?? "", 120);
 
   if (!sourceUrl || !/^https?:\/\//i.test(sourceUrl)) {
     return jsonResponse({ error: "URL source manquante ou invalide." }, { status: 400 });

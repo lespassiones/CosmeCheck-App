@@ -17,93 +17,9 @@
 import { hasMistral, hasOpenAI, mistralChat, openai } from "../_shared/aiClient.ts";
 import { serviceClient } from "../_shared/auth.ts";
 
-// ─── SSRF guard (port de validateUserUrl.ts) ────────────────────────────────
-
-const HTTP_SCHEMES = new Set(["http:", "https:"]);
-
-const BLOCKED_HOSTS = new Set([
-  "localhost",
-  "metadata.google.internal",
-  "metadata",
-  "kubernetes.default.svc",
-  "host.docker.internal",
-]);
-
-const BLOCKED_IPV4_PREFIXES = [
-  "0.",
-  "10.",
-  "127.",
-  "169.254.",
-  "192.168.",
-  "224.",
-];
-
-const BLOCKED_IPV6 = new Set(["::", "::1"]);
-
-function isBlocked172(host: string): boolean {
-  if (!host.startsWith("172.")) return false;
-  const parts = host.split(".");
-  if (parts.length < 2) return false;
-  const second = Number(parts[1]);
-  return Number.isInteger(second) && second >= 16 && second <= 31;
-}
-
-function isLikelyPrivateIPv6(host: string): boolean {
-  const h = host.toLowerCase().replace(/^\[|\]$/g, "");
-  if (BLOCKED_IPV6.has(h)) return true;
-  if (h.startsWith("fc") || h.startsWith("fd")) return true;
-  if (h.startsWith("fe8") || h.startsWith("fe9") || h.startsWith("fea") || h.startsWith("feb")) return true;
-  return false;
-}
-
-export type UrlValidationResult =
-  | { ok: true; url: URL }
-  | { ok: false; reason: string };
-
-export function validateUserUrl(input: string): UrlValidationResult {
-  const trimmed = input.trim();
-  if (!trimmed) return { ok: false, reason: "URL vide." };
-  if (trimmed.length > 2048) return { ok: false, reason: "URL trop longue." };
-
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch {
-    return { ok: false, reason: "URL invalide." };
-  }
-
-  if (!HTTP_SCHEMES.has(parsed.protocol)) {
-    return { ok: false, reason: "Seuls les liens http(s) sont acceptés." };
-  }
-
-  if (parsed.username || parsed.password) {
-    return { ok: false, reason: "Les identifiants dans l'URL ne sont pas autorisés." };
-  }
-
-  const host = parsed.hostname.toLowerCase();
-  if (!host) return { ok: false, reason: "Domaine manquant." };
-  if (BLOCKED_HOSTS.has(host)) {
-    return { ok: false, reason: "Domaine interne refusé." };
-  }
-  if (host.endsWith(".local") || host.endsWith(".internal")) {
-    return { ok: false, reason: "Domaine interne refusé." };
-  }
-
-  if (host.includes(":")) {
-    if (isLikelyPrivateIPv6(host)) {
-      return { ok: false, reason: "Adresse IP privée refusée." };
-    }
-  } else if (/^[\d.]+$/.test(host)) {
-    if (BLOCKED_IPV4_PREFIXES.some((p) => host.startsWith(p))) {
-      return { ok: false, reason: "Adresse IP privée refusée." };
-    }
-    if (isBlocked172(host)) {
-      return { ok: false, reason: "Adresse IP privée refusée." };
-    }
-  }
-
-  return { ok: true, url: parsed };
-}
+// ─── SSRF guard (mutualisé dans _shared/ssrfGuard.ts) ───────────────────────
+import { validateUserUrl, type UrlValidationResult } from "../_shared/ssrfGuard.ts";
+export { validateUserUrl, type UrlValidationResult };
 
 // ─── HTTP fetch avec diagnostic bot-management ──────────────────────────────
 
