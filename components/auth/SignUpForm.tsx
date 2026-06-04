@@ -45,6 +45,9 @@ const signUpSchema = z
       .string()
       .refine(isPasswordValid, 'Le mot de passe ne respecte pas toutes les règles'),
     confirmPassword: z.string().min(1, 'Confirme ton mot de passe'),
+    acceptedPrivacy: z.boolean().refine((v) => v === true, {
+      message: 'Tu dois accepter la politique de confidentialité pour continuer.',
+    }),
   })
   .refine((d) => d.password === d.confirmPassword, {
     message: 'Les mots de passe ne correspondent pas',
@@ -89,7 +92,13 @@ export const SignUpForm: FC = () => {
   } = useForm<SignUpFormData>({
     resolver: zodResolver(signUpSchema),
     mode: 'onBlur',
-    defaultValues: { firstName: '', email: '', password: '', confirmPassword: '' },
+    defaultValues: {
+      firstName: '',
+      email: '',
+      password: '',
+      confirmPassword: '',
+      acceptedPrivacy: false,
+    },
   })
 
   const passwordValue = useWatch({ control, name: 'password' })
@@ -280,11 +289,44 @@ export const SignUpForm: FC = () => {
         </View>
       )}
 
-      {/* RGPD */}
-      <Text style={styles.legal}>
-        En t’inscrivant, tu acceptes nos Conditions d’utilisation et notre Politique de
-        confidentialité.
-      </Text>
+      {/* RGPD — consentement explicite (obligatoire) */}
+      <Controller
+        control={control}
+        name="acceptedPrivacy"
+        render={({ field: { value, onChange } }) => (
+          <Pressable
+            style={styles.consentRow}
+            onPress={() => onChange(!value)}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: value }}
+            accessibilityLabel="J'accepte les conditions d'utilisation et la politique de confidentialité"
+          >
+            <View style={[styles.checkbox, value && styles.checkboxChecked]}>
+              {value && <Ionicons name="checkmark" size={14} color={colors.surface} />}
+            </View>
+            <Text style={styles.legal}>
+              J&apos;accepte les{' '}
+              <Text
+                style={styles.legalLink}
+                onPress={() => router.push(ROUTES.LEGAL.CGU)}
+              >
+                Conditions d&apos;utilisation
+              </Text>{' '}
+              et la{' '}
+              <Text
+                style={styles.legalLink}
+                onPress={() => router.push(ROUTES.LEGAL.PRIVACY)}
+              >
+                Politique de confidentialité
+              </Text>
+              .
+            </Text>
+          </Pressable>
+        )}
+      />
+      {errors.acceptedPrivacy && (
+        <Text style={styles.fieldError}>{errors.acceptedPrivacy.message}</Text>
+      )}
 
       {/* Bouton */}
       <Pressable
@@ -369,10 +411,35 @@ const styles = StyleSheet.create({
     color: colors.roseDeep,
     flex: 1,
   },
+  consentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.sm,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  checkboxChecked: {
+    backgroundColor: colors.rose,
+    borderColor: colors.rose,
+  },
   legal: {
     ...typography.xs,
     color: colors.inkLight,
-    textAlign: 'center',
+    flex: 1,
+    lineHeight: 17,
+  },
+  legalLink: {
+    color: colors.rose,
+    textDecorationLine: 'underline',
   },
   submit: {
     height: 52,

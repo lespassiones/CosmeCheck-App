@@ -10,7 +10,7 @@
  */
 
 import { type FC, useCallback, useMemo, useState } from 'react'
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -26,6 +26,7 @@ import { useProfile } from '@/hooks/useProfile'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { NeuCard } from '@/components/design/NeuCard'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { supabase } from '@/lib/supabase/client'
 import { SkinProfileCard } from '@/components/profile/SkinProfileCard'
 import { BeautyProfileForm } from '@/components/profile/BeautyProfileForm'
 
@@ -38,7 +39,6 @@ interface LinkRow {
 }
 
 /** Adresse de contact pour la suppression manuelle (aucune RPC dédiée à ce jour). */
-const DELETE_CONTACT_EMAIL = 'contact@cosme-check.com'
 
 const ProfileScreen: FC = () => {
   const insets = useSafeAreaInsets()
@@ -48,6 +48,7 @@ const ProfileScreen: FC = () => {
   const [editing, setEditing] = useState(false)
   const [confirmSignOut, setConfirmSignOut] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const email = user?.email ?? null
   const initial = (firstName?.[0] ?? email?.[0] ?? '?').toUpperCase()
@@ -109,21 +110,33 @@ const ProfileScreen: FC = () => {
     await signOut()
   }, [signOut])
 
-  // Suppression de compte : pas de RPC de suppression côté backend pour le
-  // moment. On ouvre un email pré-rempli vers le support puis on déconnecte.
-  // (voir followups — à remplacer par un vrai endpoint de suppression.)
+  // Suppression de compte DÉFINITIVE et IMMÉDIATE via l'Edge Function
+  // `delete-account` (cascade DB → toutes les données purgées), puis sign-out.
   const handleDeleteAccount = useCallback(async () => {
-    setConfirmDelete(false)
-    const subject = encodeURIComponent('Suppression de mon compte Cosme Check')
-    const body = encodeURIComponent(
-      `Bonjour,\n\nJe souhaite supprimer définitivement mon compte Cosme Check${
-        email ? ` (${email})` : ''
-      } ainsi que toutes mes données.\n\nMerci.`,
-    )
-    const url = `mailto:${DELETE_CONTACT_EMAIL}?subject=${subject}&body=${body}`
-    await Linking.openURL(url).catch(() => {})
-    await signOut()
-  }, [email, signOut])
+    if (deleting) return
+    setDeleting(true)
+    try {
+      const { error } = await supabase.functions.invoke('delete-account', { body: {} })
+      if (error) {
+        setDeleting(false)
+        setConfirmDelete(false)
+        Alert.alert(
+          'Suppression impossible',
+          'Une erreur est survenue. Réessaie dans un instant.',
+        )
+        return
+      }
+      // Succès → déconnexion (le guard racine redirige vers l'authentification).
+      await signOut()
+    } catch {
+      setDeleting(false)
+      setConfirmDelete(false)
+      Alert.alert(
+        'Suppression impossible',
+        'Vérifie ta connexion et réessaie.',
+      )
+    }
+  }, [deleting, signOut])
 
   const handleSave = useCallback(
     async (next: SkinProfile) => {
@@ -141,6 +154,8 @@ const ProfileScreen: FC = () => {
             style={styles.backBtn}
             onPress={() => (editing ? setEditing(false) : router.back())}
             hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Retour"
           >
             <Ionicons name="chevron-back" size={24} color={colors.ink} />
           </Pressable>
@@ -275,9 +290,9 @@ const ProfileScreen: FC = () => {
         visible={confirmDelete}
         title="Supprimer mon compte"
         message={
-          'Cette action est définitive. Pour traiter ta demande, on ouvre un email vers notre support, puis tu seras déconnecté·e. Tes données seront supprimées sous quelques jours.'
+          'Cette action est DÉFINITIVE et IMMÉDIATE. Ton compte et toutes tes données (profil, analyses, routine) seront supprimés et ne pourront pas être récupérés.'
         }
-        confirmLabel="Demander la suppression"
+        confirmLabel={deleting ? 'Suppression…' : 'Supprimer définitivement'}
         cancelLabel="Annuler"
         destructive
         onConfirm={() => void handleDeleteAccount()}
