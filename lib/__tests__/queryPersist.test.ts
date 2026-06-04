@@ -11,13 +11,16 @@ import {
 } from '@/lib/storage/queryPersist'
 
 describe('shouldPersistQueryKey', () => {
-  it('persiste les clés stables (profile, routine, dashboard, history, ingredient, dailyPicks)', () => {
-    expect(shouldPersistQueryKey(['profile', 'u1'])).toBe(true)
+  it('persiste les clés stables (routine, dashboard, history, ingredient, dailyPicks)', () => {
     expect(shouldPersistQueryKey(['routine', 'u1'])).toBe(true)
     expect(shouldPersistQueryKey(['dashboard', 'last-analysis', 'u1'])).toBe(true)
     expect(shouldPersistQueryKey(['history', 'u1'])).toBe(true)
     expect(shouldPersistQueryKey(['ingredient', 'aqua'])).toBe(true)
     expect(shouldPersistQueryKey(['dailyPicks', '2025-06-02'])).toBe(true)
+  })
+
+  it('exclut le profil (pilote la porte onboarding → jamais servi périmé)', () => {
+    expect(shouldPersistQueryKey(['profile', 'u1'])).toBe(false)
   })
 
   it('exclut les crédits (changent à chaque analyse)', () => {
@@ -48,15 +51,15 @@ describe('shouldDehydrateQuery', () => {
   }
 
   it('persiste une query success avec une clé autorisée', () => {
-    expect(shouldDehydrateQuery(fakeQuery(['profile', 'u1'], 'success'))).toBe(true)
+    expect(shouldDehydrateQuery(fakeQuery(['routine', 'u1'], 'success'))).toBe(true)
   })
 
   it('refuse une query en erreur (même clé autorisée)', () => {
-    expect(shouldDehydrateQuery(fakeQuery(['profile', 'u1'], 'error'))).toBe(false)
+    expect(shouldDehydrateQuery(fakeQuery(['routine', 'u1'], 'error'))).toBe(false)
   })
 
   it('refuse une query en cours (pending)', () => {
-    expect(shouldDehydrateQuery(fakeQuery(['profile', 'u1'], 'pending'))).toBe(false)
+    expect(shouldDehydrateQuery(fakeQuery(['routine', 'u1'], 'pending'))).toBe(false)
   })
 
   it('refuse une query success sur la blacklist', () => {

@@ -150,7 +150,9 @@ export async function signUp(
       email: email.trim().toLowerCase(),
       password,
       options: {
-        data: { first_name: firstName.trim() },
+        // `signup_platform` est copié dans user_profiles.signup_platform par le
+        // trigger handle_new_user → permet de distinguer mobile vs web en base.
+        data: { first_name: firstName.trim(), signup_platform: 'mobile' },
         emailRedirectTo: buildResetRedirect(),
       },
     })

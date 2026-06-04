@@ -14,6 +14,7 @@ import { create } from 'zustand'
 import type { Session, Subscription, User } from '@supabase/supabase-js'
 
 import { supabase } from '@/lib/supabase/client'
+import { clearUserScopedCaches } from '@/lib/storage/clearUserScopedCaches'
 
 interface UseAuthReturn {
   user: User | null
@@ -97,6 +98,9 @@ export function useAuth(): UseAuthReturn {
     // onAuthStateChange mettra le store à jour ; on force l'état localement
     // pour une UI réactive immédiate.
     useAuthStore.getState().setSession(null)
+    // Purge les caches liés au compte (évite toute fuite inter-comptes sur le
+    // même appareil). Best-effort, ne bloque pas la déconnexion.
+    await clearUserScopedCaches()
   }
 
   const refreshSession = async (): Promise<void> => {
