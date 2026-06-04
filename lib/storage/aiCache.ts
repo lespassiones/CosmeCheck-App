@@ -14,6 +14,27 @@ import { isFresh, parseCacheMap, purgeExpired, type TimestampedEntry } from './c
 
 const PREFIX = 'cosmecheck:ai-cache:'
 
+/**
+ * Plafond d'entrées par namespace. Les caches longue durée (explain/compare,
+ * TTL 30j) pourraient sinon gonfler indéfiniment (I/O + taille app). On garde
+ * les N plus récentes (éviction LRU par `cachedAt`).
+ */
+const MAX_ENTRIES_PER_NAMESPACE = 200
+
+/** Garde au plus `max` entrées (les plus récentes par `cachedAt`). Pur. */
+export function capEntries<T>(
+  map: Record<string, TimestampedEntry<T>>,
+  max: number,
+): Record<string, TimestampedEntry<T>> {
+  const keys = Object.keys(map)
+  if (keys.length <= max) return map
+  const kept: Record<string, TimestampedEntry<T>> = {}
+  for (const k of keys.sort((a, b) => map[b].cachedAt - map[a].cachedAt).slice(0, max)) {
+    kept[k] = map[k]
+  }
+  return kept
+}
+
 /** Clé AsyncStorage pour un namespace donné. */
 export function aiCacheStorageKey(namespace: string): string {
   return `${PREFIX}${namespace}`
@@ -59,7 +80,7 @@ export async function writeAiCache<T>(
   try {
     const map = await readMap<T>(namespace)
     map[key] = { data, cachedAt: Date.now() }
-    await writeMap(namespace, map)
+    await writeMap(namespace, capEntries(map, MAX_ENTRIES_PER_NAMESPACE))
   } catch {
     // ignore
   }

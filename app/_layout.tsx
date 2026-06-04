@@ -14,7 +14,6 @@
 import { useEffect, useState } from 'react'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
-import { QueryClient } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -31,6 +30,7 @@ import {
 
 import { colors } from '@/constants/colors'
 import { ROUTES } from '@/constants/routes'
+import { resolveAuthRoute } from '@/lib/navigation/authRoute'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
 import { CreditsExhaustedModal } from '@/components/shared/CreditsExhaustedModal'
@@ -43,23 +43,13 @@ import {
 import { clearExpiredCache } from '@/lib/storage/session'
 import { clearExpiredAiCache } from '@/lib/storage/aiCache'
 import { getPreOnboardingCache, isPreOnboardingDone } from '@/lib/storage/preOnboarding'
+import { queryClient } from '@/lib/storage/queryClient'
+import { AppErrorBoundary } from '@/components/shared/AppErrorBoundary'
+import { ToastHost } from '@/components/shared/Toast'
+import { OfflineBanner } from '@/components/shared/OfflineBanner'
 
 // Garde le splash natif visible jusqu'à ce qu'on soit prêts à afficher l'app.
 void SplashScreen.preventAutoHideAsync()
-
-// Client React Query partagé pour toute l'app (niveau module).
-// `gcTime` doit être >= au max-age du persister, sinon les caches sont GC'd
-// avant d'être rechargés au cold start.
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60 * 1000, // 5 min par défaut
-      gcTime: QUERY_PERSIST_MAX_AGE_MS,
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
-})
 
 const asyncStoragePersister = createAsyncStoragePersister({
   storage: AsyncStorage,
@@ -98,53 +88,32 @@ function AuthGuard() {
   }, [isAuthenticated])
 
   useEffect(() => {
-    // 1. Auth pas encore résolue : ne rien faire, le splash reste visible.
-    if (authLoading) return
-
-    const group = segments[0]
-    const inAuthGroup = group === '(auth)'
-    const inOnboarding = group === '(onboarding)'
-    const inPreOnboarding = group === '(preonboarding)'
-
-    // 2. Pas de session.
-    if (!isAuthenticated) {
-      // On laisse l'auth et le pré-onboarding s'afficher librement (évite toute
-      // boucle de redirection au moment où le carrousel marque le flag + route).
-      if (inAuthGroup || inPreOnboarding) return
-      // Sinon : 1er lancement → carrousel ; déjà vu → écran de connexion.
-      if (preOnbDone === null) return // flag encore en lecture
-      router.replace(preOnbDone ? ROUTES.AUTH.SIGN_IN : ROUTES.PREONBOARDING.INDEX)
-      return
+    // Décision déléguée à une fonction pure testée (lib/navigation/authRoute).
+    const target = resolveAuthRoute({
+      authLoading,
+      isAuthenticated,
+      profileLoading,
+      onboardingShown,
+      isProfileComplete,
+      preOnbDone,
+      group: segments[0],
+    })
+    switch (target) {
+      case 'signin':
+        router.replace(ROUTES.AUTH.SIGN_IN)
+        break
+      case 'preonboarding':
+        router.replace(ROUTES.PREONBOARDING.INDEX)
+        break
+      case 'onboarding':
+        router.replace(ROUTES.ONBOARDING.INDEX)
+        break
+      case 'home':
+        router.replace(ROUTES.TABS.HOME)
+        break
+      default:
+        break // null → on laisse passer / on attend
     }
-
-    // À partir d'ici : utilisateur authentifié.
-    // Le profil détermine l'onboarding → on attend qu'il soit chargé.
-    if (profileLoading) return
-
-    const needsOnboarding = !onboardingShown && !isProfileComplete
-
-    // 3. Sur une page auth/pré-onboarding alors qu'on est connecté → destination.
-    if (inAuthGroup || inPreOnboarding) {
-      router.replace(needsOnboarding ? ROUTES.ONBOARDING.INDEX : ROUTES.TABS.HOME)
-      return
-    }
-
-    // 4. Onboarding requis mais on n'y est pas → onboarding.
-    if (needsOnboarding && !inOnboarding) {
-      router.replace(ROUTES.ONBOARDING.INDEX)
-      return
-    }
-
-    // 5. On quitte l'onboarding UNIQUEMENT quand il a été explicitement terminé
-    //    (onboardingShown=true via « C'est parti »/« Passer »). On NE se base PAS
-    //    sur isProfileComplete : sinon remplir 2 sections en cours de
-    //    questionnaire éjecterait l'utilisateur vers le dashboard avant la fin.
-    if (onboardingShown && inOnboarding) {
-      router.replace(ROUTES.TABS.HOME)
-      return
-    }
-
-    // Sinon : on laisse passer.
   }, [
     authLoading,
     isAuthenticated,
@@ -254,8 +223,12 @@ export default function RootLayout() {
           <SplashController />
           <CacheJanitor />
           <AuthGuard />
-          <RootNavigator />
-          <CreditsExhaustedModal />
+          <AppErrorBoundary>
+            <RootNavigator />
+            <CreditsExhaustedModal />
+          </AppErrorBoundary>
+          <ToastHost />
+          <OfflineBanner />
         </PersistQueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
