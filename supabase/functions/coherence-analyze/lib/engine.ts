@@ -372,6 +372,25 @@ export function resolveOpenPromise(
 
   const wellDosed = foundDocumented.filter((f) => !f.inTrace).length;
   const trace = foundDocumented.filter((f) => f.inTrace).length;
+
+  // Règle d'absence : si le label commence par "sans " et qu'aucun ingrédient
+  // correspondant n'a été trouvé dans la formule (ni matches ni missing), la
+  // promesse est tenue — l'absence dans l'INCI prouve l'absence dans le produit.
+  const isAbsenceClaim = /^sans[\s\-]/i.test((proposal.label ?? "").trim());
+  if (isAbsenceClaim && foundDocumented.length === 0 && foundCosmetic.length === 0 && llmMissing.length === 0) {
+    return {
+      slug: proposal.category_slug || "autre",
+      label: proposal.label || "Promesse libre",
+      excerpt: proposal.excerpt,
+      verdict: "tenue",
+      expectedActives: [],
+      foundActives: [],
+      cosmeticActives: [],
+      missingActives: [],
+      score: 100,
+    };
+  }
+
   const verdict = deriveVerdict({
     documentedFound: foundDocumented.length,
     documentedFoundWellDosed: wellDosed,
