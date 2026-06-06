@@ -1,37 +1,36 @@
 /**
- * Edge Function `product-by-barcode` — port of CosmetWiki
- * app/api/product-by-barcode/route.ts.
+ * Edge Function `product-by-barcode` — catalog-only mode.
  *
- * Pipeline (mirrors web):
- *   1. gate (auth Bearer + IP rate-limit, costCredits:0). Web: 20/min/IP.
+ * Pipeline (zéro appel externe) :
+ *   1. gate (auth Bearer + IP rate-limit, costCredits:0). 20/min/IP.
  *   2. Server gate: barcode must match /^\d{8,14}$/ (EAN-8..ITF-14).
- *   3. OBF + OPF v2 in PARALLEL → first with INCI ≥ 30 chars wins (OBF prio).
- *      When INCI looks like a real list, upsert catalog (fire-and-forget).
- *   4. If a source has a name but no INCI → name cascade; on hit, prefer the
- *      barcode-DB brand/name. On a DB-only miss → not_found with the name.
- *   5. Both OBF/OPF unknown → web search (OpenAI) last resort, then upsert.
- *   6. Else → NOT_FOUND.
+ *   3. Cache KV Deno TTL 12h.
+ *   4. Lookup EAN dans le catalog Cosme Check.
+ *      - Trouvé avec INCI valide → found.
+ *      - Trouvé sans INCI        → reason:"incomplete".
+ *      - Inconnu                 → enregistre stub + reason:"registered".
  *
  * Body: { barcode, hp? }
  * Response: ProductSearchResult (found + brand/productName/ingredientsText/
- *   source/sourceUrl/confidence, or found:false + reason/message).
- * Degrades without AI keys: steps using the cascade/web search return misses.
+ *   source/confidence, or found:false + reason/message).
  */
 import { handleOptions, jsonResponse } from "../_shared/cors.ts";
 import { gate } from "../_shared/gate.ts";
-import { fetchOFFProduct } from "./lib/openBeautyFacts.ts";
-import { upsertCatalogProduct } from "./lib/catalog.ts";
-import { searchProductCascade } from "./lib/cascade.ts";
-import { searchProductByBarcode } from "./lib/barcodeWebSearch.ts";
+import { getCatalogByEan, registerScannedBarcode } from "./lib/catalog.ts";
 import { cacheBarcodeResult, getCachedBarcodeResult } from "./lib/barcodeCache.ts";
 
 const BARCODE_RE = /^\d{8,14}$/;
 
-const NOT_FOUND = {
+const INCOMPLETE = {
   found: false as const,
-  reason: "not_found" as const,
-  message:
-    "Code-barres non référencé sur nos sources publiques. Tape le nom du produit ou colle sa liste INCI.",
+  reason: "incomplete" as const,
+  message: "Ce produit n'a pas encore été référencé dans notre base de données.",
+};
+
+const REGISTERED = {
+  found: false as const,
+  reason: "registered" as const,
+  message: "Ce produit a été enregistré et sera référencé très prochainement sur Cosme Check.",
 };
 
 type RequestBody = { barcode?: string; hp?: string };
@@ -52,9 +51,6 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "Méthode non autorisée." }, { status: 405 });
   }
 
-  // Web order: IP rate-limit FIRST (429), then body parse (400), then honeypot
-  // (403), then input validation (400). The gate bundles auth (mobile-only
-  // addition) + the IP rate-limit; web used 20/min/IP.
   const g = await gate(req, {
     feature: "product_by_barcode",
     costCredits: 0,
@@ -80,136 +76,40 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "Code-barres invalide." }, { status: 400 });
   }
 
-  const ENABLE_INTERNET_FALLBACK = true;
-  // Mettre false pour désactiver la recherche internet (catalog only)
-
-  // 0. Cache TTL 12h (KV Deno) — un même code-barres scanné plusieurs fois
-  // par jour évite 2 fetchs externes (OBF + OPF) qui prennent ~500ms chacun.
+  // Cache TTL 12h — évite un aller-retour DB pour les scans répétés.
   const cached = await getCachedBarcodeResult<Record<string, unknown>>(barcode);
   if (cached) {
     return jsonResponse(cached, { headers: { "X-Cache": "HIT" } });
   }
 
-  if (!ENABLE_INTERNET_FALLBACK) {
-    // Catalog-only mode : on ne tente aucune source externe.
-    return jsonResponse({ found: false, source: "catalog_miss" });
-  }
+  // Lookup dans le catalog Cosme Check (source unique de vérité).
+  const row = await getCatalogByEan(barcode);
 
-  // 1. OBF + OPF in parallel — first with INCI ≥ 30 chars (OBF priority).
-  const [obfResult, opfResult] = await Promise.allSettled([
-    fetchOFFProduct("world.openbeautyfacts.org", barcode),
-    fetchOFFProduct("world.openproductsfacts.org", barcode),
-  ]);
-  const obf = obfResult.status === "fulfilled" ? obfResult.value : null;
-  const opf = opfResult.status === "fulfilled" ? opfResult.value : null;
-
-  if (obf && obf.inci.length >= 30) {
-    if (looksLikeInci(obf.inci)) {
-      void upsertCatalogProduct({
-        ean: barcode,
-        brand: obf.brand,
-        name: obf.name,
-        ingredientsText: obf.inci,
-        sourceUrl: obf.sourceUrl,
-        imageUrl: obf.imageUrl,
-      });
-    }
+  if (row && row.ingredients_text && looksLikeInci(row.ingredients_text)) {
     const payload = {
-      found: true,
-      brand: obf.brand,
-      productName: obf.name,
-      ingredientsText: obf.inci,
-      source: "openbeautyfacts",
-      sourceUrl: obf.sourceUrl,
-      confidence: 0.98,
+      found: true as const,
+      brand: row.brand,
+      productName: row.name,
+      ingredientsText: row.ingredients_text,
+      source: "catalog" as const,
+      confidence: 1.0,
     };
     void cacheBarcodeResult(barcode, payload);
     return jsonResponse(payload);
   }
 
-  if (opf && opf.inci.length >= 30) {
-    if (looksLikeInci(opf.inci)) {
-      void upsertCatalogProduct({
-        ean: barcode,
-        brand: opf.brand,
-        name: opf.name,
-        ingredientsText: opf.inci,
-        sourceUrl: opf.sourceUrl,
-        imageUrl: opf.imageUrl,
-      });
-    }
-    const payload = {
-      found: true,
-      brand: opf.brand,
-      productName: opf.name,
-      ingredientsText: opf.inci,
-      source: "openproductsfacts",
-      sourceUrl: opf.sourceUrl,
-      confidence: 0.95,
-    };
-    void cacheBarcodeResult(barcode, payload);
-    return jsonResponse(payload);
+  if (row) {
+    // EAN connu mais INCI manquant/insuffisant.
+    void cacheBarcodeResult(barcode, INCOMPLETE);
+    return jsonResponse(INCOMPLETE);
   }
 
-  // 2. One source has a name but no INCI → cascade by name.
-  const partial = obf?.name ? obf : opf?.name ? opf : null;
-  if (partial?.name) {
-    const nameQuery = [partial.brand, partial.name].filter(Boolean).join(" ").trim();
-    const cascadeResult = await searchProductCascade(nameQuery);
-    if (cascadeResult.found) {
-      if (looksLikeInci(cascadeResult.ingredientsText)) {
-        void upsertCatalogProduct({
-          ean: barcode,
-          brand: cascadeResult.brand ?? partial.brand,
-          name: cascadeResult.productName ?? partial.name,
-          ingredientsText: cascadeResult.ingredientsText,
-          sourceUrl: cascadeResult.sourceUrl ?? partial.sourceUrl,
-          imageUrl: partial.imageUrl,
-        });
-      }
-      const payload = {
-        ...cascadeResult,
-        brand: cascadeResult.brand ?? partial.brand,
-        productName: cascadeResult.productName ?? partial.name,
-      };
-      void cacheBarcodeResult(barcode, payload);
-      return jsonResponse(payload);
-    }
-    return jsonResponse({
-      found: false,
-      reason: "not_found",
-      message: `Produit identifié (${partial.name}) mais sans liste INCI exploitable sur nos sources. Colle la liste INCI du packaging.`,
-    });
-  }
-
-  // 3. Barcode unknown to OBF + OPF → web search last resort.
-  const webResult = await searchProductByBarcode(barcode);
-  if (webResult.found) {
-    if (looksLikeInci(webResult.ingredientsText)) {
-      void upsertCatalogProduct({
-        ean: barcode,
-        brand: webResult.brand,
-        name: webResult.productName,
-        ingredientsText: webResult.ingredientsText,
-        sourceUrl: webResult.sourceUrl,
-      });
-    }
-    const payload = {
-      found: true,
-      brand: webResult.brand,
-      productName: webResult.productName,
-      ingredientsText: webResult.ingredientsText,
-      source: "web_search",
-      sourceUrl: webResult.sourceUrl,
-      confidence: webResult.confidence,
-    };
-    void cacheBarcodeResult(barcode, payload);
-    return jsonResponse(payload);
-  }
-
-  // 4. Unknown across all sources. On cache aussi un NOT_FOUND avec TTL court
-  // (TTL_MS de la fonction reste à 12h ; le NOT_FOUND laisse à l'utilisateur
-  // la possibilité de coller l'INCI manuellement).
-  void cacheBarcodeResult(barcode, NOT_FOUND);
-  return jsonResponse(NOT_FOUND);
+  // EAN totalement inconnu → on l'enregistre pour enrichissement futur.
+  // Pas de cache sur REGISTERED : l'INSERT est idempotent (ON CONFLICT DO NOTHING)
+  // et on veut re-tenter à chaque scan si la précédente tentative a échoué.
+  // IMPORTANT : on AWAIT l'INSERT. En fire-and-forget (void), le runtime tue
+  // l'isolate après la réponse et l'écriture échoue souvent (~1 scan sur 3
+  // persisté, constaté en prod). L'await garantit la persistance (~50 ms).
+  await registerScannedBarcode(barcode);
+  return jsonResponse(REGISTERED);
 });

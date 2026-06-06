@@ -81,6 +81,64 @@ export async function fetchCatalogCandidates(
   }
 }
 
+/** Lookup a catalog product by EAN. Returns the row or null (never throws). */
+export async function lookupCatalogByEan(ean: string): Promise<{
+  ean: string;
+  brand: string | null;
+  name: string | null;
+  ingredientsText: string | null;
+} | null> {
+  try {
+    const { data, error } = await serviceClient()
+      .schema("cosme_check")
+      .from("catalog")
+      .select("ean, brand, name, ingredients_text")
+      .eq("ean", ean)
+      .maybeSingle();
+    if (error || !data) return null;
+    return {
+      ean: data.ean as string,
+      brand: data.brand as string | null,
+      name: data.name as string | null,
+      ingredientsText: data.ingredients_text as string | null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Lecture du catalogue par EAN exact (forme snake_case complète). Source
+ *  unique de vérité du scan. Lecture seule, jamais bloquante → null si erreur. */
+export async function getCatalogByEan(ean: string): Promise<CatalogRow | null> {
+  try {
+    const { data, error } = await serviceClient()
+      .schema("cosme_check")
+      .from("catalog")
+      .select("ean, brand, name, ingredients_text, source_url, image_url, count_total")
+      .eq("ean", ean)
+      .maybeSingle();
+    if (error || !data) return null;
+    return data as CatalogRow;
+  } catch {
+    return null;
+  }
+}
+
+/** Enregistre un code-barres scanné mais inconnu dans le catalogue, en mode
+ *  "à compléter" (masqué tant qu'il n'a pas de liste INCI). Idempotent côté DB
+ *  (ON CONFLICT DO NOTHING). Fire-and-forget ; ne jette jamais. */
+export async function registerScannedBarcode(ean: string): Promise<void> {
+  try {
+    const { error } = await serviceClient().rpc(
+      "cosme_check_register_scanned_barcode",
+      { p_ean: ean },
+    );
+    if (error) console.warn("[catalog] register scanned barcode error:", error.message);
+  } catch (err) {
+    console.warn("[catalog] register scanned barcode failed:", err);
+  }
+}
+
 /** Persistent catalog upsert. Fire-and-forget; never throws. */
 export async function upsertCatalogProduct(params: {
   ean: string;

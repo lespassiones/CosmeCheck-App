@@ -19,6 +19,7 @@ import {
   Text,
   View,
 } from 'react-native'
+import Animated, { FadeInDown } from 'react-native-reanimated'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import type { BarcodeScanningResult } from 'expo-camera'
 import * as Haptics from 'expo-haptics'
@@ -47,7 +48,7 @@ const BARCODE_RE = /^\d{8,14}$/
 type ScanState =
   | { kind: 'scanning' }
   | { kind: 'looking-up'; barcode: string }
-  | { kind: 'not-found'; barcode: string }
+  | { kind: 'not-found'; barcode: string; reason: 'incomplete' | 'registered' }
   | { kind: 'unavailable'; barcode: string }
   | { kind: 'error'; message: string }
 
@@ -87,15 +88,16 @@ export const BarcodeScanner: FC<Props> = ({
         return
       }
       const hit = data as
-        | { found?: boolean; ingredientsText?: string; brand?: string | null; productName?: string | null }
+        | { found?: boolean; reason?: string; ingredientsText?: string; brand?: string | null; productName?: string | null }
         | null
       if (!hit?.found) {
-        setState({ kind: 'not-found', barcode })
+        const reason = hit?.reason === 'incomplete' ? 'incomplete' : 'registered'
+        setState({ kind: 'not-found', barcode, reason })
         return
       }
       const inci = hit.ingredientsText?.trim()
       if (!inci || inci.length < 10) {
-        setState({ kind: 'not-found', barcode })
+        setState({ kind: 'not-found', barcode, reason: 'incomplete' })
         return
       }
       onInciReadyRef.current(
@@ -206,27 +208,24 @@ export const BarcodeScanner: FC<Props> = ({
         Place le code-barres dans le cadre. La caméra scanne en continu.
       </Text>
 
-      {/* Produit introuvable au catalogue OBF */}
+      {/* Produit non analysable maintenant (inconnu OU connu sans INCI) :
+          même message vert + animation rejouée à chaque scan. */}
       {state.kind === 'not-found' && (
-        <View style={styles.resultBox}>
-          <Text style={styles.resultText}>
-            Code-barres {state.barcode} non référencé.
-          </Text>
-          <Text style={styles.resultSub}>
-            Cherche le produit par son nom, ou colle la liste INCI.
-          </Text>
-          <View style={styles.btnRow}>
-            <Pressable style={styles.primaryBtn} onPress={onFallbackToSearch}>
-              <Text style={styles.primaryBtnText}>Chercher par nom</Text>
-            </Pressable>
-            <Pressable style={styles.secondaryBtn} onPress={onFallbackToManual}>
-              <Text style={styles.secondaryBtnText}>Coller l’INCI</Text>
-            </Pressable>
-            <Pressable style={styles.secondaryBtn} onPress={resume}>
-              <Text style={styles.secondaryBtnText}>Rescanner</Text>
-            </Pressable>
+        <Animated.View
+          key={state.barcode}
+          entering={FadeInDown.duration(400).springify().damping(16)}
+          style={styles.registeredBox}
+        >
+          <View style={styles.registeredHeader}>
+            <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+            <Text style={styles.registeredText}>
+              Ce produit a été enregistré et sera référencé très prochainement.
+            </Text>
           </View>
-        </View>
+          <Pressable style={[styles.secondaryBtn, { marginTop: spacing.md }]} onPress={resume} hitSlop={8}>
+            <Text style={styles.secondaryBtnText}>Scanner un autre code</Text>
+          </Pressable>
+        </Animated.View>
       )}
 
       {/* Edge Function indisponible (non déployée / erreur) */}
@@ -310,6 +309,20 @@ const styles = StyleSheet.create({
   },
   resultText: { ...typography.smallSemiBold, color: colors.ink },
   resultSub: { ...typography.xs, color: colors.inkMuted, marginTop: spacing.xs },
+  registeredBox: {
+    marginTop: spacing.base,
+    backgroundColor: colors.successSoft,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.success,
+    padding: spacing.base,
+  },
+  registeredHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  registeredText: { ...typography.smallSemiBold, color: colors.success, flex: 1 },
   btnRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
   primaryBtn: {
     backgroundColor: colors.rose,

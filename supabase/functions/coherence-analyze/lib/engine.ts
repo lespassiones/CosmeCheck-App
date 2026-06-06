@@ -76,17 +76,17 @@ function isInTrace(item: AnalyseItem): boolean {
 }
 
 function deriveVerdict({
-  documentedFound,
-  documentedFoundWellDosed,
-  marketingFound,
+  confirmingFound,
+  confirmingWellDosed,
 }: {
-  documentedFound: number;
-  documentedFoundWellDosed: number;
-  marketingFound: number;
+  confirmingFound: number;
+  confirmingWellDosed: number;
 }): CoherenceVerdict {
-  if (documentedFoundWellDosed > 0) return "tenue";
-  if (documentedFound > 0) return "partielle";
-  if (marketingFound > 0) return "marketing";
+  // Tout ingrédient confirmant (actif documenté OU cosmétique/sensoriel)
+  // compte. Bien placé → tenue ; uniquement en trace → partielle ; aucun →
+  // non démontré. Le verdict "marketing" n'est plus produit.
+  if (confirmingWellDosed > 0) return "tenue";
+  if (confirmingFound > 0) return "partielle";
   return "non_demontree";
 }
 
@@ -232,23 +232,24 @@ export function resolvePromise(
         name: active.name,
         slug: item.slug,
         position: item.position,
+        inTrace: isInTrace(item),
         note: "effet visuel/sensoriel",
       });
     }
   }
 
-  const wellDosed = foundDocumented.filter((f) => !f.inTrace).length;
-  const inTrace = foundDocumented.filter((f) => f.inTrace).length;
+  // Les ingrédients cosmétiques/sensoriels comptent comme confirmation.
+  const wellDosed =
+    foundDocumented.filter((f) => !f.inTrace).length
+    + foundCosmetic.filter((c) => !c.inTrace).length;
+  const inTrace =
+    foundDocumented.filter((f) => f.inTrace).length
+    + foundCosmetic.filter((c) => c.inTrace).length;
   const verdict = deriveVerdict({
-    documentedFound: foundDocumented.length,
-    documentedFoundWellDosed: wellDosed,
-    marketingFound: foundCosmetic.length,
+    confirmingFound: foundDocumented.length + foundCosmetic.length,
+    confirmingWellDosed: wellDosed,
   });
-  const score = unifiedScore({
-    wellDosed,
-    inTrace,
-    cosmetic: foundCosmetic.length,
-  });
+  const score = unifiedScore({ wellDosed, inTrace, cosmetic: 0 });
 
   return {
     slug: cat.slug,
@@ -358,6 +359,7 @@ export function resolveOpenPromise(
         name: item.name ?? match.item_name,
         slug: item.slug,
         position: item.position,
+        inTrace: isInTrace(item),
         note: match.reason.trim().slice(0, 80) || "effet visuel/sensoriel",
       });
     } else {
@@ -370,8 +372,13 @@ export function resolveOpenPromise(
     }
   }
 
-  const wellDosed = foundDocumented.filter((f) => !f.inTrace).length;
-  const trace = foundDocumented.filter((f) => f.inTrace).length;
+  // Documenté + cosmétique : tout ingrédient confirmant compte.
+  const wellDosed =
+    foundDocumented.filter((f) => !f.inTrace).length
+    + foundCosmetic.filter((c) => !c.inTrace).length;
+  const trace =
+    foundDocumented.filter((f) => f.inTrace).length
+    + foundCosmetic.filter((c) => c.inTrace).length;
 
   // Règle d'absence : si le label commence par "sans " et qu'aucun ingrédient
   // correspondant n'a été trouvé dans la formule (ni matches ni missing), la
@@ -392,15 +399,14 @@ export function resolveOpenPromise(
   }
 
   const verdict = deriveVerdict({
-    documentedFound: foundDocumented.length,
-    documentedFoundWellDosed: wellDosed,
-    marketingFound: foundCosmetic.length,
+    confirmingFound: foundDocumented.length + foundCosmetic.length,
+    confirmingWellDosed: wellDosed,
   });
 
   const score = unifiedScore({
     wellDosed,
     inTrace: trace,
-    cosmetic: foundCosmetic.length,
+    cosmetic: 0,
   });
 
   return {

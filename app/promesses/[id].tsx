@@ -28,7 +28,6 @@ import { PromisesBarChart } from '@/components/promesses/PromisesBarChart'
 import { CoherenceTable } from '@/components/promesses/CoherenceTable'
 import { ConclusionCard } from '@/components/promesses/ConclusionCard'
 import { InferredPromisesCard } from '@/components/promesses/InferredPromisesCard'
-import { OutOfScopePromisesCard } from '@/components/promesses/OutOfScopePromisesCard'
 import { IngredientsPositionChart } from '@/components/promesses/IngredientsPositionChart'
 import { DescriptionKeywordsCard } from '@/components/promesses/DescriptionKeywordsCard'
 import { MarketingIndexCard } from '@/components/promesses/MarketingIndexCard'
@@ -181,13 +180,6 @@ const PromesseDetailScreen: FC = () => {
               ) : null,
               state.result.promises.some((p) => p.inferred) ? (
                 <InferredPromisesCard key="inferred" promises={state.result.promises} />
-              ) : null,
-              state.result.outOfScope && state.result.outOfScope.length > 0 ? (
-                <OutOfScopePromisesCard
-                  key="oos"
-                  items={state.result.outOfScope}
-                  productType={state.result.productType}
-                />
               ) : null,
               state.result.positionSnapshot.thresholdPos !== null &&
               state.result.positionSnapshot.totalPositions > 0 ? (

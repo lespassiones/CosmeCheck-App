@@ -67,6 +67,8 @@ export type CoherencePromise = {
     name: string;
     slug: string | null;
     position: number;
+    /** True if past the fragrance/preservative threshold (≤1 %). */
+    inTrace: boolean;
     note: string;
   }[];
   /**

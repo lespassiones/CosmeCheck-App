@@ -113,7 +113,7 @@ export const colors = {
     tenue:         { DEFAULT: '#10B981', soft: '#ECFDF5', ring: '#A7F3D0', text: '#047857' },
     partielle:     { DEFAULT: '#FBBF24', soft: '#FFFBEB', ring: '#FDE68A', text: '#B45309' },
     marketing:     { DEFAULT: '#FB923C', soft: '#FFF7ED', ring: '#FED7AA', text: '#C2410C' },
-    non_demontree: { DEFAULT: '#F43F5E', soft: '#FFF1F2', ring: '#FECDD3', text: '#BE123C' },
+    non_demontree: { DEFAULT: '#EF4444', soft: '#FEF2F2', ring: '#FECACA', text: '#B91C1C' },
     contredite:    { DEFAULT: '#DC2626', soft: '#FEF2F2', ring: '#FCA5A5', text: '#991B1B' },
   },
 
