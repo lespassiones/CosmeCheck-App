@@ -1,26 +1,15 @@
 /**
  * RoutineProductCard — carte produit de la routine.
  *
- * Port mobile de RoutineProductRow (web). Affiche : mini-blob de répartition
- * couleur, nom du produit, sélecteur de fréquence 3 segments
- * (Quotidien / Hebdo / Mensuel → useRoutine().updateFrequency, optimiste), et
- * un swipe-to-delete (react-native-gesture-handler) avec confirmation.
- *
- * - Tap sur la carte → onPress(analysisId) (détail analyse).
- * - Swipe vers la gauche → révèle un bouton « Supprimer » rouge ; tap → onDelete.
- * - Changement de segment → onFrequencyChange(itemId, freq).
+ * Layout : [blob] [Nom (flex)] [Fréquence ▼] [🗑️]
+ * - Tap sur blob/nom → onPress(analysisId).
+ * - Tap sur pill fréquence → dropdown inline (Quotidien / Hebdo / Mensuel).
+ * - Tap sur poubelle → onDelete(itemId, name) (confirmation gérée par le parent).
  */
 
-import { memo, useCallback } from 'react'
+import { memo, useCallback, useState } from 'react'
 import { StyleSheet, Text, View, Pressable } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  runOnJS,
-} from 'react-native-reanimated'
 import * as Haptics from 'expo-haptics'
 
 import { colors } from '@/constants/colors'
@@ -28,8 +17,6 @@ import { spacing, radius } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 import type { RoutineFrequency } from '@/lib/supabase/types'
 import { IngredientBlob, type BlobCounts } from '@/components/design/IngredientBlob'
-
-const ACTION_WIDTH = 84
 
 const FREQ_OPTIONS: { value: RoutineFrequency; label: string }[] = [
   { value: 'daily', label: 'Quotidien' },
@@ -58,182 +45,197 @@ export const RoutineProductCard = memo(function RoutineProductCard({
   onDelete,
   onFrequencyChange,
 }: Props) {
-  const translateX = useSharedValue(0)
-  const opened = useSharedValue(false)
+  const [open, setOpen] = useState(false)
+  const currentLabel = FREQ_OPTIONS.find((o) => o.value === frequency)?.label ?? 'Quotidien'
 
-  const triggerDelete = useCallback(() => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {})
-    onDelete(itemId, name)
-  }, [itemId, name, onDelete])
-
-  const closeSwipe = useCallback(() => {
-    translateX.value = withSpring(0, { damping: 20 })
-    opened.value = false
-  }, [translateX, opened])
-
-  const pan = Gesture.Pan()
-    .activeOffsetX([-12, 12])
-    .failOffsetY([-12, 12])
-    .onUpdate((e) => {
-      const base = opened.value ? -ACTION_WIDTH : 0
-      const next = base + e.translationX
-      translateX.value = Math.min(0, Math.max(-ACTION_WIDTH - 24, next))
-    })
-    .onEnd((e) => {
-      // Swipe franc vers la gauche → suppression directe.
-      if (e.translationX < -ACTION_WIDTH * 1.4) {
-        translateX.value = withSpring(-ACTION_WIDTH, { damping: 20 })
-        opened.value = true
-        runOnJS(triggerDelete)()
-        return
+  const selectFreq = useCallback(
+    (value: RoutineFrequency) => {
+      setOpen(false)
+      if (value !== frequency) {
+        Haptics.selectionAsync().catch(() => {})
+        onFrequencyChange(itemId, value)
       }
-      const shouldOpen = translateX.value < -ACTION_WIDTH / 2
-      translateX.value = withSpring(shouldOpen ? -ACTION_WIDTH : 0, { damping: 20 })
-      opened.value = shouldOpen
-    })
-
-  const cardStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
-  }))
+    },
+    [frequency, itemId, onFrequencyChange],
+  )
 
   return (
-    <View style={styles.wrap}>
-      {/* Action de suppression révélée sous la carte */}
-      <View style={styles.actionLayer}>
-        <Pressable
-          style={styles.deleteBtn}
-          onPress={() => {
-            closeSwipe()
-            triggerDelete()
-          }}
-          accessibilityLabel={`Supprimer ${name}`}
-        >
-          <Ionicons name="trash-outline" size={22} color="#FFFFFF" />
-          <Text style={styles.deleteText}>Retirer</Text>
+    // zIndex élevé quand le dropdown est ouvert pour passer au-dessus des cartes suivantes
+    <View style={[styles.wrap, open && styles.wrapOpen]}>
+      <View style={styles.card}>
+        {/* Blob — tap → détail analyse */}
+        <Pressable onPress={() => onPress(analysisId)} style={styles.blobWrap}>
+          {counts ? (
+            <IngredientBlob counts={counts} variant="sm" width={44} />
+          ) : (
+            <View style={styles.blobPlaceholder}>
+              <Ionicons name="flask-outline" size={16} color={colors.inkLight} />
+            </View>
+          )}
         </Pressable>
-      </View>
 
-      <GestureDetector gesture={pan}>
-        <Animated.View style={[styles.card, cardStyle]}>
-          <Pressable onPress={() => onPress(analysisId)} style={styles.topRow}>
-            {counts ? (
-              <View style={styles.blobWrap}>
-                <IngredientBlob counts={counts} variant="sm" width={56} />
-              </View>
-            ) : (
-              <View style={styles.blobPlaceholder}>
-                <Ionicons name="flask-outline" size={18} color={colors.inkLight} />
-              </View>
-            )}
-            <Text style={styles.name} numberOfLines={2}>
-              {name}
-            </Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.inkLight} />
+        {/* Nom — tap → détail analyse */}
+        <Pressable onPress={() => onPress(analysisId)} style={styles.nameWrap}>
+          <Text style={styles.name} numberOfLines={1}>{name}</Text>
+        </Pressable>
+
+        {/* Pill fréquence + dropdown */}
+        <View style={styles.freqContainer}>
+          <Pressable
+            onPress={() => setOpen((o) => !o)}
+            style={[styles.freqPill, open && styles.freqPillOpen]}
+          >
+            <Text style={styles.freqPillText}>{currentLabel}</Text>
+            <Ionicons
+              name={open ? 'chevron-up' : 'chevron-down'}
+              size={11}
+              color={colors.inkMuted}
+            />
           </Pressable>
 
-          <View style={styles.freqRow}>
-            {FREQ_OPTIONS.map((opt) => {
-              const active = opt.value === frequency
-              return (
-                <Pressable
-                  key={opt.value}
-                  onPress={() => {
-                    if (!active) {
-                      Haptics.selectionAsync().catch(() => {})
-                      onFrequencyChange(itemId, opt.value)
-                    }
-                  }}
-                  style={[styles.freqSeg, active && styles.freqSegActive]}
-                >
-                  <Text style={[styles.freqSegText, active && styles.freqSegTextActive]}>
-                    {opt.label}
-                  </Text>
-                </Pressable>
-              )
-            })}
-          </View>
-        </Animated.View>
-      </GestureDetector>
+          {open && (
+            <View style={styles.dropdown}>
+              {FREQ_OPTIONS.map((opt, i) => {
+                const active = opt.value === frequency
+                return (
+                  <Pressable
+                    key={opt.value}
+                    onPress={() => selectFreq(opt.value)}
+                    style={[
+                      styles.dropdownItem,
+                      i < FREQ_OPTIONS.length - 1 && styles.dropdownItemBorder,
+                      active && styles.dropdownItemActive,
+                    ]}
+                  >
+                    <Text style={[styles.dropdownItemText, active && styles.dropdownItemTextActive]}>
+                      {opt.label}
+                    </Text>
+                    {active && (
+                      <Ionicons name="checkmark" size={14} color={colors.rose} />
+                    )}
+                  </Pressable>
+                )
+              })}
+            </View>
+          )}
+        </View>
+
+        {/* Poubelle */}
+        <Pressable
+          onPress={() => onDelete(itemId, name)}
+          style={styles.trashBtn}
+          hitSlop={8}
+          accessibilityLabel={`Retirer ${name}`}
+        >
+          <Ionicons name="trash-outline" size={18} color={colors.rose} />
+        </Pressable>
+      </View>
     </View>
   )
 })
 
 const styles = StyleSheet.create({
   wrap: {
-    position: 'relative',
-    borderRadius: radius.lg,
-    overflow: 'hidden',
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    elevation: 6,
+    zIndex: 1,
   },
-  actionLayer: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
-  deleteBtn: {
-    width: ACTION_WIDTH,
-    height: '100%',
-    backgroundColor: '#DC2626',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  deleteText: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 11,
-    color: '#FFFFFF',
+  wrapOpen: {
+    zIndex: 10,
   },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
-  topRow: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  blobWrap: { width: 56 },
+  blobWrap: {
+    width: 44,
+    alignItems: 'center',
+  },
   blobPlaceholder: {
-    width: 56,
-    height: 34,
+    width: 44,
+    height: 30,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  name: {
+  nameWrap: {
     flex: 1,
+  },
+  name: {
     fontFamily: fontFamilies.semiBold,
     fontSize: 14,
     color: colors.ink,
   },
-  freqRow: {
+  freqContainer: {
+    position: 'relative',
+  },
+  freqPill: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: colors.gray100,
     borderRadius: radius.full,
-    padding: 3,
-    gap: 3,
-  },
-  freqSeg: {
-    flex: 1,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 6,
-    borderRadius: radius.full,
-    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
-  freqSegActive: {
-    backgroundColor: colors.accentSoft,
+  freqPillOpen: {
+    borderColor: colors.border,
+    backgroundColor: '#FFFFFF',
   },
-  freqSegText: {
+  freqPillText: {
     fontFamily: fontFamilies.semiBold,
-    fontSize: 11,
-    color: colors.inkMuted,
+    fontSize: 12,
+    color: colors.ink,
   },
-  freqSegTextActive: {
-    color: colors.accent,
+  dropdown: {
+    position: 'absolute',
+    top: 34,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 10,
+    minWidth: 120,
+    overflow: 'hidden',
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 10,
+  },
+  dropdownItemBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  dropdownItemActive: {
+    backgroundColor: colors.gray50,
+  },
+  dropdownItemText: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 13,
+    color: colors.ink,
+  },
+  dropdownItemTextActive: {
+    fontFamily: fontFamilies.semiBold,
+    color: colors.rose,
+  },
+  trashBtn: {
+    padding: 4,
   },
 })

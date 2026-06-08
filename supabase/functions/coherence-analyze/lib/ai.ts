@@ -47,7 +47,7 @@ const UNVERIFIABLE_REASONS = [
 
 const PRODUCT_TYPE_GUIDANCE: Record<ProductType, string> = {
   cheveux:
-    "Le produit agit sur la fibre capillaire et le cuir chevelu. Promesses pertinentes : hydratation, démêlage, brillance, anti-frisottis, anti-chute, densification, anti-pellicules, fixation/coiffage, protection thermique, fortification de la fibre. Le cheveu mort ne contient ni collagène ni cellules vivantes - toute promesse 'régénère les cellules du cheveu' / 'collagène capillaire' / 'jeunesse cellulaire' / 'anti-âge cellulaire' est HORS-SUJET biologiquement. Le cuir chevelu peut être apaisé / nourri (peau).",
+    "Le produit agit sur la fibre capillaire et le cuir chevelu. Promesses pertinentes : hydratation, démêlage, brillance, anti-frisottis, anti-chute, densification, anti-pellicules, fixation/coiffage, protection thermique, fortification de la fibre. Le cheveu mort ne contient ni collagène ni cellules vivantes - toute promesse 'régénère les cellules du cheveu' / 'collagène capillaire' / 'jeunesse cellulaire' / 'anti-âge cellulaire' est HORS-SUJET biologiquement. Le cuir chevelu peut être apaisé / nourri (peau). IMPORTANT : 'protection contre la chaleur / protection thermique' est une PROMESSE D'EFFET valide (catégorie 'autre', label 'Protection thermique') — la mention d'une température (ex: 'jusqu'à 450°F / 232°C') est une SPÉCIFICATION de la promesse, PAS une raison de la classer unverifiable ou out_of_scope.",
   peau_visage:
     "Le produit agit sur la peau du visage. Promesses pertinentes : hydratation, apaisement, anti-âge, éclat, exfoliation, raffermissement, anti-tache, anti-pores, anti-acné, protection UV, ET aussi toutes les promesses qui décrivent un état de la peau visé par la formule : douceur, souplesse, confort cutané, beauté, lumière du teint, peau lisse, peau repulpée, peau saine, peau régénérée, nutrition. HORS-SUJET : promesses capillaires (démêlage, anti-frisottis…), olfactives (tenue parfum), dentaires.",
   peau_corps:
@@ -140,6 +140,11 @@ Si une phrase ne contient aucun de (a), (b), (c) → pas une promesse, passe.
 2. CLAIMS "SANS X" SONT DES PROMESSES VÉRIFIABLES :
    "sans sulfate", "sans paraben", "sans silicone", "sans huile minérale", "sans colorant", "sans parfum" → catégorie absence_* correspondante. Ce sont des promesses, PAS des unverifiable.
 
+2bis. RÈGLE ABSOLUE "sans X" — ANTI-HALLUCINATION :
+   N'extrais une promesse d'absence QUE si le mot exact "sans", "0 %", "free of", "exempt de" (ou équivalent direct) est LITTÉRALEMENT présent dans le texte fourni pour cet ingrédient précis.
+   Si le texte ne le mentionne PAS → n'invente JAMAIS une promesse "sans X", même si tu connais la marque, même si le produit est probablement sans cet ingrédient, même si la formule semble naturelle.
+   Exemple interdit : le texte dit "huile légère et concentrée" → tu n'extrais PAS "sans silicone". Jamais.
+
 3. promesse vs unverifiable :
    ✓ EST UNE PROMESSE = un EFFET attendu sur la peau/cheveux/etc. OU une absence d'ingrédient. Toute phrase qui décrit un état de la peau ou des cheveux visé par le produit ("rend les mains douces", "laisse la peau souple", "donne du confort", "embellit le teint", "redonne de l'éclat") est une PROMESSE - même si le verbe est ambigu. Si l'utilisateur peut dire "je vérifie si la formule contient un actif qui fait ça", c'est une promesse.
    ✗ EST UNVERIFIABLE = ni effet sur la peau/cheveux ni absence d'ingrédient :
@@ -155,6 +160,10 @@ Si une phrase ne contient aucun de (a), (b), (c) → pas une promesse, passe.
 5. EXCERPT : verbatim exact (ou fragment fidèle), max 80 caractères.
 
 6. La description peut être en français ou en anglais.
+
+7. EFFETS DISTINCTS — N'INFÈRE PAS un effet à partir d'un autre :
+   "douceur" ≠ "démêlage" : ce sont deux effets distincts. Si le texte dit "douceur" sans mentionner "démêlage", extrais "Douceur capillaire" (autre), PAS "Démêlage". De même : "brillance" ≠ "fortification", "légèreté" ≠ "sans silicone".
+   Règle générale : n'extrais QUE ce que le texte dit EXPLICITEMENT ou implique DIRECTEMENT (ex: "fixe les boucles" → "Fixation des boucles"). Ne construis pas de promesse par déduction à plusieurs étapes.
 
 ═══ EXEMPLE 1 (cheveux, claim pertinent) ═══
 

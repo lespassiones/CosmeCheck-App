@@ -64,9 +64,9 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
 /** Couleur de l'anneau selon le verdict %. */
 function ringColor(pct: number): string {
   if (pct >= 80) return '#16A34A' // vert
-  if (pct >= 60) return '#F97316' // orange
-  if (pct >= 35) return '#F59E0B' // ambre
-  return '#F43F5E' // rose
+  if (pct >= 60) return '#FBBF24' // jaune
+  if (pct >= 35) return '#F97316' // orange
+  return '#F43F5E' // rouge
 }
 
 const PromesseRing: FC<{ pct: number }> = ({ pct }) => {
