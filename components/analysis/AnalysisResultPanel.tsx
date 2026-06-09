@@ -40,6 +40,7 @@ import { radius, spacing } from '@/constants/spacing'
 import { getEuFragranceAllergen } from '@/lib/euAllergens'
 import {
   getColorRatingFromScore,
+  normalizeColor,
   toneToColorRating,
   type AnalyseItem,
   type AnalyseResponse,
@@ -209,14 +210,34 @@ export const AnalysisResultPanel: FC<Props> = ({
     return found
   }, [result.euFragranceAllergens, result.items])
 
+  // Couleur résolue d'un ingrédient : colorRating prioritaire, fallback sur
+  // dbColorRating (ingrédient trouvé en DB via un match "suggestion").
+  // Cohérent avec le fallback déjà utilisé dans ProductRow pour l'affichage.
+  const resolvedColor = useCallback(
+    (i: AnalyseItem): ColorRating | null =>
+      normalizeColor((i.colorRating ?? i.dbColorRating) as string | null),
+    [],
+  )
+
+  // Compteurs dérivés des items (source de vérité unique avec resolvedColor).
+  // Remplace result.counts pour les tabs et le filtre, ce qui évite
+  // l'incohérence entre la couleur affichée et la catégorie comptée.
+  const itemCounts = useMemo(() => {
+    const c = { vert: 0, jaune: 0, orange: 0, rouge: 0, unknown: 0 }
+    for (const item of result.items) {
+      const rc = resolvedColor(item)
+      if (!rc) c.unknown++
+      else c[rc]++
+    }
+    return c
+  }, [result.items, resolvedColor])
+
   // Liste filtrée pour la section « Liste des ingrédients ».
   const filteredItems = useMemo(() => {
     if (filter === 'all') return result.items
-    if (filter === 'unknown') return result.items.filter((i) => i.colorRating == null)
-    return result.items.filter(
-      (i) => (i.colorRating ?? '').toLowerCase() === filter,
-    )
-  }, [result.items, filter])
+    if (filter === 'unknown') return result.items.filter((i) => resolvedColor(i) == null)
+    return result.items.filter((i) => resolvedColor(i) === filter)
+  }, [result.items, filter, resolvedColor])
 
   // ── Scroll-to-item depuis le spectre ────────────────────────────────────
   // On mémorise le Y de chaque ligne (relatif au panel) via onLayout, et la
@@ -247,7 +268,7 @@ export const AnalysisResultPanel: FC<Props> = ({
 
   const counts = result.counts
   const tabs: TabKey[] = ['all', 'vert', 'jaune', 'orange', 'rouge']
-  if (counts.unknown > 0) tabs.push('unknown')
+  if (itemCounts.unknown > 0) tabs.push('unknown')
 
   return (
     <View style={styles.root}>
@@ -378,7 +399,7 @@ export const AnalysisResultPanel: FC<Props> = ({
             <View style={styles.tabs}>
               {tabs.map((t) => {
                 const active = t === filter
-                const count = tabCount(counts, t)
+                const count = tabCount(counts, t, itemCounts)
                 return (
                   <FilterChip
                     key={t}
@@ -486,20 +507,19 @@ function FilterChip({
   )
 }
 
-function tabCount(counts: AnalyseResponse['counts'], t: TabKey): number {
+function tabCount(
+  counts: AnalyseResponse['counts'],
+  t: TabKey,
+  derived: { vert: number; jaune: number; orange: number; rouge: number; unknown: number },
+): number {
   switch (t) {
-    case 'all':
-      return counts.total
-    case 'vert':
-      return counts.vert
-    case 'jaune':
-      return counts.jaune
-    case 'orange':
-      return counts.orange
-    case 'rouge':
-      return counts.rouge
-    case 'unknown':
-      return counts.unknown
+    case 'all':     return counts.total
+    // Couleurs et "non reconnu" : source dérivée (cohérente avec resolvedColor)
+    case 'vert':    return derived.vert
+    case 'jaune':   return derived.jaune
+    case 'orange':  return derived.orange
+    case 'rouge':   return derived.rouge
+    case 'unknown': return derived.unknown
   }
 }
 

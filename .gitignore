@@ -1,3 +1,6 @@
+# MCP config (contains API tokens — ne jamais commiter)
+.mcp.json
+
 # dependencies
 node_modules/
 

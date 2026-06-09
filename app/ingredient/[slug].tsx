@@ -293,7 +293,7 @@ const ReadyView: FC<{ ing: IngredientDetail; products: IngredientProductHit[] }>
             </StatCard>
 
             {hasPrevalence ? (
-              <StatCard label="Prévalence" cta="Méthodologie" href={HELP_URL}>
+              <StatCard label="Prévalence">
                 <Text style={styles.statNumber}>
                   {Number(ing.prevalence_pct).toFixed(2)}
                   <Text style={styles.statPercent}> %</Text>
