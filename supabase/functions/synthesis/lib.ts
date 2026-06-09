@@ -468,7 +468,7 @@ export type SynthesisInput = {
   restrictionsBlock?: string | null;
 };
 
-const SYNTH_PROMPT_VERSION = 11;
+const SYNTH_PROMPT_VERSION = 12;
 
 async function makeCacheKey(input: SynthesisInput): Promise<string> {
   const list = input.enriched
@@ -554,14 +554,20 @@ function buildPrompt(input: SynthesisInput): { system: string; user: string } {
     return `L'utilisateur n'a renseigné ni profil ni restrictions. OUVERTURE OBLIGATOIRE : un hook factuel et concret sur le type de produit ou son caractère, basé sur les 3 premiers ingrédients. Exemple : "Un déo en spray bien classique." OU "Une formule légère dominée par l'eau et la glycérine." (pas générique, pas marketing).`;
   })();
 
+  const restrictionCount = restrictedIngredients.length;
+  const isLowScore = input.score < 13;
+
   const closingRule = (() => {
     if (hasMatches) {
-      return `CLOSING (DERNIÈRE PUCE, obligatoire) : recommandation franche personnalisée qui s'appuie sur la/les restriction(s) matchée(s) et sur le profil si présent. Tu PEUX dire "vise plutôt", "à utiliser de temps en temps", "pour toi, ya mieux ailleurs", "à éviter au quotidien", "à toi de voir si tu veux quelque chose de plus sobre". Commence la puce par "- Pour toi" ou "- Au final" ou "- Franchement".`;
+      if (restrictionCount >= 2 || isLowScore) {
+        return `CLOSING (DERNIÈRE PUCE, obligatoire) : conseil actionnable et constructif basé sur les restrictions matchées. Oriente vers ce qu'il faut chercher pour remplacer ce produit : quelle famille d'ingrédients éviter dans la recherche, quel label regarder sur l'emballage (ex : "sans parfum de synthèse", "hypoallergénique", "sans conservateurs"), ou quel type de formule privilégier pour ce profil. Appuie-toi sur les ingrédients matchés pour rendre le conseil concret et personnalisé. INTERDIT : ne jamais dire "ya mieux ailleurs", "évite ce produit", "va voir ailleurs" ni aucune formulation orientant vers une alternative externe. Commence par "- Pour toi" ou "- Au final".`;
+      }
+      return `CLOSING (DERNIÈRE PUCE, obligatoire) : nuance l'usage de manière constructive. Si la restriction matchée est mineure ou si le score est correct, indique dans quelles conditions ce produit peut convenir (ponctuellement, zone corporelle précise, fréquence réduite) ET ce qu'il faudrait vérifier sur la prochaine formule pour éviter ce point. Reste concret et utile, pas alarmiste. INTERDIT : ne jamais dire "ya mieux ailleurs", "évite ce produit" ni orienter vers une alternative externe. Commence par "- Pour toi" ou "- Au final".`;
     }
     if (hasRestrictions || hasProfile) {
-      return `CLOSING (DERNIÈRE PUCE, obligatoire) : recommandation douce personnalisée qui relie le verdict de la formule au profil/restrictions de l'utilisateur. Tu PEUX dire "pour toi", "vise plutôt", "à toi de voir", "au final pour ton profil". Commence par "- Pour toi" ou "- Au final".`;
+      return `CLOSING (DERNIÈRE PUCE, obligatoire) : conseil pratique positif qui relie le verdict de la formule au profil. Donne une info utile sur l'usage ou un point à surveiller à l'avenir pour ce type de produit avec ce profil de peau/restrictions. Reste concret. INTERDIT : ne jamais dire "ya mieux ailleurs" ni orienter vers une alternative externe. Commence par "- Pour toi" ou "- Au final".`;
     }
-    return `CLOSING (DERNIÈRE PUCE, obligatoire) : 1 phrase de prise de recul factuelle SUIVIE d'un soft nudge à compléter le profil. Exemple : "- Au final, c'est un anti-transpirant efficace mais chargé en parfum. Tu peux remplir ton profil ou tes restrictions dans l'app si tu veux qu'on te dise précisément si ce produit te va."`;
+    return `CLOSING (DERNIÈRE PUCE, obligatoire) : 1 phrase de prise de recul factuelle sur la formule SUIVIE d'un soft nudge à compléter le profil dans l'app, pour bénéficier d'une analyse encore plus personnalisée. Exemple : "- Au final, un anti-transpirant efficace mais chargé en parfum. Tu peux renseigner ton profil ou tes restrictions dans l'app pour savoir précisément si ce produit te convient." INTERDIT : ne jamais dire "ya mieux ailleurs".`;
   })();
 
   const user = `Rédige la synthèse de l'analyse INCI ci-dessous en suivant la STRUCTURE imposée.
