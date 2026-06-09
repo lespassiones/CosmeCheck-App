@@ -30,6 +30,7 @@ import {
 } from 'react-native'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
@@ -133,11 +134,17 @@ const _nav = {
   hasMore:  false,
 }
 
+// Hauteur approximative de la tab bar (hors safe area).
+const TAB_BAR_HEIGHT = 68
+
 export const ProductSearchMode: FC<Props> = ({
   onInciReady,
   onFallbackToManual,
   disabled = false,
 }) => {
+  const insets = useSafeAreaInsets()
+  // Padding bas = tab bar + safe area bottom (home indicator Android/iOS).
+  const listBottomPad = TAB_BAR_HEIGHT + insets.bottom
   // ── Recherche ─────────────────────────────────────────────────────────
   const [query, setQuery]                 = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
@@ -147,10 +154,10 @@ export const ProductSearchMode: FC<Props> = ({
   const [searched, setSearched]           = useState(false)
 
   // ── Navigation arbre catégories ───────────────────────────────────────
-  // path = liste de noms de nœuds depuis la racine jusqu'au nœud courant.
-  // Ex : [] = racine, ['Coiffure'] = dans Coiffure, ['Coiffure','Shampooing'] = dans Shampooing.
-  // Restauré depuis _nav au montage pour préserver la position après retour.
-  const [path, setPath] = useState<string[]>(() => _nav.path)
+  // Toujours démarrer à la racine au montage (fresh open = 12 catégories).
+  // La position est naturellement préservée pendant une session grâce à
+  // router.push (l'écran scan reste dans la pile pendant l'analyse).
+  const [path, setPath] = useState<string[]>([])
 
   // Feuille courante → slug DB pour le fetch produits.
   const leafSlug = useMemo(
@@ -165,21 +172,13 @@ export const ProductSearchMode: FC<Props> = ({
   )
 
   // ── Browse produits (feuille) ─────────────────────────────────────────
-  // Restaurés depuis _nav si on revient d'une analyse → pas de re-fetch.
-  const [browseProducts, setBrowseProducts]   = useState<BrowseRow[]>(() => _nav.products)
-  const [browseOffset, setBrowseOffset]       = useState(() => _nav.offset)
-  const [browseHasMore, setBrowseHasMore]     = useState(() => _nav.hasMore)
+  const [browseProducts, setBrowseProducts]   = useState<BrowseRow[]>([])
+  const [browseOffset, setBrowseOffset]       = useState(0)
+  const [browseHasMore, setBrowseHasMore]     = useState(false)
   const [browseLoading, setBrowseLoading]     = useState(false)
   const [browseLoadingMore, setBrowseLoadingMore] = useState(false)
 
-  // Indique si on vient de restaurer _nav → on saute le fetch initial de la feuille.
-  const skipInitialFetchRef = useRef(_nav.products.length > 0 && _nav.path.length > 0)
-
-  // Sync _nav à chaque changement d'état de navigation.
-  useEffect(() => { _nav.path = path },           [path])
-  useEffect(() => { _nav.products = browseProducts }, [browseProducts])
-  useEffect(() => { _nav.offset  = browseOffset },    [browseOffset])
-  useEffect(() => { _nav.hasMore = browseHasMore },   [browseHasMore])
+  const skipInitialFetchRef = useRef(false)
 
   // Résolution INCI lazy
   const [resolvingEan, setResolvingEan]       = useState<string | null>(null)
@@ -274,11 +273,6 @@ export const ProductSearchMode: FC<Props> = ({
       setBrowseProducts([])
       setBrowseOffset(0)
       setBrowseHasMore(false)
-      return
-    }
-    // Restauration depuis _nav : produits déjà en mémoire, pas de re-fetch.
-    if (skipInitialFetchRef.current) {
-      skipInitialFetchRef.current = false
       return
     }
     let cancelled = false
@@ -414,13 +408,6 @@ export const ProductSearchMode: FC<Props> = ({
 
   /** Remonte à un niveau précis (0 = racine, 1 = L1, etc.). */
   const goToLevel = useCallback((level: number) => {
-    if (level === 0) {
-      // Retour à la racine → on efface _nav pour repartir propre
-      _nav.path = []
-      _nav.products = []
-      _nav.offset = 0
-      _nav.hasMore = false
-    }
     setPath((prev) => prev.slice(0, level))
   }, [])
 
@@ -480,7 +467,7 @@ export const ProductSearchMode: FC<Props> = ({
         )}
         <ScrollView
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: listBottomPad }]}
           showsVerticalScrollIndicator={false}
         >
           {searchResults.length > 0 && (
@@ -568,7 +555,7 @@ export const ProductSearchMode: FC<Props> = ({
           <FlatList
             data={browseProducts}
             keyExtractor={(item) => item.ean}
-            contentContainerStyle={styles.list}
+            contentContainerStyle={[styles.list, { paddingBottom: listBottomPad }]}
             keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => {
               const busy = resolvingEan === item.ean
@@ -615,7 +602,7 @@ export const ProductSearchMode: FC<Props> = ({
           data={currentChildren as CategoryNode[]}
           keyExtractor={(item) => item.name}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: listBottomPad }]}
           renderItem={({ item }) => {
             const isLeaf = !item.children || item.children.length === 0
             return (
@@ -650,7 +637,7 @@ export const ProductSearchMode: FC<Props> = ({
         data={CATEGORIES as unknown as CategoryNode[]}
         keyExtractor={(c) => c.name}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, { paddingBottom: listBottomPad }]}
         renderItem={({ item: cat }) => (
           <Pressable
             style={styles.catRow}
@@ -896,7 +883,7 @@ const styles = StyleSheet.create({
   },
   errorText: { ...typography.xs, color: colors.roseDeep },
   errorCta:  { ...typography.xsSemiBold, color: colors.roseDeep },
-  list: { paddingTop: spacing.md, paddingBottom: spacing.xl, gap: spacing.sm },
+  list: { paddingTop: spacing.md, gap: spacing.sm },
   loadingWrap:   { paddingVertical: spacing.xl, alignItems: 'center' },
   loadingFooter: { paddingVertical: spacing.base, alignItems: 'center' },
   empty: { alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.sm },

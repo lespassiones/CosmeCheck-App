@@ -563,12 +563,67 @@ export function nameToSlug(name: string): string {
 }
 
 /**
+ * Correctifs : certains slugs générés par nameToSlug diffèrent du slug réel
+ * en BD (le pipeline d'import avait des règles de normalisation légèrement
+ * différentes). La map KEY = slug généré, VALUE = slug réel en BD.
+ */
+const LEAF_SLUG_OVERRIDES: Record<string, string> = {
+  // Hygiène dentaire
+  'anti-taches-et-blanchiment-dentaire':  'anti-taches-et-blanchiment',
+
+  // Coiffure / soin capillaire
+  'soin-anti-chute-des-cheveux':          'soin-anti-chute',
+  'soin-capillaire-anti-frisottis':       'soin-anti-frisottis',
+  'soin-pour-cheveux-boucles':            'soin-cheveux-boucles',
+  'soin-pour-cheveux-colores':            'soin-cheveux-colores',
+  'soin-pour-cheveux-gras':               'soin-cheveux-gras',
+  'soin-pour-cheveux-secs-et-abimes':     'soin-cheveux-secs-et-abimes',
+  'soin-pour-tous-types-de-cheveux':      'soin-tous-types-cheveux',
+
+  // Maquillage / fond de teint
+  'correcteur-de-teint-concealer':        'correcteur-concealer',
+  'enlumineurs-et-illuminateur-de-teint': 'enlumineurs-et-illuminateur',
+  'poudre-bronzante-poudre-de-soleil':    'poudre-bronzante-soleil',
+
+  // Maquillage / lèvres
+  'fixateur-maquillage-a-levres':         'fixateur-maquillage-levres',
+  'coffret-maquillage-a-levres':          'coffret-maquillage-levres',
+
+  // Rasage / barbe
+  'baume-et-hydratant-a-barbe':           'baume-hydratant-barbe',
+  'apres-shampoing-pour-barbe':           'apres-shampoing-barbe',
+  'shampooing-et-savon-a-barbe':          'shampooing-savon-barbe',
+  'cire-pour-barbe-moustache':            'cire-barbe-moustache',
+  'soin-specifique-pour-barbe':           'soin-specifique-barbe',
+
+  // Rasage / rasage
+  'soin-specifique-pour-le-rasage':       'soin-specifique-rasage',
+
+  // Rasage / épilation
+  'bandes-de-cire-froide-corps':            'bandes-cire-froide-corps',
+  'bandes-de-cire-froide-maillot-aisselles':'bandes-cire-froide-maillot-aisselles',
+  'bandes-de-cire-froide-visage':           'bandes-cire-froide-visage',
+
+  // Soin du corps / lèvres, pieds, yeux, homme
+  'soins-specifiques-pour-les-levres':    'soins-specifiques-levres',
+  'soin-specifique-pour-jambes-et-pieds': 'soin-specifique-jambes-pieds',
+  'soins-specifiques':                    'soins-specifiques-yeux',
+  'coffret-de-soins-pour-homme':          'coffret-soins-pour-homme',
+}
+
+/**
  * Construit le slug DB complet depuis le chemin de navigation.
+ * Applique les correctifs de LEAF_SLUG_OVERRIDES sur le dernier segment.
  * Ex: ["Coiffure", "Shampooing", "Shampooing classique"]
  *   → "coiffure/shampooing/shampooing-classique"
  */
 export function pathToSlug(path: readonly string[]): string {
-  return path.map(nameToSlug).join('/')
+  const slugs = path.map(nameToSlug)
+  const last = slugs.length - 1
+  if (last >= 0 && LEAF_SLUG_OVERRIDES[slugs[last]]) {
+    slugs[last] = LEAF_SLUG_OVERRIDES[slugs[last]]
+  }
+  return slugs.join('/')
 }
 
 // ─── Navigation ───────────────────────────────────────────────────────────────

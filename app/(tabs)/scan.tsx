@@ -115,7 +115,7 @@ const ScanScreen: FC = () => {
         if (extra?.imageUrl) {
           void cacheProductImage(result.analysisId, extra.imageUrl).catch(() => {})
         }
-        router.replace(ROUTES.ANALYSE.DETAIL(result.analysisId))
+        router.push(ROUTES.ANALYSE.DETAIL(result.analysisId))
       } else {
         setFailed(true)
       }

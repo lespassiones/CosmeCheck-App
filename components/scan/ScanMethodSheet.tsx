@@ -53,9 +53,11 @@ const NAVY = '#1E3A8A'
 const BORDER = '#E5E7EB'
 
 // Dimensions fixes pour aligner les deux colonnes (cf. doc en tête de fichier).
-const BIG_H = 112
+// Photo OCR et Lien désactivés → gauche = 1 carte, droite = 2 cartes.
+// BIG_H = 2 × SMALL_H + GAP pour conserver l'alignement vertical.
 const SMALL_H = 70
 const GAP = 10
+const BIG_H = 2 * SMALL_H + GAP // 150
 
 export const ScanMethodSheet: FC<Props> = ({ visible, onClose, onSelect }) => {
   const insets = useSafeAreaInsets()
@@ -131,35 +133,44 @@ export const ScanMethodSheet: FC<Props> = ({ visible, onClose, onSelect }) => {
           <Text style={styles.title}>Comment veux-tu analyser ?</Text>
 
           <View style={styles.grid}>
-            {/* Colonne gauche : 2 grandes cartes */}
+            {/* Colonne gauche : Code-barres (photo OCR désactivée) */}
             <View style={styles.leftCol}>
               <BigOption
                 icon="barcode-outline"
                 title="Code-barres"
                 subtitle="Scan rapide en magasin"
                 onPress={() => handleSelect('barcode')}
+                grow
               />
-              <BigOption
-                icon="camera-outline"
-                title="Photo de la composition"
-                subtitle="OCR de l'étiquette"
-                onPress={() => handleSelect('photo')}
-              />
+              {/* Photo de la composition — temporairement désactivée
+              {false && (
+                <BigOption
+                  icon="camera-outline"
+                  title="Photo de la composition"
+                  subtitle="OCR de l'étiquette"
+                  onPress={() => handleSelect('photo')}
+                />
+              )}
+              */}
             </View>
 
-            {/* Colonne droite : 3 cartes compactes */}
+            {/* Colonne droite : 2 cartes (lien désactivé) */}
             <View style={styles.rightCol}>
               <SmallOption
                 icon="document-text-outline"
                 title="Coller la composition"
                 onPress={() => handleSelect('manual')}
               />
-              <SmallOption
-                icon="link-outline"
-                title="Coller le lien"
-                badge="NEW"
-                onPress={() => handleSelect('link')}
-              />
+              {/* Coller le lien — temporairement désactivé
+              {false && (
+                <SmallOption
+                  icon="link-outline"
+                  title="Coller le lien"
+                  badge="NEW"
+                  onPress={() => handleSelect('link')}
+                />
+              )}
+              */}
               <SmallOption
                 icon="search-outline"
                 title="Rechercher un produit"
@@ -192,10 +203,11 @@ const BigOption: FC<{
   title: string
   subtitle: string
   onPress: () => void
-}> = ({ icon, title, subtitle, onPress }) => (
+  grow?: boolean
+}> = ({ icon, title, subtitle, onPress, grow }) => (
   <Pressable
     onPress={onPress}
-    style={({ pressed }) => [styles.bigCard, pressed && styles.cardPressed]}
+    style={({ pressed }) => [styles.bigCard, grow && styles.bigCardGrow, pressed && styles.cardPressed]}
     accessibilityRole="button"
   >
     <Ionicons name={icon} size={24} color={colors.ink} />
@@ -285,6 +297,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 14,
     justifyContent: 'space-between',
+  },
+  bigCardGrow: {
+    height: undefined,
+    flex: 1,
   },
   bigTitle: {
     fontFamily: fontFamilies.semiBold,

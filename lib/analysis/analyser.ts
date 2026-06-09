@@ -134,7 +134,7 @@ function extractCredits(body: Record<string, unknown> | null): CreditsPayload | 
  * - Allergies freeform (ingredients[].name) → découpées par virgule en termes.
  * - Familles (restrictions.families) → comparées aux fonctions de l'item.
  */
-function applyRestrictions(
+export function applyRestrictions(
   response: AnalyseResponse,
   restrictions: UserRestrictions | undefined,
 ): AnalyseResponseWithRestrictions {

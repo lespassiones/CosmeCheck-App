@@ -36,7 +36,7 @@ import { colors } from '@/constants/colors'
 import { ROUTES } from '@/constants/routes'
 import { radius, spacing } from '@/constants/spacing'
 import { fontFamilies, typography } from '@/constants/typography'
-import { getAnalysisById } from '@/lib/analysis/analyser'
+import { applyRestrictions, getAnalysisById } from '@/lib/analysis/analyser'
 import { parseAnalyseResponse, type AnalyseResponse } from '@/lib/analysis/types'
 import { isProductCategory } from '@/lib/ai/categorize'
 import { categoryLabel } from '@/lib/categoryLabel'
@@ -47,6 +47,7 @@ import {
 } from '@/lib/storage/session'
 import { resolveAndCacheProductImage } from '@/lib/storage/productImageCache'
 import type { AnalysisRow } from '@/lib/supabase/types'
+import { useProfile } from '@/hooks/useProfile'
 import { useRoutine } from '@/hooks/useRoutine'
 
 type LoadState =
@@ -70,6 +71,7 @@ const AnalyseDetailScreen: FC = () => {
   const [productImageUrl, setProductImageUrl] = useState<string | null>(null)
   const scrollRef = useRef<ScrollView>(null)
   const reduceMotion = useReducedMotion()
+  const { restrictions } = useProfile()
   const { addToRoutine, isInRoutine } = useRoutine()
   const [routinePending, setRoutinePending] = useState(false)
 
@@ -94,10 +96,13 @@ const AnalyseDetailScreen: FC = () => {
 
   const buildReadyState = useCallback(
     (row: AnalysisRow): LoadState => {
-      const result = parseAnalyseResponse(row.result_json)
-      if (!result) {
+      const parsed = parseAnalyseResponse(row.result_json)
+      if (!parsed) {
         return { status: 'error', message: "Le résultat de cette analyse est illisible." }
       }
+      // Applique les restrictions de l'utilisateur (is_restricted sur chaque item).
+      // Nécessaire au rechargement depuis la BD car le flag n'est pas persisté.
+      const result = applyRestrictions(parsed, restrictions) as AnalyseResponse
       const category = isProductCategory(result.category) ? result.category : null
       const essentiel = computeEssentiel(result, {
         category,
@@ -117,7 +122,7 @@ const AnalyseDetailScreen: FC = () => {
         inciText: row.input_text ?? '',
       }
     },
-    [],
+    [restrictions],
   )
 
   const load = useCallback(async () => {
