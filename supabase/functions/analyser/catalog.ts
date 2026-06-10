@@ -23,7 +23,7 @@ export async function upsertProductAnalysis(params: {
         p_score: params.score,
         p_score_label: params.scoreLabel,
         p_score_tone: params.scoreTone,
-        p_algo_version: params.algoVersion ?? "v1.1",
+        p_algo_version: params.algoVersion ?? "v1.2",
       });
   } catch {
     // non-bloquant

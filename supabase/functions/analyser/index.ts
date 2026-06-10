@@ -788,7 +788,7 @@ Deno.serve(async (req: Request) => {
         score: Number(score.toFixed(4)),
         scoreLabel: scoreLabelText,
         scoreTone,
-        algoVersion: "v1.1",
+        algoVersion: "v1.2",
       });
     })();
 

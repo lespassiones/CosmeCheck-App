@@ -59,6 +59,46 @@ describe('computeScore — parité web (valeurs golden)', () => {
     expect(v).toBeGreaterThanOrEqual(0)
     expect(v).toBeLessThanOrEqual(20)
   });
+
+  it('effet cocktail — 4 Orange déclenche pénalité supplémentaire', () => {
+    // 4 Orange en fin de liste (positions 6-9 sur 10) : poids faibles ~0.2-0.45
+    // Sans cocktail : ~16.5 environ. Avec cocktail (4-3=1 Orange extra) : -0.4
+    const orangeEnd: M[] = [6, 7, 8, 9].map((p) => ({ color_rating: 'Orange', position: p }))
+    const vSans = 20 - [6, 7, 8, 9].reduce((acc, p) => {
+      const N = 10
+      return acc + 2.0 * (Math.log(N - p + 1) / Math.log(N + 1))
+    }, 0)
+    const v = computeScore(orangeEnd, 10)
+    // Doit être inférieur au score sans cocktail (effet négatif confirmé)
+    expect(v).toBeLessThan(vSans)
+    expect(v).toBeCloseTo(vSans - 0.4, 10)
+  });
+
+  it('effet cocktail — 3 Rouge déclenche pénalité (seuil = 2)', () => {
+    const rouges: M[] = [8, 9, 10].map((p) => ({ color_rating: 'Rouge', position: p }))
+    const vSans = 20 - [8, 9, 10].reduce((acc, p) => {
+      const N = 11
+      return acc + 4.0 * (Math.log(N - p + 1) / Math.log(N + 1))
+    }, 0)
+    const v = computeScore(rouges, 11)
+    // 3 Rouge > seuil 2 → pénalité cocktail de 0.8 supplémentaire
+    expect(v).toBeCloseTo(vSans - 0.8, 10)
+  });
+
+  it('effet cocktail — ≤3 Orange et ≤2 Rouge : aucune pénalité supplémentaire', () => {
+    const matches: M[] = [
+      { color_rating: 'Orange', position: 1 },
+      { color_rating: 'Orange', position: 3 },
+      { color_rating: 'Rouge', position: 5 },
+    ]
+    // En dessous des seuils (3 Orange, 2 Rouge) → cocktail = 0
+    const N = 6
+    const expected = 20
+      - 2.0 * (Math.log(N - 1 + 1) / Math.log(N + 1))
+      - 2.0 * (Math.log(N - 3 + 1) / Math.log(N + 1))
+      - 4.0 * (Math.log(N - 5 + 1) / Math.log(N + 1))
+    expect(computeScore(matches, N)).toBeCloseTo(expected, 10)
+  });
 });
 
 describe('scoreLabel — seuils web (≥17 / ≥13 / ≥9)', () => {

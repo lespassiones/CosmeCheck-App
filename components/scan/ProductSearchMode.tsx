@@ -31,6 +31,7 @@ import {
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import Svg, { Circle, Line, Path, Polygon } from 'react-native-svg'
 
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
@@ -119,9 +120,10 @@ interface Props {
   disabled?: boolean
 }
 
-const MIN_QUERY   = 2
-const DEBOUNCE_MS = 350
-const BROWSE_PAGE = 24
+const MIN_QUERY    = 2
+const DEBOUNCE_MS  = 350
+const BROWSE_PAGE  = 24
+const SEARCH_PAGE  = 50   // résultats par page en mode recherche
 
 // ─── Persistance de la position de navigation entre montages ─────────────────
 // Sauvegarde le chemin + les produits fetchés en mémoire module (survive au
@@ -148,10 +150,13 @@ export const ProductSearchMode: FC<Props> = ({
   // ── Recherche ─────────────────────────────────────────────────────────
   const [query, setQuery]                 = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<CatalogRow[]>([])
-  const [searchLoading, setSearchLoading] = useState(false)
-  const [searchError, setSearchError]     = useState<string | null>(null)
-  const [searched, setSearched]           = useState(false)
+  const [searchResults, setSearchResults]         = useState<CatalogRow[]>([])
+  const [searchLoading, setSearchLoading]         = useState(false)
+  const [searchError, setSearchError]             = useState<string | null>(null)
+  const [searched, setSearched]                   = useState(false)
+  const [searchOffset, setSearchOffset]           = useState(0)
+  const [searchHasMore, setSearchHasMore]         = useState(false)
+  const [searchLoadingMore, setSearchLoadingMore] = useState(false)
 
   // ── Navigation arbre catégories ───────────────────────────────────────
   // Toujours démarrer à la racine au montage (fresh open = 12 catégories).
@@ -211,18 +216,23 @@ export const ProductSearchMode: FC<Props> = ({
     setSearchLoading(true)
     setSearchError(null)
     setWebResults([])
+    setSearchOffset(0)
+    setSearchHasMore(false)
     void (async () => {
       try {
         const { data, error } = await supabase.rpc(
           'cosme_check_search_catalog' as never,
-          { p_query: trimmed, p_limit: 20 } as never,
+          { p_query: trimmed, p_limit: SEARCH_PAGE, p_offset: 0 } as never,
         )
         if (reqId !== reqIdRef.current) return
         if (error) {
           setSearchError('Recherche indisponible pour le moment.')
           setSearchResults([])
         } else {
-          setSearchResults((data as CatalogRow[] | null) ?? [])
+          const rows = (data as CatalogRow[] | null) ?? []
+          setSearchResults(rows)
+          setSearchHasMore(rows.length === SEARCH_PAGE)
+          setSearchOffset(SEARCH_PAGE)
         }
       } catch {
         if (reqId !== reqIdRef.current) return
@@ -266,6 +276,29 @@ export const ProductSearchMode: FC<Props> = ({
       }
     })()
   }, [debouncedQuery, searched, searchLoading, searchError, searchResults.length])
+
+  // ── Pagination recherche (page suivante) ─────────────────────────────
+  const loadMoreSearch = useCallback(async () => {
+    const trimmed = debouncedQuery.trim()
+    if (!trimmed || searchLoadingMore || !searchHasMore) return
+    setSearchLoadingMore(true)
+    try {
+      const { data, error } = await supabase.rpc(
+        'cosme_check_search_catalog' as never,
+        { p_query: trimmed, p_limit: SEARCH_PAGE, p_offset: searchOffset } as never,
+      )
+      if (error) return
+      const rows = (data as CatalogRow[] | null) ?? []
+      setSearchResults((prev) => {
+        const seen = new Set(prev.map((p) => p.ean ?? p.name ?? ''))
+        return [...prev, ...rows.filter((r) => !seen.has(r.ean ?? r.name ?? ''))]
+      })
+      setSearchHasMore(rows.length === SEARCH_PAGE)
+      setSearchOffset((prev) => prev + SEARCH_PAGE)
+    } finally {
+      setSearchLoadingMore(false)
+    }
+  }, [debouncedQuery, searchOffset, searchLoadingMore, searchHasMore])
 
   // ── Chargement produits quand on arrive sur une feuille ───────────────
   useEffect(() => {
@@ -454,6 +487,54 @@ export const ProductSearchMode: FC<Props> = ({
       searched && !searchLoading && !searchError &&
       searchResults.length === 0 && !webLoading && webResults.length === 0
 
+    // Footer FlatList : spinner "page suivante" + section web + état vide
+    const searchFooter = (
+      <>
+        {searchLoadingMore && (
+          <View style={styles.loadingFooter}>
+            <ActivityIndicator size="small" color={colors.rose} />
+          </View>
+        )}
+        {showWebSection && (
+          <View style={[styles.sectionGroup, { marginTop: spacing.lg }]}>
+            {webResults.length === 0 && webLoading ? (
+              <SearchingThinker />
+            ) : (
+              <>
+                <View style={styles.sectionKickerRow}>
+                  <Ionicons name="globe-outline" size={12} color={colors.accent} />
+                  <Text style={[styles.sectionKicker, styles.sectionKickerAccent]}>
+                    TROUVÉ SUR INTERNET
+                  </Text>
+                </View>
+                <Text style={styles.sectionSubtitle}>Résultats les plus pertinents</Text>
+                {webResults.map((c, i) => (
+                  <WebCandidateRow
+                    key={c.id || `web-${i}`}
+                    candidate={c}
+                    rank={i + 1}
+                    busy={resolvingWebId === c.id}
+                    disabled={disabled || resolvingWebId != null}
+                    onPress={() => void pickWebCandidate(c)}
+                  />
+                ))}
+              </>
+            )}
+          </View>
+        )}
+        {showNoResults && (
+          <View style={styles.empty}>
+            <Text style={styles.emptyText}>
+              Aucun produit trouvé pour « {debouncedQuery.trim()} ».
+            </Text>
+            <Pressable onPress={onFallbackToManual}>
+              <Text style={styles.emptyCta}>Coller la liste INCI</Text>
+            </Pressable>
+          </View>
+        )}
+      </>
+    )
+
     return (
       <View style={styles.root}>
         {searchBar}
@@ -465,70 +546,37 @@ export const ProductSearchMode: FC<Props> = ({
             </Pressable>
           </View>
         )}
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
+        <FlatList
+          data={searchResults}
+          keyExtractor={(item, i) => item.ean ?? `${item.name ?? 'row'}-${i}`}
           contentContainerStyle={[styles.list, { paddingBottom: listBottomPad }]}
+          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-        >
-          {searchResults.length > 0 && (
-            <View style={styles.sectionGroup}>
-              <Text style={styles.sectionKicker}>DANS NOTRE BASE</Text>
-              <Text style={styles.sectionSubtitle}>Les plus pertinents</Text>
-              {searchResults.map((item, i) => {
-                const busy = resolvingEan != null && resolvingEan === (item.ean ?? item.name ?? '')
-                return (
-                  <ProductRow
-                    key={item.ean ?? `${item.name ?? 'row'}-${i}`}
-                    item={item}
-                    rank={i + 1}
-                    busy={busy}
-                    disabled={disabled || resolvingEan != null}
-                    onPress={() => void pickCatalog(item)}
-                  />
-                )
-              })}
-            </View>
-          )}
-
-          {showWebSection && (
-            <View style={styles.sectionGroup}>
-              {webResults.length === 0 && webLoading ? (
-                <SearchingThinker />
-              ) : (
-                <>
-                  <View style={styles.sectionKickerRow}>
-                    <Ionicons name="globe-outline" size={12} color={colors.accent} />
-                    <Text style={[styles.sectionKicker, styles.sectionKickerAccent]}>
-                      TROUVÉ SUR INTERNET
-                    </Text>
-                  </View>
-                  <Text style={styles.sectionSubtitle}>Résultats les plus pertinents</Text>
-                  {webResults.map((c, i) => (
-                    <WebCandidateRow
-                      key={c.id || `web-${i}`}
-                      candidate={c}
-                      rank={i + 1}
-                      busy={resolvingWebId === c.id}
-                      disabled={disabled || resolvingWebId != null}
-                      onPress={() => void pickWebCandidate(c)}
-                    />
-                  ))}
-                </>
-              )}
-            </View>
-          )}
-
-          {showNoResults && (
-            <View style={styles.empty}>
-              <Text style={styles.emptyText}>
-                Aucun produit trouvé pour « {debouncedQuery.trim()} ».
-              </Text>
-              <Pressable onPress={onFallbackToManual}>
-                <Text style={styles.emptyCta}>Coller la liste INCI</Text>
-              </Pressable>
-            </View>
-          )}
-        </ScrollView>
+          ListHeaderComponent={
+            searchResults.length > 0 ? (
+              <View style={styles.searchHeader}>
+                <Text style={styles.sectionKicker}>DANS NOTRE BASE</Text>
+                <Text style={styles.sectionSubtitle}>
+                  Du meilleur au moins bon — {searchResults.length}{searchHasMore ? '+' : ''} résultats
+                </Text>
+              </View>
+            ) : null
+          }
+          renderItem={({ item }) => {
+            const busy = resolvingEan != null && resolvingEan === (item.ean ?? item.name ?? '')
+            return (
+              <ProductRow
+                item={item}
+                busy={busy}
+                disabled={disabled || resolvingEan != null}
+                onPress={() => void pickCatalog(item)}
+              />
+            )
+          }}
+          onEndReachedThreshold={0.6}
+          onEndReached={() => void loadMoreSearch()}
+          ListFooterComponent={searchFooter}
+        />
       </View>
     )
   }
@@ -790,6 +838,89 @@ const WebCandidateRow: FC<{
 
 // ─── ProductRow ──────────────────────────────────────────────────────────────
 
+// ─── Pastille catalogue (miroir des 5 niveaux du VerdictGauge) ───────────────
+// Utilise le score numérique (0–20) pour couvrir les 5 pastilles :
+//   ≥ 17   → ❤️  cœur vert    (très bien)
+//   13–17  → 🍃  feuille verte (bien)
+//    9–13  → 👁️  œil jaune    (à surveiller)
+//    4–9   → ⚠️  triangle orange (moyen/préoccupant)
+//    0–4   → 🛑  stop rouge   (à éviter)
+
+type PastilleSlot = {
+  bg: string
+  iconColor: string
+  icon: 'heart' | 'leaf' | 'eye' | 'triangle' | 'stop'
+}
+
+// Seuils 17/13/9/5 — IDENTIQUES à verdictToneFromScore (engine.ts), source de
+// vérité unique de la pastille. Couleurs alignées sur VerdictGauge.
+function scoreToSlot(score: number | null): PastilleSlot | null {
+  if (score == null) return null
+  if (score >= 17) return { bg: '#34D399', iconColor: '#022C22', icon: 'heart' }
+  if (score >= 13) return { bg: '#34D399', iconColor: '#022C22', icon: 'leaf' }
+  if (score >= 9)  return { bg: '#FBBF24', iconColor: '#451A03', icon: 'eye' }
+  if (score >= 5)  return { bg: '#F97316', iconColor: '#FFFFFF',  icon: 'triangle' }
+  return             { bg: '#F43F5E', iconColor: '#FFFFFF',  icon: 'stop' }
+}
+
+const CatalogPastille: FC<{ score: number | null; tone?: string | null }> = ({ score, tone }) => {
+  // Priorité au score numérique (5 niveaux) ; fallback sur tone si score absent
+  const slot = scoreToSlot(score) ?? (tone === 'rose' ? { bg: '#F43F5E', iconColor: '#FFFFFF', icon: 'stop' as const }
+    : tone === 'orange' ? { bg: '#F97316', iconColor: '#FFFFFF', icon: 'triangle' as const }
+    : tone === 'amber'  ? { bg: '#34D399', iconColor: '#022C22', icon: 'leaf' as const }
+    : tone === 'green'  ? { bg: '#34D399', iconColor: '#022C22', icon: 'heart' as const }
+    : null)
+  if (!slot) return null
+  const SIZE = 32
+  const ICON = 14
+  return (
+    <View style={[styles.pastilleWrap, { width: SIZE, height: SIZE, borderRadius: SIZE / 2, backgroundColor: slot.bg }]}>
+      <PastilleIcon kind={slot.icon} size={ICON} color={slot.iconColor} />
+    </View>
+  )
+}
+
+const PastilleIcon: FC<{ kind: 'heart' | 'leaf' | 'eye' | 'triangle' | 'stop'; size: number; color: string }> = ({ kind, size, color }) => {
+  switch (kind) {
+    case 'heart':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 24 24">
+          <Path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill={color} />
+        </Svg>
+      )
+    case 'leaf':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <Path d="M11 20A7 7 0 0 1 4 13V8a7 7 0 0 1 7-7h7v6a7 7 0 0 1-7 7h-3" />
+          <Path d="M2 21c4-5 7-7 14-9" />
+        </Svg>
+      )
+    case 'eye':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <Path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
+          <Circle cx={12} cy={12} r={3} />
+        </Svg>
+      )
+    case 'triangle':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <Path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+          <Line x1={12} y1={9} x2={12} y2={13} />
+          <Circle cx={12} cy={17} r={0.6} fill={color} />
+        </Svg>
+      )
+    case 'stop':
+      return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <Polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2" />
+          <Line x1={15} y1={9} x2={9} y2={15} />
+          <Line x1={9} y1={9} x2={15} y2={15} />
+        </Svg>
+      )
+  }
+}
+
 const ProductRow: FC<{
   item: CatalogRow | BrowseRow
   rank?: number
@@ -820,8 +951,8 @@ const ProductRow: FC<{
         </View>
       )}
       <View style={styles.resultMain}>
-        {item.brand ? <Text style={styles.resultBrand}>{item.brand}</Text> : null}
-        <Text style={styles.resultName} numberOfLines={2}>{item.name ?? 'Produit'}</Text>
+        {item.brand ? <Text style={styles.resultBrand} numberOfLines={1}>{item.brand}</Text> : null}
+        <Text style={styles.resultName} numberOfLines={3}>{item.name ?? 'Produit'}</Text>
         {category ? (
           <View style={[styles.categoryPill, { backgroundColor: pillColors(category).bg }]}>
             <Text
@@ -836,10 +967,12 @@ const ProductRow: FC<{
           <Text style={styles.resultNoInci}>Composition indisponible</Text>
         ) : null}
       </View>
+      {/* Pastille VerdictGauge — 5 niveaux basés sur le score numérique */}
+      <CatalogPastille score={item.score ?? null} tone={item.score_tone ?? null} />
       {busy ? (
         <ActivityIndicator size="small" color={colors.rose} />
       ) : (
-        <Ionicons name="chevron-forward" size={18} color={colors.inkLight} />
+        <Ionicons name="chevron-forward" size={16} color={colors.inkLight} />
       )}
     </Pressable>
   )
@@ -1042,4 +1175,18 @@ const styles = StyleSheet.create({
   resultBrand: { ...typography.caption, color: colors.inkMuted, marginBottom: 2 },
   resultName:  { ...typography.smallSemiBold, color: colors.ink },
   resultNoInci: { ...typography.caption, color: colors.inkLight, marginTop: 2 },
+  // Pastille catalogue
+  pastilleWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  // Header section recherche
+  searchHeader: {
+    marginBottom: spacing.sm,
+  },
 })

@@ -40,7 +40,7 @@ import { applyRestrictions, getAnalysisById } from '@/lib/analysis/analyser'
 import { parseAnalyseResponse, type AnalyseResponse } from '@/lib/analysis/types'
 import { isProductCategory } from '@/lib/ai/categorize'
 import { categoryLabel } from '@/lib/categoryLabel'
-import { computeEssentiel, type EssentielData } from '@/lib/essentiel/engine'
+import { computeEssentiel, verdictToneFromScore, type EssentielData } from '@/lib/essentiel/engine'
 import {
   cacheAnalysisRow,
   getCachedAnalysisRow,
@@ -182,8 +182,11 @@ const AnalyseDetailScreen: FC = () => {
     scrollRef.current?.scrollTo({ y: y + HEADER_OFFSET, animated: !reduceMotion })
   }, [reduceMotion])
 
+  // Pastille du VerdictGauge dérivée du SCORE (source de vérité unique), pour
+  // qu'elle soit IDENTIQUE à celle affichée en recherche/catalogue. La phrase
+  // "L'essentiel" garde sa logique descriptive (essentiel.verdict).
   const verdictTone = useMemo(
-    () => (state.status === 'ready' ? state.essentiel.verdict.tone : 'unknown'),
+    () => (state.status === 'ready' ? verdictToneFromScore(state.result.score) : 'unknown'),
     [state],
   )
 
@@ -277,7 +280,7 @@ const AnalyseDetailScreen: FC = () => {
         >
           {/* En-tête produit : titre pleine largeur, catégorie, CTAs, partage + jauge */}
           <View style={styles.header}>
-            <Text style={styles.title}>{state.title}</Text>
+            <Text style={styles.title} numberOfLines={3}>{state.title}</Text>
             {state.categoryText ? (
               <View style={styles.categoryChip}>
                 <Text style={styles.categoryText}>{state.categoryText}</Text>

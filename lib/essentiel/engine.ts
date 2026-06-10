@@ -34,6 +34,28 @@ export type Verdict = {
   phrase: string;
 };
 
+/**
+ * Mappe un score 0–20 sur les 5 pastilles du VerdictGauge.
+ * SOURCE DE VÉRITÉ UNIQUE de la pastille : le score précalculé du produit.
+ * Identique partout (recherche, catalogue, analyse) → la pastille d'un produit
+ * ne change jamais selon le contexte.
+ *
+ * Seuils (validés produit) :
+ *   ≥17  → very-safe (cœur vert)
+ *   13–17 → safe      (feuille verte)
+ *   9–13  → caution   (œil jaune)
+ *   5–9   → warning   (triangle orange)
+ *   <5    → danger    (stop rouge)
+ */
+export function verdictToneFromScore(score: number | null | undefined): VerdictTone {
+  if (score == null || Number.isNaN(score)) return "unknown";
+  if (score >= 17) return "very-safe";
+  if (score >= 13) return "safe";
+  if (score >= 9) return "caution";
+  if (score >= 5) return "warning";
+  return "danger";
+}
+
 /** Pick the appropriate verdict tier from the colour counts. */
 function pickTone(counts: AnalyseResponse["counts"]): VerdictTone {
   const { jaune, orange, rouge, matched } = counts;
@@ -625,7 +647,7 @@ const TAG_CONSEQUENCES: Record<string, string> = {
   "ammonium-quaternaire": "doux immédiat mais irritation possible à long terme",
   "allergene-parfumant": "risque accru d'allergie sur peau sensible",
   conservateur: "peuvent irriter ou sensibiliser les peaux réactives",
-  "parfum-synthese": "source fréquente d'irritation des peaux réactives",
+  "parfum-synthese": "à surveiller sur peaux sensibles",
   "huile-essentielle": "peuvent sensibiliser, à éviter sur peaux fragiles",
   "peg-ppg": "issus de l'éthoxylation, traces de résidus possibles",
   "polymere-synthese": "non biodégradables, persistent dans l'environnement",
