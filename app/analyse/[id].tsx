@@ -37,6 +37,7 @@ import { ROUTES } from '@/constants/routes'
 import { radius, spacing } from '@/constants/spacing'
 import { fontFamilies, typography } from '@/constants/typography'
 import { applyRestrictions, getAnalysisById } from '@/lib/analysis/analyser'
+import { decodeHtml } from '@/lib/decodeHtml'
 import { parseAnalyseResponse, type AnalyseResponse } from '@/lib/analysis/types'
 import { isProductCategory } from '@/lib/ai/categorize'
 import { categoryLabel } from '@/lib/categoryLabel'
@@ -108,7 +109,7 @@ const AnalyseDetailScreen: FC = () => {
         category,
         productType: row.product_type ?? result.productType ?? null,
       })
-      const title = row.product_label?.trim() || row.name?.trim() || 'Analyse de votre liste'
+      const title = decodeHtml(row.product_label?.trim() || row.name?.trim()) || 'Analyse de votre liste'
       const categoryText = categoryLabel(category) ?? row.product_type ?? null
       return {
         status: 'ready',
@@ -116,8 +117,8 @@ const AnalyseDetailScreen: FC = () => {
         essentiel,
         title,
         categoryText,
-        brand: row.brand?.trim() || null,
-        productLabel: row.product_label?.trim() || row.name?.trim() || null,
+        brand: decodeHtml(row.brand?.trim()) || null,
+        productLabel: decodeHtml(row.product_label?.trim() || row.name?.trim()) || null,
         productType: row.product_type ?? result.productType ?? null,
         inciText: row.input_text ?? '',
       }

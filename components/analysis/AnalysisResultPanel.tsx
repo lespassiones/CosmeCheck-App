@@ -328,6 +328,7 @@ export const AnalysisResultPanel: FC<Props> = ({
             items={result.items}
             loading={synthesisLoading}
             onRequestSynthesis={handleRequestSynthesis}
+            onIngredientPress={onIngredientPress}
           />
 
           {/* 6. Spectre positionnel */}

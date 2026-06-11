@@ -53,7 +53,12 @@ import { initSentry } from '@/lib/reporting/report'
 void SplashScreen.preventAutoHideAsync()
 
 // Sentry initialisé le plus tôt possible pour capturer les erreurs au boot.
-initSentry()
+// try-catch : le module natif Sentry n'est pas disponible en Expo Go sans dev build.
+try {
+  initSentry()
+} catch {
+  // silencieux
+}
 
 const asyncStoragePersister = createAsyncStoragePersister({
   storage: AsyncStorage,

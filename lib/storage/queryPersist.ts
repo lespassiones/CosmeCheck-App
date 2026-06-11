@@ -28,6 +28,8 @@ function rootKey(queryKey: unknown): string | null {
  *  - 'credits'           — solde quotidien, doit toujours repartir frais.
  *  - 'ingredient-explain', 'compare-insights', 'routine-suggest'
  *                          — réponses IA cachées séparément avec leur TTL.
+ *  - 'catalog-search'      — résultats de recherche, transients (staleTime 60s).
+ *                          Aucun intérêt à les garder 7 jours sur disque.
  *
  * Tout le reste est persisté (routine, dashboard, history, ingredient,
  * dailyPicks, etc.).
@@ -45,6 +47,7 @@ export function shouldPersistQueryKey(queryKey: unknown): boolean {
     'ingredient-explain',
     'compare-insights',
     'routine-suggest',
+    'catalog-search',
   ])
   return !BLACKLIST.has(k)
 }

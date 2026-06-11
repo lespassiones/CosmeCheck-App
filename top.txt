@@ -7,3 +7,70 @@ Quand tu voudras refaire un APK après d'autres modifs, ce sera juste :
 npx eas-cli build -p android --profile preview
 (plus aucune question : projet lié, keystore et variables déjà en place).
 
+
+Les chiffres qui cadrent tout
+400 398 produits "cherchables" (count_total ≥ 3).
+Colonnes légères (ean + marque + nom + catégorie + score + tone, sans ingredients_text ni image_url qui font les 585 MB) = 49 MB de texte brut.
+En SQLite avec index de recherche FTS5 : ~70-80 MB sur le disque, mais téléchargement ~12-18 MB une fois gzippé. ✅ Pile dans ta cible.
+expo-sqlite n'est pas installé → ajout nécessaire (rebuild natif, que tu fais déjà).
+1. Est-ce un problème pour l'App Store / Play Store ? → NON
+C'est un pattern ultra-courant et explicitement autorisé sur les deux stores. La règle clé :
+
+Règle	Statut
+Apple 2.5.2 "pas de code exécutable téléchargé"	✅ Un fichier SQLite, c'est de la donnée, pas du code. Aucun souci.
+Apple 2.1 "l'app doit être fonctionnelle au lancement"	✅ Ton app marche sans la base (recherche en ligne en fallback). La base locale est un bonus, pas le cœur. C'est la condition à ne PAS violer.
+Apple — téléchargement cellulaire	⚠️ 12-18 MB c'est petit, mais bonne pratique : proposer WiFi ou demander. Pas un blocage.
+Google Play	✅ Aucune restriction. Google ENCOURAGE même de sortir les gros assets de l'APK.
+Sécurité (donnée extractible)	✅ Tu ne stockes QUE du public (noms/marques/scores). Zéro secret, zéro donnée user. Conforme à ce que tu disais.
+Verdict : zéro risque de rejet, tant que (a) c'est de la donnée SQLite, (b) l'app reste utilisable sans, (c) tu respectes le cellulaire.
+
+2. Comment le faire simplement (tout gratuit)
+
+Génération (toi, 1 fois + cron mensuel)
+  Postgres → dump des 6 colonnes légères → fichier .db SQLite + index FTS5 → gzip
+       ↓
+Hébergement : Supabase Storage (bucket public "catalog-db")  ← gratuit (1 GB inclus)
+       ↓
+App : expo-file-system télécharge le .gz → décompresse → expo-sqlite l'ouvre
+       ↓
+Recherche locale instantanée (0 ms, 0 requête serveur, marche hors-ligne)
+3 briques, toutes gratuites :
+
+expo-sqlite : lecture locale + FTS5.
+expo-file-system : download + décompression.
+Supabase Storage (bucket public) : héberge le .db.gz. Inclus dans ton plan.
+Sync future = re-générer le .db 1×/mois et bumper un numéro de version ; l'app re-télécharge si version locale < version serveur. (Le delta updated_at ligne-par-ligne est plus complexe — je le déconseille au début, un remplacement complet mensuel de 15 MB est plus simple et suffisant.)
+
+3. À quel moment demander à l'user ?
+Surtout pas pendant l'install (les stores ne le permettent pas) et pas en bloquant. Le bon niveau :
+
+✅ Recommandé : un petit bandeau non-bloquant la 1ère fois qu'il ouvre la recherche :
+"⚡ Recherche instantanée hors-ligne — Télécharger (15 MB) • Plus tard"
+Auto-téléchargement en WiFi seulement, ou sur tap.
+
+✅ Alternative : dernière étape optionnelle de l'onboarding (toggle "Activer la recherche hors-ligne").
+Toujours un interrupteur dans Profil → Réglages pour activer/désactiver/supprimer.
+Jamais en modal plein écran obligatoire : l'app marche déjà sans.
+
+4. Comment tenir les 60-80 MB
+C'est déjà calé par construction : on exclut les 2 colonnes lourdes (ingredients_text, image_url). Les ingrédients/image se chargent du serveur au tap sur un produit (1 requête, pas 400k). Résultat : 49 MB données + ~25 MB index FTS = ~75 MB disque, ~15 MB téléchargé.
+
+⚖️ Mon avis honnête sur le séquençage
+Après la Phase 1 (index réparé), la recherche serveur passe à ~15 ms. Donc la base locale n'apporte plus de la vitesse (le serveur est déjà rapide) — elle apporte le hors-ligne + zéro charge serveur. Pour "10 000 users simultanés", la Phase 1 + le cache KV (Phase 4) suffisent déjà largement.
+
+La base locale devient alors un vrai plus produit (instantané + offline + serveur déchargé à ~0), mais c'est la brique la plus lourde en dev/maintenance. Donc :
+
+Je la garderais pour la fin : Phase 1 (index) → 2 (React Query) → 3 (bouton recherche approfondie) → 4 (KV + rate-limit) → 5 (base locale offline).
+
+Tu valides cet ordre et je démarre la Phase 1 ? Ou tu veux qu'on prépare d'abord le pipeline de génération de la base locale (Phase 5) puisque c'est ce qui t'intéresse le plus ?
+
+
+
+Phase 5 — Base locale SQLite ❌ (je te déconseille, je t'explique)
+Tu étais enthousiaste là-dessus, mais les chiffres disent non :
+
+Le catalog fait 585 MB / 405 761 produits. Même réduit aux noms+marques+score, ça fait ~60-80 MB embarqués → ton APK passerait de 122 MB à ~190 MB (+55 %). Ça alourdit massivement l'app, exactement ce que tu veux éviter.
+complexité de sync updated_at, + maintenance.
+Alternative légère que je recommande : garder en local seulement l'historique de recherche + les derniers produits vus (quelques Ko via AsyncStorage). 95 % du bénéfice ressenti, 0,01 % du poids.
+
+

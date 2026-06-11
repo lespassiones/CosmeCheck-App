@@ -17,6 +17,7 @@
  */
 
 import { type FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   ActivityIndicator,
   Animated,
@@ -29,6 +30,7 @@ import {
   View,
 } from 'react-native'
 import { Image } from 'expo-image'
+import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Circle, Line, Path, Polygon } from 'react-native-svg'
@@ -37,6 +39,8 @@ import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography, fontFamilies } from '@/constants/typography'
 import { supabase } from '@/lib/supabase/client'
+import { catalogSearchKey, CATALOG_SEARCH_STALE_MS } from '@/lib/catalog/searchCache'
+import { ROUTES } from '@/constants/routes'
 import { useAndroidBack } from '@/hooks/useAndroidBack'
 import {
   CATEGORIES,
@@ -87,6 +91,14 @@ interface WebCandidate {
   source?: string
   title?: string
 }
+
+// État de la recherche approfondie internet (manuelle, 1 crédit) :
+//  idle      → bouton proposé (catalog vide)
+//  running   → crédit débité + product-suggest en cours
+//  done      → résultats reçus (webResults peut être vide = rien trouvé)
+//  no_credit → solde épuisé → upsell Premium
+//  error     → échec, retry possible
+type DeepState = 'idle' | 'running' | 'done' | 'no_credit' | 'error'
 
 // ─── Pastille catégorie : couleur stable dérivée du libellé ─────────────────
 
@@ -145,8 +157,33 @@ export const ProductSearchMode: FC<Props> = ({
   disabled = false,
 }) => {
   const insets = useSafeAreaInsets()
+  const queryClient = useQueryClient()
+  const router = useRouter()
   // Padding bas = tab bar + safe area bottom (home indicator Android/iOS).
   const listBottomPad = TAB_BAR_HEIGHT + insets.bottom
+
+  // Recherche catalogue avec cache React Query : une recherche équivalente
+  // (même mots, casse/accents/ordre indifférents) retapée dans les 60 s ne
+  // rappelle PAS la RPC. fetchQuery dédoublonne aussi les requêtes en vol.
+  const fetchCatalogPage = useCallback(
+    (trimmed: string, offset: number) =>
+      queryClient.fetchQuery({
+        queryKey: catalogSearchKey(trimmed, offset),
+        staleTime: CATALOG_SEARCH_STALE_MS,
+        queryFn: async (): Promise<CatalogRow[]> => {
+          // RPC directe, indexée trigram (Phase 1, ~40ms à chaud). Le cache
+          // cross-user est assuré par le buffer cache Postgres ; React Query
+          // dédoublonne côté appareil (Phase 2).
+          const { data, error } = await supabase.rpc(
+            'cosme_check_search_catalog' as never,
+            { p_query: trimmed, p_limit: SEARCH_PAGE, p_offset: offset } as never,
+          )
+          if (error) throw error
+          return (data as CatalogRow[] | null) ?? []
+        },
+      }),
+    [queryClient],
+  )
   // ── Recherche ─────────────────────────────────────────────────────────
   const [query, setQuery]                 = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
@@ -188,9 +225,9 @@ export const ProductSearchMode: FC<Props> = ({
   // Résolution INCI lazy
   const [resolvingEan, setResolvingEan]       = useState<string | null>(null)
 
-  // ── Fallback internet ─────────────────────────────────────────────────
+  // ── Recherche approfondie internet (manuelle, 1 crédit) ───────────────
   const [webResults, setWebResults]           = useState<WebCandidate[]>([])
-  const [webLoading, setWebLoading]           = useState(false)
+  const [deepState, setDeepState]             = useState<DeepState>('idle')
   const [resolvingWebId, setResolvingWebId]   = useState<string | null>(null)
 
   const reqIdRef    = useRef(0)
@@ -210,33 +247,26 @@ export const ProductSearchMode: FC<Props> = ({
       setSearched(false)
       setSearchError(null)
       setWebResults([])
+      setDeepState('idle')
       return
     }
     const reqId = ++reqIdRef.current
     setSearchLoading(true)
     setSearchError(null)
     setWebResults([])
+    setDeepState('idle')
     setSearchOffset(0)
     setSearchHasMore(false)
     void (async () => {
       try {
-        const { data, error } = await supabase.rpc(
-          'cosme_check_search_catalog' as never,
-          { p_query: trimmed, p_limit: SEARCH_PAGE, p_offset: 0 } as never,
-        )
+        const rows = await fetchCatalogPage(trimmed, 0)
         if (reqId !== reqIdRef.current) return
-        if (error) {
-          setSearchError('Recherche indisponible pour le moment.')
-          setSearchResults([])
-        } else {
-          const rows = (data as CatalogRow[] | null) ?? []
-          setSearchResults(rows)
-          setSearchHasMore(rows.length === SEARCH_PAGE)
-          setSearchOffset(SEARCH_PAGE)
-        }
+        setSearchResults(rows)
+        setSearchHasMore(rows.length === SEARCH_PAGE)
+        setSearchOffset(SEARCH_PAGE)
       } catch {
         if (reqId !== reqIdRef.current) return
-        setSearchError('Connexion impossible. Réessaie.')
+        setSearchError('Recherche indisponible pour le moment.')
         setSearchResults([])
       } finally {
         if (reqId === reqIdRef.current) {
@@ -245,37 +275,44 @@ export const ProductSearchMode: FC<Props> = ({
         }
       }
     })()
-  }, [debouncedQuery])
+  }, [debouncedQuery, fetchCatalogPage])
 
-  // ── Fallback internet ─────────────────────────────────────────────────
-  useEffect(() => {
+  // ── Recherche approfondie internet (déclenchée MANUELLEMENT, 1 crédit) ──
+  // On ne lance JAMAIS la cascade OBF/INCIDecoder/OpenAI/DDG automatiquement
+  // (protège les quotas d'API externes à grande échelle). L'utilisateur doit
+  // taper le bouton ; ça débite 1 crédit, et s'il n'en a plus → upsell Premium.
+  const runDeepSearch = useCallback(async () => {
     const trimmed = debouncedQuery.trim()
-    if (
-      !searched ||
-      searchLoading ||
-      searchError ||
-      searchResults.length > 0 ||
-      trimmed.length < 3
-    ) return
+    if (trimmed.length < 3 || deepState === 'running') return
     const reqId = ++webReqIdRef.current
-    setWebLoading(true)
-    void (async () => {
-      try {
-        const { data, error } = await supabase.functions.invoke('product-suggest', {
-          body: { query: trimmed, page: 1 },
-        })
-        if (reqId !== webReqIdRef.current) return
-        if (error) { setWebResults([]); return }
-        const res = data as { candidates?: WebCandidate[]; webCandidates?: WebCandidate[] } | null
-        setWebResults([...(res?.candidates ?? []), ...(res?.webCandidates ?? [])])
-      } catch {
-        if (reqId !== webReqIdRef.current) return
-        setWebResults([])
-      } finally {
-        if (reqId === webReqIdRef.current) setWebLoading(false)
-      }
-    })()
-  }, [debouncedQuery, searched, searchLoading, searchError, searchResults.length])
+    setDeepState('running')
+    try {
+      // 1) Débit du crédit "deep_search".
+      const { data: credit, error: creditErr } = await supabase.rpc(
+        'cosme_check_consume_credit',
+        { p_feature: 'deep_search' } as never,
+      )
+      if (reqId !== webReqIdRef.current) return
+      if (creditErr) { setDeepState('error'); return }
+      const ok = (credit as { ok?: boolean } | null)?.ok === true
+      if (!ok) { setDeepState('no_credit'); return }
+      // Solde modifié → la pastille crédits doit se rafraîchir.
+      void queryClient.invalidateQueries({ queryKey: ['credits'] })
+
+      // 2) Cascade internet (uniquement maintenant).
+      const { data, error } = await supabase.functions.invoke('product-suggest', {
+        body: { query: trimmed, page: 1 },
+      })
+      if (reqId !== webReqIdRef.current) return
+      if (error) { setDeepState('error'); return }
+      const res = data as { candidates?: WebCandidate[]; webCandidates?: WebCandidate[] } | null
+      setWebResults([...(res?.candidates ?? []), ...(res?.webCandidates ?? [])])
+      setDeepState('done')
+    } catch {
+      if (reqId !== webReqIdRef.current) return
+      setDeepState('error')
+    }
+  }, [debouncedQuery, deepState, queryClient])
 
   // ── Pagination recherche (page suivante) ─────────────────────────────
   const loadMoreSearch = useCallback(async () => {
@@ -283,22 +320,19 @@ export const ProductSearchMode: FC<Props> = ({
     if (!trimmed || searchLoadingMore || !searchHasMore) return
     setSearchLoadingMore(true)
     try {
-      const { data, error } = await supabase.rpc(
-        'cosme_check_search_catalog' as never,
-        { p_query: trimmed, p_limit: SEARCH_PAGE, p_offset: searchOffset } as never,
-      )
-      if (error) return
-      const rows = (data as CatalogRow[] | null) ?? []
+      const rows = await fetchCatalogPage(trimmed, searchOffset)
       setSearchResults((prev) => {
         const seen = new Set(prev.map((p) => p.ean ?? p.name ?? ''))
         return [...prev, ...rows.filter((r) => !seen.has(r.ean ?? r.name ?? ''))]
       })
       setSearchHasMore(rows.length === SEARCH_PAGE)
       setSearchOffset((prev) => prev + SEARCH_PAGE)
+    } catch {
+      // page suivante indisponible : on garde ce qui est déjà affiché
     } finally {
       setSearchLoadingMore(false)
     }
-  }, [debouncedQuery, searchOffset, searchLoadingMore, searchHasMore])
+  }, [debouncedQuery, searchOffset, searchLoadingMore, searchHasMore, fetchCatalogPage])
 
   // ── Chargement produits quand on arrive sur une feuille ───────────────
   useEffect(() => {
@@ -481,13 +515,13 @@ export const ProductSearchMode: FC<Props> = ({
 
   // ─── MODE RECHERCHE ────────────────────────────────────────────────────
   if (showSearch) {
-    const showWebSection =
-      searched && !searchLoading && (webLoading || webResults.length > 0)
-    const showNoResults =
-      searched && !searchLoading && !searchError &&
-      searchResults.length === 0 && !webLoading && webResults.length === 0
+    // Catalog vide pour cette requête → on propose la recherche approfondie.
+    const catalogEmpty =
+      searched && !searchLoading && !searchError && searchResults.length === 0
+    const showWebSection = deepState === 'done' && webResults.length > 0
+    const canDeepSearch = debouncedQuery.trim().length >= 3
 
-    // Footer FlatList : spinner "page suivante" + section web + état vide
+    // Footer FlatList : spinner pagination + section internet + bloc approfondi
     const searchFooter = (
       <>
         {searchLoadingMore && (
@@ -497,39 +531,99 @@ export const ProductSearchMode: FC<Props> = ({
         )}
         {showWebSection && (
           <View style={[styles.sectionGroup, { marginTop: spacing.lg }]}>
-            {webResults.length === 0 && webLoading ? (
-              <SearchingThinker />
-            ) : (
-              <>
-                <View style={styles.sectionKickerRow}>
-                  <Ionicons name="globe-outline" size={12} color={colors.accent} />
-                  <Text style={[styles.sectionKicker, styles.sectionKickerAccent]}>
-                    TROUVÉ SUR INTERNET
-                  </Text>
-                </View>
-                <Text style={styles.sectionSubtitle}>Résultats les plus pertinents</Text>
-                {webResults.map((c, i) => (
-                  <WebCandidateRow
-                    key={c.id || `web-${i}`}
-                    candidate={c}
-                    rank={i + 1}
-                    busy={resolvingWebId === c.id}
-                    disabled={disabled || resolvingWebId != null}
-                    onPress={() => void pickWebCandidate(c)}
-                  />
-                ))}
-              </>
-            )}
+            <View style={styles.sectionKickerRow}>
+              <Ionicons name="globe-outline" size={12} color={colors.accent} />
+              <Text style={[styles.sectionKicker, styles.sectionKickerAccent]}>
+                TROUVÉ SUR INTERNET
+              </Text>
+            </View>
+            <Text style={styles.sectionSubtitle}>Résultats les plus pertinents</Text>
+            {webResults.map((c, i) => (
+              <WebCandidateRow
+                key={c.id || `web-${i}`}
+                candidate={c}
+                rank={i + 1}
+                busy={resolvingWebId === c.id}
+                disabled={disabled || resolvingWebId != null}
+                onPress={() => void pickWebCandidate(c)}
+              />
+            ))}
           </View>
         )}
-        {showNoResults && (
+        {catalogEmpty && (
           <View style={styles.empty}>
-            <Text style={styles.emptyText}>
-              Aucun produit trouvé pour « {debouncedQuery.trim()} ».
-            </Text>
-            <Pressable onPress={onFallbackToManual}>
-              <Text style={styles.emptyCta}>Coller la liste INCI</Text>
-            </Pressable>
+            {/* idle : aucun produit dans notre base → proposer la recherche approfondie */}
+            {deepState === 'idle' && (
+              <>
+                <Text style={styles.emptyText}>
+                  Aucun produit trouvé pour « {debouncedQuery.trim()} » dans notre base.
+                </Text>
+                {canDeepSearch && (
+                  <>
+                    <Pressable
+                      style={[styles.deepBtn, disabled && styles.deepBtnDisabled]}
+                      onPress={() => void runDeepSearch()}
+                      disabled={disabled}
+                    >
+                      <Ionicons name="globe-outline" size={16} color="#fff" />
+                      <Text style={styles.deepBtnText}>Recherche approfondie sur internet</Text>
+                    </Pressable>
+                    <Text style={styles.deepHint}>Cherche la composition en ligne · 1 crédit</Text>
+                  </>
+                )}
+                <Pressable onPress={onFallbackToManual} hitSlop={6}>
+                  <Text style={styles.emptyCta}>Ou coller la liste INCI</Text>
+                </Pressable>
+              </>
+            )}
+
+            {/* running : crédit débité + cascade internet en cours */}
+            {deepState === 'running' && <SearchingThinker />}
+
+            {/* no_credit : solde épuisé → upsell Premium */}
+            {deepState === 'no_credit' && (
+              <View style={styles.upsellBox}>
+                <Ionicons name="sparkles" size={20} color={colors.accent} />
+                <Text style={styles.upsellTitle}>Plus de crédits aujourd'hui</Text>
+                <Text style={styles.upsellText}>
+                  Passe à Premium pour des recherches approfondies illimitées.
+                </Text>
+                <Pressable
+                  style={styles.deepBtn}
+                  onPress={() => router.push(ROUTES.OFFRE.INDEX)}
+                >
+                  <Ionicons name="sparkles" size={16} color="#fff" />
+                  <Text style={styles.deepBtnText}>Découvrir Premium</Text>
+                </Pressable>
+                <Pressable onPress={onFallbackToManual} hitSlop={6}>
+                  <Text style={styles.emptyCta}>Ou coller la liste INCI</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {/* error : échec → retry */}
+            {deepState === 'error' && (
+              <>
+                <Text style={styles.emptyText}>Recherche approfondie indisponible pour le moment.</Text>
+                <Pressable style={styles.deepBtn} onPress={() => void runDeepSearch()}>
+                  <Ionicons name="refresh" size={16} color="#fff" />
+                  <Text style={styles.deepBtnText}>Réessayer</Text>
+                </Pressable>
+                <Pressable onPress={onFallbackToManual} hitSlop={6}>
+                  <Text style={styles.emptyCta}>Ou coller la liste INCI</Text>
+                </Pressable>
+              </>
+            )}
+
+            {/* done sans résultat : rien trouvé sur internet non plus */}
+            {deepState === 'done' && webResults.length === 0 && (
+              <>
+                <Text style={styles.emptyText}>Rien trouvé sur internet non plus.</Text>
+                <Pressable onPress={onFallbackToManual} hitSlop={6}>
+                  <Text style={styles.emptyCta}>Coller la liste INCI</Text>
+                </Pressable>
+              </>
+            )}
           </View>
         )}
       </>
@@ -1027,6 +1121,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.base,
   },
   emptyCta: { ...typography.smallSemiBold, color: colors.rose },
+  deepBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.accent,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 12,
+    marginTop: spacing.sm,
+  },
+  deepBtnDisabled: { opacity: 0.5 },
+  deepBtnText: { fontFamily: fontFamilies.semiBold, fontSize: 14, color: '#fff' },
+  deepHint: { ...typography.caption, color: colors.inkMuted, textAlign: 'center' },
+  upsellBox: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.lg,
+    alignSelf: 'stretch',
+  },
+  upsellTitle: { ...typography.smallSemiBold, color: colors.ink },
+  upsellText: { ...typography.caption, color: colors.inkMuted, textAlign: 'center' },
   kicker: {
     fontFamily: fontFamilies.semiBold,
     fontSize: 11,

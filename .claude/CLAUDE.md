@@ -68,7 +68,8 @@ supabase/
 - `cosme_check_get_credits` — retourne le solde du jour (latest `daily_limit` de `user_credits`, fallback 60).
 - `cosme_check_consume_credit(p_feature)` — débit.
 - `cosme_check_get_routine_tags(p_limit)` — **NEW juin 2026** : projection routine compacte pour `advisor-chat` (évite 360 KB de `result_json`). Guard `jsonb_typeof = 'array'` obligatoire (v2 après bug "cannot extract from scalar").
-- `cosme_check_get_ingredient(p_slug)`, `cosme_check_products_for_ingredient`, `cosme_check_search_catalog`, `cosme_check_upsert_catalog_product`, `cosme_check_check_rate_limit`, etc.
+- `cosme_check_search_catalog(p_query, p_limit, p_offset)` — **réécrite 11 juin 2026** : plpgsql, prédicats positifs `LIKE '%token%'` par token (un AND par mot) servis par l'index GIN trigram `catalog_search_unaccent_trgm` sur `lower(f_unaccent(brand||' '||name))`. **Insensible casse + accents + ordre** (wrapper immuable `cosme_check.f_unaccent`). Tri `score DESC, count_total DESC` (le `word_similarity` a été retiré : il recalculait par ligne → +1–1,4 s sur les requêtes larges). **~40 ms à chaud vs 2 224 ms avant** (seq scan). NE garder qu'UNE surcharge 3-args. Retourne `ingredients_text` (utilisé direct par la sélection produit pour éviter un 2ᵉ fetch).
+- `cosme_check_get_ingredient(p_slug)`, `cosme_check_products_for_ingredient`, `cosme_check_upsert_catalog_product`, `cosme_check_check_rate_limit`, etc.
 
 ### Edge Functions Deno (`supabase/functions/`)
 analyser, advisor-chat, coherence-analyze, compare-insights, deep-fetch, ecommerce-scrape, health, ingredient-explain, ingredient-exposure, ocr-scan, product-by-barcode, product-search, product-suggest, promesse-fetch-description, promesse-identify, routine-suggest, synthesis.
@@ -104,14 +105,15 @@ analyser, advisor-chat, coherence-analyze, compare-insights, deep-fetch, ecommer
 | `cw:dailyPicks:<YYYY-MM-DD>` | progrès quotidien quiz | rotation journalière |
 
 ### React Query persister
-- Module `lib/storage/queryPersist.ts` : predicate `shouldDehydrateQuery` filtre `success` only + blacklist `['credits','ingredient-explain','compare-insights','routine-suggest']`.
+- Module `lib/storage/queryPersist.ts` : predicate `shouldDehydrateQuery` filtre `success` only + blacklist `['profile','credits','ingredient-explain','compare-insights','routine-suggest','catalog-search']`. (`catalog-search` = résultats recherche, transients staleTime 60 s, ajouté 11 juin 2026.)
 - `QUERY_PERSIST_MAX_AGE_MS = 7j`, `QUERY_PERSIST_BUSTER = 'cosmecheck-rq-v1'` (bumper si types changent).
 - `gcTime` du QueryClient aligné sur `MAX_AGE_MS` (sinon caches GC'd avant rechargement).
 
 ### Cache serveur (Edge Functions)
-- `product-by-barcode` : `Deno.openKv()` TTL 12h. Fallback silencieux si KV indispo. Header `X-Cache: HIT`.
+- ⚠️ **`Deno.openKv()` est INDISPONIBLE sur le runtime Supabase Edge** (prouvé 11 juin 2026 : `typeof Deno.openKv !== 'function'`). Tout le code KV best-effort (`product-by-barcode/lib/barcodeCache.ts`) **dégrade silencieusement → 0 cache, toujours MISS**. Le `X-Cache: HIT` de `product-by-barcode` **ne se déclenche jamais** en réalité. Pour un vrai cache cross-user : table Postgres, PAS Deno KV.
 - `catalog` table — upsert depuis OBF/OPF (cache cross-instance permanent).
 - `idempotency` table — TTL 24h, purge cron.
+- **Recherche catalogue** : pas de cache serveur dédié — la RPC trigram (~40 ms) + le **buffer cache Postgres** (garde les requêtes populaires chaudes en RAM, partagé entre users) suffisent. Edge Function `catalog-search` testée puis ABANDONNÉE (KV indispo, voir ci-dessus).
 
 ### Dérivations client-side (au lieu de fetch)
 - Dashboard `RoutineSummary` : dérivé de `useRoutine()` via `summarizeRoutine(items)`. Pas de 2e select sur `routine_items`.
@@ -213,12 +215,14 @@ Anneau circulaire SVG (rayon 23, stroke 5, rotation -90°). Seuils : ≥80 vert,
 5. Tous aboutissent à `launch(source, inci, extra?)` → `runAnalysis()` → `router.replace('/analyse/[id]')`.
 6. **`RunAnalysisParams.source`** = `'barcode' | 'ocr' | 'search' | 'manual' | 'link'`. `RunAnalysisParams.sourceUrl` + `imageUrl` propagés pour link et search.
 
-### ProductSearchMode (catégories + recherche + fallback internet)
+### ProductSearchMode (catégories + recherche + recherche approfondie)
 `components/scan/ProductSearchMode.tsx` — 4 vues dans un seul composant :
 1. **Grille catégories** (défaut) : 12 catégories du catalogue, icônes Ionicons monochrome (Coiffure→`cut-outline`, Maquillage→`color-palette-outline`, …). RPC `cosme_check_get_category_counts` cachée 1h.
 2. **Sous-catégories** (tap sur catégorie) : tri par count décroissant.
 3. **Browse produits** (tap sur sous-catégorie) : grille paginée 24/page via `cosme_check_browse_subcategory`.
-4. **Search results** (`query.length ≥ 2`) : RPC `cosme_check_search_catalog` substring + **fallback internet** auto via `product-suggest` quand catalog vide → section "**TROUVÉ SUR INTERNET**" (badge globe, fond violet pastel, source affichée).
+4. **Search results** (`query.length ≥ 2`, debounce 350 ms) : RPC `cosme_check_search_catalog` (trigram indexé, insensible casse/accents/ordre) **wrappée dans `queryClient.fetchQuery`** (clé normalisée via `lib/catalog/searchCache.ts`, `staleTime 60s`) → recherche équivalente retapée = 0 appel DB côté appareil.
+
+**Recherche approfondie internet (MANUELLE, 1 crédit) — 11 juin 2026** : on ne lance PLUS la cascade `product-suggest` (OBF/INCIDecoder/OpenAI/DDG) automatiquement (protège les quotas API à grande échelle). Quand le catalog est vide → bouton « 🌐 Recherche approfondie sur internet ». Au tap : `cosme_check_consume_credit('deep_search')` → si `ok` appelle `product-suggest` + invalide `['credits']` ; si épuisé → carte upsell Premium (`/offre`). Machine à états `DeepState` = `idle → running → done | no_credit | error`. Section résultats "**TROUVÉ SUR INTERNET**" (badge globe, fond violet pastel) inchangée.
 
 Breadcrumb "Catégories › X › Y", barre recherche sticky en haut.
 
@@ -243,7 +247,7 @@ Breadcrumb "Catégories › X › Y", barre recherche sticky en haut.
 - `lib/storage/productImageCache.ts` :
   - `cacheProductImage(analysisId, url)` — TTL 30j, max 500 entrées.
   - `getProductImage(analysisId)` — instant.
-  - `resolveAndCacheProductImage(analysisId, brand, name)` — fallback catalog : si miss → 1 appel RPC `cosme_check_search_catalog` substring → cache → 0 appel ensuite.
+  - `resolveAndCacheProductImage(analysisId, brand, name)` — fallback catalog : si miss → 1 appel RPC `cosme_check_search_catalog` (trigram indexé) → cache → 0 appel ensuite.
 - Propagation `imageUrl` depuis `ProductSearchMode` / `PasteLinkFlow` jusqu'au cache après `runAnalysis` succès.
 - `AnalyseDetailScreen` lit via `resolveAndCacheProductImage(id, state.brand, state.productLabel)` au montage → pass à `AnalysisResultPanel.productImageUrl` → `BigScoreCard.imageUrl`.
 - `expo-image cachePolicy="memory-disk"` sur le rendu → binaire local persistant.
@@ -255,11 +259,12 @@ Breadcrumb "Catégories › X › Y", barre recherche sticky en haut.
 
 ## Tests
 
-- **164 tests, 16 suites**. Lancer : `npx jest --config jest.config.js --no-coverage`.
+- **286 tests, 27 suites** (au 11 juin 2026). Lancer : `npx jest --config jest.config.js --no-coverage`.
 - Env **node** (pas RN). Tests dans `lib/__tests__/`.
 - Logique pure extraite pour testabilité :
   - `lib/storage/cacheCore` (TTL, purge)
   - `lib/storage/queryPersist` (predicate persister)
+  - `lib/catalog/searchCache` (normalisation clé casse/accents/ordre + dédoublonnage fetchQuery)
   - `lib/storage/aiCache` (hash routine, namespaces, round-trip via AsyncStorage mocké)
   - `lib/routine/summary` (dashboard)
   - `lib/routine/compareOverlap` (compare)
@@ -299,6 +304,13 @@ Migrations DB : via Supabase MCP `apply_migration` (avec `name` snake_case + `qu
 ---
 
 ## Historique récent (juin 2026)
+
+### Optimisation recherche produits — scalabilité 10k users (11 juin)
+- **Phase 1 — Index SQL (déployé prod)** : `cosme_check_search_catalog` faisait un **Parallel Seq Scan sur 405k lignes = 2 224 ms** (index trigram inutilisé : construit sans `lower()` + prédicat `NOT EXISTS(... NOT LIKE)` non-indexable). Réécrite en plpgsql avec prédicats positifs `LIKE '%token%'` par token, index GIN `catalog_search_unaccent_trgm` sur `lower(f_unaccent(brand||' '||name))` → **insensible casse/accents/ordre**, **~40 ms à chaud**. `word_similarity` retiré du tri (recalcul par ligne = +1–1,4 s sur requêtes larges) → tri `score DESC, count_total DESC`. Surcharge 2-args supprimée. Index trigram aussi ajouté sur `product_inci_cache`. Migrations : `search_catalog_use_trgm_index_phase1`, `search_catalog_drop_word_similarity_sort`, `search_catalog_accent_insensitive`.
+- **Phase 2 — React Query (client)** : recherche wrappée dans `queryClient.fetchQuery` (`staleTime 60s`), clé normalisée `lib/catalog/searchCache.ts` (casse/accents/ordre). `catalog-search` ajouté au blacklist persister. Tests `lib/__tests__/catalogSearchCache.test.ts` (15, dont preuve dédoublonnage réel).
+- **Phase 3 — Recherche approfondie manuelle** : suppression du déclenchement AUTO de `product-suggest`. Bouton manuel + débit 1 crédit (`deep_search`) + upsell Premium si épuisé. Protège les API externes du rate-limit fournisseur.
+- **Phase 4 — Cache cross-user** : **Deno KV indisponible sur Supabase Edge** (découverte). Edge Function `catalog-search` testée (rate-limit 30/min OK, mais cache KV = no-op) puis ABANDONNÉE. On reste sur la RPC directe + buffer cache Postgres (cross-user gratuit). Cf. note ⚠️ section "Cache serveur".
+- Test obsolète `barcodeFlag.test.ts` corrigé (mode catalog-only). Suite : **286 tests, 27 suites**.
 
 ### Refonte scan + UX (3 juin)
 - **Scan refactor majeur** : `ScanSheet.tsx` supprimé. `scan.tsx` route directement vers chaque méthode plein écran via `?mode=X`. Pas de tabs segmentées en haut.

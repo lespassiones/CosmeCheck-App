@@ -34,6 +34,10 @@ describe('shouldPersistQueryKey', () => {
     expect(shouldPersistQueryKey(['routine-suggest', 'hash'])).toBe(false)
   })
 
+  it('exclut la recherche catalogue (transient, staleTime 60s)', () => {
+    expect(shouldPersistQueryKey(['catalog-search', 'garnier', 0])).toBe(false)
+  })
+
   it('refuse les queryKey non-array / vides / non-string', () => {
     expect(shouldPersistQueryKey([])).toBe(false)
     expect(shouldPersistQueryKey(null)).toBe(false)

@@ -43,6 +43,7 @@ import {
   type ColorRating,
 } from '@/lib/analysis/types'
 import { categoryLabel, type ProductCategory } from '@/lib/categoryLabel'
+import { decodeHtml } from '@/lib/decodeHtml'
 import { useAuth } from '@/hooks/useAuth'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { ScreenHeader } from '@/components/shared/ScreenHeader'
@@ -122,7 +123,7 @@ function buildItem(row: AnalysisRow, latestCoherenceId: string | null): HistoryI
   const rawCategory = (parsed?.category ?? row.category) as ProductCategory | null
   const category = categoryLabel(rawCategory) ?? productType
 
-  const title = row.name?.trim() || row.product_label?.trim() || 'Analyse'
+  const title = decodeHtml(row.name?.trim() || row.product_label?.trim()) || 'Analyse'
 
   const dateLabel = formatDistanceToNow(new Date(row.created_at), {
     addSuffix: true,
@@ -132,7 +133,7 @@ function buildItem(row: AnalysisRow, latestCoherenceId: string | null): HistoryI
   return {
     id: row.id,
     title,
-    rawName: row.name?.trim() || row.product_label?.trim() || 'Analyse',
+    rawName: decodeHtml(row.name?.trim() || row.product_label?.trim()) || 'Analyse',
     category,
     score: row.score,
     rating,
@@ -140,8 +141,8 @@ function buildItem(row: AnalysisRow, latestCoherenceId: string | null): HistoryI
     dateLabel,
     latestCoherenceId,
     searchTokens: Array.from(tokenSet),
-    brand: row.brand?.trim() || null,
-    productLabel: row.product_label?.trim() || row.name?.trim() || null,
+    brand: decodeHtml(row.brand?.trim()) || null,
+    productLabel: decodeHtml(row.product_label?.trim() || row.name?.trim()) || null,
     productType: row.product_type ?? parsed?.productType ?? null,
     inciText: row.input_text ?? '',
   }

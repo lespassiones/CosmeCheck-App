@@ -37,6 +37,7 @@ import { spacing, radius } from '@/constants/spacing'
 import { typography, fontFamilies } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { supabase } from '@/lib/supabase/client'
+import { decodeHtml } from '@/lib/decodeHtml'
 import { parseAnalyseResponse, type AnalyseResponse } from '@/lib/analysis/types'
 import {
   computeRoutineMetrics,
@@ -76,7 +77,7 @@ function exposureColor(label: RoutineMetrics['exposureLabel']): string {
 }
 
 function titleFor(item: RoutineItem): string {
-  return item.analysis?.product_label?.trim() || item.analysis?.name?.trim() || 'Produit'
+  return decodeHtml(item.analysis?.product_label?.trim() || item.analysis?.name?.trim()) || 'Produit'
 }
 
 /** Rend un texte avec **gras** markdown léger. */

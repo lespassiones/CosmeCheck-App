@@ -30,6 +30,8 @@ interface Props {
   loading?: boolean
   /** Bouton "Réessayer" affiché quand la synthèse est absente ET non chargée. */
   onRequestSynthesis?: () => void
+  /** Ouvre la fiche ingrédient au tap sur un nom coloré. */
+  onIngredientPress?: (slug: string) => void
 }
 
 type SynthesisBlock = { type: 'p'; text: string } | { type: 'ul'; items: string[] }
@@ -85,16 +87,26 @@ function textColorForRating(r: ColorRating): string {
   return colors.rating[r].text
 }
 
-/** Rend une string avec **gras** → <Text bold> (teinté si rating connu). */
-function renderBold(s: string, colorByName: Map<string, ColorRating>, keyPrefix: string): ReactNode[] {
+/** Rend une string avec **gras** → <Text bold> (teinté + tappable si slug connu). */
+function renderBold(
+  s: string,
+  colorByName: Map<string, ColorRating>,
+  slugByName: Map<string, string>,
+  onIngredientPress: ((slug: string) => void) | undefined,
+  keyPrefix: string,
+): ReactNode[] {
   const parts = s.split(/(\*\*[^*]+\*\*)/g)
   return parts.map((p, i) => {
     if (/^\*\*[^*]+\*\*$/.test(p)) {
       const inner = p.slice(2, -2)
-      const rating = colorByName.get(normaliseToken(inner))
+      const token = normaliseToken(inner)
+      const rating = colorByName.get(token)
+      const slug = slugByName.get(token)
+      const handlePress = onIngredientPress && slug ? () => onIngredientPress(slug) : undefined
       return (
         <Text
           key={`${keyPrefix}-${i}`}
+          onPress={handlePress}
           style={[styles.bold, rating ? { color: textColorForRating(rating) } : null]}
         >
           {inner}
@@ -110,6 +122,7 @@ const SynthesisCardBase: FC<Props> = ({
   items,
   loading = false,
   onRequestSynthesis,
+  onIngredientPress,
 }) => {
   const [expanded, setExpanded] = useState(false)
 
@@ -120,6 +133,16 @@ const SynthesisCardBase: FC<Props> = ({
       if (!rating) continue
       if (it.name) m.set(normaliseToken(it.name), rating)
       if (it.input) m.set(normaliseToken(it.input), rating)
+    }
+    return m
+  }, [items])
+
+  const slugByName = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const it of items) {
+      if (!it.slug) continue
+      if (it.name) m.set(normaliseToken(it.name), it.slug)
+      if (it.input) m.set(normaliseToken(it.input), it.slug)
     }
     return m
   }, [items])
@@ -142,7 +165,7 @@ const SynthesisCardBase: FC<Props> = ({
               if (block.type === 'p') {
                 return (
                   <Text key={i} style={styles.paragraph}>
-                    {renderBold(block.text, colorByName, `p${i}`)}
+                    {renderBold(block.text, colorByName, slugByName, onIngredientPress, `p${i}`)}
                   </Text>
                 )
               }
@@ -152,7 +175,7 @@ const SynthesisCardBase: FC<Props> = ({
                     <View key={j} style={styles.li}>
                       <View style={styles.bullet} />
                       <Text style={styles.liText}>
-                        {renderBold(item, colorByName, `li${i}-${j}`)}
+                        {renderBold(item, colorByName, slugByName, onIngredientPress, `li${i}-${j}`)}
                       </Text>
                     </View>
                   ))}
