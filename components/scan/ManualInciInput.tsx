@@ -145,9 +145,12 @@ export const ManualInciInput: FC<Props> = ({
       <Pressable
         style={[styles.cta, !canAnalyse && styles.ctaDisabled]}
         disabled={!canAnalyse}
-        onPress={() =>
-          onInciReady(trimmed, productName.trim() || undefined)
-        }
+        onPress={() => {
+          const name = productName.trim() || undefined
+          setInciText('')
+          setProductName('')
+          onInciReady(trimmed, name)
+        }}
       >
         <Ionicons name="sparkles" size={18} color="#FFFFFF" />
         <Text style={styles.ctaText}>Analyser</Text>

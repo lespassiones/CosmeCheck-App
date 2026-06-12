@@ -36,6 +36,11 @@ export const ROUTES = {
     DETAIL: (id: string) => `/analyse/${id}` as const,
   },
 
+  // ── Alternatives (page « Voir tout ») ────────────────────────────
+  ALTERNATIVES: {
+    DETAIL: (ean: string) => `/alternatives/${ean}` as const,
+  },
+
   // ── Promesses ───────────────────────────────────────────────────
   PROMESSES: {
     NOUVELLE: '/promesses/nouvelle',

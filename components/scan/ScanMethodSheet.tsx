@@ -210,7 +210,7 @@ const BigOption: FC<{
     style={({ pressed }) => [styles.bigCard, grow && styles.bigCardGrow, pressed && styles.cardPressed]}
     accessibilityRole="button"
   >
-    <Ionicons name={icon} size={24} color={colors.ink} />
+    <Ionicons name={icon} size={48} color={colors.ink} />
     <Text style={styles.bigTitle} numberOfLines={2}>
       {title}
     </Text>

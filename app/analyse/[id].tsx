@@ -47,6 +47,8 @@ import {
   getCachedAnalysisRow,
 } from '@/lib/storage/session'
 import { resolveAndCacheProductImage } from '@/lib/storage/productImageCache'
+import { resolveCatalogIdentity } from '@/lib/catalog/resolveCatalogIdentity'
+import { leafLabelFromCategorySlug } from '@/constants/categories'
 import type { AnalysisRow } from '@/lib/supabase/types'
 import { useProfile } from '@/hooks/useProfile'
 import { useRoutine } from '@/hooks/useRoutine'
@@ -70,6 +72,11 @@ const AnalyseDetailScreen: FC = () => {
   const { id } = useLocalSearchParams<{ id: string }>()
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [productImageUrl, setProductImageUrl] = useState<string | null>(null)
+  // Score INCI Beauty (catalog.score) + dernière sous-catégorie, résolus depuis
+  // le catalogue par marque+nom. catalog.score est la SOURCE DE VÉRITÉ du score
+  // (l'écran doit l'afficher, pas le score calculé de result_json).
+  const [catalogScore, setCatalogScore] = useState<number | null>(null)
+  const [leafCategory, setLeafCategory] = useState<string | null>(null)
   const scrollRef = useRef<ScrollView>(null)
   const reduceMotion = useReducedMotion()
   const { restrictions } = useProfile()
@@ -94,6 +101,23 @@ const AnalyseDetailScreen: FC = () => {
       cancelled = true
     }
   }, [id, state])
+
+  // Résout le score INCI Beauty (catalog.score) + la dernière sous-catégorie
+  // depuis le catalogue (par marque+nom). Si le produit n'est pas au catalogue
+  // (saisie manuelle / internet), catalogScore reste null → on garde le score
+  // calculé de result_json.
+  useEffect(() => {
+    if (state.status !== 'ready') return
+    let cancelled = false
+    void resolveCatalogIdentity(state.brand, state.productLabel).then((info) => {
+      if (cancelled || !info) return
+      setCatalogScore(info.score)
+      setLeafCategory(leafLabelFromCategorySlug(info.category))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [state])
 
   const buildReadyState = useCallback(
     (row: AnalysisRow): LoadState => {
@@ -183,13 +207,15 @@ const AnalyseDetailScreen: FC = () => {
     scrollRef.current?.scrollTo({ y: y + HEADER_OFFSET, animated: !reduceMotion })
   }, [reduceMotion])
 
-  // Pastille du VerdictGauge dérivée du SCORE (source de vérité unique), pour
-  // qu'elle soit IDENTIQUE à celle affichée en recherche/catalogue. La phrase
-  // "L'essentiel" garde sa logique descriptive (essentiel.verdict).
-  const verdictTone = useMemo(
-    () => (state.status === 'ready' ? verdictToneFromScore(state.result.score) : 'unknown'),
-    [state],
-  )
+  // Pastille du VerdictGauge dérivée du SCORE. SOURCE DE VÉRITÉ = catalog.score
+  // (INCI Beauty) dès qu'il est résolu ; sinon le score de result_json (produit
+  // hors catalogue / en attendant la résolution). Garantit que la pastille du
+  // détail = celle des listes (recherche/alternatives).
+  const verdictTone = useMemo(() => {
+    if (state.status !== 'ready') return 'unknown'
+    const effectiveScore = catalogScore ?? state.result.score
+    return verdictToneFromScore(effectiveScore)
+  }, [state, catalogScore])
 
   const alreadyInRoutine = id ? isInRoutine(id) : false
 
@@ -282,9 +308,18 @@ const AnalyseDetailScreen: FC = () => {
           {/* En-tête produit : titre pleine largeur, catégorie, CTAs, partage + jauge */}
           <View style={styles.header}>
             <Text style={styles.title} numberOfLines={3}>{state.title}</Text>
-            {state.categoryText ? (
-              <View style={styles.categoryChip}>
-                <Text style={styles.categoryText}>{state.categoryText}</Text>
+            {(leafCategory || state.categoryText || state.brand) ? (
+              <View style={styles.metaRow}>
+                {(leafCategory || state.categoryText) ? (
+                  <View style={styles.categoryChip}>
+                    <Text style={styles.categoryText} numberOfLines={1}>
+                      {leafCategory || state.categoryText}
+                    </Text>
+                  </View>
+                ) : null}
+                {state.brand ? (
+                  <Text style={styles.brandText} numberOfLines={1}>{state.brand}</Text>
+                ) : null}
               </View>
             ) : null}
 
@@ -350,6 +385,9 @@ const AnalyseDetailScreen: FC = () => {
             onRequestScrollTo={handleRequestScrollTo}
             reduceMotion={reduceMotion}
             productImageUrl={productImageUrl}
+            brand={state.brand}
+            productName={state.productLabel}
+            verdictScore={catalogScore ?? state.result.score}
           />
         </ScrollView>
       )}
@@ -430,19 +468,31 @@ const styles = StyleSheet.create({
     ...typography.h2,
     color: colors.ink,
   },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: -spacing.xs,
+  },
   categoryChip: {
     alignSelf: 'flex-start',
     backgroundColor: 'rgba(0,0,0,0.06)',
     borderRadius: 9999,
     paddingHorizontal: 10,
     paddingVertical: 3,
-    marginTop: -spacing.xs,
   },
   categoryText: {
     fontFamily: fontFamilies.medium,
     fontSize: 11,
     color: colors.inkMuted,
     textTransform: 'capitalize',
+  },
+  brandText: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 12,
+    color: colors.ink,
+    flexShrink: 1,
   },
   ctaRow: {
     flexDirection: 'row',

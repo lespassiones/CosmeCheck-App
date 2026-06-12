@@ -32,6 +32,7 @@ import {
   type LayoutChangeEvent,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { useRouter } from 'expo-router'
 
 import { WhiteCard } from '@/components/design/WhiteCard'
 import { colors } from '@/constants/colors'
@@ -56,7 +57,11 @@ import { PenaltySummaryStrip } from './PenaltySummaryStrip'
 import { ProductRow } from './ProductRow'
 import { RestrictionWarning, RestrictionsOkBadge } from './RestrictionWarning'
 import { SynthesisCard } from './SynthesisCard'
+import { AlternativesCarousel } from './AlternativesCarousel'
 import { supabase } from '@/lib/supabase/client'
+import { ProcessingOverlay } from '@/components/shared/ProcessingOverlay'
+import { useAlternatives } from '@/hooks/useAlternatives'
+import { useLaunchAlternative } from '@/hooks/useLaunchAlternative'
 import type { EssentielData } from '@/lib/essentiel/engine'
 
 interface Props {
@@ -74,6 +79,12 @@ interface Props {
   reduceMotion?: boolean
   /** URL de l'image produit (catalogue / OBF / web). Passée à BigScoreCard. */
   productImageUrl?: string | null
+  /** Marque + nom du produit — servent à résoudre les alternatives (catalogue). */
+  brand?: string | null
+  productName?: string | null
+  /** Score global (INCI Beauty) — pour que la pastille L'ESSENTIEL soit
+   *  identique à la jauge du verdict. */
+  verdictScore?: number | null
 }
 
 type TabKey = 'all' | ColorRating | 'unknown'
@@ -96,11 +107,24 @@ export const AnalysisResultPanel: FC<Props> = ({
   onRequestScrollTo,
   reduceMotion,
   productImageUrl,
+  brand,
+  productName,
+  verdictScore,
 }) => {
+  const router = useRouter()
   const [detailsExpanded, setDetailsExpanded] = useState(false)
   const [filter, setFilter] = useState<TabKey>('all')
   const [listModalOpen, setListModalOpen] = useState(false)
   const modalScrollRef = useRef<ScrollView>(null)
+
+  // ── Alternatives (recommandations same-category, filtrées restrictions/profil) ──
+  const alternatives = useAlternatives({
+    brand,
+    productName,
+    initialCount: 10,
+    step: 10,
+  })
+  const { analyze, isAnalyzing } = useLaunchAlternative()
 
   // ── Synthèse lazy ─────────────────────────────────────────────────────
   // result.synthesis peut être déjà présent (analyses récentes / générées
@@ -270,6 +294,28 @@ export const AnalysisResultPanel: FC<Props> = ({
   const tabs: TabKey[] = ['all', 'vert', 'jaune', 'orange', 'rouge']
   if (itemCounts.unknown > 0) tabs.push('unknown')
 
+  // Carrousel d'alternatives — rendu soit replié (sous le bouton), soit déplié
+  // (tout en bas après la liste d'ingrédients). Une seule branche monte à la fois.
+  const altCarousel = (
+    <AlternativesCarousel
+      products={alternatives.products}
+      isInitialLoading={alternatives.isInitialLoading}
+      isEmpty={alternatives.isEmpty}
+      analyzing={isAnalyzing}
+      showSeeAll={alternatives.hasMore}
+      onSelect={(p) => void analyze(p)}
+      onSeeAll={() => {
+        if (alternatives.currentEan) {
+          // Forme objet (idiome expo-router pour route dynamique) — robuste vs typegen.
+          router.push({
+            pathname: '/alternatives/[ean]',
+            params: { ean: alternatives.currentEan },
+          })
+        }
+      }}
+    />
+  )
+
   return (
     <View style={styles.root}>
       {/* 1. Essentiel — 3 cartes (toggle rendu séparément en dessous) */}
@@ -278,6 +324,7 @@ export const AnalysisResultPanel: FC<Props> = ({
         expanded={detailsExpanded}
         onToggle={() => setDetailsExpanded((v) => !v)}
         hideToggle
+        verdictScore={verdictScore}
       />
 
       <View style={styles.toggleWrap}>
@@ -286,6 +333,9 @@ export const AnalysisResultPanel: FC<Props> = ({
           onToggle={() => setDetailsExpanded((v) => !v)}
         />
       </View>
+
+      {/* Replié : alternatives juste sous le bouton (façon Yuka) */}
+      {!detailsExpanded ? altCarousel : null}
 
       {detailsExpanded ? (
         <View style={styles.details}>
@@ -372,6 +422,9 @@ export const AnalysisResultPanel: FC<Props> = ({
               </View>
             </WhiteCard>
           </Pressable>
+
+          {/* 10. Déplié : alternatives tout en bas, après la liste d'ingrédients */}
+          {altCarousel}
         </View>
       ) : null}
 
@@ -444,6 +497,9 @@ export const AnalysisResultPanel: FC<Props> = ({
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
+      {/* Overlay pendant l'analyse d'une alternative choisie */}
+      <ProcessingOverlay visible={isAnalyzing} message="On décode la composition…" />
     </View>
   )
 }

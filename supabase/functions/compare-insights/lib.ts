@@ -47,9 +47,8 @@ export type CompareInsights = {
   howToChoose: string;
 };
 
-// Bumped à 4 quand le prompt a appris à utiliser les vrais noms produits au
-// lieu de "produit A"/"produit B" (cf. web).
-const PROMPT_VERSION = 4;
+// v5 : personnalisation "Comment choisir ?" via profil peau + restrictions user.
+const PROMPT_VERSION = 5;
 
 // ── shortenProductName (port verbatim du web) ───────────────────────────────
 
@@ -126,8 +125,13 @@ function fingerprint(side: CompareSideInput): string {
     .join("|");
 }
 
-async function makeCacheKey(a: CompareSideInput, b: CompareSideInput): Promise<string> {
-  const raw = `${fingerprint(a)}<>${fingerprint(b)}|v=${PROMPT_VERSION}`;
+async function makeCacheKey(
+  a: CompareSideInput,
+  b: CompareSideInput,
+  profileFingerprint?: string,
+): Promise<string> {
+  const profileSuffix = profileFingerprint ? `|profile:${profileFingerprint}` : "";
+  const raw = `${fingerprint(a)}<>${fingerprint(b)}|v=${PROMPT_VERSION}${profileSuffix}`;
   const hash = (await sha256Hex(raw)).slice(0, 32);
   return `compare:${hash}`;
 }
@@ -153,7 +157,11 @@ function flagged(
     .map((i) => `${i.name ?? i.input}${i.primaryFunction ? ` (${i.primaryFunction})` : ""}`);
 }
 
-function buildPrompt(a: CompareSideInput, b: CompareSideInput): { system: string; user: string } {
+function buildPrompt(
+  a: CompareSideInput,
+  b: CompareSideInput,
+  opts: { profileBlock?: string | null; restrictionsBlock?: string | null } = {},
+): { system: string; user: string } {
   const sideBlock = (label: string, side: CompareSideInput) => {
     const c = side.result.counts;
     return [
@@ -183,6 +191,14 @@ function buildPrompt(a: CompareSideInput, b: CompareSideInput): { system: string
     "alcool, conservateur, silicone, actif hydratant) si ça aide à comprendre. Tu retournes UNIQUEMENT " +
     "un objet JSON valide, sans markdown, sans texte autour.";
 
+  const profileSection = [opts.profileBlock, opts.restrictionsBlock]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const howToChooseInstruction = profileSection
+    ? `1 à 2 phrases personnalisées qui aident CE LECTEUR SPÉCIFIQUE à choisir en tenant compte de son profil (type de peau, préoccupations, restrictions). Dis explicitement quel produit correspond mieux à son profil et pourquoi, en citant un élément concret du profil (ex : "pour une peau sèche, …"). Pas de 'meilleur', pas de 'préfère X'. JAMAIS "A" / "B" / "produit A" / "produit B" - toujours les vrais noms.`
+    : `1 à 2 phrases qui aident le lecteur à choisir SANS trancher. Ex : 'Si tu cherches un soin doux pour peau réactive, ${a.name} correspond à ce profil. Si tu privilégies un nettoyant moussant efficace, ${b.name} est conçu pour ça.' Pas de 'meilleur', pas de 'préfère X'. JAMAIS "A" / "B" / "produit A" / "produit B" - toujours les vrais noms.`;
+
   const user = `Voici les données de deux produits à comparer. Rédige 4 champs courts.
 
 ${sideBlock("PRODUIT 1", a)}
@@ -192,14 +208,14 @@ ${sideBlock("PRODUIT 2", b)}
 NOMS À UTILISER DANS LE TEXTE (verbatim, ne les modifie pas) :
 - Pour le produit 1 : "${a.name}"
 - Pour le produit 2 : "${b.name}"
-
+${profileSection ? `\n${profileSection}\n` : ""}
 Rends un JSON avec exactement ces 4 clés :
 
 {
   "portraitA": "1 à 2 phrases qui décrivent la formule de \"${a.name}\" : son caractère (eau-glycérine, huileux, moussant, à base d'alcool…), ce qu'elle apporte, son point d'attention principal si pertinent. Cite \"${a.name}\" par son nom au moins une fois. Ne dis jamais qu'elle est bonne ou mauvaise.",
   "portraitB": "Idem pour \"${b.name}\". Cite \"${b.name}\" par son nom au moins une fois.",
   "common": "1 phrase concrète qui résume ce que les deux produits ont en commun (type de formule, point de vigilance partagé, ou rien de notable). Si rien d'intéressant en commun, dis 'Les deux suivent des logiques de formulation très différentes.' Tu peux écrire \"les deux produits\" ou citer les noms.",
-  "howToChoose": "1 à 2 phrases qui aident le lecteur à choisir SANS trancher. Ex : 'Si tu cherches un soin doux pour peau réactive, ${a.name} correspond à ce profil. Si tu privilégies un nettoyant moussant efficace, ${b.name} est conçu pour ça.' Pas de 'meilleur', pas de 'préfère X'. JAMAIS \"A\" / \"B\" / \"produit A\" / \"produit B\" - toujours les vrais noms."
+  "howToChoose": "${howToChooseInstruction}"
 }
 
 CONTRAINTES
@@ -244,9 +260,10 @@ function tryParse(raw: string): CompareInsights | null {
 async function callMistralFallback(
   a: CompareSideInput,
   b: CompareSideInput,
+  profileOpts: { profileBlock?: string | null; restrictionsBlock?: string | null } = {},
 ): Promise<CompareInsights | null> {
   if (!hasMistral()) return null;
-  const { system, user } = buildPrompt(a, b);
+  const { system, user } = buildPrompt(a, b, profileOpts);
   const content = await mistralChat({
     temperature: 0.5,
     maxTokens: 700,
@@ -262,15 +279,31 @@ async function callMistralFallback(
 export async function generateCompareInsights(
   a: CompareSideInput,
   b: CompareSideInput,
-  opts: { userId?: string | null } = {},
+  opts: {
+    userId?: string | null;
+    profileBlock?: string | null;
+    restrictionsBlock?: string | null;
+  } = {},
 ): Promise<CompareInsights | null> {
-  const cacheKey = await makeCacheKey(a, b);
+  const profileOpts = {
+    profileBlock: opts.profileBlock ?? null,
+    restrictionsBlock: opts.restrictionsBlock ?? null,
+  };
+
+  // Cache user-specific quand un profil est présent, global sinon.
+  let profileFingerprint: string | undefined;
+  if (profileOpts.profileBlock || profileOpts.restrictionsBlock) {
+    const raw = (profileOpts.profileBlock ?? "") + "|" + (profileOpts.restrictionsBlock ?? "");
+    profileFingerprint = (await sha256Hex(raw)).slice(0, 16);
+  }
+  const cacheKey = await makeCacheKey(a, b, profileFingerprint);
+
   const cached = await getCached<CompareInsights>(cacheKey);
   if (cached?.portraitA && cached?.portraitB) return cached;
 
   if (!hasOpenAI() && !hasMistral()) return null;
 
-  const { system, user } = buildPrompt(a, b);
+  const { system, user } = buildPrompt(a, b, profileOpts);
 
   try {
     const result = await callWithFallback<CompareInsights | null>({
@@ -296,7 +329,7 @@ export async function generateCompareInsights(
         };
       },
       fallback: async () => ({
-        value: await callMistralFallback(a, b),
+        value: await callMistralFallback(a, b, profileOpts),
         provider: "mistral",
       }),
     });

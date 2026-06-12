@@ -626,6 +626,36 @@ export function pathToSlug(path: readonly string[]): string {
   return slugs.join('/')
 }
 
+// Map slug (DB, généré + réel) → nom d'affichage, construite depuis l'arbre.
+const SLUG_TO_NAME: Record<string, string> = (() => {
+  const map: Record<string, string> = {}
+  const walk = (nodes: readonly CategoryNode[]): void => {
+    for (const n of nodes) {
+      const gen = nameToSlug(n.name)
+      const real = LEAF_SLUG_OVERRIDES[gen] ?? gen
+      map[gen] = n.name
+      map[real] = n.name
+      if (n.children) walk(n.children)
+    }
+  }
+  walk(CATEGORIES)
+  return map
+})()
+
+/**
+ * Nom d'affichage de la DERNIÈRE sous-catégorie depuis un slug complet
+ * (ex. "coiffure/shampooing/shampooing-classique" → "Shampooing classique").
+ * Fallback : prettify du slug si non trouvé dans l'arbre.
+ */
+export function leafLabelFromCategorySlug(slug: string | null | undefined): string | null {
+  if (!slug) return null
+  const leaf = slug.split('/').filter(Boolean).pop()
+  if (!leaf) return null
+  if (SLUG_TO_NAME[leaf]) return SLUG_TO_NAME[leaf]
+  const pretty = leaf.replace(/-/g, ' ').trim()
+  return pretty ? pretty.charAt(0).toUpperCase() + pretty.slice(1) : null
+}
+
 // ─── Navigation ───────────────────────────────────────────────────────────────
 
 /** Trouve le nœud correspondant à un chemin dans l'arbre. */

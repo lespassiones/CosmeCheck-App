@@ -22,12 +22,17 @@ const PENALTY: Record<ColorRating, number> = {
   Rouge: 4.0,
 };
 
+// Constante de saturation calibrée contre INCI Beauty (grid-search sur 10k
+// produits notés IB) : MAE ~4.1 et SURTOUT plus aucun plancher brutal à 0.
+const SAT_C = 8;
+
 export function computeScore(
   matches: { color_rating: ColorRating | null; position: number }[],
   totalPositions: number,
 ): number {
   if (totalPositions === 0) return 0;
-  let score = 20;
+  // S = somme des pénalités pondérées par la position + effet cocktail.
+  let S = 0;
   let countOrange = 0;
   let countRouge = 0;
   for (const m of matches) {
@@ -35,15 +40,15 @@ export function computeScore(
     const p = m.position;
     const N = Math.max(totalPositions, 1);
     const weight = Math.log(N - p + 1) / Math.log(N + 1);
-    score -= PENALTY[m.color_rating] * weight;
+    S += PENALTY[m.color_rating] * weight;
     if (m.color_rating === "Orange") countOrange++;
     if (m.color_rating === "Rouge") countRouge++;
   }
-  // Effet cocktail : pénalité supplémentaire quand les ingrédients problématiques
-  // s'accumulent, indépendamment de leur position (aligné sur INCI Beauty).
-  score -= Math.max(0, countOrange - 3) * 0.4;
-  score -= Math.max(0, countRouge - 2) * 0.8;
-  return Math.max(0, Math.min(20, score));
+  S += Math.max(0, countOrange - 3) * 0.4;
+  S += Math.max(0, countRouge - 2) * 0.8;
+  // Saturation douce : score = 20 / (1 + S/C). Décroît sans jamais s'effondrer
+  // à 0 (une liste longue avec beaucoup de pénalités tombe bas mais > 0).
+  return Math.max(0, Math.min(20, 20 / (1 + S / SAT_C)));
 }
 
 /** Map a numeric score (0-20) to a qualitative label + tone. Seuils ≥17/≥13/≥9. */

@@ -6,6 +6,28 @@
  */
 import { serviceClient } from "../_shared/auth.ts";
 
+/**
+ * Lit le score CATALOGUE (= score INCI Beauty, source de vérité) pour un EAN.
+ * Renvoie null si l'EAN n'est pas au catalogue (produit internet) ou sans score.
+ * Sert à ne JAMAIS afficher/persister un score recalculé pour un produit connu.
+ */
+export async function getCatalogScore(
+  ean: string,
+): Promise<number | null> {
+  try {
+    const { data } = await serviceClient()
+      .schema("cosme_check")
+      .from("catalog")
+      .select("score")
+      .eq("ean", ean)
+      .maybeSingle();
+    const s = (data as { score: number | null } | null)?.score;
+    return typeof s === "number" ? s : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function upsertProductAnalysis(params: {
   ean: string;
   resultJson: unknown;

@@ -27,6 +27,7 @@ import {
   generateCompareInsights,
   shortenProductName,
 } from "./lib.ts";
+import { loadProfileAndRestrictions } from "./lib/profile.ts";
 
 Deno.serve(async (req) => {
   const pre = handleOptions(req);
@@ -82,10 +83,13 @@ Deno.serve(async (req) => {
     const shortA = shortenProductName(rawA);
     const shortB = shortenProductName(rawB);
 
+    // 5. Profil utilisateur (best-effort, non-bloquant).
+    const { profileBlock, restrictionsBlock } = await loadProfileAndRestrictions(sb, user.id);
+
     const insights = await generateCompareInsights(
       { name: shortA, result: a.result_json },
       { name: shortB, result: b.result_json },
-      { userId: user.id },
+      { userId: user.id, profileBlock, restrictionsBlock },
     );
 
     if (!insights) {

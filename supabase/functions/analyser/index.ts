@@ -21,6 +21,7 @@
 import { handleOptions, jsonResponse } from "../_shared/cors.ts";
 import { gate } from "../_shared/gate.ts";
 import { serviceClient } from "../_shared/auth.ts";
+import { getCatalogScore } from "./catalog.ts";
 import { lookupEanByName } from "../_shared/eanLookup.ts";
 import { sha256Hex } from "../_shared/aiClient.ts";
 import { type ColorRating, computeScore, type ScoreTone, scoreLabel } from "./score.ts";
@@ -107,6 +108,23 @@ const ABSENCE_REPORTED = new Set([
 ]);
 const NEUTRAL_WHEN_ABSENT = new Set(["huile-essentielle"]);
 ABSENCE_REPORTED.add("huile-essentielle");
+
+// Catégorisation live : mappe la catégorie LLM (enum) vers un slug RÉEL de la
+// taxonomie (parmi les catégories/sous-catégories existantes). Sert à classer
+// les produits trouvés sur internet pour qu'ils apparaissent dans les listes
+// (alternatives, sous-catégorie affichée). null = on ne devine pas (évite le faux).
+const CATEGORY_ENUM_TO_SLUG: Record<string, string | null> = {
+  creme_visage:      "soin-du-corps-et-visage/creme-hydratante/creme-visage",
+  creme_corps:       "soin-du-corps-et-visage/creme-hydratante/hydratant-corps",
+  nettoyant_visage:  "soin-du-corps-et-visage/creme-hydratante/creme-visage",
+  shampooing:        "coiffure/shampooing/shampooing-classique",
+  apres_shampooing:  "coiffure/soin-capillaire/apres-shampooing",
+  solaire:           "produit-solaire/creme-solaire",
+  maquillage:        "maquillage/fond-de-teint-et-poudre/fond-de-teint",
+  parfum:            "parfum/parfum-pour-femme/eau-de-parfum-pour-femme",
+  deodorant:         null,
+  autre:             null,
+};
 
 const WATER_NAMES = new Set(["aqua", "water", "eau"]);
 const TOP_LIST_WINDOW = 5;
@@ -250,11 +268,28 @@ Deno.serve(async (req: Request) => {
     try {
       const svc = serviceClient();
       const { data: precomputed } = await svc.rpc("cosme_check_get_product_analysis", { p_ean: productEan });
-      if (precomputed) {
-        const cachedResult = precomputed as Record<string, unknown>;
-        const items = (Array.isArray(cachedResult.items) ? cachedResult.items : []) as ThresholdItem[];
-        cachedResult.items = recomputeThresholdContext(items);
+      const cachedResult = (precomputed ?? null) as Record<string, unknown> | null;
+      const cachedItems = (cachedResult && Array.isArray(cachedResult.items)
+        ? cachedResult.items
+        : []) as ThresholdItem[];
+      // Garde anti-cache-corrompu : un batch ETL (v1.1) a écrit des analyses
+      // tronquées (souvent 1 seul item) alors que l'INCI réel en compte bien plus.
+      // Si le cache a nettement moins d'ingrédients que la liste fournie, on
+      // l'IGNORE et on recalcule depuis le bon INCI (re-cache propre ensuite).
+      const inputTokenCount = parseInciList(rawText).length;
+      const cacheTrustworthy = inputTokenCount < 5 || cachedItems.length >= inputTokenCount * 0.5;
+      if (cachedResult && cacheTrustworthy) {
+        cachedResult.items = recomputeThresholdContext(cachedItems);
         cachedResult.synthesis = null;
+        // SCORE = source de vérité catalog (INCI Beauty). On ne sert JAMAIS le
+        // score calculé en cache pour un produit présent au catalogue.
+        const ibScore = await getCatalogScore(productEan);
+        if (ibScore != null) {
+          const { label, tone } = scoreLabel(ibScore);
+          cachedResult.score = ibScore;
+          cachedResult.scoreLabel = label;
+          cachedResult.scoreTone = tone;
+        }
 
         let savedAnalysisId: string | null = null;
         try {
@@ -455,12 +490,26 @@ Deno.serve(async (req: Request) => {
   }
   const matched = enriched.length - counts["Non reconnu"];
 
-  // Score.
-  const score = computeScore(
+  // Score CALCULÉ (notre algo) — utilisé seulement si le produit n'est PAS au
+  // catalogue (produit internet). Pour un produit connu, on lui substitue le
+  // score INCI Beauty de catalog.score juste après.
+  let score = computeScore(
     enriched.map((r) => ({ color_rating: r.effective_color, position: r.position_idx })),
     enriched.length,
   );
-  const { label: scoreLabelText, tone: scoreTone } = scoreLabel(score);
+  let { label: scoreLabelText, tone: scoreTone } = scoreLabel(score);
+
+  // SOURCE DE VÉRITÉ : si l'EAN est au catalogue, le score = catalog.score
+  // (INCI Beauty). On ne montre/persiste JAMAIS le score calculé pour un produit
+  // connu, et on n'écrasera pas catalog.score (voir upsert plus bas).
+  const catalogScore = productEan ? await getCatalogScore(productEan) : null;
+  const isCatalogProduct = catalogScore != null;
+  if (isCatalogProduct) {
+    score = catalogScore as number;
+    const lab = scoreLabel(score);
+    scoreLabelText = lab.label;
+    scoreTone = lab.tone;
+  }
 
   // Agrégation de tags.
   const tagCounts: Record<string, number> = {};
@@ -794,14 +843,20 @@ Deno.serve(async (req: Request) => {
 
     void (async () => {
       const { upsertCatalogProduct } = await import("./catalog.ts");
+      // Produit DÉJÀ au catalogue (score INCI Beauty) → on NE touche PAS au score
+      // (score/label/tone = null = on garde l'existant). Produit nouveau/internet
+      // → on écrit notre score calculé pour l'amorcer.
       await upsertCatalogProduct({
         ean: productEan,
         brand: body.brand ?? null,
         name: body.productLabel ?? null,
         ingredientsText: body.text ?? null,
-        score: Number(score.toFixed(4)),
-        scoreLabel: scoreLabelText,
-        scoreTone,
+        // Catégorie de la taxonomie (remplie seulement si absente, via COALESCE
+        // côté RPC) → le produit internet est classé comme les autres.
+        category: CATEGORY_ENUM_TO_SLUG[resolvedCategory ?? "autre"] ?? null,
+        score: isCatalogProduct ? null : Number(score.toFixed(4)),
+        scoreLabel: isCatalogProduct ? null : scoreLabelText,
+        scoreTone: isCatalogProduct ? null : scoreTone,
         countTotal: itemsResponse.length,
       });
     })();

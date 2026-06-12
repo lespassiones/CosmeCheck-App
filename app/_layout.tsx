@@ -187,6 +187,7 @@ function RootNavigator() {
       <Stack.Screen name="advisor/index" options={{ animation: 'fade' }} />
       <Stack.Screen name="compare/index" />
       <Stack.Screen name="analyse/[id]" />
+      <Stack.Screen name="alternatives/[ean]" />
       <Stack.Screen name="promesses/nouvelle" options={{ presentation: 'modal' }} />
       <Stack.Screen name="promesses/[id]" />
       <Stack.Screen name="profile/index" />

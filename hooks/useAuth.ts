@@ -53,10 +53,19 @@ function initAuth(): void {
   // Session initiale (lecture cache + refresh éventuel).
   supabase.auth
     .getSession()
-    .then(({ data: { session } }) => {
+    .then(async ({ data: { session }, error }) => {
+      // Refresh token périmé/invalide ("Invalid Refresh Token: Not Found") →
+      // on PURGE la session stockée (signOut local) au lieu de laisser
+      // l'auto-refresh en arrière-plan relever une AuthApiError non gérée.
+      if (error) {
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+        setSession(null)
+        return
+      }
       setSession(session)
     })
-    .catch(() => {
+    .catch(async () => {
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
       setSession(null)
     })
     .finally(() => {
@@ -104,8 +113,15 @@ export function useAuth(): UseAuthReturn {
   }
 
   const refreshSession = async (): Promise<void> => {
-    const { data } = await supabase.auth.refreshSession()
-    useAuthStore.getState().setSession(data.session)
+    try {
+      const { data, error } = await supabase.auth.refreshSession()
+      if (error) throw error
+      useAuthStore.getState().setSession(data.session)
+    } catch {
+      // Token de refresh invalide → on nettoie au lieu de propager l'erreur.
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+      useAuthStore.getState().setSession(null)
+    }
   }
 
   return {

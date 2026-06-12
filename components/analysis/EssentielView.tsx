@@ -19,6 +19,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
 import { WhiteCard } from '@/components/design/WhiteCard'
+import { CatalogPastille } from '@/components/shared/CatalogPastille'
 import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
 import { spacing } from '@/constants/spacing'
@@ -29,12 +30,15 @@ interface Props {
   expanded: boolean
   onToggle: () => void
   hideToggle?: boolean
+  /** Score global (INCI Beauty) — la pastille L'ESSENTIEL en dérive, identique
+   *  à la jauge du verdict (cœur/feuille/œil/triangle/stop). */
+  verdictScore?: number | null
 }
 
-export const EssentielView: FC<Props> = ({ data, expanded, onToggle, hideToggle = false }) => {
+export const EssentielView: FC<Props> = ({ data, expanded, onToggle, hideToggle = false, verdictScore }) => {
   return (
     <View style={styles.section} accessibilityLabel="Aperçu essentiel de l'analyse">
-      <VerdictCard verdict={data.verdict} />
+      <VerdictCard verdict={data.verdict} verdictScore={verdictScore} />
 
       {data.positives.length > 0 ? <PositivesCard positives={data.positives} /> : null}
 
@@ -70,14 +74,25 @@ export const EssentielToggleButton: FC<{ expanded: boolean; onToggle: () => void
 
 // ── Cartes ───────────────────────────────────────────────────────────────────
 
-function VerdictCard({ verdict }: { verdict: EssentielData['verdict'] }) {
+function VerdictCard({
+  verdict,
+  verdictScore,
+}: {
+  verdict: EssentielData['verdict']
+  verdictScore?: number | null
+}) {
   const v = VERDICT_VISUAL[verdict.tone]
   return (
     <WhiteCard padding={spacing.base} style={styles.cardRow}>
       <View style={styles.cardInner}>
-        <View style={[styles.iconCircle, { backgroundColor: v.badgeBg }]}>
-          <Ionicons name={v.icon} size={20} color={v.iconColor} />
-        </View>
+        {/* Pastille IDENTIQUE au verdict global (jauge) : dérivée du score. */}
+        {verdictScore != null ? (
+          <CatalogPastille score={verdictScore} size={40} />
+        ) : (
+          <View style={[styles.iconCircle, { backgroundColor: v.badgeBg }]}>
+            <Ionicons name={v.icon} size={20} color={v.iconColor} />
+          </View>
+        )}
         <View style={styles.cardBody}>
           <Text style={styles.eyebrow}>L'ESSENTIEL</Text>
           <Text style={styles.verdictPhrase}>{verdict.phrase}</Text>
@@ -91,8 +106,10 @@ function PositivesCard({ positives }: { positives: EssentielData['positives'] })
   return (
     <WhiteCard padding={spacing.base}>
       <View style={styles.cardInnerTop}>
-        <View style={[styles.iconCircle, { backgroundColor: colors.rating.vert.bg }]}>
-          <Ionicons name="leaf-outline" size={20} color={colors.rating.vert.text} />
+        {/* Toujours un "+" vert (carré) : c'est le bloc du positif, quel que
+            soit le verdict global du produit. */}
+        <View style={[styles.iconSquare, { backgroundColor: colors.rating.vert.DEFAULT }]}>
+          <Ionicons name="add" size={26} color="#FFFFFF" />
         </View>
         <View style={styles.cardBody}>
           <Text style={styles.eyebrow}>CE QUI EST BIEN</Text>
@@ -225,6 +242,13 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconSquare: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },

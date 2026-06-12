@@ -20,6 +20,7 @@ import {
   View,
 } from 'react-native'
 import Animated, { FadeInDown } from 'react-native-reanimated'
+import { useFocusEffect } from 'expo-router'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import type { BarcodeScanningResult } from 'expo-camera'
 import * as Haptics from 'expo-haptics'
@@ -63,10 +64,25 @@ export const BarcodeScanner: FC<Props> = ({
   const [state, setState] = useState<ScanState>({ kind: 'scanning' })
   // Verrou : empêche les détections multiples d'un même cadre.
   const lockedRef = useRef(false)
+  // Dernier code scanné + timestamp : évite de re-scanner le MÊME code en boucle
+  // juste après le réarmement (le produit est encore dans le cadre).
+  const recentRef = useRef<{ code: string; ts: number } | null>(null)
   const onInciReadyRef = useRef(onInciReady)
   useEffect(() => {
     onInciReadyRef.current = onInciReady
   }, [onInciReady])
+
+  // Réarme le scanner à CHAQUE fois que l'écran scan (re)prend le focus.
+  // Cas clé : après un scan réussi on navigue vers l'analyse (push). Au retour,
+  // le composant est resté monté en état 'looking-up' + verrouillé → sans ça,
+  // la caméra reste figée sur « Recherche du produit… ». Le focus le débloque.
+  useFocusEffect(
+    useCallback(() => {
+      lockedRef.current = false
+      recentRef.current = null
+      setState({ kind: 'scanning' })
+    }, []),
+  )
 
   // Demande la permission au montage si encore indéterminée.
   useEffect(() => {
@@ -106,6 +122,12 @@ export const BarcodeScanner: FC<Props> = ({
         barcode,
         hit.brand ?? undefined,
       )
+      // Réarme tout de suite : la navigation va pousser l'écran d'analyse
+      // par-dessus (la caméra est coupée pendant l'analyse via isActive, et le
+      // garde anti-doublon empêche un re-scan immédiat du même code). Si
+      // l'analyse échoue sans naviguer, on est quand même prêt à rescanner.
+      lockedRef.current = false
+      setState({ kind: 'scanning' })
     } catch {
       setState({ kind: 'unavailable', barcode })
     }
@@ -116,6 +138,13 @@ export const BarcodeScanner: FC<Props> = ({
       if (lockedRef.current || disabled || !isActive) return
       const value = result.data?.trim() ?? ''
       if (!BARCODE_RE.test(value)) return // ignore QR/URL/IMEI, continue à scanner
+      // Anti-doublon : ignore le même code re-détecté dans les 3 s (produit
+      // encore dans le cadre juste après un scan).
+      const now = Date.now()
+      if (recentRef.current && recentRef.current.code === value && now - recentRef.current.ts < 3000) {
+        return
+      }
+      recentRef.current = { code: value, ts: now }
       lockedRef.current = true
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
       void lookup(value)
@@ -260,7 +289,8 @@ export const BarcodeScanner: FC<Props> = ({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  // Centré verticalement : la caméra est au milieu de l'écran, pas collée en haut.
+  root: { flex: 1, justifyContent: 'center' },
   cameraBox: {
     aspectRatio: 4 / 3,
     width: '100%',

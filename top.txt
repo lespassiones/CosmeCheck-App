@@ -74,3 +74,35 @@ complexité de sync updated_at, + maintenance.
 Alternative légère que je recommande : garder en local seulement l'historique de recherche + les derniers produits vus (quelques Ko via AsyncStorage). 95 % du bénéfice ressenti, 0,01 % du poids.
 
 
+
+
+
+La commande que je lance pour produire l'APK autonome installable :
+
+Depuis la racine du projet (d:\MesApps\deploy\CosmeCheck-App) :
+
+PowerShell :
+
+
+cd android; .\gradlew.bat assembleRelease
+Bash / Git Bash :
+
+
+cd android && ./gradlew assembleRelease
+L'APK sort ici :
+
+
+android\app\build\outputs\apk\release\app-release.apk
+Quelques variantes utiles :
+
+
+# Build propre (si un truc cloche, repart de zéro — plus lent)
+cd android; .\gradlew.bat clean assembleRelease
+
+# Installer direct sur le tél branché en USB (débogage USB activé)
+adb install -r android\app\build\outputs\apk\release\app-release.apk
+Notes :
+
+assembleRelease = APK autonome (JS embarqué, marche sans Metro), auto-signé avec la debug keystore. C'est ce qu'il te faut pour tester sur ton tél.
+C'est incrémental : le 1er build est long (~10-15 min), les suivants ~2 min (comme là).
+Si tu changes seulement du JS/TS (comme la feature Alternatives), pas besoin de re-prebuild — assembleRelease re-bundle le JS tout seul. Tu ne dois re-prebuild (npx expo prebuild) que si tu ajoutes un module natif ou modifies app.json (permissions, plugins…).
