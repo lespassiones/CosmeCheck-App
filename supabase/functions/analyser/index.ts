@@ -24,7 +24,7 @@ import { serviceClient } from "../_shared/auth.ts";
 import { getCatalogScore } from "./catalog.ts";
 import { lookupEanByName } from "../_shared/eanLookup.ts";
 import { sha256Hex } from "../_shared/aiClient.ts";
-import { type ColorRating, computeScore, type ScoreTone, scoreLabel } from "./score.ts";
+import { applyColorCap, type ColorRating, computeScore, type ScoreTone, scoreLabel } from "./score.ts";
 import { isCleanInciInput, parseInciList } from "./parse.ts";
 import {
   EU_ALLERGENS_TOTAL,
@@ -506,6 +506,16 @@ Deno.serve(async (req: Request) => {
   const isCatalogProduct = catalogScore != null;
   if (isCatalogProduct) {
     score = catalogScore as number;
+    const lab = scoreLabel(score);
+    scoreLabelText = lab.label;
+    scoreTone = lab.tone;
+  }
+
+  // Plancher de sécurité par couleur : ≥1 rouge OU ≥3 orange → pastille ≤ triangle ;
+  // 1-2 orange → pastille ≤ œil (indépendant de la position). S'applique même au score IB.
+  const cappedScore = applyColorCap(score, counts["Orange"], counts["Rouge"]);
+  if (cappedScore !== score) {
+    score = cappedScore;
     const lab = scoreLabel(score);
     scoreLabelText = lab.label;
     scoreTone = lab.tone;

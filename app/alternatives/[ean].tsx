@@ -30,6 +30,7 @@ import { CatalogPastille } from '@/components/shared/CatalogPastille'
 import { useAlternatives } from '@/hooks/useAlternatives'
 import { useLaunchAlternative } from '@/hooks/useLaunchAlternative'
 import type { AlternativeProduct } from '@/lib/analysis/alternativesFilter'
+import { applyColorCap, scoreLabelFromScore } from '@/lib/analysis/scoreCap'
 
 const INITIAL_COUNT = 15
 const STEP = 10
@@ -38,7 +39,15 @@ const GridCard: FC<{
   product: AlternativeProduct
   disabled: boolean
   onPress: () => void
-}> = ({ product, disabled, onPress }) => (
+}> = ({ product, disabled, onPress }) => {
+  // Plancher couleur : note affichée = celle qu'on verra au clic (cohérence).
+  const displayScore =
+    product.score != null
+      ? applyColorCap(product.score, product.countOrange, product.countRouge)
+      : null
+  const displayLabel =
+    displayScore != null ? scoreLabelFromScore(displayScore) : product.scoreLabel
+  return (
   <Pressable
     onPress={onPress}
     disabled={disabled}
@@ -68,15 +77,16 @@ const GridCard: FC<{
       </Text>
     ) : null}
     <View style={styles.scoreRow}>
-      <CatalogPastille score={product.score} tone={product.scoreTone} size={18} />
-      {product.scoreLabel ? (
+      <CatalogPastille score={displayScore} size={18} />
+      {displayLabel ? (
         <Text style={styles.scoreLabel} numberOfLines={1}>
-          {product.scoreLabel}
+          {displayLabel}
         </Text>
       ) : null}
     </View>
   </Pressable>
-)
+  )
+}
 
 const AlternativesScreen: FC = () => {
   const { ean } = useLocalSearchParams<{ ean: string }>()

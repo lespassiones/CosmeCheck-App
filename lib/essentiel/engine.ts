@@ -532,6 +532,30 @@ function bestVerbForItem(
  *  in the current context (e.g. "Conditionneur capillaire" on a deodorant)
  *  we silently skip it rather than burn a slot — that way a body lotion
  *  with one mismatched green ingredient still shows three valid bullets. */
+const WATER_INCI = new Set(["AQUA", "WATER", "EAU"]);
+/** True si le nom INCI désigne l'eau (gère "AQUA / WATER / EAU"). */
+function isWaterName(name: string): boolean {
+  return name
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .split(/[\/,]/)
+    .map((s) => s.trim())
+    .some((s) => WATER_INCI.has(s));
+}
+
+/** True si le nom désigne un alcool gras (aide à la formulation, pas un actif). */
+function isAlcoholName(name: string): boolean {
+  const n = name.toLowerCase();
+  return n.includes("alcool") || n.includes("alcohol");
+}
+
+/** Fonctions purement émulsifiantes — aides à la formulation sans bénéfice cutané. */
+const EMULSIFIER_FUNCTIONS = new Set([
+  "Agent émulsifiant",
+  "Stabilisateur d'émulsion",
+]);
+
 function pickPositives(items: AnalyseItem[], category: ProductCategory | null): Positive[] {
   const greens = items
     .filter((it) => it.colorRating === "Vert")
@@ -542,6 +566,13 @@ function pickPositives(items: AnalyseItem[], category: ProductCategory | null): 
     if (out.length >= 3) break;
     const rawName = (it.name ?? it.input ?? "").trim();
     if (!rawName) continue;
+    // Eau — peu informatif pour l'utilisateur.
+    if (isWaterName(rawName) || it.slug === "aqua") continue;
+    // Alcools gras (béhénylique, cétylique…) et émulsifiants — aides à la
+    // formulation : lient ou texturisent, n'apportent pas de bénéfice peau.
+    if (isAlcoholName(rawName)) continue;
+    const allFns = it.allFunctions?.length ? it.allFunctions : it.primaryFunction ? [it.primaryFunction] : [];
+    if (allFns.some((f) => EMULSIFIER_FUNCTIONS.has(f))) continue;
     const verb = bestVerbForItem(it, category);
     if (!verb) continue;
     // Display-name priority:

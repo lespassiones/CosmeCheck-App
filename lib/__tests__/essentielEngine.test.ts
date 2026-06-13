@@ -80,17 +80,19 @@ describe('computeEssentiel — seuils de verdict (tone)', () => {
 });
 
 describe('computeEssentiel — positives (verbes)', () => {
-  it('max 3 ingrédients verts avec verbe, triés par position', () => {
+  it('max 3 ingrédients verts avec verbe, triés par position (eau exclue)', () => {
     const items = [
+      // Aqua (eau) est volontairement exclu de "Ce qui est bien" (cf. engine.isWaterName).
       item({ position: 0, name: 'Aqua', colorRating: 'Vert', allFunctions: ['Solvant'] }),
       item({ position: 1, name: 'Glycerin', colorRating: 'Vert', allFunctions: ['Humectant'] }),
       item({ position: 2, name: 'Tocopherol', colorRating: 'Vert', allFunctions: ['Antioxydant'] }),
       item({ position: 3, name: 'Panthenol', colorRating: 'Vert', allFunctions: ['Humectant'] }),
     ]
     const e = computeEssentiel(resp({ vert: 4, jaune: 0, orange: 0, rouge: 0 }, items))
+    // Eau retirée → restent Glycerin, Tocopherol, Panthenol (3 max).
     expect(e.positives).toHaveLength(3)
-    expect(e.positives[0].verb).toBe('dissout les autres ingrédients de la formule')
-    expect(e.positives[1].verb).toBe('attire l\'eau dans la peau')
+    expect(e.positives.map((p) => p.name)).not.toContain('Aqua')
+    expect(e.positives[0].verb).toBe('attire l\'eau dans la peau')
   });
 
   it('verbe contextuel : "Antistatique" sauté hors capillaire (default null)', () => {

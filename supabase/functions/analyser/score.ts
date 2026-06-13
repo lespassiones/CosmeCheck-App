@@ -51,6 +51,24 @@ export function computeScore(
   return Math.max(0, Math.min(20, 20 / (1 + S / SAT_C)));
 }
 
+/**
+ * Plancher de sécurité par couleur (INDÉPENDANT de la position) :
+ *   - ≥ 1 ingrédient ROUGE   → pastille au max "triangle" → score < 9
+ *   - ≥ 3 ingrédients ORANGE → pastille au max "triangle" → score < 9
+ *   - 1 ou 2 ingrédients ORANGE → pastille au max "œil"   → score < 13
+ * Ne fait que PLAFONNER (jamais remonter). 8.9 = haut de la tranche triangle
+ * (5–9) ; 12.9 = haut de la tranche œil (9–13).
+ */
+export function applyColorCap(
+  score: number,
+  countOrange: number,
+  countRouge: number,
+): number {
+  if (countRouge >= 1 || countOrange >= 3) return Math.min(score, 8.9);
+  if (countOrange >= 1) return Math.min(score, 12.9);
+  return score;
+}
+
 /** Map a numeric score (0-20) to a qualitative label + tone. Seuils ≥17/≥13/≥9. */
 export function scoreLabel(score: number): { label: string; tone: ScoreTone } {
   if (score >= 17) return { label: "Très bien", tone: "green" };

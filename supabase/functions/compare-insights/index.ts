@@ -84,12 +84,12 @@ Deno.serve(async (req) => {
     const shortB = shortenProductName(rawB);
 
     // 5. Profil utilisateur (best-effort, non-bloquant).
-    const { profileBlock, restrictionsBlock } = await loadProfileAndRestrictions(sb, user.id);
+    const { profileBlock, restrictionsBlock, firstName } = await loadProfileAndRestrictions(sb, user.id);
 
     const insights = await generateCompareInsights(
       { name: shortA, result: a.result_json },
       { name: shortB, result: b.result_json },
-      { userId: user.id, profileBlock, restrictionsBlock },
+      { userId: user.id, profileBlock, restrictionsBlock, firstName },
     );
 
     if (!insights) {

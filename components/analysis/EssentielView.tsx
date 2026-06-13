@@ -23,7 +23,45 @@ import { CatalogPastille } from '@/components/shared/CatalogPastille'
 import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
 import { spacing } from '@/constants/spacing'
+import { verdictToneFromScore } from '@/lib/essentiel/engine'
 import type { ConcernTier, EssentielData, VerdictTone } from '@/lib/essentiel/engine'
+
+// Phrase L'ESSENTIEL — préfixe FIXE selon la pastille + qualificatif du compteur
+// d'ingrédients pénalisants (orange + rouge), propre à chaque niveau :
+//   œil → "à suivre" · triangle → "pénalisant(s)" · stop → "problématique(s)".
+const VERDICT_PHRASE: Record<
+  VerdictTone,
+  { prefix: string; noun: 'à suivre' | 'pénalisant' | 'problématique' | null }
+> = {
+  'very-safe': { prefix: 'Formule très douce', noun: null },
+  safe: { prefix: 'Formule globalement saine', noun: null },
+  caution: { prefix: 'Formule moyenne', noun: 'à suivre' },
+  warning: { prefix: 'Formule à suivre de près', noun: 'pénalisant' },
+  danger: { prefix: 'Formule à examiner attentivement', noun: 'problématique' },
+  'high-risk': { prefix: 'Formule à examiner attentivement', noun: 'problématique' },
+  unknown: { prefix: '', noun: null },
+}
+
+/**
+ * Phrase L'ESSENTIEL : préfixe imposé par le SCORE (= la pastille), suivi
+ * UNIQUEMENT du nombre d'ingrédients pénalisants (orange + rouge) avec le
+ * qualificatif du niveau. Si aucun pénalisant (ou cœur/feuille) → juste le préfixe.
+ */
+function buildVerdictPhrase(
+  enginePhrase: string,
+  verdictScore: number | null | undefined,
+  penalizingCount: number,
+): string {
+  if (verdictScore == null) return enginePhrase
+  const cfg = VERDICT_PHRASE[verdictToneFromScore(verdictScore)]
+  if (!cfg.prefix) return enginePhrase
+  if (!cfg.noun || penalizingCount <= 0) return `${cfg.prefix}.`
+  const plural = penalizingCount > 1
+  const ingr = plural ? 'ingrédients' : 'ingrédient'
+  const qual = cfg.noun === 'à suivre' ? 'à suivre' : plural ? `${cfg.noun}s` : cfg.noun
+  const count = penalizingCount === 1 ? 'un' : String(penalizingCount)
+  return `${cfg.prefix}, ${count} ${ingr} ${qual}.`
+}
 
 interface Props {
   data: EssentielData
@@ -33,12 +71,21 @@ interface Props {
   /** Score global (INCI Beauty) — la pastille L'ESSENTIEL en dérive, identique
    *  à la jauge du verdict (cœur/feuille/œil/triangle/stop). */
   verdictScore?: number | null
+  /** Nombre d'ingrédients pénalisants (orange + rouge) — quantifié dans la phrase. */
+  penalizingCount?: number
 }
 
-export const EssentielView: FC<Props> = ({ data, expanded, onToggle, hideToggle = false, verdictScore }) => {
+export const EssentielView: FC<Props> = ({
+  data,
+  expanded,
+  onToggle,
+  hideToggle = false,
+  verdictScore,
+  penalizingCount = 0,
+}) => {
   return (
     <View style={styles.section} accessibilityLabel="Aperçu essentiel de l'analyse">
-      <VerdictCard verdict={data.verdict} verdictScore={verdictScore} />
+      <VerdictCard verdict={data.verdict} verdictScore={verdictScore} penalizingCount={penalizingCount} />
 
       {data.positives.length > 0 ? <PositivesCard positives={data.positives} /> : null}
 
@@ -77,9 +124,11 @@ export const EssentielToggleButton: FC<{ expanded: boolean; onToggle: () => void
 function VerdictCard({
   verdict,
   verdictScore,
+  penalizingCount = 0,
 }: {
   verdict: EssentielData['verdict']
   verdictScore?: number | null
+  penalizingCount?: number
 }) {
   const v = VERDICT_VISUAL[verdict.tone]
   return (
@@ -95,7 +144,9 @@ function VerdictCard({
         )}
         <View style={styles.cardBody}>
           <Text style={styles.eyebrow}>L'ESSENTIEL</Text>
-          <Text style={styles.verdictPhrase}>{verdict.phrase}</Text>
+          <Text style={styles.verdictPhrase}>
+            {buildVerdictPhrase(verdict.phrase, verdictScore, penalizingCount)}
+          </Text>
         </View>
       </View>
     </WhiteCard>
@@ -109,7 +160,7 @@ function PositivesCard({ positives }: { positives: EssentielData['positives'] })
         {/* Toujours un "+" vert (carré) : c'est le bloc du positif, quel que
             soit le verdict global du produit. */}
         <View style={[styles.iconSquare, { backgroundColor: colors.rating.vert.DEFAULT }]}>
-          <Ionicons name="add" size={26} color="#FFFFFF" />
+          <Ionicons name="shield-checkmark-outline" size={22} color="#FFFFFF" />
         </View>
         <View style={styles.cardBody}>
           <Text style={styles.eyebrow}>CE QUI EST BIEN</Text>

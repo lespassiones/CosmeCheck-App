@@ -120,16 +120,19 @@ function formatRestrictions(
 export async function loadProfileAndRestrictions(
   sb: SupabaseClient,
   userId: string,
-): Promise<{ profileBlock: string | null; restrictionsBlock: string | null }> {
+): Promise<{ profileBlock: string | null; restrictionsBlock: string | null; firstName: string | null }> {
   try {
     const { data } = await sb
       .schema("cosme_check")
       .from("user_profiles")
-      .select("preferences")
+      .select("preferences, first_name")
       .eq("id", userId)
       .maybeSingle();
     const prefs = (data?.preferences ?? null) as Prefs;
-    if (!prefs) return { profileBlock: null, restrictionsBlock: null };
+    const firstName = (typeof (data as { first_name?: unknown } | null)?.first_name === "string"
+      ? (data as { first_name: string }).first_name.trim() || null
+      : null);
+    if (!prefs) return { profileBlock: null, restrictionsBlock: null, firstName };
 
     const profileBlock = formatSkinProfile(prefs);
 
@@ -156,8 +159,8 @@ export async function loadProfileAndRestrictions(
     }
     restrictionsBlock = formatRestrictions(prefs, familyLabels);
 
-    return { profileBlock, restrictionsBlock };
+    return { profileBlock, restrictionsBlock, firstName };
   } catch {
-    return { profileBlock: null, restrictionsBlock: null };
+    return { profileBlock: null, restrictionsBlock: null, firstName: null };
   }
 }

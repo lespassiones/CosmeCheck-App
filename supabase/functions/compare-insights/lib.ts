@@ -47,8 +47,8 @@ export type CompareInsights = {
   howToChoose: string;
 };
 
-// v5 : personnalisation "Comment choisir ?" via profil peau + restrictions user.
-const PROMPT_VERSION = 5;
+// v6 : portraits en langage courant (pas de noms INCI, pas de conseils d'action).
+const PROMPT_VERSION = 6;
 
 // ── shortenProductName (port verbatim du web) ───────────────────────────────
 
@@ -160,7 +160,7 @@ function flagged(
 function buildPrompt(
   a: CompareSideInput,
   b: CompareSideInput,
-  opts: { profileBlock?: string | null; restrictionsBlock?: string | null } = {},
+  opts: { profileBlock?: string | null; restrictionsBlock?: string | null; firstName?: string | null } = {},
 ): { system: string; user: string } {
   const sideBlock = (label: string, side: CompareSideInput) => {
     const c = side.result.counts;
@@ -175,29 +175,44 @@ function buildPrompt(
     ].join("\n");
   };
 
-  const system =
-    "Tu écris une comparaison entre deux produits cosmétiques pour un consommateur français. " +
-    "Style : un pote bien informé qui décrit, pas un juge qui tranche. " +
-    "Phrases courtes, vocabulaire simple, pas de jargon scientifique. " +
-    "Tu n'écris JAMAIS \"X est mieux que Y\", \"X est meilleur\", \"recommandé\", \"à éviter\", " +
-    "\"premier choix\", \"vainqueur\" : tu décris ce que chaque produit est et à qui il s'adresse, " +
-    "le lecteur déduit lui-même celui qui lui convient. " +
-    "Tu utilises TOUJOURS les vrais noms des produits (ceux qui te sont donnés entre guillemets) " +
-    "et JAMAIS les mots \"produit A\", \"produit B\", \"A\", \"B\" comme étiquettes - " +
-    "ça parle bien plus à l'utilisateur final. " +
-    NO_LONG_DASHES_RULE + " " +
-    "Pas de marketing (idéal, généreux, agréable...), pas de description sensorielle, pas d'emoji, " +
-    "pas de conseil médical. Tu peux mentionner une famille d'ingrédient simple (tensioactif, " +
-    "alcool, conservateur, silicone, actif hydratant) si ça aide à comprendre. Tu retournes UNIQUEMENT " +
-    "un objet JSON valide, sans markdown, sans texte autour.";
+  const firstName = opts.firstName ?? null;
+  const profileSection = [opts.profileBlock, opts.restrictionsBlock].filter(Boolean).join("\n\n");
 
-  const profileSection = [opts.profileBlock, opts.restrictionsBlock]
-    .filter(Boolean)
-    .join("\n\n");
+  const system =
+    "Tu es un conseiller cosmétique bienveillant qui s'adresse directement à l'utilisateur. " +
+    "Vocabulaire accessible à tous, de 15 à 80 ans — zéro jargon scientifique. " +
+    "INTERDIT dans portraitA et portraitB : les noms d'ingrédients INCI en majuscules " +
+    "(ALUMINUM CHLOROHYDRATE, DIMETHICONE, PARFUM, etc.). Traduis toujours en français courant : " +
+    "'anti-transpirant puissant', 'silicone', 'parfum de synthèse', 'conservateur'. " +
+    "INTERDIT partout : 'à tester', 'à utiliser avec précaution', 'recommandé', 'déconseillé', " +
+    "'il vaut mieux', 'on vous conseille'. Tu informes UNIQUEMENT avec 'peut + conséquence' " +
+    "(ex : 'peut irriter', 'peut boucher les pores', 'peut provoquer des rougeurs'). " +
+    "Tu n'écris JAMAIS \"X est mieux que Y\" ou \"X est meilleur\". " +
+    "Tu utilises TOUJOURS les vrais noms des produits, JAMAIS \"produit A\" / \"produit B\". " +
+    NO_LONG_DASHES_RULE + " " +
+    "Pas de marketing, pas d'emoji, pas de conseil médical. " +
+    "Tu retournes UNIQUEMENT un objet JSON valide, sans markdown, sans texte autour.";
+
+  const namePrefix = firstName ? `${firstName}, ` : "";
+
+  const portraitInstruction = (productName: string) =>
+    `1 à 2 phrases. Commence par "${namePrefix}${productName}" (utilise le vrai nom). ` +
+    `Décris ce que fait concrètement ce produit (son rôle : protège, nettoie, hydrate…) ` +
+    `puis cite son principal point d'attention en langage courant avec 'peut + conséquence'. ` +
+    (profileSection
+      ? `Si le produit contient un ingrédient problématique pour le profil fourni, dis-le explicitement.`
+      : `Reste général : 'peut réagir sur les peaux sensibles', etc.`);
+
+  const commonInstruction =
+    `1 à 2 phrases. Mentionne UN point positif ET UN point négatif que les deux produits partagent. ` +
+    `Utilise 'peut + conséquence' pour les points négatifs. En langage courant, ` +
+    `pas de noms INCI. Tu peux écrire "les deux" ou citer les noms.`;
 
   const howToChooseInstruction = profileSection
-    ? `1 à 2 phrases personnalisées qui aident CE LECTEUR SPÉCIFIQUE à choisir en tenant compte de son profil (type de peau, préoccupations, restrictions). Dis explicitement quel produit correspond mieux à son profil et pourquoi, en citant un élément concret du profil (ex : "pour une peau sèche, …"). Pas de 'meilleur', pas de 'préfère X'. JAMAIS "A" / "B" / "produit A" / "produit B" - toujours les vrais noms.`
-    : `1 à 2 phrases qui aident le lecteur à choisir SANS trancher. Ex : 'Si tu cherches un soin doux pour peau réactive, ${a.name} correspond à ce profil. Si tu privilégies un nettoyant moussant efficace, ${b.name} est conçu pour ça.' Pas de 'meilleur', pas de 'préfère X'. JAMAIS "A" / "B" / "produit A" / "produit B" - toujours les vrais noms.`;
+    ? `1 à 2 phrases personnalisées${firstName ? ` pour ${firstName}` : ""} qui expliquent quel produit correspond mieux à son profil et pourquoi, en citant un élément concret du profil (type de peau, préoccupation). ` +
+      `Utilise 'peut + conséquence'. JAMAIS 'meilleur', 'recommandé', 'à éviter'. Toujours les vrais noms.`
+    : `1 à 2 phrases qui expliquent à qui s'adresse chacun des deux produits (type d'usage, type de peau). ` +
+      `Ex : 'Si tu transpires beaucoup, ${a.name} bloque plus efficacement.' JAMAIS 'meilleur'. Toujours les vrais noms.`;
 
   const user = `Voici les données de deux produits à comparer. Rédige 4 champs courts.
 
@@ -205,27 +220,26 @@ ${sideBlock("PRODUIT 1", a)}
 
 ${sideBlock("PRODUIT 2", b)}
 
-NOMS À UTILISER DANS LE TEXTE (verbatim, ne les modifie pas) :
-- Pour le produit 1 : "${a.name}"
-- Pour le produit 2 : "${b.name}"
-${profileSection ? `\n${profileSection}\n` : ""}
-Rends un JSON avec exactement ces 4 clés :
+NOMS À UTILISER DANS LE TEXTE (verbatim) :
+- Produit 1 : "${a.name}"
+- Produit 2 : "${b.name}"
+${firstName ? `\nPRÉNOM DE L'UTILISATEUR : ${firstName}\n` : ""}${profileSection ? `\n${profileSection}\n` : ""}
+JSON avec exactement ces 4 clés :
 
 {
-  "portraitA": "1 à 2 phrases qui décrivent la formule de \"${a.name}\" : son caractère (eau-glycérine, huileux, moussant, à base d'alcool…), ce qu'elle apporte, son point d'attention principal si pertinent. Cite \"${a.name}\" par son nom au moins une fois. Ne dis jamais qu'elle est bonne ou mauvaise.",
-  "portraitB": "Idem pour \"${b.name}\". Cite \"${b.name}\" par son nom au moins une fois.",
-  "common": "1 phrase concrète qui résume ce que les deux produits ont en commun (type de formule, point de vigilance partagé, ou rien de notable). Si rien d'intéressant en commun, dis 'Les deux suivent des logiques de formulation très différentes.' Tu peux écrire \"les deux produits\" ou citer les noms.",
+  "portraitA": "${portraitInstruction(a.name)}",
+  "portraitB": "${portraitInstruction(b.name)}",
+  "common": "${commonInstruction}",
   "howToChoose": "${howToChooseInstruction}"
 }
 
-CONTRAINTES
-- JSON valide, rien d'autre.
-- Chaque champ : 1 à 2 phrases max, jamais de liste à puces.
-- Ne cite pas les notes /20.
-- Ne mentionne pas le mot "score" ou "note".
-- Ne dis pas qu'un produit est meilleur, gagnant, recommandé, déconseillé.
-- Tu peux citer un ingrédient INCI en **gras** (avec doubles astérisques) si ça enrichit, max 2 par champ.
-- INTERDIT : "produit A", "produit B", "le produit A", "le produit B", "A pourrait...", "B est conçu...". Utilise toujours les vrais noms ci-dessus.`;
+CONTRAINTES ABSOLUES
+- JSON valide uniquement, rien d'autre.
+- 1 à 2 phrases max par champ, jamais de liste à puces.
+- Zéro nom INCI en majuscules dans portraitA et portraitB.
+- Zéro 'à tester', 'à utiliser avec précaution', 'recommandé', 'déconseillé'.
+- Zéro 'produit A' / 'produit B' / 'A' / 'B' comme étiquette.
+- Ne cite pas les notes /20, ne mentionne pas 'score' ou 'note'.`;
 
   return { system, user };
 }
@@ -260,7 +274,7 @@ function tryParse(raw: string): CompareInsights | null {
 async function callMistralFallback(
   a: CompareSideInput,
   b: CompareSideInput,
-  profileOpts: { profileBlock?: string | null; restrictionsBlock?: string | null } = {},
+  profileOpts: { profileBlock?: string | null; restrictionsBlock?: string | null; firstName?: string | null } = {},
 ): Promise<CompareInsights | null> {
   if (!hasMistral()) return null;
   const { system, user } = buildPrompt(a, b, profileOpts);
@@ -283,11 +297,13 @@ export async function generateCompareInsights(
     userId?: string | null;
     profileBlock?: string | null;
     restrictionsBlock?: string | null;
+    firstName?: string | null;
   } = {},
 ): Promise<CompareInsights | null> {
   const profileOpts = {
     profileBlock: opts.profileBlock ?? null,
     restrictionsBlock: opts.restrictionsBlock ?? null,
+    firstName: opts.firstName ?? null,
   };
 
   // Cache user-specific quand un profil est présent, global sinon.

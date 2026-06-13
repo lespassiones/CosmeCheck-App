@@ -57,7 +57,6 @@ type FamilyGroup = {
   items: Flagged[]
 }
 
-const INCI_PER_GROUP = 4
 
 function flaggedFor(side: CompareSide): Flagged[] {
   return side.result.items
@@ -357,24 +356,15 @@ const AttentionCard: FC<{ name: string; groups: FamilyGroup[] }> = ({ name, grou
       </View>
     </View>
     <View style={styles.attentionList}>
-      {groups.map((g) => {
-        const visible = g.items.slice(0, INCI_PER_GROUP)
-        const extra = g.items.length - visible.length
-        return (
-          <Text key={g.label} style={styles.attentionLine}>
-            <Text style={{ color: g.color === 'Rouge' ? colors.rose : colors.rating.orange.DEFAULT }}>
-              {'● '}
-            </Text>
-            <Text style={styles.attentionGroup}>{g.label}</Text>
-            <Text style={styles.attentionDim}> ({g.items.length})</Text>
-            <Text style={styles.attentionDim}> : </Text>
-            <Text style={styles.attentionItems}>
-              {visible.map((i) => i.name).join(', ')}
-              {extra > 0 ? `, +${extra}` : ''}
-            </Text>
+      {groups.map((g) => (
+        <Text key={g.label} style={styles.attentionLine}>
+          <Text style={{ color: g.color === 'Rouge' ? colors.rose : colors.rating.orange.DEFAULT }}>
+            {'● '}
           </Text>
-        )
-      })}
+          <Text style={styles.attentionGroup}>{g.label}</Text>
+          <Text style={styles.attentionDim}> ({g.items.length})</Text>
+        </Text>
+      ))}
     </View>
   </GlassCard>
 )
@@ -529,9 +519,6 @@ const styles = StyleSheet.create({
   },
   attentionDim: {
     color: colors.roseDeep,
-  },
-  attentionItems: {
-    color: '#9F1239',
   },
   block: {
     marginBottom: spacing.base,

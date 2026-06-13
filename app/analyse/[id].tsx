@@ -77,6 +77,10 @@ const AnalyseDetailScreen: FC = () => {
   // (l'écran doit l'afficher, pas le score calculé de result_json).
   const [catalogScore, setCatalogScore] = useState<number | null>(null)
   const [leafCategory, setLeafCategory] = useState<string | null>(null)
+  // EAN + slug de catégorie catalogue — pour la section Outils (signalement /
+  // envoi de photo). Restent null si le produit n'est pas au catalogue.
+  const [catalogEan, setCatalogEan] = useState<string | null>(null)
+  const [catalogCategorySlug, setCatalogCategorySlug] = useState<string | null>(null)
   const scrollRef = useRef<ScrollView>(null)
   const reduceMotion = useReducedMotion()
   const { restrictions } = useProfile()
@@ -113,6 +117,8 @@ const AnalyseDetailScreen: FC = () => {
       if (cancelled || !info) return
       setCatalogScore(info.score)
       setLeafCategory(leafLabelFromCategorySlug(info.category))
+      setCatalogEan(info.ean)
+      setCatalogCategorySlug(info.category)
     })
     return () => {
       cancelled = true
@@ -211,11 +217,26 @@ const AnalyseDetailScreen: FC = () => {
   // (INCI Beauty) dès qu'il est résolu ; sinon le score de result_json (produit
   // hors catalogue / en attendant la résolution). Garantit que la pastille du
   // détail = celle des listes (recherche/alternatives).
-  const verdictTone = useMemo(() => {
-    if (state.status !== 'ready') return 'unknown'
-    const effectiveScore = catalogScore ?? state.result.score
-    return verdictToneFromScore(effectiveScore)
+  // Score affiché = score IB (catalog) sinon calculé, PLAFONNÉ par le plancher
+  // couleur : ≥1 rouge OU ≥3 orange → pastille ≤ triangle (<9) ; 1-2 orange →
+  // pastille ≤ œil (<13). + nombre d'ingrédients pénalisants (orange+rouge).
+  const { effectiveVerdictScore, penalizingCount } = useMemo(() => {
+    if (state.status !== 'ready') return { effectiveVerdictScore: null as number | null, penalizingCount: 0 }
+    const nOrange = state.result.counts.orange ?? 0
+    const nRouge = state.result.counts.rouge ?? 0
+    const base = catalogScore ?? state.result.score
+    let score = base
+    if (base != null) {
+      if (nRouge >= 1 || nOrange >= 3) score = Math.min(base, 8.9)
+      else if (nOrange >= 1) score = Math.min(base, 12.9)
+    }
+    return { effectiveVerdictScore: score, penalizingCount: nOrange + nRouge }
   }, [state, catalogScore])
+
+  const verdictTone = useMemo(
+    () => (effectiveVerdictScore == null ? 'unknown' : verdictToneFromScore(effectiveVerdictScore)),
+    [effectiveVerdictScore],
+  )
 
   const alreadyInRoutine = id ? isInRoutine(id) : false
 
@@ -387,7 +408,10 @@ const AnalyseDetailScreen: FC = () => {
             productImageUrl={productImageUrl}
             brand={state.brand}
             productName={state.productLabel}
-            verdictScore={catalogScore ?? state.result.score}
+            verdictScore={effectiveVerdictScore}
+            penalizingCount={penalizingCount}
+            productEan={catalogEan}
+            category={catalogCategorySlug}
           />
         </ScrollView>
       )}

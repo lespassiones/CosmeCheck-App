@@ -47,7 +47,7 @@ import {
   type AnalyseResponse,
   type ColorRating,
 } from '@/lib/analysis/types'
-import type { AnalyseItemWithRestriction } from '@/lib/analysis/analyser'
+import { applyRestrictions, type AnalyseItemWithRestriction } from '@/lib/analysis/analyser'
 
 import { BigScoreCard } from './BigScoreCard'
 import { EssentielView, EssentielToggleButton } from './EssentielView'
@@ -58,10 +58,12 @@ import { ProductRow } from './ProductRow'
 import { RestrictionWarning, RestrictionsOkBadge } from './RestrictionWarning'
 import { SynthesisCard } from './SynthesisCard'
 import { AlternativesCarousel } from './AlternativesCarousel'
+import { ProductToolsSection } from './ProductToolsSection'
 import { supabase } from '@/lib/supabase/client'
 import { ProcessingOverlay } from '@/components/shared/ProcessingOverlay'
 import { useAlternatives } from '@/hooks/useAlternatives'
 import { useLaunchAlternative } from '@/hooks/useLaunchAlternative'
+import { useProfile } from '@/hooks/useProfile'
 import type { EssentielData } from '@/lib/essentiel/engine'
 
 interface Props {
@@ -85,6 +87,12 @@ interface Props {
   /** Score global (INCI Beauty) — pour que la pastille L'ESSENTIEL soit
    *  identique à la jauge du verdict. */
   verdictScore?: number | null
+  /** Nombre d'ingrédients pénalisants (orange + rouge) — affiché dans la phrase. */
+  penalizingCount?: number
+  /** EAN catalogue du produit (pour la section Outils : signalement / photo). */
+  productEan?: string | null
+  /** Slug de catégorie catalogue (pour rattacher une photo soumise). */
+  category?: string | null
 }
 
 type TabKey = 'all' | ColorRating | 'unknown'
@@ -110,8 +118,12 @@ export const AnalysisResultPanel: FC<Props> = ({
   brand,
   productName,
   verdictScore,
+  penalizingCount,
+  productEan,
+  category,
 }) => {
   const router = useRouter()
+  const { restrictions } = useProfile()
   const [detailsExpanded, setDetailsExpanded] = useState(false)
   const [filter, setFilter] = useState<TabKey>('all')
   const [listModalOpen, setListModalOpen] = useState(false)
@@ -195,11 +207,15 @@ export const AnalysisResultPanel: FC<Props> = ({
     ? toneToColorRating(result.scoreTone)
     : getColorRatingFromScore(result.score)
 
-  // Items restreints (flag `is_restricted` posé par applyRestrictions côté
-  // analyser ; pour une analyse rechargée depuis la DB le flag peut être absent).
+  // Items restreints — recalculés en temps réel depuis les restrictions actuelles
+  // du profil (pas le flag `is_restricted` stocké à l'analyse, qui peut être
+  // périmé si l'utilisateur a modifié ses restrictions après l'analyse).
   const restrictedItems = useMemo(
-    () => (result.items as AnalyseItemWithRestriction[]).filter((it) => it.is_restricted),
-    [result.items],
+    () =>
+      (applyRestrictions(result, restrictions).items as AnalyseItemWithRestriction[]).filter(
+        (it) => it.is_restricted,
+      ),
+    [result, restrictions],
   )
 
   // Map nom-d'ingrédient → slug pour les liens dans les observations.
@@ -316,6 +332,21 @@ export const AnalysisResultPanel: FC<Props> = ({
     />
   )
 
+  // Bloc « Outils » — rendu tout en bas, APRÈS les alternatives (dans les deux
+  // états replié/déplié). hasImage masque l'outil photo si le produit a déjà
+  // une image.
+  const toolsSection = (
+    <ProductToolsSection
+      productEan={productEan ?? null}
+      brand={brand ?? null}
+      productName={productName ?? null}
+      category={category ?? null}
+      hasImage={!!productImageUrl}
+      score={verdictScore ?? null}
+      counts={itemCounts}
+    />
+  )
+
   return (
     <View style={styles.root}>
       {/* 1. Essentiel — 3 cartes (toggle rendu séparément en dessous) */}
@@ -325,6 +356,7 @@ export const AnalysisResultPanel: FC<Props> = ({
         onToggle={() => setDetailsExpanded((v) => !v)}
         hideToggle
         verdictScore={verdictScore}
+        penalizingCount={penalizingCount}
       />
 
       <View style={styles.toggleWrap}>
@@ -427,6 +459,9 @@ export const AnalysisResultPanel: FC<Props> = ({
           {altCarousel}
         </View>
       ) : null}
+
+      {/* 11. Outils — tout en bas, après les alternatives (les deux états) */}
+      {toolsSection}
 
       {/* Modale plein écran : liste complète des ingrédients */}
       <Modal

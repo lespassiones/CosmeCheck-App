@@ -25,6 +25,7 @@ import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
 import { CatalogPastille } from '@/components/shared/CatalogPastille'
 import type { AlternativeProduct } from '@/lib/analysis/alternativesFilter'
+import { applyColorCap, scoreLabelFromScore } from '@/lib/analysis/scoreCap'
 
 const CARD_W = 150
 
@@ -42,7 +43,15 @@ const AltCard: FC<{
   product: AlternativeProduct
   disabled: boolean
   onPress: () => void
-}> = ({ product, disabled, onPress }) => (
+}> = ({ product, disabled, onPress }) => {
+  // Plancher couleur : la note affichée = celle qu'on verra au clic (cohérence).
+  const displayScore =
+    product.score != null
+      ? applyColorCap(product.score, product.countOrange, product.countRouge)
+      : null
+  const displayLabel =
+    displayScore != null ? scoreLabelFromScore(displayScore) : product.scoreLabel
+  return (
   <Pressable
     onPress={onPress}
     disabled={disabled}
@@ -72,15 +81,16 @@ const AltCard: FC<{
       </Text>
     ) : null}
     <View style={styles.scoreRow}>
-      <CatalogPastille score={product.score} tone={product.scoreTone} size={18} />
-      {product.scoreLabel ? (
+      <CatalogPastille score={displayScore} size={18} />
+      {displayLabel ? (
         <Text style={styles.scoreLabel} numberOfLines={1}>
-          {product.scoreLabel}
+          {displayLabel}
         </Text>
       ) : null}
     </View>
   </Pressable>
-)
+  )
+}
 
 export const AlternativesCarousel: FC<Props> = ({
   products,

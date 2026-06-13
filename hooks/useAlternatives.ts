@@ -19,6 +19,7 @@ import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-quer
 
 import { useProfile } from '@/hooks/useProfile'
 import { resolveCatalogIdentity } from '@/lib/catalog/resolveCatalogIdentity'
+import { applyColorCap } from '@/lib/analysis/scoreCap'
 import {
   buildExclusionSet,
   filterAlternatives,
@@ -43,6 +44,8 @@ interface AltRpcRow {
   score_tone: string | null
   count_total: number | null
   ingredients_text: string | null
+  count_orange: number | null
+  count_rouge: number | null
 }
 
 function mapRow(r: AltRpcRow): AlternativeProduct {
@@ -56,6 +59,8 @@ function mapRow(r: AltRpcRow): AlternativeProduct {
     scoreTone: r.score_tone,
     countTotal: r.count_total,
     ingredientsText: r.ingredients_text,
+    countOrange: r.count_orange ?? 0,
+    countRouge: r.count_rouge ?? 0,
   }
 }
 
@@ -182,7 +187,16 @@ export function useAlternatives({
   targetRef.current = target
   exclusionRef.current = exclusion
 
-  const filtered = useMemo(() => filterAlternatives(raw, exclusion), [raw, exclusion])
+  // Filtré (restrictions/profil) PUIS re-trié par score PLAFONNÉ (plancher
+  // couleur) : les recommandations réellement bonnes remontent en premier, et
+  // la note affichée = celle qu'on verra au clic.
+  const filtered = useMemo(() => {
+    const capped = (p: AlternativeProduct) =>
+      applyColorCap(p.score ?? 0, p.countOrange, p.countRouge)
+    return filterAlternatives(raw, exclusion)
+      .slice()
+      .sort((a, b) => capped(b) - capped(a))
+  }, [raw, exclusion])
 
   // Réinitialise quand le produit cible change (nouvel EAN).
   useEffect(() => {

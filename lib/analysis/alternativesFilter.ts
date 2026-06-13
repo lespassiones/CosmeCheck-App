@@ -29,6 +29,9 @@ export interface AlternativeProduct {
   scoreTone: string | null
   countTotal: number | null
   ingredientsText: string | null
+  /** Nb d'ingrédients orange/rouge (pour le plancher de sécurité couleur). */
+  countOrange: number
+  countRouge: number
 }
 
 /** Ensemble normalisé des éléments à exclure. */

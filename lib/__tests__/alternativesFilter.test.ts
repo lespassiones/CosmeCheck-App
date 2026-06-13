@@ -26,6 +26,8 @@ function product(ean: string, inci: string, score = 18): AlternativeProduct {
     scoreTone: 'green',
     countTotal: 10,
     ingredientsText: inci,
+    countOrange: 0,
+    countRouge: 0,
   }
 }
 
