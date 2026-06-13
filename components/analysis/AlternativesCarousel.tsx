@@ -37,6 +37,10 @@ interface Props {
   showSeeAll: boolean
   onSelect: (product: AlternativeProduct) => void
   onSeeAll: () => void
+  /** Titre de section (défaut « Alternatives »). */
+  title?: string
+  /** Texte affiché quand la liste est vide (état isEmpty). */
+  emptyText?: string
 }
 
 const AltCard: FC<{
@@ -100,6 +104,8 @@ export const AlternativesCarousel: FC<Props> = ({
   showSeeAll,
   onSelect,
   onSeeAll,
+  title = 'Alternatives',
+  emptyText = 'Aucune alternative sans tes restrictions dans cette catégorie pour le moment.',
 }) => {
   // Pas de match catalogue (ni produits, ni état vide explicite) → on n'affiche rien.
   if (!isInitialLoading && !isEmpty && products.length === 0) return null
@@ -107,12 +113,7 @@ export const AlternativesCarousel: FC<Props> = ({
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Alternatives</Text>
-        {showSeeAll && products.length > 0 ? (
-          <Pressable onPress={onSeeAll} hitSlop={8} accessibilityRole="button">
-            <Text style={styles.seeAll}>Voir tout</Text>
-          </Pressable>
-        ) : null}
+        <Text style={styles.title}>{title}</Text>
       </View>
 
       {isInitialLoading ? (
@@ -120,9 +121,7 @@ export const AlternativesCarousel: FC<Props> = ({
           <ActivityIndicator color={colors.rose} />
         </View>
       ) : isEmpty ? (
-        <Text style={styles.emptyText}>
-          Aucune alternative sans tes restrictions dans cette catégorie pour le moment.
-        </Text>
+        <Text style={styles.emptyText}>{emptyText}</Text>
       ) : (
         <FlatList
           horizontal
@@ -133,6 +132,21 @@ export const AlternativesCarousel: FC<Props> = ({
           renderItem={({ item }) => (
             <AltCard product={item} disabled={analyzing} onPress={() => onSelect(item)} />
           )}
+          ListFooterComponent={
+            showSeeAll && products.length > 0 ? (
+              <Pressable
+                onPress={onSeeAll}
+                style={({ pressed }) => [styles.seeAllTile, pressed && styles.cardPressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Voir plus de produits"
+              >
+                <View style={styles.seeAllCircle}>
+                  <Ionicons name="arrow-forward" size={22} color="#FFFFFF" />
+                </View>
+                <Text style={styles.seeAllTileText}>Voir plus</Text>
+              </Pressable>
+            ) : null
+          }
         />
       )}
     </View>
@@ -148,7 +162,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
   },
   title: { ...typography.h4, color: colors.ink },
-  seeAll: { ...typography.smallSemiBold, color: colors.rating.vert.text },
+  seeAllTile: {
+    width: 112,
+    minHeight: 190,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: spacing.sm,
+  },
+  seeAllCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.ink,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  seeAllTileText: { ...typography.smallSemiBold, color: colors.ink },
   loading: { height: 140, alignItems: 'center', justifyContent: 'center' },
   emptyText: {
     ...typography.xs,

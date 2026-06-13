@@ -50,6 +50,7 @@ export const ROUTES = {
   // ── Advisor ─────────────────────────────────────────────────────
   ADVISOR: {
     INDEX: '/advisor',
+    RECOMMENDATIONS: '/advisor/recommendations',
   },
 
   // ── Compare ─────────────────────────────────────────────────────

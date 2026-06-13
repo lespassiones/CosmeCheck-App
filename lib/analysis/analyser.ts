@@ -134,9 +134,26 @@ function extractCredits(body: Record<string, unknown> | null): CreditsPayload | 
  * - Allergies freeform (ingredients[].name) → découpées par virgule en termes.
  * - Familles (restrictions.families) → comparées aux fonctions de l'item.
  */
+/** minuscule + sans accents + espaces compactés (matching robuste des INCI). */
+function normalizeName(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export function applyRestrictions(
   response: AnalyseResponse,
   restrictions: UserRestrictions | undefined,
+  /**
+   * Noms INCI membres des familles évitées (résolus via la RPC
+   * `cosme_check_get_family_ingredient_names`). INDISPENSABLE pour détecter une
+   * famille comme « silicones » : ses ingrédients (Dimethicone…) ne portent pas
+   * le mot « silicone » dans leur nom ni dans leur fonction.
+   */
+  familyIngredientNames: string[] = [],
 ): AnalyseResponseWithRestrictions {
   const items = response.items as AnalyseItemWithRestriction[]
   if (!restrictions) {
@@ -156,13 +173,23 @@ export function applyRestrictions(
       .filter((s) => s.length > 0),
   )
 
-  // Familles à éviter (comparées aux fonctions de l'item).
+  // Familles à éviter (comparées aux fonctions de l'item — historique, faible
+  // portée mais sans risque de faux positif).
   const familyTerms = restrictions.families
     .map((f) => f.trim().toLowerCase())
     .filter((f) => f.length > 0)
 
+  // Noms INCI membres des familles évitées (match exact, normalisé). C'est le
+  // vrai mécanisme : on attrape Dimethicone & co quand « silicones » est coché.
+  const familyMemberNames = new Set(
+    familyTerms.length > 0
+      ? familyIngredientNames.map((n) => normalizeName(n)).filter((n) => n.length > 0)
+      : [],
+  )
+
   const markedItems: AnalyseItemWithRestriction[] = items.map((item) => {
-    const name = (item.name ?? '').toLowerCase()
+    const rawName = item.name ?? ''
+    const name = rawName.toLowerCase()
     const slug = (item.slug ?? '').toLowerCase()
     const functions = [
       item.primaryFunction,
@@ -176,8 +203,10 @@ export function applyRestrictions(
     const byFamily = functions.some((fn) =>
       familyTerms.some((fam) => fn.includes(fam)),
     )
+    const byFamilyMember =
+      familyMemberNames.size > 0 && familyMemberNames.has(normalizeName(rawName))
 
-    if (byName || bySlug || byFamily) {
+    if (byName || bySlug || byFamily || byFamilyMember) {
       return { ...item, is_restricted: true }
     }
     return item

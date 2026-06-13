@@ -32,7 +32,7 @@
       "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#FAFAFA"
+        "backgroundColor": "#9855E2"
       },
       "permissions": [
         "android.permission.CAMERA",

@@ -18,6 +18,8 @@ import { router } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AdvisorChat } from '@/components/advisor/AdvisorChat'
+import { AdvisorHistorySheet } from '@/components/advisor/AdvisorHistorySheet'
+import { loadConversationMessages, type StoredMessage } from '@/lib/advisor/conversations'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { GlassCard } from '@/components/design/GlassCard'
 import { colors } from '@/constants/colors'
@@ -35,6 +37,24 @@ import {
 const AdvisorScreen: FC = () => {
   const { skin, firstName, isLoading } = useProfile()
   const [summaryOpen, setSummaryOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  // Conversation active : id (null = nouvelle) + messages chargés depuis l'historique.
+  // chatKey force le remontage de AdvisorChat quand on change de conversation.
+  const [activeConv, setActiveConv] = useState<{
+    id: string | null
+    messages: StoredMessage[] | null
+    chatKey: number
+  }>({ id: null, messages: null, chatKey: 0 })
+
+  function startNewConversation() {
+    setActiveConv((c) => ({ id: null, messages: null, chatKey: c.chatKey + 1 }))
+  }
+
+  async function openConversation(conversationId: string) {
+    setHistoryOpen(false)
+    const messages = await loadConversationMessages(conversationId)
+    setActiveConv((c) => ({ id: conversationId, messages, chatKey: c.chatKey + 1 }))
+  }
 
   // Le chat s'affiche dès qu'un signal de profil est rempli (parité web).
   const started = isProfileStarted(skin)
@@ -65,7 +85,30 @@ const AdvisorScreen: FC = () => {
         >
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
-        <View style={styles.backBtn} />
+        {started ? (
+          <View style={styles.topActions}>
+            <Pressable
+              onPress={startNewConversation}
+              hitSlop={10}
+              style={styles.backBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Nouvelle conversation"
+            >
+              <Ionicons name="create-outline" size={22} color={colors.ink} />
+            </Pressable>
+            <Pressable
+              onPress={() => setHistoryOpen(true)}
+              hitSlop={10}
+              style={styles.backBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Historique des conversations"
+            >
+              <Ionicons name="time-outline" size={22} color={colors.ink} />
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.backBtn} />
+        )}
       </View>
 
       <View style={styles.content}>
@@ -117,10 +160,22 @@ const AdvisorScreen: FC = () => {
               </Pressable>
             )}
 
-            <AdvisorChat firstName={firstName ?? 'toi'} />
+            <AdvisorChat
+              key={activeConv.chatKey}
+              firstName={firstName ?? 'toi'}
+              conversationId={activeConv.id}
+              initialMessages={activeConv.messages}
+              onConversationCreated={(id) => setActiveConv((c) => ({ ...c, id }))}
+            />
           </View>
         )}
       </View>
+
+      <AdvisorHistorySheet
+        visible={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        onSelect={(id) => void openConversation(id)}
+      />
     </SafeAreaView>
   )
 }
@@ -146,6 +201,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  topActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   content: {
     flex: 1,
     paddingHorizontal: spacing.base,

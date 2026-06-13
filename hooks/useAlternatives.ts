@@ -19,6 +19,7 @@ import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-quer
 
 import { useProfile } from '@/hooks/useProfile'
 import { resolveCatalogIdentity } from '@/lib/catalog/resolveCatalogIdentity'
+import { fetchFamilyIngredientNames } from '@/lib/catalog/familyIngredientNames'
 import { applyColorCap } from '@/lib/analysis/scoreCap'
 import {
   buildExclusionSet,
@@ -84,16 +85,6 @@ async function fetchAlternativesPage(
   })
 }
 
-async function fetchFamilyIngredientNames(slugs: string[]): Promise<string[]> {
-  const { data, error } = await supabase.rpc(
-    'cosme_check_get_family_ingredient_names' as never,
-    { p_family_slugs: slugs } as never,
-  )
-  if (error) throw error
-  return ((data as { name: string | null }[] | null) ?? [])
-    .map((r) => r.name)
-    .filter((n): n is string => !!n)
-}
 
 export interface UseAlternativesParams {
   /** EAN direct (page « Voir tout ») — court-circuite la résolution marque+nom. */

@@ -1,0 +1,44 @@
+1. Recommande directement (demande claire de produit)
+« Conseille-moi un sérum à la vitamine C »
+« Je cherche une crème hydratante pour le visage »
+« Quel produit pour réduire mes boutons ? »
+« Tu aurais un bon contour des yeux pour les cernes ? »
+« Un déodorant safe qui absorbe bien la transpiration »
+2. Recommande en déduisant les ingrédients (besoin décrit + profil)
+(marche mieux si ton profil peau/cheveux est rempli)
+
+« J'ai la peau qui brille et des points noirs »
+« Mes boucles sont sèches et frisottent »
+« Je veux faire pousser mes cheveux plus vite »
+« Ma peau tiraille et pèle, aide-moi »
+3. Pose UNE question de cadrage (trop vague + profil insuffisant)
+« Conseille-moi une crème » (sans rien d'autre → il demande pour quel besoin)
+« Je veux améliorer ma peau »
+« Aide-moi avec mes cheveux »
+4. Répond simplement, SANS recommander (question d'info)
+« C'est quoi le rétinol et à quoi ça sert ? »
+« Est-ce que les silicones sont vraiment mauvais ? »
+« À quoi sert la niacinamide ? »
+« La vitamine C et le rétinol, on peut les mélanger ? »
+5. Pas de reco (salutation / remerciement / réaction)
+« Bonjour, ça va ? »
+« Merci beaucoup ! »
+« Ok super »
+6. Limite médicale (redirige vers un dermatologue)
+« J'ai de l'acné sévère avec des kystes douloureux »
+« J'ai de l'eczéma sur les mains »
+« J'ai une rosacée diagnostiquée, quel traitement ? »
+7. Respect des restrictions (si tu as coché des restrictions dans ton profil)
+« Conseille-moi un soin hydratant » (il évite tes ingrédients restreints sans te demander de vérifier)
+« Une crème visage sans parfum »
+8. Multi-ingrédients (classe les produits qui en contiennent le plus)
+« Un sérum avec rétinol, niacinamide et peptides »
+« Un soin avec acide hyaluronique et céramides »
+9. Test du dico FR → INCI (mots français)
+« Un produit à l'acide hyaluronique » (→ hyaluronic)
+« Une crème au beurre de karité » (→ butyrospermum)
+« Quelque chose à l'huile d'argan » (→ argania)
+10. Cas particuliers / suivi
+Pose une question, clique sur un produit du carrousel → l'analyse s'ouvre → reviens en arrière : tu dois retomber dans la conversation.
+Demande une reco, puis « tu peux m'en montrer d'autres ? »
+Teste les boutons Historique (🕑) et Nouvelle conversation (✎).

@@ -54,6 +54,32 @@ const SKIN_CONCERNS = [
   "pores_dilates", "exces_sebum", "cernes_poches", "vergetures_cellulite",
 ];
 
+// Objectifs (souhaits) — mirror de lib/skin/profile.ts:PROFILE_GOAL_LABEL.
+export const GOAL_LABEL: Record<string, string> = {
+  peau_douce: "Avoir une peau plus douce",
+  teint_uniforme: "Uniformiser mon teint",
+  attenuer_boutons: "Atténuer mes boutons",
+  reduire_rides: "Réduire mes rides et ridules",
+  calmer_rougeurs: "Calmer mes rougeurs",
+  hydrater_profondeur: "Hydrater ma peau en profondeur",
+  reduire_taches: "Réduire mes taches",
+  renforcer_barriere: "Renforcer ma peau face aux agressions",
+  adoucir_corps: "Adoucir ma peau du corps",
+  reduire_vergetures: "Réduire l'apparence des vergetures",
+  proteger_soleil: "Mieux protéger ma peau du soleil",
+  cheveux_brillants: "Avoir des cheveux plus brillants",
+  renforcer_cheveux: "Renforcer mes cheveux abîmés",
+  definir_boucles: "Définir mes boucles",
+  cuir_chevelu_sain: "Avoir un cuir chevelu sain",
+  reduire_chute: "Réduire la chute / casse",
+  simplifier_routine: "Simplifier ma routine quotidienne",
+  decouvrir_clean: "Découvrir des produits plus clean",
+  comprendre_produits: "Mieux comprendre mes produits",
+  eviter_risques: "Éviter les ingrédients risqués",
+  alternatives_adaptees: "Trouver des alternatives adaptées",
+  construire_routine: "Construire / améliorer ma routine",
+};
+
 export type SkinProfile = {
   skinTypeFace?: string;
   otherSkinTypeFace?: string;
@@ -61,6 +87,8 @@ export type SkinProfile = {
   otherSkinTypeBody?: string;
   concerns?: string[];
   allergiesFreeform?: string;
+  goals?: string[];
+  otherGoals?: string;
 };
 
 /**
@@ -103,6 +131,10 @@ export function readSkinProfile(prefs: Record<string, unknown> | null | undefine
     ? (r.skinType as string)
     : undefined;
 
+  const goals = Array.isArray(r.goals)
+    ? (r.goals as unknown[]).filter((g): g is string => typeof g === "string" && g.length > 0)
+    : [];
+
   return {
     skinTypeFace,
     otherSkinTypeFace: readShort("otherSkinTypeFace", 120),
@@ -110,6 +142,8 @@ export function readSkinProfile(prefs: Record<string, unknown> | null | undefine
     otherSkinTypeBody: readShort("otherSkinTypeBody", 120) ?? readShort("otherSkinType", 120),
     concerns: cleanedConcerns.length > 0 ? cleanedConcerns : undefined,
     allergiesFreeform: readShort("allergiesFreeform", 500),
+    goals: goals.length > 0 ? goals : undefined,
+    otherGoals: readShort("otherGoals", 300),
   };
 }
 

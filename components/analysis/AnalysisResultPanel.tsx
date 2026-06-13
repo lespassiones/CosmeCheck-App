@@ -61,9 +61,11 @@ import { AlternativesCarousel } from './AlternativesCarousel'
 import { ProductToolsSection } from './ProductToolsSection'
 import { supabase } from '@/lib/supabase/client'
 import { ProcessingOverlay } from '@/components/shared/ProcessingOverlay'
+import { useQuery } from '@tanstack/react-query'
 import { useAlternatives } from '@/hooks/useAlternatives'
 import { useLaunchAlternative } from '@/hooks/useLaunchAlternative'
 import { useProfile } from '@/hooks/useProfile'
+import { fetchFamilyIngredientNames } from '@/lib/catalog/familyIngredientNames'
 import type { EssentielData } from '@/lib/essentiel/engine'
 
 interface Props {
@@ -210,12 +212,28 @@ export const AnalysisResultPanel: FC<Props> = ({
   // Items restreints — recalculés en temps réel depuis les restrictions actuelles
   // du profil (pas le flag `is_restricted` stocké à l'analyse, qui peut être
   // périmé si l'utilisateur a modifié ses restrictions après l'analyse).
+  // Noms INCI membres des familles évitées (ex. « silicones » → Dimethicone…),
+  // résolus via RPC et cachés 1 h. INDISPENSABLE pour que les familles soient
+  // détectées dans la liste (sinon « aucun ingrédient restreint » à tort).
+  const familySlugs = useMemo(
+    () => [...restrictions.families].sort(),
+    [restrictions.families],
+  )
+  const { data: familyNames = [] } = useQuery({
+    queryKey: ['family-inci-names', familySlugs],
+    enabled: familySlugs.length > 0,
+    staleTime: 60 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
+    queryFn: () => fetchFamilyIngredientNames(familySlugs),
+  })
+
   const restrictedItems = useMemo(
     () =>
-      (applyRestrictions(result, restrictions).items as AnalyseItemWithRestriction[]).filter(
-        (it) => it.is_restricted,
-      ),
-    [result, restrictions],
+      (
+        applyRestrictions(result, restrictions, familyNames)
+          .items as AnalyseItemWithRestriction[]
+      ).filter((it) => it.is_restricted),
+    [result, restrictions, familyNames],
   )
 
   // Map nom-d'ingrédient → slug pour les liens dans les observations.

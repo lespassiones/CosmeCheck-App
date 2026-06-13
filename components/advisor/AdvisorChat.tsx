@@ -45,11 +45,24 @@ import Animated, {
 import { Ionicons } from '@expo/vector-icons'
 // expo/fetch : implémentation streaming fiable sous React Native (SDK 54).
 import { fetch as expoFetch } from 'expo/fetch'
+import { useRouter } from 'expo-router'
 
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 import { supabase } from '@/lib/supabase/client'
+import { useProfile } from '@/hooks/useProfile'
+import { useLaunchAlternative } from '@/hooks/useLaunchAlternative'
+import { AlternativesCarousel } from '@/components/analysis/AlternativesCarousel'
+import { ProcessingOverlay } from '@/components/shared/ProcessingOverlay'
+import { parseRecoBlock, stripRecoBlock } from '@/lib/advisor/recoBlock'
+import { fetchAdvisorRecommendations } from '@/lib/advisor/recommendations'
+import {
+  createConversation,
+  saveAdvisorMessage,
+  type StoredMessage,
+} from '@/lib/advisor/conversations'
+import type { AlternativeProduct } from '@/lib/analysis/alternativesFilter'
 
 type ChatMsg = {
   role: 'user' | 'assistant'
@@ -57,6 +70,16 @@ type ChatMsg = {
   time?: string
   /** Message d'accueil : exclu de l'historique envoyé à l'API. */
   uiOnly?: boolean
+  /** Une recommandation produit a été demandée pour ce message. */
+  recoTried?: boolean
+  /** Recherche des produits en cours. */
+  recoLoading?: boolean
+  /** Produits recommandés à afficher en carrousel sous la bulle. */
+  products?: AlternativeProduct[]
+  /** Critères de la reco (pour le « Voir plus » qui ouvre la page paginée). */
+  recoCriteria?: { ingredients: string[]; form: string | null }
+  /** Raison d'un carrousel vide : 'restrictions' (tout filtré) ou 'none' (rien trouvé). */
+  recoEmptyReason?: 'restrictions' | 'none' | null
 }
 
 const SUGGESTED_PROMPTS = [
@@ -73,18 +96,48 @@ function getTime() {
   return new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 }
 
-export const AdvisorChat: FC<{ firstName: string }> = ({ firstName }) => {
-  const [messages, setMessages] = useState<ChatMsg[]>([
-    {
-      role: 'assistant',
-      content: `Salut ${firstName} 👋\nJe suis là pour t'aider avec ta routine ou tes ingrédients.\n\n**Que souhaites-tu savoir ?**`,
-      time: getTime(),
-      uiOnly: true,
-    },
-  ])
+interface AdvisorChatProps {
+  firstName: string
+  /** Conversation existante à reprendre (sinon nouvelle conversation). */
+  conversationId?: string | null
+  /** Messages d'une conversation chargée depuis l'historique. */
+  initialMessages?: StoredMessage[] | null
+  /** Notifie le parent quand une nouvelle conversation est créée (1er message). */
+  onConversationCreated?: (id: string) => void
+}
+
+const greeting = (firstName: string): ChatMsg => ({
+  role: 'assistant',
+  content: `Salut ${firstName} 👋\nJe suis là pour t'aider avec ta routine ou tes ingrédients.\n\n**Que souhaites-tu savoir ?**`,
+  time: getTime(),
+  uiOnly: true,
+})
+
+export const AdvisorChat: FC<AdvisorChatProps> = ({
+  firstName,
+  conversationId = null,
+  initialMessages = null,
+  onConversationCreated,
+}) => {
+  const [messages, setMessages] = useState<ChatMsg[]>(() =>
+    initialMessages && initialMessages.length > 0
+      ? initialMessages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          products: m.products ?? undefined,
+          recoCriteria: m.recoCriteria ?? undefined,
+          recoTried: !!(m.products && m.products.length > 0) || !!m.recoCriteria,
+        }))
+      : [greeting(firstName)],
+  )
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const scrollRef = useRef<ScrollView>(null)
+  const { restrictions, skin } = useProfile()
+  const { analyze, isAnalyzing } = useLaunchAlternative()
+  const router = useRouter()
+  // Id de la conversation courante (créée à la volée au 1er message).
+  const convIdRef = useRef<string | null>(conversationId)
 
   useEffect(() => {
     const t = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60)
@@ -98,21 +151,58 @@ export const AdvisorChat: FC<{ firstName: string }> = ({ firstName }) => {
       setStreaming(true)
 
       const userMsg: ChatMsg = { role: 'user', content: text, time: getTime() }
-      // Historique envoyé à l'API : sans les messages purement UI.
+      // Historique envoyé à l'API : sans les messages purement UI. On RECONSTRUIT
+      // le bloc RECO sur les réponses passées (à partir des critères stockés),
+      // sinon l'IA voit qu'elle a répondu sans bloc et imite ce schéma → elle
+      // arrête d'émettre le bloc aux tours suivants (carrousel qui disparaît).
       const apiMessages = [
-        ...messages.filter((m) => !m.uiOnly).map((m) => ({ role: m.role, content: m.content })),
+        ...messages
+          .filter((m) => !m.uiOnly)
+          .map((m) => ({
+            role: m.role,
+            content:
+              m.role === 'assistant' && m.recoCriteria
+                ? `${m.content}\n<<<RECO>>>${JSON.stringify({
+                    ingredients: m.recoCriteria.ingredients,
+                    form: m.recoCriteria.form,
+                  })}<<<END>>>`
+                : m.content,
+          })),
         { role: userMsg.role, content: userMsg.content },
       ]
       setMessages((prev) => [...prev, userMsg, { role: 'assistant', content: '', time: getTime() }])
       setInput('')
 
-      const replaceLastAssistant = (content: string) =>
+      // Persistance historique (best-effort) : conversation créée au 1er message.
+      let convId = convIdRef.current
+      if (!convId) {
+        convId = await createConversation(text)
+        if (convId) {
+          convIdRef.current = convId
+          onConversationCreated?.(convId)
+        }
+      }
+      if (convId) void saveAdvisorMessage(convId, { role: 'user', content: text })
+
+      // Pour sauvegarder la réponse de l'assistant en fin de tour.
+      let finalAssistant = ''
+      let finalProducts: AlternativeProduct[] = []
+      let finalCriteria: { ingredients: string[]; form: string | null } | null = null
+
+      const updateLastAssistant = (patch: Partial<ChatMsg>) =>
         setMessages((prev) => {
           const copy = [...prev]
-          copy[copy.length - 1] = { role: 'assistant', content, time: getTime() }
+          const last = copy[copy.length - 1]
+          copy[copy.length - 1] = {
+            ...last,
+            ...patch,
+            role: 'assistant',
+            time: last?.time ?? getTime(),
+          }
           return copy
         })
 
+      const replaceLastAssistant = (content: string) => updateLastAssistant({ content })
       const failWith = (msg: string) => replaceLastAssistant(msg)
 
       try {
@@ -161,13 +251,57 @@ export const AdvisorChat: FC<{ firstName: string }> = ({ firstName }) => {
           const { done, value } = await reader.read()
           if (done) break
           buffer += decoder.decode(value, { stream: true })
-          replaceLastAssistant(buffer)
+          // On masque le bloc technique <<<RECO>>> dès qu'il commence à arriver.
+          updateLastAssistant({ content: stripRecoBlock(buffer) })
         }
         buffer += decoder.decode()
-        if (buffer.trim().length === 0) {
-          replaceLastAssistant("Je n'ai pas pu générer de réponse cette fois-ci.")
-        } else {
-          replaceLastAssistant(buffer)
+
+        const visible = stripRecoBlock(buffer).trim()
+        finalAssistant = visible || "Je n'ai pas pu générer de réponse cette fois-ci."
+        updateLastAssistant({ content: finalAssistant })
+
+        // Si l'advisor a émis un bloc RECO, on récupère les produits sûrs
+        // (catalogue, badge feuille minimum, filtrés par les restrictions) et on
+        // les affiche en carrousel sous la réponse.
+        const reco = parseRecoBlock(buffer)
+        if (reco) {
+          finalCriteria = { ingredients: reco.ingredients, form: reco.form }
+          updateLastAssistant({
+            recoTried: true,
+            recoLoading: true,
+            recoCriteria: finalCriteria,
+          })
+          try {
+            const res = await fetchAdvisorRecommendations({
+              ingredients: reco.ingredients,
+              form: reco.form,
+              restrictions,
+              allergiesFreeform: skin.allergiesFreeform,
+              limit: 10,
+            })
+            finalProducts = res.products
+            // Carrousel vide : distingue « tout filtré par tes restrictions »
+            // de « rien trouvé pour ce besoin ».
+            const emptyReason: 'restrictions' | 'none' | null =
+              res.products.length > 0 ? null : res.rawCount > 0 ? 'restrictions' : 'none'
+            updateLastAssistant({
+              products: res.products,
+              recoLoading: false,
+              recoEmptyReason: emptyReason,
+            })
+          } catch {
+            updateLastAssistant({ products: [], recoLoading: false, recoEmptyReason: 'none' })
+          }
+        }
+
+        // Sauvegarde la réponse de l'assistant (avec ses produits) dans l'historique.
+        if (convId) {
+          void saveAdvisorMessage(convId, {
+            role: 'assistant',
+            content: finalAssistant,
+            products: finalProducts,
+            recoCriteria: finalCriteria,
+          })
         }
       } catch {
         failWith('Connexion interrompue. Vérifie ta connexion et réessaie.')
@@ -175,7 +309,7 @@ export const AdvisorChat: FC<{ firstName: string }> = ({ firstName }) => {
         setStreaming(false)
       }
     },
-    [messages, streaming],
+    [messages, streaming, restrictions, skin],
   )
 
   const showSuggestions = messages.filter((m) => !m.uiOnly).length === 0
@@ -194,12 +328,37 @@ export const AdvisorChat: FC<{ firstName: string }> = ({ firstName }) => {
         keyboardShouldPersistTaps="handled"
       >
         {messages.map((m, i) => (
-          <MessageBubble
-            key={i}
-            msg={m}
-            isLast={i === messages.length - 1}
-            streaming={streaming}
-          />
+          <Fragment key={i}>
+            <MessageBubble msg={m} isLast={i === messages.length - 1} streaming={streaming} />
+            {m.role === 'assistant' && m.recoTried ? (
+              <View style={styles.recoWrap}>
+                <AlternativesCarousel
+                  products={m.products ?? []}
+                  isInitialLoading={!!m.recoLoading}
+                  isEmpty={!m.recoLoading && (m.products?.length ?? 0) === 0}
+                  analyzing={isAnalyzing}
+                  showSeeAll={(m.products?.length ?? 0) >= 10 && !!m.recoCriteria}
+                  onSelect={(p) => void analyze(p)}
+                  onSeeAll={() => {
+                    if (!m.recoCriteria) return
+                    router.push({
+                      pathname: '/advisor/recommendations',
+                      params: {
+                        ingredients: m.recoCriteria.ingredients.join(','),
+                        form: m.recoCriteria.form ?? '',
+                      },
+                    })
+                  }}
+                  title="Quelques produits sûrs pour toi"
+                  emptyText={
+                    m.recoEmptyReason === 'restrictions'
+                      ? "Des produits correspondaient, mais aucun ne respecte tes restrictions actuelles. Assouplis-les dans ton profil pour voir des suggestions."
+                      : "Je n'ai pas trouvé de produit qui colle vraiment à ce besoin. Précise un peu et je recherche autrement."
+                  }
+                />
+              </View>
+            ) : null}
+          </Fragment>
         ))}
       </ScrollView>
 
@@ -263,6 +422,8 @@ export const AdvisorChat: FC<{ firstName: string }> = ({ firstName }) => {
           )}
         </Pressable>
       </View>
+
+      <ProcessingOverlay visible={isAnalyzing} message="On décode la composition…" />
     </KeyboardAvoidingView>
   )
 }
@@ -427,6 +588,7 @@ const Dot: FC<{ delay: number }> = ({ delay }) => {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  recoWrap: { paddingHorizontal: spacing.xs, marginTop: -spacing.sm },
   listContent: {
     paddingHorizontal: spacing.xs,
     paddingTop: spacing.base,

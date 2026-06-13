@@ -185,6 +185,7 @@ function RootNavigator() {
       <Stack.Screen name="(onboarding)" />
       <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
       <Stack.Screen name="advisor/index" options={{ animation: 'fade' }} />
+      <Stack.Screen name="advisor/recommendations" />
       <Stack.Screen name="compare/index" />
       <Stack.Screen name="analyse/[id]" />
       <Stack.Screen name="alternatives/[ean]" />
