@@ -15,7 +15,7 @@ export interface AdvisorHistoryMsg {
   /** Message d'UI seulement (ex. carte) : exclu de l'historique API. */
   uiOnly?: boolean
   /** Critères de la reco émise par ce message assistant (pour reconstruire le bloc). */
-  recoCriteria?: { ingredients: string[]; form: string | null } | null
+  recoCriteria?: { ingredients: string[]; form: string | null; exclude?: string[] } | null
 }
 
 export interface AdvisorApiMessage {
@@ -40,6 +40,9 @@ export function buildAdvisorApiMessages(
           ? `${m.content}\n<<<RECO>>>${JSON.stringify({
               ingredients: m.recoCriteria.ingredients,
               form: m.recoCriteria.form,
+              ...(m.recoCriteria.exclude && m.recoCriteria.exclude.length > 0
+                ? { exclude: m.recoCriteria.exclude }
+                : {}),
             })}<<<END>>>`
           : m.content,
     }))

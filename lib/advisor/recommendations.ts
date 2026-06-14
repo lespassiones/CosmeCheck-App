@@ -1,15 +1,16 @@
 /**
  * Récupération des produits recommandés par le Beauty Advisor.
  *
- * À partir des critères extraits du bloc RECO ({ ingredients, form }) :
- *   1. RPC `cosme_check_recommend_products` : produits du catalogue du bon TYPE
- *      (le `form` pilote), classés par pertinence ingrédients puis score, badge
- *      minimum (score >= 15). Les restrictions (familles + ingrédients) sont
- *      appliquées CÔTÉ SERVEUR, AVANT la limite : on récupère donc 24 produits
- *      déjà compatibles, au lieu de filtrer une liste déjà tronquée (qui pouvait
- *      tomber à 1 seul produit quand beaucoup de restrictions sont actives).
- *   2. Les allergies en texte libre restent filtrées côté client (match
- *      sous-chaîne, que la RPC ne gère pas).
+ * À partir des critères du bloc RECO ({ ingredients, form, exclude }) :
+ *   1. RPC `cosme_check_recommend_products` : produits du bon TYPE (`form` pilote),
+ *      classés par pertinence ingrédients puis score, badge >= 15. Les restrictions
+ *      du PROFIL **et** les contraintes ad-hoc du message (« sans parfum »…) sont
+ *      appliquées CÔTÉ SERVEUR, avant la limite.
+ *   2. Allergies en texte libre : filtrées côté client (sous-chaîne).
+ *   3. RELÂCHEMENT INTELLIGENT : si plus AUCUN produit ne coche TOUTES les contraintes
+ *      ad-hoc, on identifie laquelle bloque et on propose le meilleur compromis
+ *      (« j'en ai X sans parfum mais qui peuvent contenir de l'alcool »). On ne
+ *      relâche JAMAIS les restrictions du profil (règles dures de l'utilisateur).
  *
  * On ne propose QUE des produits sûrs et compatibles avec le profil.
  */
@@ -20,6 +21,7 @@ import {
   isExclusionEmpty,
   type AlternativeProduct,
 } from '@/lib/analysis/alternativesFilter'
+import { resolveExclusion, type ExcludeSpec } from '@/lib/advisor/excludeMap'
 import type { UserRestrictions } from '@/lib/supabase/types'
 
 interface RecoRpcRow {
@@ -38,18 +40,28 @@ interface RecoRpcRow {
 
 export const ADVISOR_MIN_SCORE = 15 // qualité : entre feuille (13) et cœur (17)
 
-export interface AdvisorRecoResult {
-  /** Produits sûrs compatibles avec les restrictions (à afficher). */
+export interface AdvisorRelaxation {
+  /** Contraintes ad-hoc conservées dans le set relâché (« sans parfum »). */
+  keptLabels: string[]
+  /** Contraintes ad-hoc qu'on a dû lâcher pour trouver des produits (« sans alcool »). */
+  droppedLabels: string[]
+  /** Le set de produits relâché à proposer. */
   products: AlternativeProduct[]
-  /**
-   * Nb de produits du TYPE demandé AVANT le filtre restrictions.
-   * > 0 alors que `products` est vide => ce sont les restrictions qui bloquent.
-   */
-  rawCount: number
 }
 
-function mapRows(data: RecoRpcRow[]): AlternativeProduct[] {
-  return data.map((r) => ({
+export interface AdvisorRecoResult {
+  /** Produits respectant TOUTES les contraintes (profil + ad-hoc). */
+  products: AlternativeProduct[]
+  /** Nb de produits du TYPE avant restrictions (>0 + products vide => bloqué par restrictions). */
+  rawCount: number
+  /** Présent quand `products` est vide mais qu'un compromis existe (cf. ci-dessus). */
+  relaxation?: AdvisorRelaxation | null
+}
+
+function mapRows(data: unknown): AlternativeProduct[] {
+  const rows = (data as RecoRpcRow[] | null) ?? []
+  if (!Array.isArray(rows)) return []
+  return rows.map((r) => ({
     ean: r.ean,
     brand: r.brand,
     name: r.name,
@@ -68,62 +80,121 @@ export async function fetchAdvisorRecommendations(opts: {
   ingredients: string[]
   form: string | null
   restrictions: UserRestrictions
+  /** Contraintes ad-hoc du message (mots-clés canoniques, cf. excludeMap). */
+  exclude?: string[]
   allergiesFreeform?: string | null
   /** Nb de produits à AFFICHER (slice final). Défaut 10. */
   limit?: number
   /** Nb de produits à RÉCUPÉRER côté base (p_limit RPC, plafonné à 50). Défaut 24. */
   fetchLimit?: number
 }): Promise<AdvisorRecoResult> {
-  const excludeFamilies = opts.restrictions.families ?? []
-  const excludeIngredients = (opts.restrictions.ingredients ?? [])
+  const displayLimit = opts.limit ?? 10
+  const fetchLimit = Math.min(opts.fetchLimit ?? 24, 50)
+
+  const profileFamilies = opts.restrictions.families ?? []
+  const profileIngredients = (opts.restrictions.ingredients ?? [])
     .map((i) => i.name)
     .filter((n): n is string => !!n)
 
-  const { data, error } = await supabase.rpc(
-    'cosme_check_recommend_products' as never,
-    {
-      p_terms: opts.ingredients,
-      p_form: opts.form,
-      p_min_score: ADVISOR_MIN_SCORE,
-      p_limit: Math.min(opts.fetchLimit ?? 24, 50),
-      p_exclude_families: excludeFamilies,
-      p_exclude_ingredients: excludeIngredients,
-    } as never,
-  )
-  if (error || !data) return { products: [], rawCount: 0 }
+  // Contraintes ad-hoc reconnues (les inconnues/sensorielles sont ignorées ici,
+  // l'advisor les décline dans son texte).
+  const adhoc: { keyword: string; spec: ExcludeSpec }[] = []
+  for (const kw of opts.exclude ?? []) {
+    const spec = resolveExclusion(kw)
+    if (spec) adhoc.push({ keyword: kw, spec })
+  }
 
-  let products = mapRows(data as RecoRpcRow[])
-
-  // Allergies en texte libre : non gérées par la RPC, filtrées ici (sous-chaîne).
+  // Filtre freeform (allergies texte libre) : non géré par la RPC.
   const freeformEx = buildExclusionSet({
     restrictions: { families: [], ingredients: [] } as unknown as UserRestrictions,
     familyIngredientNames: [],
     allergiesFreeform: opts.allergiesFreeform ?? null,
   })
-  if (!isExclusionEmpty(freeformEx)) {
-    products = filterAlternatives(products, freeformEx)
-  }
+  const applyFreeform = (products: AlternativeProduct[]) =>
+    isExclusionEmpty(freeformEx) ? products : filterAlternatives(products, freeformEx)
 
-  const display = products.slice(0, opts.limit ?? 10)
-
-  // rawCount : seulement utile pour distinguer « bloqué par restrictions » de
-  // « rien trouvé ». On ne paie une requête de sonde QUE si la liste est vide.
-  let rawCount = products.length
-  if (products.length === 0) {
-    const probe = await supabase.rpc(
+  // Appel RPC avec un sous-ensemble de contraintes ad-hoc actives.
+  const query = async (activeAdhoc: { spec: ExcludeSpec }[]): Promise<AlternativeProduct[]> => {
+    const families = [...new Set([...profileFamilies, ...activeAdhoc.flatMap((a) => a.spec.families)])]
+    const ingredients = [...new Set([...profileIngredients, ...activeAdhoc.flatMap((a) => a.spec.ingredients)])]
+    const { data, error } = await supabase.rpc(
       'cosme_check_recommend_products' as never,
       {
         p_terms: opts.ingredients,
         p_form: opts.form,
         p_min_score: ADVISOR_MIN_SCORE,
-        p_limit: 1,
-        p_exclude_families: [],
-        p_exclude_ingredients: [],
+        p_limit: fetchLimit,
+        p_exclude_families: families,
+        p_exclude_ingredients: ingredients,
       } as never,
     )
-    const probeRows = probe.data as RecoRpcRow[] | null
-    rawCount = Array.isArray(probeRows) ? probeRows.length : 0
+    if (error || !data) return []
+    return applyFreeform(mapRows(data))
   }
 
-  return { products: display, rawCount }
+  // 1) Set STRICT : toutes les contraintes (profil + ad-hoc).
+  const strict = await query(adhoc)
+  if (strict.length > 0 || adhoc.length === 0) {
+    let rawCount = strict.length
+    if (strict.length === 0) {
+      // Distinguer « bloqué par restrictions » de « rien trouvé » : sonde sans aucune exclusion.
+      const probe = await supabase.rpc(
+        'cosme_check_recommend_products' as never,
+        {
+          p_terms: opts.ingredients,
+          p_form: opts.form,
+          p_min_score: ADVISOR_MIN_SCORE,
+          p_limit: 1,
+          p_exclude_families: [],
+          p_exclude_ingredients: [],
+        } as never,
+      )
+      rawCount = Array.isArray(probe.data) ? (probe.data as unknown[]).length : 0
+    }
+    return { products: strict.slice(0, displayLimit), rawCount, relaxation: null }
+  }
+
+  // 2) STRICT vide AVEC contraintes ad-hoc -> RELÂCHEMENT : on cherche quelle
+  //    contrainte lâcher pour retrouver des produits (jamais le profil).
+  const drops = await Promise.all(
+    adhoc.map(async (dropped) => {
+      const kept = adhoc.filter((a) => a !== dropped)
+      const products = await query(kept)
+      return { dropped, kept, products }
+    }),
+  )
+  let best = drops.filter((d) => d.products.length > 0).sort((a, b) => b.products.length - a.products.length)[0] ?? null
+
+  // Si lâcher UNE contrainte ne suffit pas, on lâche TOUTES les ad-hoc (profil conservé).
+  if (!best) {
+    const onlyProfile = await query([])
+    if (onlyProfile.length > 0) {
+      best = { dropped: null as never, kept: [], products: onlyProfile }
+    }
+  }
+
+  if (!best) {
+    // Vraiment rien, même profil seul : sonde pour le message restrictions vs none.
+    const probe = await supabase.rpc(
+      'cosme_check_recommend_products' as never,
+      { p_terms: opts.ingredients, p_form: opts.form, p_min_score: ADVISOR_MIN_SCORE, p_limit: 1, p_exclude_families: [], p_exclude_ingredients: [] } as never,
+    )
+    const rawCount = Array.isArray(probe.data) ? (probe.data as unknown[]).length : 0
+    return { products: [], rawCount, relaxation: null }
+  }
+
+  const droppedLabels = best.dropped
+    ? [best.dropped.spec.label]
+    : adhoc.map((a) => a.spec.label) // cas « toutes lâchées »
+  const keptLabels = best.dropped ? best.kept.map((a) => a.spec.label) : []
+
+  return {
+    products: [],
+    rawCount: 0,
+    relaxation: {
+      keptLabels: [...new Set(keptLabels)],
+      droppedLabels: [...new Set(droppedLabels)],
+      products: best.products.slice(0, displayLimit),
+    },
+  }
 }

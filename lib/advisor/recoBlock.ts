@@ -16,6 +16,11 @@
 export interface RecoCriteria {
   ingredients: string[]
   form: string | null
+  /**
+   * Contraintes ad-hoc à EXCLURE, exprimées dans le message (« sans parfum »…).
+   * Mots-clés canoniques résolus par `lib/advisor/excludeMap`. Optionnel.
+   */
+  exclude?: string[]
 }
 
 const RECO_MARKER = '<<<RECO'
@@ -62,5 +67,11 @@ export function parseRecoBlock(text: string): RecoCriteria | null {
     formRaw.length > 0 && !['null', 'none', 'aucun', 'undefined'].includes(formRaw.toLowerCase())
       ? formRaw
       : null
-  return { ingredients, form }
+  const exclude = Array.isArray(o.exclude)
+    ? o.exclude
+        .filter((x): x is string => typeof x === 'string' && x.trim().length >= 2)
+        .map((x) => x.trim())
+        .slice(0, 8)
+    : []
+  return exclude.length > 0 ? { ingredients, form, exclude } : { ingredients, form }
 }

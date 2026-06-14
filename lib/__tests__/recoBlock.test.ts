@@ -51,4 +51,20 @@ describe('parseRecoBlock', () => {
     const t = '<<<RECO>>>{"ingredients":["caffeine"],"form":"crayon yeux"}<<<END>>>'
     expect(parseRecoBlock(t)?.form).toBe('crayon yeux')
   })
+
+  it('extrait les contraintes ad-hoc `exclude`', () => {
+    const t = '<<<RECO>>>{"ingredients":["hyaluronic"],"form":"creme visage","exclude":["parfum","alcool"]}<<<END>>>'
+    expect(parseRecoBlock(t)).toEqual({
+      ingredients: ['hyaluronic'],
+      form: 'creme visage',
+      exclude: ['parfum', 'alcool'],
+    })
+  })
+
+  it('omet `exclude` quand absent ou vide (rétro-compatible)', () => {
+    const t = '<<<RECO>>>{"ingredients":["hyaluronic"],"form":"creme","exclude":[]}<<<END>>>'
+    expect(parseRecoBlock(t)).toEqual({ ingredients: ['hyaluronic'], form: 'creme' })
+    const t2 = '<<<RECO>>>{"ingredients":["hyaluronic"],"form":"creme"}<<<END>>>'
+    expect(parseRecoBlock(t2)?.exclude).toBeUndefined()
+  })
 })

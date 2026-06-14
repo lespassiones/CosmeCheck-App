@@ -46,6 +46,7 @@ import { Ionicons } from '@expo/vector-icons'
 // expo/fetch : implémentation streaming fiable sous React Native (SDK 54).
 import { fetch as expoFetch } from 'expo/fetch'
 import { useRouter } from 'expo-router'
+import { useQueryClient } from '@tanstack/react-query'
 
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
@@ -58,6 +59,7 @@ import { ProcessingOverlay } from '@/components/shared/ProcessingOverlay'
 import { parseRecoBlock, stripRecoBlock } from '@/lib/advisor/recoBlock'
 import { fetchAdvisorRecommendations } from '@/lib/advisor/recommendations'
 import { buildAdvisorApiMessages } from '@/lib/advisor/apiMessages'
+import { prefetchProductsAnalyses } from '@/lib/analysis/eanAnalysisPrefetch'
 import {
   createConversation,
   saveAdvisorMessage,
@@ -78,9 +80,15 @@ type ChatMsg = {
   /** Produits recommandés à afficher en carrousel sous la bulle. */
   products?: AlternativeProduct[]
   /** Critères de la reco (pour le « Voir plus » qui ouvre la page paginée). */
-  recoCriteria?: { ingredients: string[]; form: string | null }
+  recoCriteria?: { ingredients: string[]; form: string | null; exclude?: string[] }
   /** Raison d'un carrousel vide : 'restrictions' (tout filtré) ou 'none' (rien trouvé). */
   recoEmptyReason?: 'restrictions' | 'none' | null
+  /** Compromis proposé quand aucune reco ne coche TOUTES les contraintes ad-hoc. */
+  recoRelaxation?: {
+    keptLabels: string[]
+    droppedLabels: string[]
+    products: AlternativeProduct[]
+  } | null
 }
 
 const SUGGESTED_PROMPTS = [
@@ -137,6 +145,7 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
   const { restrictions, skin } = useProfile()
   const { analyze, isAnalyzing } = useLaunchAlternative()
   const router = useRouter()
+  const qc = useQueryClient()
   // Id de la conversation courante (créée à la volée au 1er message).
   const convIdRef = useRef<string | null>(conversationId)
 
@@ -173,7 +182,7 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
       // Pour sauvegarder la réponse de l'assistant en fin de tour.
       let finalAssistant = ''
       let finalProducts: AlternativeProduct[] = []
-      let finalCriteria: { ingredients: string[]; form: string | null } | null = null
+      let finalCriteria: { ingredients: string[]; form: string | null; exclude?: string[] } | null = null
 
       const updateLastAssistant = (patch: Partial<ChatMsg>) =>
         setMessages((prev) => {
@@ -251,7 +260,7 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
         // les affiche en carrousel sous la réponse.
         const reco = parseRecoBlock(buffer)
         if (reco) {
-          finalCriteria = { ingredients: reco.ingredients, form: reco.form }
+          finalCriteria = { ingredients: reco.ingredients, form: reco.form, exclude: reco.exclude }
           updateLastAssistant({
             recoTried: true,
             recoLoading: true,
@@ -261,11 +270,15 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
             const res = await fetchAdvisorRecommendations({
               ingredients: reco.ingredients,
               form: reco.form,
+              exclude: reco.exclude,
               restrictions,
               allergiesFreeform: skin.allergiesFreeform,
               limit: 10,
             })
             finalProducts = res.products
+            // Préchargement LECTURE SEULE : pendant que la personne lit, on prépare
+            // l'analyse des produits visibles → clic instantané ensuite.
+            prefetchProductsAnalyses(qc, res.products.map((p) => p.ean))
             // Carrousel vide : distingue « tout filtré par tes restrictions »
             // de « rien trouvé pour ce besoin ».
             const emptyReason: 'restrictions' | 'none' | null =
@@ -274,6 +287,7 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
               products: res.products,
               recoLoading: false,
               recoEmptyReason: emptyReason,
+              recoRelaxation: res.relaxation ?? null,
             })
           } catch {
             updateLastAssistant({ products: [], recoLoading: false, recoEmptyReason: 'none' })
@@ -295,8 +309,19 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
         setStreaming(false)
       }
     },
-    [messages, streaming, restrictions, skin],
+    [messages, streaming, restrictions, skin, qc],
   )
+
+  // L'utilisateur accepte le compromis : on charge le set relâché dans le carrousel.
+  const acceptRelaxation = useCallback((index: number) => {
+    setMessages((prev) =>
+      prev.map((mm, idx) =>
+        idx === index && mm.recoRelaxation
+          ? { ...mm, products: mm.recoRelaxation.products, recoEmptyReason: null, recoRelaxation: null }
+          : mm,
+      ),
+    )
+  }, [])
 
   const showSuggestions = messages.filter((m) => !m.uiOnly).length === 0
 
@@ -318,30 +343,50 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
             <MessageBubble msg={m} isLast={i === messages.length - 1} streaming={streaming} />
             {m.role === 'assistant' && m.recoTried ? (
               <View style={styles.recoWrap}>
-                <AlternativesCarousel
-                  products={m.products ?? []}
-                  isInitialLoading={!!m.recoLoading}
-                  isEmpty={!m.recoLoading && (m.products?.length ?? 0) === 0}
-                  analyzing={isAnalyzing}
-                  showSeeAll={(m.products?.length ?? 0) >= 10 && !!m.recoCriteria}
-                  onSelect={(p) => void analyze(p)}
-                  onSeeAll={() => {
-                    if (!m.recoCriteria) return
-                    router.push({
-                      pathname: '/advisor/recommendations',
-                      params: {
-                        ingredients: m.recoCriteria.ingredients.join(','),
-                        form: m.recoCriteria.form ?? '',
-                      },
-                    })
-                  }}
-                  title="Quelques produits sûrs pour toi"
-                  emptyText={
-                    m.recoEmptyReason === 'restrictions'
-                      ? "Des produits correspondaient, mais aucun ne respecte tes restrictions actuelles. Assouplis-les dans ton profil pour voir des suggestions."
-                      : "Je n'ai pas trouvé de produit qui colle vraiment à ce besoin. Précise un peu et je recherche autrement."
-                  }
-                />
+                {m.recoRelaxation && !m.recoLoading && (m.products?.length ?? 0) === 0 ? (
+                  <View style={styles.relaxBox}>
+                    <Text style={styles.relaxText}>
+                      {m.recoRelaxation.keptLabels.length > 0
+                        ? `Aucun produit ne coche tout. J'en ai ${m.recoRelaxation.products.length} ${m.recoRelaxation.keptLabels.join(' et ')}, mais je ne peux pas garantir : ${m.recoRelaxation.droppedLabels.join(', ')}.`
+                        : `Aucun produit ne respecte toutes ces contraintes dans notre base. J'ai ${m.recoRelaxation.products.length} produits du bon type (compatibles avec ton profil), mais je ne peux pas garantir : ${m.recoRelaxation.droppedLabels.join(', ')}.`}
+                    </Text>
+                    <Pressable
+                      onPress={() => acceptRelaxation(i)}
+                      style={({ pressed }) => [styles.relaxBtn, pressed && styles.relaxBtnPressed]}
+                      accessibilityRole="button"
+                    >
+                      <Text style={styles.relaxBtnText}>
+                        Voir ces {m.recoRelaxation.products.length} produits
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <AlternativesCarousel
+                    products={m.products ?? []}
+                    isInitialLoading={!!m.recoLoading}
+                    isEmpty={!m.recoLoading && (m.products?.length ?? 0) === 0}
+                    analyzing={isAnalyzing}
+                    showSeeAll={(m.products?.length ?? 0) >= 10 && !!m.recoCriteria}
+                    onSelect={(p) => void analyze(p)}
+                    onSeeAll={() => {
+                      if (!m.recoCriteria) return
+                      router.push({
+                        pathname: '/advisor/recommendations',
+                        params: {
+                          ingredients: m.recoCriteria.ingredients.join(','),
+                          form: m.recoCriteria.form ?? '',
+                          exclude: m.recoCriteria.exclude?.join(',') ?? '',
+                        },
+                      })
+                    }}
+                    title="Quelques produits sûrs pour toi"
+                    emptyText={
+                      m.recoEmptyReason === 'restrictions'
+                        ? "Des produits correspondaient, mais aucun ne respecte tes restrictions actuelles. Assouplis-les dans ton profil pour voir des suggestions."
+                        : "Je n'ai pas trouvé de produit qui colle vraiment à ce besoin. Précise un peu et je recherche autrement."
+                    }
+                  />
+                )}
               </View>
             ) : null}
           </Fragment>
@@ -575,6 +620,34 @@ const Dot: FC<{ delay: number }> = ({ delay }) => {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   recoWrap: { paddingHorizontal: spacing.xs, marginTop: -spacing.sm },
+  relaxBox: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: '#E7E2EC',
+    padding: spacing.md,
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  relaxText: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.ink,
+  },
+  relaxBtn: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.rose,
+  },
+  relaxBtnPressed: { opacity: 0.85 },
+  relaxBtnText: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 13,
+    color: '#FFFFFF',
+  },
   listContent: {
     paddingHorizontal: spacing.xs,
     paddingTop: spacing.base,

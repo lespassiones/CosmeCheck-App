@@ -23,7 +23,7 @@ export interface StoredMessage {
   content: string
   products?: AlternativeProduct[] | null
   /** Critères de reco (pour réafficher le carrousel + Voir plus depuis l'historique). */
-  recoCriteria?: { ingredients: string[]; form: string | null } | null
+  recoCriteria?: { ingredients: string[]; form: string | null; exclude?: string[] } | null
 }
 
 async function currentUserId(): Promise<string | null> {

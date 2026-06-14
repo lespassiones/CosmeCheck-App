@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
+import { useQueryClient } from '@tanstack/react-query'
 
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
@@ -30,6 +31,7 @@ import { CatalogPastille } from '@/components/shared/CatalogPastille'
 import { useProfile } from '@/hooks/useProfile'
 import { useLaunchAlternative } from '@/hooks/useLaunchAlternative'
 import { fetchAdvisorRecommendations } from '@/lib/advisor/recommendations'
+import { prefetchProductsAnalyses } from '@/lib/analysis/eanAnalysisPrefetch'
 import { applyColorCap, scoreLabelFromScore } from '@/lib/analysis/scoreCap'
 import type { AlternativeProduct } from '@/lib/analysis/alternativesFilter'
 
@@ -82,8 +84,9 @@ const GridCard: FC<{
 }
 
 const AdvisorRecommendationsScreen: FC = () => {
-  const params = useLocalSearchParams<{ ingredients?: string; form?: string }>()
+  const params = useLocalSearchParams<{ ingredients?: string; form?: string; exclude?: string }>()
   const router = useRouter()
+  const qc = useQueryClient()
   const { restrictions, skin } = useProfile()
   const { analyze, isAnalyzing } = useLaunchAlternative()
 
@@ -92,6 +95,10 @@ const AdvisorRecommendationsScreen: FC = () => {
     [params.ingredients],
   )
   const form = params.form && params.form.length > 0 ? params.form : null
+  const exclude = useMemo(
+    () => (params.exclude ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+    [params.exclude],
+  )
 
   const [all, setAll] = useState<AlternativeProduct[]>([])
   const [rawCount, setRawCount] = useState(0)
@@ -104,6 +111,7 @@ const AdvisorRecommendationsScreen: FC = () => {
     void fetchAdvisorRecommendations({
       ingredients,
       form,
+      exclude,
       restrictions,
       allergiesFreeform: skin.allergiesFreeform,
       limit: 50,
@@ -111,8 +119,12 @@ const AdvisorRecommendationsScreen: FC = () => {
     })
       .then((res) => {
         if (!cancelled) {
-          setAll(res.products)
+          // La page « Voir plus » montre le set strict ; à défaut, le compromis relâché.
+          const shownProducts = res.products.length > 0 ? res.products : (res.relaxation?.products ?? [])
+          setAll(shownProducts)
           setRawCount(res.rawCount)
+          // Préchargement lecture seule des premiers produits visibles (clic instantané).
+          prefetchProductsAnalyses(qc, shownProducts.map((p) => p.ean), 8)
         }
       })
       .finally(() => {
@@ -122,7 +134,7 @@ const AdvisorRecommendationsScreen: FC = () => {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.ingredients, params.form, restrictions])
+  }, [params.ingredients, params.form, params.exclude, restrictions])
 
   const back = () => {
     if (router.canGoBack()) router.back()

@@ -248,6 +248,65 @@ async function rpcBattery() {
     })
     check('RPC cosme_check_get_family_ingredient_names -> 200', fam.status === 200, `status ${fam.status}`)
   }
+
+  section('13. RPC — contraintes ad-hoc du message (« sans X ») filtrées pour de vrai')
+  {
+    const hasExactToken = (text, tokens) => {
+      if (!text) return false
+      const set = new Set(tokens.map(norm))
+      return text.split(/[,;]/).some((raw) => set.has(norm(raw)))
+    }
+    // « crème visage sans parfum » : 0 produit avec parfum/fragrance ni allergène parfumant.
+    const sansParfum = await rpcReco({
+      terms: ['hyaluronic', 'niacinamide'], form: 'creme visage', limit: 30,
+      families: ['allergene-parfumant'], ingredients: ['parfum', 'fragrance'],
+    })
+    check('sans parfum -> non vide', sansParfum.length > 0, `${sansParfum.length} produits`)
+    const parfumOffenders = sansParfum.filter((p) => hasExactToken(p.ingredients_text, ['parfum', 'fragrance']) || /linalool|limonene|citronellol|geraniol|citral|eugenol/i.test(p.ingredients_text || ''))
+    check('sans parfum -> 0 produit avec parfum/fragrance/allergène', parfumOffenders.length === 0, `${parfumOffenders.length} fautifs`)
+
+    // « sans alcool » : 0 alcool desséchant en token, MAIS ne doit pas tout vider (alcools gras OK).
+    const alcoolTokens = ['alcohol', 'alcohol denat.', 'alcohol denat', 'sd alcohol', 'sd alcohol 40', 'sd alcohol 40-b', 'ethanol', 'ethyl alcohol']
+    const sansAlcool = await rpcReco({ terms: ['hyaluronic'], form: 'creme visage', limit: 30, ingredients: alcoolTokens })
+    check('sans alcool -> non vide (alcools gras non bannis)', sansAlcool.length > 0, `${sansAlcool.length} produits`)
+    const alcoolOffenders = sansAlcool.filter((p) => hasExactToken(p.ingredients_text, alcoolTokens))
+    check('sans alcool -> 0 produit avec alcool desséchant', alcoolOffenders.length === 0, `${alcoolOffenders.length} fautifs`)
+  }
+
+  section('14. RPC — gradient de relâchement (lâcher une contrainte récupère des produits)')
+  {
+    // Principe du repli client : sur-contraindre vide, et retirer une contrainte recouvre.
+    const fams = ['allergene-parfumant', 'silicone', 'sulfate', 'paraben', 'huile-essentielle', 'huile-minerale', 'colorant-synthese']
+    const tight = await rpcReco({ terms: ['ascorbic'], form: 'serum visage', limit: 24, families: fams, ingredients: ['parfum', 'fragrance', 'alcohol', 'ethanol'] })
+    const looser = await rpcReco({ terms: ['ascorbic'], form: 'serum visage', limit: 24, families: fams.filter((f) => f !== 'allergene-parfumant'), ingredients: ['alcohol', 'ethanol'] })
+    check('retirer une contrainte ne réduit jamais le nombre de produits', looser.length >= tight.length, `strict=${tight.length} -> relâché=${looser.length}`)
+  }
+
+  section('15. RPC — filtre QUALITÉ : aucun ingrédient noté Orange/Rouge dans les recos')
+  {
+    // Régression du bug « Kojic Acid Body Lotion » (score INCI Beauty 20 mais 9 pénalisants).
+    // Échantillon d'INCI notoirement Orange/Rouge : aucun ne doit apparaître dans une reco.
+    const PENAL = ['mineral oil', 'petrolatum', 'paraffinum liquidum', 'dimethicone', 'cyclopentasiloxane',
+      'cyclohexasiloxane', 'methylparaben', 'propylparaben', 'butylparaben', 'ceteareth-25', 'laureth-7', 'bht']
+    const hasPenal = (text) => {
+      if (!text) return null
+      const set = new Set(PENAL)
+      for (const raw of text.split(/[,;]/)) { const t = norm(raw); if (set.has(t)) return t }
+      return null
+    }
+    const cases = [
+      { label: 'crème corps', terms: ['glycerin', 'butyrospermum'], form: 'creme corps' },
+      { label: 'crème visage', terms: ['hyaluronic', 'niacinamide'], form: 'creme visage' },
+      { label: 'déodorant bille', terms: ['aloe', 'zinc'], form: 'deodorant bille' },
+      { label: 'sérum (sans type)', terms: ['ascorbic'], form: null },
+    ]
+    for (const c of cases) {
+      const r = await rpcReco({ terms: c.terms, form: c.form, limit: 24 })
+      const offenders = r.map((p) => ({ n: p.name, hit: hasPenal(p.ingredients_text) })).filter((x) => x.hit)
+      check(`${c.label} -> 0 produit avec ingrédient Orange/Rouge connu`, offenders.length === 0,
+        offenders.slice(0, 3).map((o) => `${(o.n || '').slice(0, 20)}:${o.hit}`).join(', ') || `${r.length} produits propres`)
+    }
+  }
 }
 
 // ── BATTERIE 2 — Conversation (LLM, tolérante) ───────────────────────────────
@@ -329,6 +388,33 @@ async function conversationBattery() {
     console.log(`    ${ok ? '\x1b[32mok\x1b[0m' : '\x1b[31mKO\x1b[0m'} "${t.q}" -> ${hasReco ? 'reco' : 'pas de reco'}`)
   }
   check('questions pièges gérées', trapsOk === traps.length, `${trapsOk}/${traps.length}`)
+
+  section('13b. Conversation — extraction des contraintes ad-hoc « sans X » (bloc exclude)')
+  const exCases = [
+    { q: 'une creme visage sans parfum', expect: ['parfum'] },
+    { q: 'un soin hydratant sans parfum ni alcool', expect: ['parfum', 'alcool'] },
+    { q: 'un shampoing sans sulfate ni silicone', expect: ['sulfate', 'silicone'] },
+  ]
+  let exOk = 0
+  for (const c of exCases) {
+    const r = await advisor([{ role: 'user', content: c.q }], token)
+    const b = blockOf(r)
+    const got = (b && Array.isArray(b.exclude) ? b.exclude : []).map((x) => norm(x).replace(/^sans /, '').replace(/\s+/g, '_'))
+    const ok = !!b && c.expect.every((e) => got.some((g) => g.includes(e) || e.includes(g)))
+    if (ok) exOk++
+    console.log(`    ${ok ? '\x1b[32mok\x1b[0m' : '\x1b[31mKO\x1b[0m'} "${c.q}" -> exclude=${JSON.stringify(b?.exclude ?? null)}`)
+  }
+  check('contraintes « sans X » captées dans exclude', exOk === exCases.length, `${exOk}/${exCases.length}`)
+
+  section('14b. Conversation — demande SENSORIELLE déclinée honnêtement (pas de fausse promesse)')
+  {
+    const r = await advisor([{ role: 'user', content: 'un parfum qui sent bon le fruité' }], token)
+    const b = blockOf(r)
+    const got = (b && Array.isArray(b.exclude) ? b.exclude : []).map((x) => norm(x))
+    // « fruité »/« sent bon » ne doivent PAS être mis dans exclude (vocabulaire contrôlé).
+    const noFakeFilter = !got.some((g) => g.includes('fruit') || g.includes('sent') || g.includes('odeur'))
+    check('odeur "fruité" non mise dans exclude (pas de filtre olfactif bidon)', noFakeFilter, `exclude=${JSON.stringify(b?.exclude ?? null)}`)
+  }
 
   console.log(`\n  Nettoyage utilisateur de test : ${await deleteUser(uid)}`)
 }
