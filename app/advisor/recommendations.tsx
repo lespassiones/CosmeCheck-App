@@ -107,6 +107,7 @@ const AdvisorRecommendationsScreen: FC = () => {
       restrictions,
       allergiesFreeform: skin.allergiesFreeform,
       limit: 50,
+      fetchLimit: 50,
     })
       .then((res) => {
         if (!cancelled) {

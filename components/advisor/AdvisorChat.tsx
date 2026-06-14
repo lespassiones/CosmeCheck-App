@@ -57,6 +57,7 @@ import { AlternativesCarousel } from '@/components/analysis/AlternativesCarousel
 import { ProcessingOverlay } from '@/components/shared/ProcessingOverlay'
 import { parseRecoBlock, stripRecoBlock } from '@/lib/advisor/recoBlock'
 import { fetchAdvisorRecommendations } from '@/lib/advisor/recommendations'
+import { buildAdvisorApiMessages } from '@/lib/advisor/apiMessages'
 import {
   createConversation,
   saveAdvisorMessage,
@@ -151,25 +152,10 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
       setStreaming(true)
 
       const userMsg: ChatMsg = { role: 'user', content: text, time: getTime() }
-      // Historique envoyé à l'API : sans les messages purement UI. On RECONSTRUIT
-      // le bloc RECO sur les réponses passées (à partir des critères stockés),
-      // sinon l'IA voit qu'elle a répondu sans bloc et imite ce schéma → elle
-      // arrête d'émettre le bloc aux tours suivants (carrousel qui disparaît).
-      const apiMessages = [
-        ...messages
-          .filter((m) => !m.uiOnly)
-          .map((m) => ({
-            role: m.role,
-            content:
-              m.role === 'assistant' && m.recoCriteria
-                ? `${m.content}\n<<<RECO>>>${JSON.stringify({
-                    ingredients: m.recoCriteria.ingredients,
-                    form: m.recoCriteria.form,
-                  })}<<<END>>>`
-                : m.content,
-          })),
-        { role: userMsg.role, content: userMsg.content },
-      ]
+      // Historique envoyé à l'API : sans les messages purement UI, avec le bloc RECO
+      // reconstruit sur les réponses passées (cf. lib/advisor/apiMessages — bug
+      // multi-tours : sans ça l'IA arrête d'émettre le bloc aux tours suivants).
+      const apiMessages = buildAdvisorApiMessages(messages, userMsg.content)
       setMessages((prev) => [...prev, userMsg, { role: 'assistant', content: '', time: getTime() }])
       setInput('')
 

@@ -37,4 +37,18 @@ describe('parseRecoBlock', () => {
     const t = '<<<RECO>>>{"ingredients":["a","retinol","niacinamide","peptides","aha","bha"]}<<<END>>>'
     expect(parseRecoBlock(t)?.ingredients).toEqual(['retinol', 'niacinamide', 'peptides', 'aha'])
   })
+
+  // Régression : le LLM écrit parfois la CHAÎNE "null"/"none"/"aucun" au lieu du
+  // JSON null. Sans neutralisation, la RPC cherchait la catégorie "null" → 0 produit.
+  it('neutralise la chaîne "null"/"none"/"aucun"/"undefined" en form null', () => {
+    for (const bad of ['null', 'None', 'AUCUN', 'undefined', '  null  ']) {
+      const t = `<<<RECO>>>{"ingredients":["niacinamide"],"form":"${bad}"}<<<END>>>`
+      expect(parseRecoBlock(t)?.form).toBeNull()
+    }
+  })
+
+  it('conserve un form réel (type/zone) tel quel', () => {
+    const t = '<<<RECO>>>{"ingredients":["caffeine"],"form":"crayon yeux"}<<<END>>>'
+    expect(parseRecoBlock(t)?.form).toBe('crayon yeux')
+  })
 })

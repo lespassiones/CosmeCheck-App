@@ -56,7 +56,11 @@ export function parseRecoBlock(text: string): RecoCriteria | null {
         .slice(0, 4)
     : []
   if (ingredients.length === 0) return null
+  const formRaw = typeof o.form === 'string' ? o.form.trim() : ''
+  // Tolère le cas où l'IA met la chaîne "null"/"none" au lieu du JSON null.
   const form =
-    typeof o.form === 'string' && o.form.trim().length > 0 ? o.form.trim() : null
+    formRaw.length > 0 && !['null', 'none', 'aucun', 'undefined'].includes(formRaw.toLowerCase())
+      ? formRaw
+      : null
   return { ingredients, form }
 }
