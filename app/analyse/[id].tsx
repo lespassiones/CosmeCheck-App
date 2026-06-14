@@ -310,11 +310,11 @@ const AnalyseDetailScreen: FC = () => {
                 <Text style={styles.retryText}>Réessayer</Text>
               </Pressable>
               <Pressable
-                onPress={() => router.replace(ROUTES.TABS.HOME)}
+                onPress={() => (router.canGoBack() ? router.back() : router.replace(ROUTES.TABS.HOME))}
                 style={({ pressed }) => [styles.homeBtn, pressed && styles.btnPressed]}
                 accessibilityRole="button"
               >
-                <Text style={styles.homeText}>Accueil</Text>
+                <Text style={styles.homeText}>Retour</Text>
               </Pressable>
             </View>
           </GlassCard>

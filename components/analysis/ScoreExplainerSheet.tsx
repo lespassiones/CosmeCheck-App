@@ -18,13 +18,13 @@ import {
   Linking,
   Modal,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
   type DimensionValue,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 
 import { colors } from '@/constants/colors'
@@ -115,9 +115,9 @@ export const ScoreExplainerSheet: FC<Props> = ({
     delta == null
       ? null
       : delta > 0.5
-        ? 'Ce produit est mieux noté que la moyenne des produits similaires.'
+        ? 'Ce produit est mieux classé que la moyenne des produits similaires.'
         : delta < -0.5
-          ? 'Ce produit est moins bien noté que la moyenne des produits similaires.'
+          ? 'Ce produit est moins bien classé que la moyenne des produits similaires.'
           : 'Ce produit se situe dans la moyenne des produits similaires.'
 
   return (
@@ -129,7 +129,7 @@ export const ScoreExplainerSheet: FC<Props> = ({
     >
       <SafeAreaView style={styles.safe}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Comment cette note est calculée ?</Text>
+          <Text style={styles.headerTitle}>Comment ce classement est calculé ?</Text>
           <Pressable
             onPress={onClose}
             hitSlop={10}
@@ -142,8 +142,8 @@ export const ScoreExplainerSheet: FC<Props> = ({
         </View>
 
         <ScrollView contentContainerStyle={styles.content}>
-          {/* 1. La note de ce produit */}
-          <Section title="La note de ce produit">
+          {/* 1. Le classement de ce produit */}
+          <Section title="Le classement de ce produit">
             <View style={styles.scoreRow}>
               <CatalogPastille score={score} size={56} />
               <Text style={[styles.paragraph, styles.scoreText]}>
@@ -216,11 +216,11 @@ export const ScoreExplainerSheet: FC<Props> = ({
             </View>
           </Section>
 
-          {/* 5. Sur quoi repose la note (méthodologie, sans dévoiler le barème) */}
-          <Section title="Sur quoi repose cette note">
+          {/* 5. Sur quoi repose le classement (méthodologie, sans dévoiler le barème) */}
+          <Section title="Sur quoi repose ce classement">
             <Text style={styles.paragraph}>
-              La note reflète les ingrédients réellement présents dans la formule
-              et la place qu'ils occupent dans la liste.
+              Le classement reflète les ingrédients réellement présents dans la
+              formule et la place qu'ils occupent dans la liste.
             </Text>
             <Text style={styles.paragraph}>
               Chaque ingrédient est apprécié au regard de la réglementation
@@ -231,14 +231,14 @@ export const ScoreExplainerSheet: FC<Props> = ({
             </Text>
             <Text style={styles.paragraph}>
               Plus un ingrédient est encadré, discuté ou signalé comme préoccupant
-              par ces sources, plus il influence la note. Une formule composée
+              par ces sources, plus il pèse sur le classement. Une formule composée
               d'ingrédients bien tolérés s'en sort donc mieux.
             </Text>
             <Text style={styles.footnote}>
-              Pour les produits déjà référencés, la note provient d'une base
-              d'évaluation spécialisée. Pour les produits trouvés hors base, elle
-              est estimée à partir de leur composition. Une note basse ne veut pas
-              dire « mauvais produit » : elle signale surtout la présence
+              Pour les produits déjà référencés, le classement provient d'une base
+              d'évaluation spécialisée. Pour les produits trouvés hors base, il
+              est estimé à partir de leur composition. Un classement bas ne veut pas
+              dire « mauvais produit » : il signale surtout la présence
               d'ingrédients qui font débat.
             </Text>
           </Section>

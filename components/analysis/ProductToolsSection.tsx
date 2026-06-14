@@ -73,8 +73,8 @@ export const ProductToolsSection: FC<Props> = ({
     {
       key: 'score',
       icon: 'help-circle-outline' as const,
-      label: 'Comment cette note est calculée ?',
-      hint: 'Comprendre le détail du score',
+      label: 'Comment ce classement est calculé ?',
+      hint: 'Comprendre le détail du classement',
       onPress: () => setScoreOpen(true),
     },
   ]

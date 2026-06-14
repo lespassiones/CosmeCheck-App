@@ -8,15 +8,15 @@
  *   2. Garde-fou clé IA : 503 si ni OpenAI ni Mistral.
  *   3. Parse {messages:[{role,content}]} : 12 derniers tours, contenu ≤2000.
  *   4. Auth Bearer (401 sinon) via le client lié au token utilisateur (RLS).
- *   5. Fan-out parallèle : compteur quotidien (ai_logs feature=synthesis du
- *      jour), profil (user_profiles.preferences) et routine
- *      (routine_items + analyses). Cap 30/jour → 429.
+ *   5. Fan-out parallèle : débit d'1 crédit (cosme_check_consume_credit, solde
+ *      quotidien partagé ~60/j → 429 code:no_credits si épuisé), profil
+ *      (user_profiles.preferences) et routine (routine_items + analyses).
  *   6. Construit le system prompt (profil + restrictions + routine), puis
  *      STREAM text/plain : OpenAI streaming primaire -> Mistral streaming
  *      fallback (uniquement si OpenAI échoue AVANT toute émission).
  *
- * Crédit : 0 (aucun débit). Sortie : Response streaming text/plain + CORS,
- * ou JSON d'erreur (400/401/429/503).
+ * Crédit : 1 par message (débité au solde quotidien partagé). Sortie : Response
+ * streaming text/plain + CORS, ou JSON d'erreur (400/401/429/503).
  */
 import { corsHeaders, handleOptions, jsonResponse } from "../_shared/cors.ts";
 import { getUserFromRequest, serviceClient } from "../_shared/auth.ts";
@@ -35,7 +35,6 @@ import { normalizeRoutineRows } from "./routineNormalize.ts";
 
 const MODEL = "gpt-4o-mini";
 const MISTRAL_MODEL = "mistral-small-latest";
-const MAX_MESSAGES_PER_DAY = 30;
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -193,16 +192,11 @@ Deno.serve(async (req: Request) => {
   // (gain : ~360 KB → ~3 KB par message). Si la RPC n'est pas déployée (ex.
   // édition en cours, ancien projet), on retombe sur le select classique
   // pour ne JAMAIS casser la fonction en prod.
-  const since = new Date();
-  since.setHours(0, 0, 0, 0);
-  const [usedTodayRes, profileRes, routineRpcRes] = await Promise.all([
-    sb
-      .schema("cosme_check")
-      .from("ai_logs")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("feature", "synthesis")
-      .gte("created_at", since.toISOString()),
+  // Débit d'1 crédit du solde quotidien (partagé avec les autres features).
+  // `cosme_check_consume_credit` incrémente `used` SI `used < daily_limit` et
+  // renvoie ok:false (sans débiter) si le solde est épuisé.
+  const [creditRes, profileRes, routineRpcRes] = await Promise.all([
+    sb.rpc("cosme_check_consume_credit", { p_feature: "advisor" }),
     sb
       .schema("cosme_check")
       .from("user_profiles")
@@ -226,10 +220,14 @@ Deno.serve(async (req: Request) => {
     routineRes = routineRpcRes;
   }
 
-  const usedToday = usedTodayRes.count;
-  if ((usedToday ?? 0) > MAX_MESSAGES_PER_DAY) {
+  const credit = (creditRes.data ?? { ok: true }) as { ok: boolean; remaining?: number; limit?: number };
+  if (!credit.ok) {
     return jsonResponse(
-      { error: `Limite quotidienne atteinte (${MAX_MESSAGES_PER_DAY}/jour). À demain !` },
+      {
+        error: "Tu as utilisé tous tes crédits du jour. Reviens demain ou passe en Premium pour en avoir plus.",
+        code: "no_credits",
+        credits: credit,
+      },
       { status: 429 },
     );
   }
@@ -307,6 +305,7 @@ COMMENT TU AIDES (TRÈS IMPORTANT) :
 - RECOMMANDE des produits (bloc RECO ci-dessous) UNIQUEMENT quand la personne cherche un produit : elle demande un conseil/une reco (« conseille-moi… », « je cherche… », « quel produit pour… », « tu aurais quelque chose pour… »), OU nomme un TYPE de produit (« un déodorant à bille », « une crème mains », « quel shampoing », « les meilleurs X », « je veux un crayon pour les yeux »), OU décrit un besoin/souci qu'elle veut résoudre par un produit (boutons, hydratation, éclat, pousse des cheveux…). Dans ce cas, recommande tout de suite, sans sur-questionner.
 - DÈS QUE le TYPE de produit est clair (déodorant, crème mains, shampoing, crayon yeux, fond de teint…), c'est SUFFISANT pour recommander : ne demande JAMAIS « qu'est-ce que tu recherches en particulier ? ». Recommande directement les meilleurs produits de ce type (le carrousel les affiche, classés par qualité). Tu peux mentionner 1-2 ingrédients utiles pour ce type, mais le bloc RECO est alors OBLIGATOIRE.
 - RE-RECOMMANDE À CHAQUE DEMANDE, même si tu as déjà recommandé ce type au tour précédent. Une nouvelle demande produit (« et des déodorants à bille ? », « quels sont les meilleurs ? », « montre-moi autre chose ») n'est JAMAIS redondante : ré-émets le bloc RECO à chaque fois. Ne réponds jamais « je t'ai déjà montré » ni ne renvoie de réponse sans bloc sous prétexte que c'est similaire au tour d'avant.
+- MESSAGES DE SUIVI = RE-RECOMMANDE : si, juste après que tu aies évoqué/conseillé un type de produit, la personne te demande de le MONTRER ou confirme (« montre-moi », « montre », « vas-y », « oui », « ok montre », « je veux voir », « lesquels ? », « et les autres ? »), tu DOIS ré-émettre le bloc RECO du MÊME type (réutilise le type et les ingrédients du tour précédent, visibles dans le bloc de l'historique). Un « montre-moi » ne se répond JAMAIS par du texte seul sans bloc : c'est exactement le moment où la personne veut voir les produits.
 - NE recommande PAS, réponds simplement SANS bloc RECO, quand la personne : pose une question d'information ou de compréhension (« c'est quoi le rétinol ? », « est-ce que les silicones sont mauvais ? », « à quoi sert la niacinamide ? », « mon produit actuel est-il bon ? »), te remercie, te salue, réagit ou bavarde. Donne une réponse utile et concise, sans forcer de produit.
 - Une question n'est « trop vague » QUE si la personne ne donne NI type de produit NI besoin précis (ex. « améliore ma peau », « je veux être plus beau » sans autre indice). Là seulement, pose UNE seule question simple et concrète (jamais technique), sans reco ce tour-ci. N'enchaîne jamais deux questions de suite. Si un TYPE est nommé, ce n'est PAS vague : recommande, ne questionne pas.
 - Sers-toi du profil, des objectifs et de la routine ci-dessous pour personnaliser, sans jamais les réclamer.

@@ -61,7 +61,28 @@ type StoredResultJson = {
   scoreLabel?: string;
   observations?: { label: string; status: "present" | "absent" | "info" | "warn"; count: number }[];
   synthesis?: string | null;
+  /** Clé des restrictions au moment de la génération de la synthèse (cf. restrictionsKey).
+   *  Si ≠ restrictions actuelles → synthèse périmée → régénération. */
+  synthesisRestrictionsKey?: string | null;
 };
+
+/**
+ * Clé canonique des restrictions. DOIT être identique au client
+ * (lib/analysis/restrictionsKey.ts) sinon la synthèse se régénère à chaque ouverture.
+ */
+function restrictionsKey(
+  r: { families: string[]; ingredients: { slug: string; name: string }[] } | null | undefined,
+): string {
+  const fams = (r?.families ?? [])
+    .map((f) => (f ?? "").trim().toLowerCase())
+    .filter((f) => f.length > 0)
+    .sort();
+  const ings = (r?.ingredients ?? [])
+    .map((i) => ((i?.slug ?? i?.name) ?? "").trim().toLowerCase())
+    .filter((s) => s.length > 0)
+    .sort();
+  return `${fams.join(",")}|${ings.join(",")}`;
+}
 
 Deno.serve(async (req: Request): Promise<Response> => {
   const pre = handleOptions(req);
@@ -120,18 +141,22 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return jsonResponse({ error: "Analyse invalide." }, { status: 400 });
   }
 
-  // ── 3b. Court-circuit si synthèse déjà en cache sur la ligne. ─────────────
-  if (resultJson.synthesis) {
+  // ── 3b. Restrictions courantes + leur clé (best-effort, ne throw jamais). ──
+  const { profileBlock, restrictions: restrictionsCtx } = await loadUserContext(
+    supabase,
+    user.id,
+  );
+  const synthKey = restrictionsKey(restrictionsCtx.restrictions);
+
+  // ── 3c. Court-circuit : on réutilise la synthèse en cache UNIQUEMENT si elle a
+  // été générée avec les MÊMES restrictions qu'aujourd'hui. Sinon elle est périmée
+  // (ex. « X que tu as choisi d'éviter » alors que la restriction a été retirée)
+  // → on régénère pour rester cohérent avec le badge live.
+  if (resultJson.synthesis && resultJson.synthesisRestrictionsKey === synthKey) {
     return jsonResponse({ synthesis: stripAbsencesParagraph(resultJson.synthesis) });
   }
 
   try {
-    // ── 4. Profil + restrictions ────────────────────────────────────────────
-    const { profileBlock, restrictions: restrictionsCtx } = await loadUserContext(
-      supabase,
-      user.id,
-    );
-
     const items = resultJson.items as StoredItem[];
 
     // Re-match les restrictions exactement comme analyser, pour attacher un
@@ -191,7 +216,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     // Persiste best-effort dans la ligne (prochaine visite instantanée).
     if (synthesis) {
-      const updatedJson = { ...resultJson, synthesis };
+      const updatedJson = { ...resultJson, synthesis, synthesisRestrictionsKey: synthKey };
       await supabase
         .schema("cosme_check")
         .from("analyses")

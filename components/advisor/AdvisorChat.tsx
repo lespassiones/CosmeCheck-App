@@ -93,7 +93,7 @@ type ChatMsg = {
 
 const SUGGESTED_PROMPTS = [
   'Que penses-tu de ma routine ?',
-  'Quels ingrédients prioriser pour ma peau ?',
+  'Conseille-moi une crème adaptée à ma peau',
   'Quels ingrédients éviter selon mon profil ?',
   "Comment ajuster ma routine pour l'hiver ?",
 ]
@@ -117,7 +117,7 @@ interface AdvisorChatProps {
 
 const greeting = (firstName: string): ChatMsg => ({
   role: 'assistant',
-  content: `Salut ${firstName} 👋\nJe suis là pour t'aider avec ta routine ou tes ingrédients.\n\n**Que souhaites-tu savoir ?**`,
+  content: `Salut ${firstName} 👋\n\n**Que souhaites-tu savoir ?**`,
   time: getTime(),
   uiOnly: true,
 })
@@ -219,13 +219,19 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
         })
 
         if (!res.ok) {
-          if (res.status === 429) {
+          const errBody = (await res.json().catch(() => null)) as
+            | { code?: string; error?: string }
+            | null
+          if (res.status === 429 && errBody?.code === 'no_credits') {
             failWith(
-              "Tu as atteint la limite de questions pour aujourd'hui. Reviens demain, je serai là 💜",
+              errBody.error ??
+                "Tu as utilisé tous tes crédits du jour. Reviens demain ou passe en Premium pour en avoir plus 💜",
             )
+          } else if (res.status === 429) {
+            failWith('Tu vas un peu vite 😅 Patiente une minute et réessaie.')
           } else {
             failWith(
-              "Le conseiller IA est momentanément indisponible. Réessaie dans un instant.",
+              'Le conseiller IA est momentanément indisponible. Réessaie dans un instant.',
             )
           }
           return
@@ -307,6 +313,8 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
         failWith('Connexion interrompue. Vérifie ta connexion et réessaie.')
       } finally {
         setStreaming(false)
+        // L'advisor débite 1 crédit côté serveur → on rafraîchit la pastille.
+        void qc.invalidateQueries({ queryKey: ['credits'] })
       }
     },
     [messages, streaming, restrictions, skin, qc],

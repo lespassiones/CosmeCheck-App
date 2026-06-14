@@ -48,6 +48,7 @@ import {
   type ColorRating,
 } from '@/lib/analysis/types'
 import { applyRestrictions, type AnalyseItemWithRestriction } from '@/lib/analysis/analyser'
+import { restrictionsKey } from '@/lib/analysis/restrictionsKey'
 
 import { BigScoreCard } from './BigScoreCard'
 import { EssentielView, EssentielToggleButton } from './EssentielView'
@@ -150,7 +151,15 @@ export const AnalysisResultPanel: FC<Props> = ({
 
   // Synthèse effective : celle stockée dans result_json, ou celle qu'on vient
   // de générer dynamiquement. Sinon null → SynthesisCard montre l'état "indisponible".
-  const effectiveSynthesis = result.synthesis ?? lazySynthesis
+  //
+  // La synthèse stockée n'est valable que si elle a été générée avec les MÊMES
+  // restrictions qu'aujourd'hui. Sinon (ex. l'utilisateur a retiré une famille
+  // évitée) elle est périmée — elle dirait « X que tu as choisi d'éviter » alors
+  // que le badge live affiche « aucune restriction » → on la régénère.
+  const currentRestrictionsKey = useMemo(() => restrictionsKey(restrictions), [restrictions])
+  const storedSynthesisFresh =
+    result.synthesis != null && result.synthesisRestrictionsKey === currentRestrictionsKey
+  const effectiveSynthesis = (storedSynthesisFresh ? result.synthesis : null) ?? lazySynthesis
 
   // Déclenche la génération à la première ouverture du détail, si on n'a pas
   // déjà la synthèse en row ET qu'on a un analysisId.

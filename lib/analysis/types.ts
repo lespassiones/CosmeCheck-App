@@ -103,6 +103,9 @@ export interface AnalyseResponse {
   spectrum: AnalyseSpectrum
   euFragranceAllergens?: EuFragranceAllergens
   synthesis: string | null
+  /** Clé des restrictions au moment où la synthèse a été générée (cf. restrictionsKey).
+   *  Si elle diffère des restrictions actuelles, la synthèse est régénérée. */
+  synthesisRestrictionsKey?: string | null
   productType?: string | null
   category?: ProductCategory | null
 }
@@ -153,5 +156,17 @@ export function parseAnalyseResponse(json: unknown): AnalyseResponse | null {
   if (!json || typeof json !== 'object') return null
   const r = json as Record<string, unknown>
   if (typeof r.score !== 'number' || !r.counts || typeof r.counts !== 'object') return null
+  // Défensif : des analyses cachées ont des champs ATTENDUS-tableau corrompus en
+  // objet/scalaire (ex. `tags` enrichi Wikidata = objet). On les re-coerce en
+  // tableau pour qu'aucune itération downstream (computeEssentiel, rendu) ne casse.
+  if (Array.isArray(r.items)) {
+    r.items = r.items.map((raw) => {
+      if (!raw || typeof raw !== 'object') return raw
+      const it = raw as Record<string, unknown>
+      if ('tags' in it && !Array.isArray(it.tags)) it.tags = []
+      if ('allFunctions' in it && !Array.isArray(it.allFunctions)) it.allFunctions = []
+      return it
+    })
+  }
   return json as AnalyseResponse
 }

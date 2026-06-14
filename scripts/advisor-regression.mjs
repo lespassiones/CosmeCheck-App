@@ -327,10 +327,18 @@ async function deleteUser(uid) {
   const res = await fetch(`${URL_}/auth/v1/admin/users/${uid}`, { method: 'DELETE', headers: headers(SERVICE) })
   return res.ok ? 'supprimé' : `échec ${res.status}`
 }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 async function advisor(messages, tok) {
-  return await (await fetch(`${URL_}/functions/v1/advisor-chat`, {
-    method: 'POST', headers: headers(tok), body: JSON.stringify({ messages }),
-  })).text()
+  // L'advisor a un rate-limit 20/min par IP. La batterie dépasse ce budget ;
+  // on attend la fenêtre puis on retente pour ne pas faux-échouer (artefact de test).
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(`${URL_}/functions/v1/advisor-chat`, {
+      method: 'POST', headers: headers(tok), body: JSON.stringify({ messages }),
+    })
+    if (res.status === 429) { await sleep(63000); continue }
+    return await res.text()
+  }
+  return ''
 }
 
 async function conversationBattery() {
@@ -415,6 +423,33 @@ async function conversationBattery() {
     const noFakeFilter = !got.some((g) => g.includes('fruit') || g.includes('sent') || g.includes('odeur'))
     check('odeur "fruité" non mise dans exclude (pas de filtre olfactif bidon)', noFakeFilter, `exclude=${JSON.stringify(b?.exclude ?? null)}`)
   }
+
+  section('15b. Conversation — messages de SUIVI (« montre-moi ») ré-émettent le bloc')
+  // Régression du « ça bloque » : un suivi après une reco doit re-déclencher le carrousel.
+  // NB : utilisateur FRAIS — la batterie fait beaucoup d'appels sur `token`, et l'advisor
+  // a un rate-limit ; sans ça la dernière section faux-échoue (rate-limit, pas un bug prod).
+  const { token: ftok, uid: fuid } = await makeUser()
+  const followCases = [
+    ['un deodorant qui absorbe bien', 'montre moi'],
+    ['une creme hydratante visage', 'vas-y montre'],
+    ['un shampoing doux', 'lesquels ?'],
+  ]
+  let followOk = 0
+  for (const [q1, q2] of followCases) {
+    const h = []
+    h.push({ role: 'user', content: q1 })
+    const r1 = await advisor(h, ftok)
+    const b1 = blockOf(r1)
+    h.push({ role: 'assistant', content: b1 && b1 !== 'MALFORME' ? stripBlock(r1) + '\n' + rawBlock(b1) : stripBlock(r1) })
+    h.push({ role: 'user', content: q2 })
+    const r2 = await advisor(h, ftok)
+    const b2 = blockOf(r2)
+    const ok = !!b2 && b2 !== 'MALFORME'
+    if (ok) followOk++
+    console.log(`    ${ok ? '\x1b[32mok\x1b[0m' : '\x1b[31mKO\x1b[0m'} "${q1}" -> "${q2}" -> ${ok ? 'RECO ' + JSON.stringify(b2) : 'PAS DE BLOC'}`)
+  }
+  check('suivi « montre-moi » ré-émet le bloc RECO', followOk === followCases.length, `${followOk}/${followCases.length}`)
+  await deleteUser(fuid)
 
   console.log(`\n  Nettoyage utilisateur de test : ${await deleteUser(uid)}`)
 }
