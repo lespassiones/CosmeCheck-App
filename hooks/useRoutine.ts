@@ -24,6 +24,9 @@ export interface RoutineJoinedAnalysis {
   product_label: string | null
   score: number | null
   result_json: unknown
+  category: string | null
+  category_precise: string | null
+  ean: string | null
 }
 
 export type RoutineItem = RoutineItemRow & {
@@ -41,7 +44,7 @@ interface UseRoutineReturn {
   refresh: () => void
 }
 
-const SELECT = 'id,user_id,analysis_id,frequency,added_at,analysis:analyses(id,name,product_label,score,result_json)'
+const SELECT = 'id,user_id,analysis_id,frequency,added_at,analysis:analyses(id,name,product_label,score,result_json,category,category_precise,ean)'
 
 /** Supabase renvoie la relation jointe en objet ou en tableau selon la config. */
 function normalizeAnalysis(raw: unknown): RoutineJoinedAnalysis | null {
@@ -55,6 +58,9 @@ function normalizeAnalysis(raw: unknown): RoutineJoinedAnalysis | null {
     product_label: typeof r.product_label === 'string' ? r.product_label : null,
     score: typeof r.score === 'number' ? r.score : null,
     result_json: r.result_json ?? null,
+    category: typeof r.category === 'string' ? r.category : null,
+    category_precise: typeof r.category_precise === 'string' ? r.category_precise : null,
+    ean: typeof r.ean === 'string' ? r.ean : null,
   }
 }
 

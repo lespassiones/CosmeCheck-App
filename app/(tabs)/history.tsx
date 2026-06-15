@@ -35,6 +35,7 @@ import { typography } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { db } from '@/lib/supabase/client'
 import { invalidateCachedAnalysisRow } from '@/lib/storage/session'
+import { filterHistory } from '@/lib/history/filterHistory'
 import { showToast } from '@/components/shared/Toast'
 import {
   parseAnalyseResponse,
@@ -62,6 +63,7 @@ interface AnalysisRow {
   score: number | null
   result_json: unknown
   category: string | null
+  favori: boolean | null
   created_at: string
 }
 
@@ -140,6 +142,7 @@ function buildItem(row: AnalysisRow, latestCoherenceId: string | null): HistoryI
     counts,
     dateLabel,
     latestCoherenceId,
+    favori: row.favori ?? false,
     searchTokens: Array.from(tokenSet),
     brand: decodeHtml(row.brand?.trim()) || null,
     productLabel: decodeHtml(row.product_label?.trim() || row.name?.trim()) || null,
@@ -155,6 +158,7 @@ const HistoryScreen: FC = () => {
   const queryClient = useQueryClient()
 
   const [search, setSearch] = useState('')
+  const [favorisOnly, setFavorisOnly] = useState(false)
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
   const [promesseModalFor, setPromesseModalFor] = useState<HistoryItem | null>(null)
@@ -178,7 +182,7 @@ const HistoryScreen: FC = () => {
       const [analysesRes, coherencesRes] = await Promise.all([
         db()
           .from('analyses')
-          .select('id,name,product_label,brand,product_type,input_text,score,result_json,category,created_at')
+          .select('id,name,product_label,brand,product_type,input_text,score,result_json,category,favori,created_at')
           .eq('user_id', userId)
           .order('created_at', { ascending: false })
           .limit(50),
@@ -209,11 +213,10 @@ const HistoryScreen: FC = () => {
     },
   })
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return items
-    return items.filter((it) => it.searchTokens.some((t) => t.includes(q)))
-  }, [items, search])
+  const filtered = useMemo(
+    () => filterHistory(items, search, favorisOnly),
+    [items, search, favorisOnly],
+  )
 
   // ── Mutations renommer / supprimer ─────────────────────────────────────────
   const renameMutation = useMutation({
@@ -242,6 +245,38 @@ const HistoryScreen: FC = () => {
     },
     onError: () => showToast('Suppression impossible. Réessaie.', 'error'),
   })
+
+  const favoriMutation = useMutation({
+    mutationFn: async ({ id, favori }: { id: string; favori: boolean }) => {
+      const { error } = await db().from('analyses').update({ favori }).eq('id', id)
+      if (error) throw error
+    },
+    // Optimiste : on bascule la valeur dans le cache liste avant le retour serveur.
+    onMutate: async ({ id, favori }) => {
+      await queryClient.cancelQueries({ queryKey })
+      const prev = queryClient.getQueryData<HistoryItem[]>(queryKey)
+      queryClient.setQueryData<HistoryItem[]>(queryKey, (old) =>
+        (old ?? []).map((it) => (it.id === id ? { ...it, favori } : it)),
+      )
+      return { prev }
+    },
+    onError: (_e, _vars, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(queryKey, ctx.prev)
+      showToast('Action impossible. Réessaie.', 'error')
+    },
+    onSuccess: (_data, vars) => {
+      void invalidateCachedAnalysisRow(vars.id).catch(() => {})
+    },
+  })
+
+  const toggleFavori = useCallback(
+    (item: HistoryItem) => {
+      const next = !item.favori
+      void favoriMutation.mutateAsync({ id: item.id, favori: next })
+      showToast(next ? 'Ajouté aux favoris' : 'Retiré des favoris', 'success')
+    },
+    [favoriMutation],
+  )
 
   // ── Sélection / comparaison ─────────────────────────────────────────────────
   const toggleSelect = useCallback((id: string) => {
@@ -289,9 +324,10 @@ const HistoryScreen: FC = () => {
         onToggleSelect={() => toggleSelect(item.id)}
         onOpenActions={() => setActionsFor(item)}
         onAnalysePromesse={() => goToPromesse(item)}
+        onToggleFavori={() => toggleFavori(item)}
       />
     ),
-    [selectMode, selected, toggleSelect, goToPromesse],
+    [selectMode, selected, toggleSelect, goToPromesse, toggleFavori],
   )
 
   const hint = useMemo(() => {
@@ -305,6 +341,20 @@ const HistoryScreen: FC = () => {
       return (
         <View style={styles.center}>
           <ActivityIndicator color={colors.rose} />
+        </View>
+      )
+    }
+    if (favorisOnly && search.trim().length === 0) {
+      return (
+        <View style={styles.emptyWrap}>
+          <Ionicons name="bookmark-outline" size={42} color={colors.inkLight} />
+          <Text style={styles.emptyTitle}>Aucun favori</Text>
+          <Text style={styles.emptyText}>
+            Mets des produits en favori (icône signet) pour les retrouver ici.
+          </Text>
+          <Pressable onPress={() => setFavorisOnly(false)} hitSlop={8}>
+            <Text style={styles.emptyLink}>Voir tout l'historique</Text>
+          </Pressable>
         </View>
       )
     }
@@ -335,54 +385,61 @@ const HistoryScreen: FC = () => {
 
   const canCompare = selected.length === 2
 
-  return (
-    <View style={styles.root}>
-      <BackgroundGlow variant="minimal" />
-      <ScreenHeader title="Historique" />
-      <SafeAreaView style={styles.safe} edges={[]}>
-        {/* Ligne unique : compteur d'analyses + bouton "Comparer 2 analyses"
-            (ou contrôles du mode sélection) */}
-        {items.length > 0 ? (
+  // En-tête de la LISTE (scrolle avec le contenu : seul le ScreenHeader/crédits
+  // reste fixe). Recherche en haut, puis ligne « Tout | Favoris … Comparer ».
+  const listHeaderElement =
+    items.length === 0 ? null : (
+      <View style={styles.headerWrap}>
+        {selectMode ? (
           <View style={styles.toolbar}>
-            {selectMode ? (
-              <>
-                <Text style={styles.hint}>{hint}</Text>
-                <View style={styles.toolbarRight}>
-                  <Pressable onPress={cancelSelect} hitSlop={8} style={styles.cancelBtn}>
-                    <Text style={styles.cancelText}>Annuler</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={compare}
-                    disabled={!canCompare}
-                    style={[styles.compareBtn, !canCompare && styles.compareBtnDisabled]}
-                  >
-                    <Text style={styles.compareText}>Comparer ({selected.length}/2)</Text>
-                  </Pressable>
-                </View>
-              </>
-            ) : (
-              <>
-                <Text style={styles.count}>
-                  {items.length} analyse{items.length > 1 ? 's' : ''}
-                </Text>
-                {items.length >= 2 ? (
-                  <Pressable onPress={startSelect} style={styles.compareEntry}>
-                    <Text style={styles.compareEntryText}>Comparer 2 analyses</Text>
-                    <Ionicons name="swap-horizontal" size={15} color={colors.surface} />
-                  </Pressable>
-                ) : null}
-              </>
-            )}
+            <Text style={styles.hint}>{hint}</Text>
+            <View style={styles.toolbarRight}>
+              <Pressable onPress={cancelSelect} hitSlop={8} style={styles.cancelBtn}>
+                <Text style={styles.cancelText}>Annuler</Text>
+              </Pressable>
+              <Pressable
+                onPress={compare}
+                disabled={!canCompare}
+                style={[styles.compareBtn, !canCompare && styles.compareBtnDisabled]}
+              >
+                <Text style={styles.compareText}>Comparer ({selected.length}/2)</Text>
+              </Pressable>
+            </View>
           </View>
-        ) : null}
-
-        {!selectMode && items.length > 0 ? (
-          <View style={styles.searchWrap}>
+        ) : (
+          <>
             <SearchBar
               value={search}
               onChangeText={setSearch}
               placeholder="Rechercher un produit ou un ingrédient…"
             />
+            <View style={styles.controlsRow}>
+              <View style={styles.segmentRow}>
+                <Pressable
+                  onPress={() => setFavorisOnly(false)}
+                  style={[styles.segment, !favorisOnly && styles.segmentOn]}
+                >
+                  <Text style={[styles.segmentText, !favorisOnly && styles.segmentTextOn]}>Tout</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setFavorisOnly(true)}
+                  style={[styles.segment, favorisOnly && styles.segmentOn]}
+                >
+                  <Ionicons
+                    name={favorisOnly ? 'bookmark' : 'bookmark-outline'}
+                    size={13}
+                    color={favorisOnly ? colors.rose : colors.inkMuted}
+                  />
+                  <Text style={[styles.segmentText, favorisOnly && styles.segmentTextOn]}>Favoris</Text>
+                </Pressable>
+              </View>
+              {items.length >= 2 ? (
+                <Pressable onPress={startSelect} style={styles.compareEntry}>
+                  <Text style={styles.compareEntryText}>Comparer 2 analyses</Text>
+                  <Ionicons name="swap-horizontal" size={15} color={colors.surface} />
+                </Pressable>
+              ) : null}
+            </View>
             {search.trim().length > 0 ? (
               <Text style={styles.searchCount}>
                 {filtered.length === 0
@@ -390,13 +447,21 @@ const HistoryScreen: FC = () => {
                   : `${filtered.length} résultat${filtered.length > 1 ? 's' : ''}.`}
               </Text>
             ) : null}
-          </View>
-        ) : null}
+          </>
+        )}
+      </View>
+    )
 
+  return (
+    <View style={styles.root}>
+      <BackgroundGlow variant="minimal" />
+      <ScreenHeader title="Historique" />
+      <SafeAreaView style={styles.safe} edges={[]}>
         <FlatList
           data={selectMode ? items : filtered}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
+          ListHeaderComponent={listHeaderElement}
           ListEmptyComponent={listEmpty}
           contentContainerStyle={[
             styles.listContent,
@@ -413,12 +478,16 @@ const HistoryScreen: FC = () => {
       <HistoryItemActions
         visible={actionsFor !== null}
         currentName={actionsFor?.rawName ?? ''}
+        favori={actionsFor?.favori ?? false}
         onClose={() => setActionsFor(null)}
         onRename={async (newName) => {
           if (actionsFor) await renameMutation.mutateAsync({ id: actionsFor.id, name: newName })
         }}
         onDelete={async () => {
           if (actionsFor) await deleteMutation.mutateAsync(actionsFor.id)
+        }}
+        onToggleFavori={() => {
+          if (actionsFor) toggleFavori(actionsFor)
         }}
       />
 
@@ -438,17 +507,37 @@ const HistoryScreen: FC = () => {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   safe: { flex: 1 },
-  count: { ...typography.small, color: colors.inkMuted },
+  headerWrap: {
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+  },
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.sm,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
     minHeight: 36,
   },
   toolbarRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  controlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
+  },
+  segmentRow: { flexDirection: 'row', gap: spacing.sm },
+  segment: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: spacing.base,
+    paddingVertical: 7,
+    borderRadius: radius.full,
+    backgroundColor: colors.gray100,
+  },
+  segmentOn: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.rose },
+  segmentText: { ...typography.xsSemiBold, color: colors.inkMuted },
+  segmentTextOn: { color: colors.rose },
   hint: { ...typography.xs, color: colors.inkMuted },
   cancelBtn: { paddingHorizontal: spacing.sm, paddingVertical: 6 },
   cancelText: { ...typography.xsSemiBold, color: colors.inkMuted },
@@ -470,10 +559,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
   },
   compareEntryText: { ...typography.xsSemiBold, color: colors.surface },
-  searchWrap: {
-    paddingHorizontal: spacing.sm,
-    paddingBottom: spacing.md,
-  },
   searchCount: { ...typography.xs, color: colors.inkMuted, marginTop: spacing.sm },
   listContent: {
     paddingHorizontal: spacing.sm,

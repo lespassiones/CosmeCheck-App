@@ -24,6 +24,10 @@ import { WhiteCard } from '@/components/design/WhiteCard'
 import { IngredientBlob } from '@/components/design/IngredientBlob'
 import type { ColorRating } from '@/lib/analysis/types'
 
+/** Affichage de la date relative (« il y a 8 h »). Désactivé pour libérer de la
+ *  place au nom du produit. Repasser à true pour le réactiver. */
+const SHOW_DATE = false
+
 export interface HistoryItemView {
   id: string
   title: string
@@ -33,6 +37,7 @@ export interface HistoryItemView {
   counts: { vert: number; jaune: number; orange: number; rouge: number }
   dateLabel: string
   latestCoherenceId: string | null
+  favori: boolean
 }
 
 interface Props {
@@ -43,6 +48,7 @@ interface Props {
   onToggleSelect: () => void
   onOpenActions: () => void
   onAnalysePromesse: () => void
+  onToggleFavori: () => void
 }
 
 export const HistoryRowCard = memo(function HistoryRowCard({
@@ -53,6 +59,7 @@ export const HistoryRowCard = memo(function HistoryRowCard({
   onToggleSelect,
   onOpenActions,
   onAnalysePromesse,
+  onToggleFavori,
 }: Props) {
   if (selectMode) {
     return (
@@ -73,7 +80,7 @@ export const HistoryRowCard = memo(function HistoryRowCard({
             <Text style={styles.title} numberOfLines={1}>
               {item.title}
             </Text>
-            <Text style={styles.date}>{item.dateLabel}</Text>
+            {SHOW_DATE ? <Text style={styles.date}>{item.dateLabel}</Text> : null}
           </View>
         </View>
       </WhiteCard>
@@ -100,9 +107,11 @@ export const HistoryRowCard = memo(function HistoryRowCard({
                 </Text>
               ) : null}
             </View>
-            <Text style={styles.date} numberOfLines={1}>
-              {item.dateLabel}
-            </Text>
+            {SHOW_DATE ? (
+              <Text style={styles.date} numberOfLines={1}>
+                {item.dateLabel}
+              </Text>
+            ) : null}
           </View>
 
           <View style={styles.bottomRow}>
@@ -129,15 +138,30 @@ export const HistoryRowCard = memo(function HistoryRowCard({
               </Text>
             </Pressable>
 
-            <Pressable
-              onPress={onOpenActions}
-              hitSlop={8}
-              style={styles.kebab}
-              accessibilityRole="button"
-              accessibilityLabel="Plus d'actions"
-            >
-              <Ionicons name="ellipsis-vertical" size={18} color={colors.inkMuted} />
-            </Pressable>
+            <View style={styles.actions}>
+              <Pressable
+                onPress={onToggleFavori}
+                hitSlop={8}
+                style={styles.kebab}
+                accessibilityRole="button"
+                accessibilityLabel={item.favori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+              >
+                <Ionicons
+                  name={item.favori ? 'bookmark' : 'bookmark-outline'}
+                  size={18}
+                  color={item.favori ? colors.rose : colors.inkMuted}
+                />
+              </Pressable>
+              <Pressable
+                onPress={onOpenActions}
+                hitSlop={8}
+                style={styles.kebab}
+                accessibilityRole="button"
+                accessibilityLabel="Plus d'actions"
+              >
+                <Ionicons name="ellipsis-vertical" size={18} color={colors.inkMuted} />
+              </Pressable>
+            </View>
           </View>
         </View>
       </View>
@@ -167,6 +191,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginTop: spacing.sm,
   },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   kebab: {
     width: 32,
     height: 32,

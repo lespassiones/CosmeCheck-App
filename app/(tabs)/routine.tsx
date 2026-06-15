@@ -36,7 +36,7 @@ import { colors } from '@/constants/colors'
 import { spacing, radius } from '@/constants/spacing'
 import { typography, fontFamilies } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
-import { supabase } from '@/lib/supabase/client'
+import { supabase, db } from '@/lib/supabase/client'
 import { decodeHtml } from '@/lib/decodeHtml'
 import { parseAnalyseResponse, type AnalyseResponse } from '@/lib/analysis/types'
 import {
@@ -46,6 +46,7 @@ import {
 } from '@/lib/routine/engine'
 import { useRoutine, type RoutineItem } from '@/hooks/useRoutine'
 import { useProfile } from '@/hooks/useProfile'
+import { useAuth } from '@/hooks/useAuth'
 import {
   readAiCache,
   routineSuggestKey,
@@ -62,6 +63,19 @@ import { TagExposureBar } from '@/components/routine/TagExposureBar'
 import { RoutineProductCard } from '@/components/routine/RoutineProductCard'
 import { AddProductModal } from '@/components/routine/AddProductModal'
 import { RoutineSimulationModal } from '@/components/routine/RoutineSimulationModal'
+import { SuggestionsDeck, type DeckSuggestion } from '@/components/routine/SuggestionsDeck'
+import { applyRestrictions } from '@/lib/analysis/analyser'
+import { selectToOptimize } from '@/lib/routine/optimize'
+import { buildSuggestions, cappedOf } from '@/lib/routine/buildSuggestions'
+import { routineSignature, readDeckCache, writeDeckCache } from '@/lib/routine/deckCache'
+import { compareInsightsKey, TTL_COMPARE_INSIGHTS_MS } from '@/lib/storage/aiCache'
+import { buildExclusionSet } from '@/lib/analysis/alternativesFilter'
+import { fetchFamilyIngredientNames } from '@/lib/catalog/familyIngredientNames'
+import { categoryLabel } from '@/lib/categoryLabel'
+import { useKeepFavorite } from '@/hooks/useKeepFavorite'
+import { useLaunchAlternative } from '@/hooks/useLaunchAlternative'
+import { showToast } from '@/components/shared/Toast'
+import { useQueryClient } from '@tanstack/react-query'
 
 type Suggestion = {
   text: string
@@ -102,12 +116,230 @@ const RoutineScreen: FC = () => {
   const insets = useSafeAreaInsets()
   const { items, isLoading, addToRoutine, removeFromRoutine, updateFrequency, isInRoutine } =
     useRoutine()
-  const { restrictions } = useProfile()
+  const { restrictions, skin } = useProfile()
   const restrictionsCount = restrictions.families.length + restrictions.ingredients.length
 
   const [addOpen, setAddOpen] = useState(false)
   const [simOpen, setSimOpen] = useState(false)
   const [penalizingOpen, setPenalizingOpen] = useState(false)
+
+  // ── Suggestions intelligentes (deck) ──────────────────────────────────────
+  const qc = useQueryClient()
+  const { user } = useAuth()
+  const { keep, ensureAnalysisId } = useKeepFavorite()
+  const { analyze: launchAlternative } = useLaunchAlternative()
+  const [deckOpen, setDeckOpen] = useState(false)
+  const [deck, setDeck] = useState<DeckSuggestion[]>([])
+  const [deckLoading, setDeckLoading] = useState(false)
+  const [keepingKey, setKeepingKey] = useState<string | null>(null)
+  const [keptKeys, setKeptKeys] = useState<Set<string>>(new Set())
+
+  // Amorce l'état « Ajouté en favori » depuis la BASE : une carte est marquée
+  // ajoutée si son alternative existe déjà en favori dans l'historique (match EAN,
+  // sinon nom). Persiste donc à la fermeture/régénération, tant que le favori existe.
+  const seedKept = useCallback(
+    async (deckData: DeckSuggestion[]) => {
+      try {
+        const userId = user?.id
+        if (!userId) {
+          setKeptKeys(new Set())
+          return
+        }
+        const { data } = await db()
+          .from('analyses')
+          .select('ean,name')
+          .eq('user_id', userId)
+          .eq('favori', true)
+        const eans = new Set<string>()
+        const names = new Set<string>()
+        for (const r of (data as { ean: string | null; name: string | null }[] | null) ?? []) {
+          if (r.ean) eans.add(String(r.ean))
+          if (r.name) names.add(r.name.trim().toLowerCase())
+        }
+        const kept = new Set<string>()
+        for (const s of deckData) {
+          const e = s.alternative.ean
+          const nm = s.alternative.name?.trim().toLowerCase()
+          if ((e && eans.has(String(e))) || (nm && names.has(nm))) kept.add(s.key)
+        }
+        setKeptKeys(kept)
+      } catch {
+        setKeptKeys(new Set())
+      }
+    },
+    [user?.id],
+  )
+
+  const openSuggestions = useCallback(async () => {
+    if (deckLoading) return
+    setDeckLoading(true)
+    try {
+      // 0. Cache LOCAL persistant : routine inchangée → deck instantané, SANS crédit.
+      const sig = routineSignature(items)
+      const cached = await readDeckCache<DeckSuggestion>(sig)
+      if (cached && cached.length > 0) {
+        await seedKept(cached)
+        setDeck(cached)
+        setDeckOpen(true)
+        return
+      }
+      // 1. Produits à optimiser (top 8), restrictions appliquées.
+      const candidates = selectToOptimize(
+        items,
+        (it) => {
+          const parsed = parseAnalyseResponse(it.analysis?.result_json)
+          return parsed ? (applyRestrictions(parsed, restrictions) as AnalyseResponse) : null
+        },
+        8,
+      )
+      if (candidates.length === 0) {
+        showToast('Ta routine est déjà au top ✨ aucun produit à optimiser.', 'success')
+        return
+      }
+      // 2. Restrictions → ensemble d'exclusion.
+      const familyNames = restrictions.families.length
+        ? await fetchFamilyIngredientNames([...restrictions.families].sort())
+        : []
+      const exclusion = buildExclusionSet({
+        restrictions,
+        familyIngredientNames: familyNames,
+        allergiesFreeform: skin.allergiesFreeform,
+      })
+      // 2bis. Catégorie manquante (produits scannés au code-barres : category=null sur
+      // l'analyse) → on la récupère du CATALOGUE via l'EAN. Sans ça ces produits sont
+      // éliminés faute de catégorie et ne reçoivent jamais d'alternative.
+      const missingEans = Array.from(
+        new Set(
+          candidates
+            .map((c) => c.product)
+            .filter((it) => !(it.analysis?.category_precise || it.analysis?.category) && it.analysis?.ean)
+            .map((it) => String(it.analysis!.ean)),
+        ),
+      )
+      const catByEan = new Map<string, string>()
+      if (missingEans.length > 0) {
+        const { data: catRows } = await db()
+          .from('catalog')
+          .select('ean,category')
+          .in('ean', missingEans)
+        for (const r of (catRows as { ean: string; category: string | null }[] | null) ?? []) {
+          if (r.category) catByEan.set(String(r.ean), r.category)
+        }
+      }
+      // 3. Alternatives (catalogue) — retire les produits sans alternative.
+      const sugg = await buildSuggestions(
+        candidates,
+        (it) =>
+          it.analysis?.category_precise ??
+          categoryLabel(it.analysis?.category as never) ??
+          (it.analysis?.ean ? catByEan.get(String(it.analysis.ean)) ?? null : null),
+        (it) => it.analysis?.ean ?? null,
+        exclusion,
+      )
+      if (sugg.length === 0) {
+        showToast('Aucune alternative plus propre trouvée pour le moment.', 'info')
+        return
+      }
+      // 4. Débit d'1 crédit (seulement si on a des suggestions).
+      const { data: credit } = await supabase.rpc(
+        'cosme_check_consume_credit' as never,
+        { p_feature: 'routine_suggest' } as never,
+      )
+      if ((credit as { ok?: boolean } | null)?.ok !== true) {
+        showToast('Crédits épuisés pour aujourd’hui.', 'info')
+        router.push(ROUTES.OFFRE.INDEX)
+        return
+      }
+      void qc.invalidateQueries({ queryKey: ['credits'] })
+      // 5. Mappe → deck + cache local (instantané la prochaine fois).
+      const deckData: DeckSuggestion[] = sugg.map((s) => ({
+        key: s.product.analysis?.id ?? `${s.alternative.ean}`,
+        productAnalysisId: s.product.analysis?.id ?? null,
+        productTitle: titleFor(s.product),
+        productScore: s.info.cappedScore,
+        dangerLabel: s.info.dangerLabel,
+        dangerColor: s.info.dangerColor,
+        alternative: s.alternative,
+        alternativeScore: cappedOf(s.alternative),
+      }))
+      void writeDeckCache(sig, deckData)
+      await seedKept(deckData)
+      setDeck(deckData)
+      setDeckOpen(true)
+    } catch {
+      showToast('Suggestions indisponibles. Réessaie.', 'error')
+    } finally {
+      setDeckLoading(false)
+    }
+  }, [items, restrictions, skin, deckLoading, qc, seedKept])
+
+  const handleKeep = useCallback(
+    async (s: DeckSuggestion) => {
+      // Anti-doublon : déjà ajouté (ou en cours) → on ignore.
+      if (keptKeys.has(s.key) || keepingKey === s.key) return
+      setKeepingKey(s.key)
+      try {
+        const ok = await keep(s.alternative)
+        if (ok) {
+          setKeptKeys((prev) => new Set(prev).add(s.key))
+        } else {
+          showToast("Impossible d'ajouter. Réessaie.", 'error')
+        }
+      } finally {
+        setKeepingKey(null)
+      }
+    },
+    [keep, keptKeys, keepingKey],
+  )
+
+  // Tap sur l'alternative → ouvre son analyse. On NE FERME PAS le deck : au
+  // retour (back), l'utilisateur retombe sur la suggestion.
+  const handleOpenAlternative = useCallback(
+    (s: DeckSuggestion) => {
+      void launchAlternative(s.alternative)
+    },
+    [launchAlternative],
+  )
+
+  // « Comparer les deux produits » → comparaison habituelle (1 crédit, 1 fois :
+  // gratuit si déjà comparé, via le cache compare-insights). Deck laissé ouvert.
+  const handleCompare = useCallback(
+    async (s: DeckSuggestion) => {
+      const routineId = s.productAnalysisId
+      if (!routineId) return
+      setKeepingKey(s.key)
+      try {
+        const altId = await ensureAnalysisId(s.alternative)
+        if (!altId) {
+          showToast('Comparaison impossible. Réessaie.', 'error')
+          return
+        }
+        const already = await readAiCache(
+          'compare-insights',
+          compareInsightsKey(routineId, altId),
+          TTL_COMPARE_INSIGHTS_MS,
+        )
+        if (!already) {
+          const { data: credit } = await supabase.rpc(
+            'cosme_check_consume_credit' as never,
+            { p_feature: 'compare' } as never,
+          )
+          if ((credit as { ok?: boolean } | null)?.ok !== true) {
+            showToast('Crédits épuisés pour aujourd’hui.', 'info')
+            router.push(ROUTES.OFFRE.INDEX)
+            return
+          }
+          void qc.invalidateQueries({ queryKey: ['credits'] })
+        }
+        router.push(`${ROUTES.COMPARE.INDEX}?ids=${routineId},${altId}` as never)
+      } catch {
+        showToast('Comparaison impossible. Réessaie.', 'error')
+      } finally {
+        setKeepingKey(null)
+      }
+    },
+    [ensureAnalysisId, qc],
+  )
 
   // ── Suggestions IA (à la demande, dégradation gracieuse) ──────────────────
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null)
@@ -488,59 +720,23 @@ const RoutineScreen: FC = () => {
               </View>
             )}
 
-            {/* ── Suggestions IA ── */}
+            {/* ── Suggestions intelligentes (1 bouton → deck) ── */}
             <WhiteCard padding={spacing.lg} style={styles.sectionCard}>
-              <View style={styles.aiHeader}>
-                <View style={styles.aiHeaderMain}>
-                  <Text style={styles.sectionTitle}>✨ Suggestions intelligentes</Text>
-                  <Text style={styles.sectionHint}>
-                    Idées concrètes pour réduire ton exposition cumulée.
-                  </Text>
-                </View>
-                {suggestions !== null && !aiUnavailable && (
-                  <Pressable onPress={loadSuggestions} disabled={aiPending} hitSlop={6}>
-                    <Text style={styles.aiRegen}>{aiPending ? '…' : 'Régénérer'}</Text>
-                  </Pressable>
+              <Pressable
+                style={[styles.aiBtn, deckLoading && styles.aiBtnDisabled]}
+                onPress={openSuggestions}
+                disabled={deckLoading}
+                accessibilityRole="button"
+              >
+                {deckLoading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <View style={styles.suggestRow}>
+                    <Ionicons name="sparkles" size={16} color="#FFFFFF" />
+                    <Text style={styles.aiBtnText}>Suggestions intelligentes</Text>
+                  </View>
                 )}
-              </View>
-
-              {aiUnavailable ? (
-                <Text style={styles.mutedText}>Suggestions indisponibles pour le moment.</Text>
-              ) : suggestions === null ? (
-                <Pressable
-                  style={[styles.aiBtn, aiPending && styles.aiBtnDisabled]}
-                  onPress={loadSuggestions}
-                  disabled={aiPending}
-                >
-                  {aiPending ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.aiBtnText}>Générer</Text>
-                  )}
-                </Pressable>
-              ) : suggestions.length === 0 ? (
-                <Text style={styles.mutedText}>
-                  Aucune suggestion : ta routine semble déjà optimisée.
-                </Text>
-              ) : (
-                <View style={styles.aiList}>
-                  {suggestions.map((s, i) => (
-                    <View key={i} style={styles.aiItem}>
-                      <BoldText text={s.text} style={styles.aiItemText} />
-                      {s.impact && (
-                        <View style={styles.impactPill}>
-                          <Ionicons name="arrow-up" size={12} color={colors.rating.vert.text} />
-                          <Text style={styles.impactText}>
-                            Note routine : {s.impact.from} → {s.impact.to} (
-                            {s.impact.delta > 0 ? '+' : ''}
-                            {s.impact.delta})
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  ))}
-                </View>
-              )}
+              </Pressable>
             </WhiteCard>
           </ScrollView>
         )}
@@ -567,6 +763,17 @@ const RoutineScreen: FC = () => {
         visible={penalizingOpen}
         onClose={() => setPenalizingOpen(false)}
         products={products}
+      />
+
+      <SuggestionsDeck
+        visible={deckOpen}
+        suggestions={deck}
+        keepingKey={keepingKey}
+        keptKeys={keptKeys}
+        onClose={() => setDeckOpen(false)}
+        onKeep={handleKeep}
+        onCompare={handleCompare}
+        onOpenAlternative={handleOpenAlternative}
       />
     </View>
   )
@@ -713,6 +920,7 @@ const styles = StyleSheet.create({
 
   // Sections
   sectionCard: { marginBottom: spacing.base },
+  suggestRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   sectionTitle: { fontFamily: fontFamilies.semiBold, fontSize: 15, color: colors.ink },
   sectionTitleStandalone: {
     fontFamily: fontFamilies.semiBold,

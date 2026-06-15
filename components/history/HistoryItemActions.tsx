@@ -32,19 +32,24 @@ import { fontFamilies, typography } from '@/constants/typography'
 interface Props {
   visible: boolean
   currentName: string
+  favori: boolean
   onClose: () => void
   /** Renomme l'analyse. Doit résoudre quand l'update serveur est terminé. */
   onRename: (newName: string) => Promise<void>
   /** Supprime l'analyse. */
   onDelete: () => Promise<void>
+  /** Bascule le statut favori. */
+  onToggleFavori: () => void
 }
 
 export const HistoryItemActions: FC<Props> = ({
   visible,
   currentName,
+  favori,
   onClose,
   onRename,
   onDelete,
+  onToggleFavori,
 }) => {
   const insets = useSafeAreaInsets()
   const [editing, setEditing] = useState(false)
@@ -174,6 +179,20 @@ export const HistoryItemActions: FC<Props> = ({
             <Text style={styles.menuTitle} numberOfLines={1}>
               {currentName}
             </Text>
+            <Pressable
+              style={styles.menuItem}
+              onPress={() => { onToggleFavori(); onClose() }}
+              accessibilityRole="button"
+            >
+              <Ionicons
+                name={favori ? 'bookmark' : 'bookmark-outline'}
+                size={20}
+                color={favori ? colors.rose : colors.ink}
+              />
+              <Text style={[styles.menuItemText, favori && { color: colors.rose }]}>
+                {favori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+              </Text>
+            </Pressable>
             <Pressable
               style={styles.menuItem}
               onPress={() => setEditing(true)}

@@ -64,6 +64,7 @@ type LoadState =
       categoryText: string | null
       /** Catégorie précise (slug famille/sous/feuille) pour produits analysés. */
       categoryPrecise: string | null
+      favori: boolean
       brand: string | null
       productLabel: string | null
       productType: string | null
@@ -153,6 +154,7 @@ const AnalyseDetailScreen: FC = () => {
         title,
         categoryText,
         categoryPrecise: (row as { category_precise?: string | null }).category_precise ?? null,
+        favori: (row as { favori?: boolean | null }).favori ?? false,
         brand: decodeHtml(row.brand?.trim()) || null,
         productLabel: decodeHtml(row.product_label?.trim() || row.name?.trim()) || null,
         productType: row.product_type ?? result.productType ?? null,
@@ -371,7 +373,7 @@ const AnalyseDetailScreen: FC = () => {
               >
                 <Ionicons name="sparkles" size={14} color="#FFFFFF" />
                 <Text style={styles.ctaText} numberOfLines={1}>
-                  Voir l&apos;analyse de la promesse
+                  Analyse de la promesse
                 </Text>
               </Pressable>
 
