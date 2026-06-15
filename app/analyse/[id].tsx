@@ -62,6 +62,8 @@ type LoadState =
       essentiel: EssentielData
       title: string
       categoryText: string | null
+      /** Catégorie précise (slug famille/sous/feuille) pour produits analysés. */
+      categoryPrecise: string | null
       brand: string | null
       productLabel: string | null
       productType: string | null
@@ -150,6 +152,7 @@ const AnalyseDetailScreen: FC = () => {
         essentiel,
         title,
         categoryText,
+        categoryPrecise: (row as { category_precise?: string | null }).category_precise ?? null,
         brand: decodeHtml(row.brand?.trim()) || null,
         productLabel: decodeHtml(row.product_label?.trim() || row.name?.trim()) || null,
         productType: row.product_type ?? result.productType ?? null,
@@ -333,12 +336,19 @@ const AnalyseDetailScreen: FC = () => {
           {/* En-tête produit : titre pleine largeur, catégorie, CTAs, partage + jauge */}
           <View style={styles.header}>
             <Text style={styles.title} numberOfLines={3}>{state.title}</Text>
-            {(leafCategory || state.categoryText || state.brand) ? (
+            {(() => {
+              // Priorité à la catégorie précise (famille/sous/feuille) pour les
+              // produits analysés, sinon la feuille catalogue, sinon l'enum.
+              const preciseLeaf = state.categoryPrecise
+                ? leafLabelFromCategorySlug(state.categoryPrecise)
+                : null
+              const chipLabel = leafCategory || preciseLeaf || state.categoryText
+              return (chipLabel || state.brand) ? (
               <View style={styles.metaRow}>
-                {(leafCategory || state.categoryText) ? (
+                {chipLabel ? (
                   <View style={styles.categoryChip}>
                     <Text style={styles.categoryText} numberOfLines={1}>
-                      {leafCategory || state.categoryText}
+                      {chipLabel}
                     </Text>
                   </View>
                 ) : null}
@@ -346,7 +356,8 @@ const AnalyseDetailScreen: FC = () => {
                   <Text style={styles.brandText} numberOfLines={1}>{state.brand}</Text>
                 ) : null}
               </View>
-            ) : null}
+            ) : null
+            })()}
 
             <View style={styles.ctaRow}>
               <Pressable
@@ -415,7 +426,7 @@ const AnalyseDetailScreen: FC = () => {
             verdictScore={effectiveVerdictScore}
             penalizingCount={penalizingCount}
             productEan={state.ean ?? catalogEan}
-            category={catalogCategorySlug ?? state.categoryText}
+            category={catalogCategorySlug ?? state.categoryPrecise ?? state.categoryText}
           />
         </ScrollView>
       )}

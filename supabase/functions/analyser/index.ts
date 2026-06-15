@@ -40,6 +40,7 @@ import {
 } from "./engine.ts";
 import {
   categorizeProduct,
+  classifyPreciseCategory,
   correctTypo,
   generateSynthesis,
   parseInciWithAI,
@@ -565,6 +566,15 @@ Deno.serve(async (req: Request) => {
     ? categorizeProduct(categoryTop5Names, user.id).catch(() => "autre" as ProductCategory)
     : Promise.resolve("autre" as ProductCategory);
 
+  // Catégorie PRÉCISE (chemin famille/sous/feuille) — basée sur le NOM + marque
+  // (le nom prime). Non bloquante : patch en arrière-plan après l'insert.
+  const precisePromise: Promise<string | null> = classifyPreciseCategory(
+    body.productLabel ?? null,
+    body.brand ?? null,
+    categoryTop5Names,
+    user.id,
+  ).catch(() => null);
+
   // 1. Formule à base d'eau.
   const first = byPosition[0];
   if (first) {
@@ -835,6 +845,17 @@ Deno.serve(async (req: Request) => {
             .schema("cosme_check")
             .from("analyses")
             .update({ category: cat })
+            .eq("id", categorizeId);
+        })
+        .catch(() => undefined);
+      // Patch catégorie PRÉCISE (famille/sous/feuille) en arrière-plan.
+      void precisePromise
+        .then(async (slug) => {
+          if (!slug) return;
+          await sbAuth
+            .schema("cosme_check")
+            .from("analyses")
+            .update({ category_precise: slug })
             .eq("id", categorizeId);
         })
         .catch(() => undefined);

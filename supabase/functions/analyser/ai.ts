@@ -332,6 +332,73 @@ export async function categorizeProduct(top5: string[], userId?: string | null):
   }
 }
 
+// ─── classifyPreciseCategory ─────────────────────────────────────────────────
+// Catégorie PRÉCISE (chemin famille/sous/feuille) pour les produits analysés, en
+// plus de l'enum grossier. Le NOM du produit prime (ex. « Lait capillaire » =
+// Coiffure, pas Soin du corps) — l'enum ne voyait que les ingrédients d'où des
+// erreurs. gpt-4o-mini, caché.
+const PRECISE_FAMILIES = [
+  "Bien-être", "Coiffure", "Hygiène dentaire", "Hygiène du corps",
+  "Manucure et pédicure", "Maquillage", "Parfum", "Produit solaire",
+  "Rasage et épilation", "Santé", "Soin du corps et visage", "Soin et hygiène bébé",
+];
+
+function slugifyCategoryPath(path: string | null): string | null {
+  if (!path) return null;
+  const segs = path
+    .split(/[/>]/)
+    .map((s) =>
+      s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+        .replace(/['']/g, " ").replace(/[^a-z0-9\s-]/g, "").trim()
+        .replace(/\s+/g, "-").replace(/-+/g, "-"),
+    )
+    .filter(Boolean);
+  return segs.length ? segs.join("/") : null;
+}
+
+export async function classifyPreciseCategory(
+  name: string | null,
+  brand: string | null,
+  top5: string[],
+  userId?: string | null,
+): Promise<string | null> {
+  const label = `${brand ?? ""} ${name ?? ""}`.trim();
+  if (label.length < 2 && top5.length === 0) return null;
+  if (!hasOpenAI()) return null;
+
+  const hash = (await sha256Hex(`${label}|${top5.slice(0, 5).join("|")}`.toLowerCase())).slice(0, 24);
+  const cacheKey = `cat_precise:${hash}`;
+  const cached = await getCached<{ slug: string | null }>(cacheKey);
+  if (cached) return cached.slug;
+
+  const system = [
+    "Tu classes un produit cosmétique dans une catégorie PRÉCISE.",
+    `La Famille DOIT être EXACTEMENT l'une de : ${PRECISE_FAMILIES.join(", ")}.`,
+    "Le NOM du produit PRIME sur les ingrédients (ex. « Lait capillaire » = Coiffure, jamais Soin du corps).",
+    "Donne le chemin le plus précis possible : « Famille / Sous-catégorie / Type ».",
+    'Réponds en JSON strict : {"category":"Famille / Sous-catégorie / Type"}',
+  ].join("\n");
+  const user = `Produit : "${label || "(sans nom)"}"\nPremiers ingrédients : ${top5.slice(0, 5).join(", ") || "n/a"}\n\nClasse-le. JSON strict.`;
+
+  const t0 = Date.now();
+  try {
+    const r = await openai().chat.completions.create({
+      model: AI_MODEL,
+      temperature: 0,
+      response_format: { type: "json_object" },
+      messages: [{ role: "system", content: system }, { role: "user", content: user }],
+    });
+    const parsed = JSON.parse(r.choices?.[0]?.message?.content ?? "{}") as { category?: string };
+    const slug = slugifyCategoryPath(typeof parsed.category === "string" ? parsed.category : null);
+    logAI({ feature: "categorize", provider: "openai", status: "success", model: AI_MODEL, duration_ms: Date.now() - t0, user_id: userId ?? null });
+    void setCached(cacheKey, { slug });
+    return slug;
+  } catch {
+    logAI({ feature: "categorize", provider: "openai", status: "error", model: AI_MODEL, duration_ms: Date.now() - t0, user_id: userId ?? null });
+    return null;
+  }
+}
+
 // ─── generateSynthesis (prompt v11, PERSONNALISÉ) ───────────────────────────
 export type SynthesisInput = {
   enriched: {
