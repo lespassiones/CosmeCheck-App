@@ -120,7 +120,9 @@ export const PromesseFlowModal: FC<Props> = ({
 
   // ── 3. Lancement coherence-analyze ────────────────────────────────────
   const runCoherence = useCallback(
-    async (description: string) => {
+    // `cacheable` = false pour une promesse COLLÉE manuellement → pas de cache
+    // cross-user (texte perso). True pour une promesse récupérée automatiquement.
+    async (description: string, cacheable = true) => {
       const desc = description.slice(0, MAX_MANUAL_DESC).trim()
       // Sans analysisId on ne peut pas lier la cohérence → bascule wizard
       if (!analysisId) {
@@ -135,7 +137,7 @@ export const PromesseFlowModal: FC<Props> = ({
       setErrorMsg(null)
       try {
         const { data, error } = await supabase.functions.invoke('coherence-analyze', {
-          body: { analysis_id: analysisId, description: desc },
+          body: { analysis_id: analysisId, description: desc, cacheable },
         })
         if (error) {
           setErrorMsg("Échec de l'analyse de cohérence.")
@@ -254,7 +256,8 @@ export const PromesseFlowModal: FC<Props> = ({
       return
     }
     setErrorMsg(null)
-    void runCoherence(desc)
+    // Promesse COLLÉE → pas de cache cross-user.
+    void runCoherence(desc, false)
   }, [manualDescription, runCoherence])
 
   // ── Rendus par étape ──────────────────────────────────────────────────

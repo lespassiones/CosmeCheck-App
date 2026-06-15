@@ -133,9 +133,15 @@ export const AnalysisResultPanel: FC<Props> = ({
   const modalScrollRef = useRef<ScrollView>(null)
 
   // ── Alternatives (recommandations same-category, filtrées restrictions/profil) ──
+  // On passe l'EAN stocké en priorité : la résolution par marque+nom échoue pour
+  // les noms de niche (ex. « Typologie … »), ce qui laissait le carrousel vide.
+  // `category` sert de repli quand le produit n'a pas d'EAN (trouvé sur internet,
+  // absent du catalogue) → alternatives de la même catégorie via l'index inversé.
   const alternatives = useAlternatives({
+    ean: productEan,
     brand,
     productName,
+    category,
     initialCount: 10,
     step: 10,
   })
@@ -345,7 +351,7 @@ export const AnalysisResultPanel: FC<Props> = ({
       isInitialLoading={alternatives.isInitialLoading}
       isEmpty={alternatives.isEmpty}
       analyzing={isAnalyzing}
-      showSeeAll={alternatives.hasMore}
+      showSeeAll={alternatives.hasMore && !!alternatives.currentEan}
       onSelect={(p) => void analyze(p)}
       onSeeAll={() => {
         if (alternatives.currentEan) {

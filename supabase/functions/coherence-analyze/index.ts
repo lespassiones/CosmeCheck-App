@@ -52,6 +52,12 @@ import type {
 type Body = {
   analysis_id?: string;
   description?: string;
+  /**
+   * `false` quand la promesse a été COLLÉE manuellement par l'utilisateur →
+   * on ne met PAS le résultat en cache cross-user (texte perso, non partageable).
+   * Défaut `true` (promesse récupérée automatiquement, identique pour tous).
+   */
+  cacheable?: boolean;
 };
 
 // ─── Idempotence (port de CosmetWiki/lib/idempotency.ts, Deno) ──────────────
@@ -116,6 +122,7 @@ Deno.serve(async (req: Request) => {
 
   const analysisId = (body.analysis_id ?? "").trim();
   const description = (body.description ?? "").trim();
+  const cacheable = body.cacheable !== false;
   if (!analysisId) {
     return jsonResponse({ error: "analysis_id manquant." }, { status: 400 });
   }
@@ -178,70 +185,131 @@ Deno.serve(async (req: Request) => {
       (analysisRow.name as string | null) ??
       null;
 
-    // ─── Step 0: detect product type (silent LLM call). ───────────────────
-    const typeHint = [
-      analysisRow.product_type as string | null,
-      productLabel,
-      analysisRow.brand as string | null,
-    ]
-      .filter((s): s is string => Boolean(s && s.trim()))
-      .join(" - ");
-    const productType: ProductType = await detectProductType(
-      description,
-      typeHint || null,
-      user.id,
-    );
+    // ─── Cache cross-user (par formule INCI + promesse) ───────────────────
+    // Steps 0-3 (détection type, extraction, exploration) ne dépendent QUE de
+    // (formule, description) → cache cross-user dans coherence_cache. La
+    // conclusion (Step 5) est personnalisée → toujours recalculée. On NE cache
+    // PAS une promesse collée manuellement (cacheable=false).
+    const inciHash = (await sha256Hex(
+      parent.items
+        .map((it) => (it.slug || it.name || ""))
+        .filter(Boolean)
+        .sort()
+        .join("|"),
+    )).slice(0, 40);
+    const descHash = (await sha256Hex(description.toLowerCase())).slice(0, 40);
 
-    // ─── Step 1: extract promises (LLM, JSON schema) ──────────────────────
-    const extraction = await extractPromisesFromDescription(
-      description,
-      productType,
-      user.id,
-    );
-    const reclassifiedProposals = reclassifyOpenProposals(
-      extraction.proposals,
-      productType,
-    );
-    const dedupedProposals = dedupProposals(reclassifiedProposals);
+    type Extraction = Awaited<ReturnType<typeof extractPromisesFromDescription>>;
+    type CacheVal = {
+      promises: CoherencePromise[];
+      unverifiable: Extraction["unverifiable"];
+      outOfScope: Extraction["outOfScope"];
+    };
 
-    // ─── Step 2: split catalogue (effect) / catalogue (absence) / open ────
-    const cataloguePromises: CoherencePromise[] = [];
-    const openProposals: typeof extraction.proposals = [];
-    for (const p of dedupedProposals) {
-      const cat = findCategoryBySlug(p.category_slug);
-      if (cat && isAbsenceCategory(cat)) {
-        cataloguePromises.push(resolveAbsencePromise(p, cat, parent.items));
-      } else if (cat) {
-        cataloguePromises.push(resolvePromise(p, parent.items));
-      } else {
-        openProposals.push(p);
+    let promises: CoherencePromise[];
+    let unverifiable: Extraction["unverifiable"];
+    let outOfScope: Extraction["outOfScope"];
+    let productType: ProductType;
+
+    const cacheRead = await sb
+      .schema("cosme_check")
+      .from("coherence_cache")
+      .select("result_json, product_type")
+      .eq("inci_hash", inciHash)
+      .eq("description_hash", descHash)
+      .maybeSingle();
+    const cachedVal = (cacheRead.data as
+      | { result_json: CacheVal; product_type: string | null }
+      | null) ?? null;
+
+    if (cachedVal && Array.isArray(cachedVal.result_json?.promises)) {
+      // HIT cross-user : on saute les LLM coûteux (steps 0-3).
+      promises = cachedVal.result_json.promises;
+      unverifiable = cachedVal.result_json.unverifiable;
+      outOfScope = cachedVal.result_json.outOfScope;
+      productType = (cachedVal.product_type ?? "autre") as ProductType;
+    } else {
+      // ─── Step 0: detect product type (silent LLM call). ─────────────────
+      const typeHint = [
+        analysisRow.product_type as string | null,
+        productLabel,
+        analysisRow.brand as string | null,
+      ]
+        .filter((s): s is string => Boolean(s && s.trim()))
+        .join(" - ");
+      productType = await detectProductType(description, typeHint || null, user.id);
+
+      // ─── Step 1: extract promises (LLM, JSON schema) ────────────────────
+      const extraction = await extractPromisesFromDescription(
+        description,
+        productType,
+        user.id,
+      );
+      const reclassifiedProposals = reclassifyOpenProposals(
+        extraction.proposals,
+        productType,
+      );
+      const dedupedProposals = dedupProposals(reclassifiedProposals);
+
+      // ─── Step 2: split catalogue (effect) / catalogue (absence) / open ──
+      const cataloguePromises: CoherencePromise[] = [];
+      const openProposals: typeof extraction.proposals = [];
+      for (const p of dedupedProposals) {
+        const cat = findCategoryBySlug(p.category_slug);
+        if (cat && isAbsenceCategory(cat)) {
+          cataloguePromises.push(resolveAbsencePromise(p, cat, parent.items));
+        } else if (cat) {
+          cataloguePromises.push(resolvePromise(p, parent.items));
+        } else {
+          openProposals.push(p);
+        }
+      }
+
+      // ─── Step 3: open promises - explore the formula via LLM in parallel ─
+      const itemsForLlm: FormulaItemForLlm[] = parent.items
+        .filter((it): it is typeof it & { slug: string; name: string } =>
+          Boolean(it.slug) && Boolean(it.name),
+        )
+        .map((it) => ({
+          slug: it.slug,
+          name: it.name,
+          primaryFunction: it.primaryFunction,
+        }));
+
+      const openPromises: CoherencePromise[] = await Promise.all(
+        openProposals.map(async (p) => {
+          const exploration = await exploreOpenPromise(
+            p.label,
+            p.excerpt,
+            itemsForLlm,
+            user.id,
+          );
+          return resolveOpenPromise(p, parent.items, exploration.matches, exploration.missing);
+        }),
+      );
+
+      promises = [...cataloguePromises, ...openPromises];
+      unverifiable = extraction.unverifiable;
+      outOfScope = extraction.outOfScope;
+
+      // Écriture cache cross-user (sauf promesse collée).
+      if (cacheable) {
+        const val: CacheVal = { promises, unverifiable, outOfScope };
+        await sb
+          .schema("cosme_check")
+          .from("coherence_cache")
+          .upsert(
+            {
+              inci_hash: inciHash,
+              description_hash: descHash,
+              result_json: val,
+              product_type: productType,
+              algo_version: "v1",
+            },
+            { onConflict: "inci_hash,description_hash" },
+          );
       }
     }
-
-    // ─── Step 3: open promises - explore the formula via LLM in parallel ──
-    const itemsForLlm: FormulaItemForLlm[] = parent.items
-      .filter((it): it is typeof it & { slug: string; name: string } =>
-        Boolean(it.slug) && Boolean(it.name),
-      )
-      .map((it) => ({
-        slug: it.slug,
-        name: it.name,
-        primaryFunction: it.primaryFunction,
-      }));
-
-    const openPromises: CoherencePromise[] = await Promise.all(
-      openProposals.map(async (p) => {
-        const exploration = await exploreOpenPromise(
-          p.label,
-          p.excerpt,
-          itemsForLlm,
-          user.id,
-        );
-        return resolveOpenPromise(p, parent.items, exploration.matches, exploration.missing);
-      }),
-    );
-
-    const promises = [...cataloguePromises, ...openPromises];
 
     // ─── Step 5: conclusion (LLM, only sees verdicts) + personnalisation ──
     const { profileBlock, restrictionsBlock } = await loadProfileAndRestrictions(
@@ -260,8 +328,8 @@ Deno.serve(async (req: Request) => {
     const result = buildCoherenceResult({
       description,
       promises,
-      unverifiable: extraction.unverifiable,
-      outOfScope: extraction.outOfScope,
+      unverifiable,
+      outOfScope,
       productType,
       parent,
       conclusion,

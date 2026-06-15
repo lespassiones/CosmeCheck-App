@@ -59,6 +59,7 @@ export function useLaunchAlternative(): {
               input_text: inci,
               result_json,
               score: Number(((cached.score as number) ?? 0).toFixed(2)),
+              ean: product.ean ?? null,
             } as never)
             .select('*')
             .single()

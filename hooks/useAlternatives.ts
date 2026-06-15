@@ -65,20 +65,31 @@ function mapRow(r: AltRpcRow): AlternativeProduct {
   }
 }
 
-/** Une page de candidats bruts, cachée 5 min (transient, comme la recherche). */
+/**
+ * Une page de candidats bruts, cachée 5 min (transient, comme la recherche).
+ * `key` = l'EAN du produit (alternatives même-catégorie exacte), OU `cat:<catégorie>`
+ * quand le produit n'est PAS au catalogue (ex. trouvé sur internet) → on cherche
+ * alors par catégorie via l'index inversé (cosme_check_get_alternatives_by_category).
+ */
 async function fetchAlternativesPage(
   qc: QueryClient,
-  ean: string,
+  key: string,
   offset: number,
 ): Promise<AlternativeProduct[]> {
   return qc.fetchQuery({
-    queryKey: ['alternatives', ean, offset],
+    queryKey: ['alternatives', key, offset],
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      const { data, error } = await supabase.rpc(
-        'cosme_check_get_alternatives' as never,
-        { p_ean: ean, p_limit: RAW_PAGE, p_offset: offset } as never,
-      )
+      const isCat = key.startsWith('cat:')
+      const { data, error } = isCat
+        ? await supabase.rpc(
+            'cosme_check_get_alternatives_by_category' as never,
+            { p_category: key.slice(4), p_limit: RAW_PAGE, p_offset: offset } as never,
+          )
+        : await supabase.rpc(
+            'cosme_check_get_alternatives' as never,
+            { p_ean: key, p_limit: RAW_PAGE, p_offset: offset } as never,
+          )
       if (error) throw error
       return ((data as AltRpcRow[] | null) ?? []).map(mapRow)
     },
@@ -91,6 +102,12 @@ export interface UseAlternativesParams {
   ean?: string | null
   brand?: string | null
   productName?: string | null
+  /**
+   * Catégorie du produit (label/slug). Utilisée en REPLI quand aucun EAN n'est
+   * résoluble — typiquement un produit trouvé sur internet, absent du catalogue :
+   * on cherche alors des alternatives de la même catégorie via l'index inversé.
+   */
+  category?: string | null
   initialCount: number
   step: number
   enabled?: boolean
@@ -113,6 +130,7 @@ export function useAlternatives({
   ean: directEan,
   brand,
   productName,
+  category,
   initialCount,
   step,
   enabled = true,
@@ -131,6 +149,15 @@ export function useAlternatives({
   })
   const ean = directEan ?? identityQuery.data?.ean ?? null
   const identityResolving = !directEan && identityQuery.isLoading && identityKey.length >= 3
+
+  // Repli par catégorie : seulement quand AUCUN ean n'est résoluble (produit
+  // internet absent du catalogue) ET qu'on ne résout plus l'identité.
+  const catParam =
+    !ean && !identityResolving && (category?.trim().length ?? 0) >= 3
+      ? (category as string).trim()
+      : null
+  // Source unique d'alternatives : l'ean exact, sinon `cat:<catégorie>`.
+  const altKey = ean ?? (catParam ? `cat:${catParam}` : null)
 
   // 2. Familles → noms INCI membres (caché 1h).
   const familySlugs = useMemo(
@@ -199,10 +226,10 @@ export function useAlternatives({
     setExhausted(false)
     setScanned(0)
     setTarget(initialCount)
-  }, [ean, initialCount])
+  }, [altKey, initialCount])
 
   const fill = useCallback(async () => {
-    if (!ean || !exclusionReady || fillingRef.current) return
+    if (!altKey || !exclusionReady || fillingRef.current) return
     fillingRef.current = true
     setFilling(true)
     try {
@@ -212,7 +239,7 @@ export function useAlternatives({
         !exhaustedRef.current &&
         offsetRef.current < SCAN_CAP
       ) {
-        const page = await fetchAlternativesPage(queryClient, ean, offsetRef.current)
+        const page = await fetchAlternativesPage(queryClient, altKey, offsetRef.current)
         offsetRef.current += RAW_PAGE
         setScanned(offsetRef.current)
         if (page.length < RAW_PAGE) {
@@ -231,14 +258,14 @@ export function useAlternatives({
       fillingRef.current = false
       setFilling(false)
     }
-  }, [ean, exclusionReady, queryClient])
+  }, [altKey, exclusionReady, queryClient])
 
   useEffect(() => {
-    if (!enabled || !ean || !exclusionReady) return
+    if (!enabled || !altKey || !exclusionReady) return
     if (filtered.length < target && !exhausted && offsetRef.current < SCAN_CAP) {
       void fill()
     }
-  }, [enabled, ean, exclusionReady, filtered.length, target, exhausted, fill])
+  }, [enabled, altKey, exclusionReady, filtered.length, target, exhausted, fill])
 
   const loadMore = useCallback(() => {
     setTarget((t) => t + step)
@@ -252,11 +279,11 @@ export function useAlternatives({
     enabled &&
     products.length === 0 &&
     (identityResolving ||
-      (!!ean && !exclusionReady) ||
-      (!!ean && filling && !exhausted))
+      (!!altKey && !exclusionReady) ||
+      (!!altKey && filling && !exhausted))
 
   const isLoadingMore = filling && products.length > 0
-  const isEmpty = !!ean && exclusionReady && !filling && filtered.length === 0
+  const isEmpty = !!altKey && exclusionReady && !filling && filtered.length === 0
 
   return {
     products,

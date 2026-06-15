@@ -66,6 +66,9 @@ type LoadState =
       productLabel: string | null
       productType: string | null
       inciText: string
+      /** EAN stocké sur la ligne (scan / clic reco / recherche) — fiable pour les
+       *  alternatives, contrairement à la résolution par marque+nom. */
+      ean: string | null
     }
 
 const AnalyseDetailScreen: FC = () => {
@@ -151,6 +154,7 @@ const AnalyseDetailScreen: FC = () => {
         productLabel: decodeHtml(row.product_label?.trim() || row.name?.trim()) || null,
         productType: row.product_type ?? result.productType ?? null,
         inciText: row.input_text ?? '',
+        ean: (row as { ean?: string | null }).ean ?? null,
       }
     },
     [restrictions],
@@ -410,8 +414,8 @@ const AnalyseDetailScreen: FC = () => {
             productName={state.productLabel}
             verdictScore={effectiveVerdictScore}
             penalizingCount={penalizingCount}
-            productEan={catalogEan}
-            category={catalogCategorySlug}
+            productEan={state.ean ?? catalogEan}
+            category={catalogCategorySlug ?? state.categoryText}
           />
         </ScrollView>
       )}

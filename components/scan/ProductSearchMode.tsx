@@ -38,6 +38,7 @@ import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography, fontFamilies } from '@/constants/typography'
 import { supabase } from '@/lib/supabase/client'
+import { applyColorCap } from '@/lib/analysis/scoreCap'
 import { catalogSearchKey, CATALOG_SEARCH_STALE_MS } from '@/lib/catalog/searchCache'
 import { ROUTES } from '@/constants/routes'
 import { useAndroidBack } from '@/hooks/useAndroidBack'
@@ -68,6 +69,8 @@ interface CatalogRow {
   score_tone: string | null
   count_total: number | null
   ingredients_text: string | null
+  count_orange: number | null
+  count_rouge: number | null
 }
 
 interface BrowseRow {
@@ -79,6 +82,8 @@ interface BrowseRow {
   score_label: string | null
   score_tone: string | null
   ingredients_text: string | null
+  count_orange: number | null
+  count_rouge: number | null
 }
 
 interface WebCandidate {
@@ -981,8 +986,16 @@ const ProductRow: FC<{
           <Text style={styles.resultNoInci}>Composition indisponible</Text>
         ) : null}
       </View>
-      {/* Pastille VerdictGauge — 5 niveaux basés sur le score numérique */}
-      <CatalogPastille score={item.score ?? null} tone={item.score_tone ?? null} />
+      {/* Pastille VerdictGauge — 5 niveaux basés sur le score PLAFONNÉ (mêmes
+          plafonds orange/rouge que l'écran d'analyse → badge ↔ détail cohérents). */}
+      <CatalogPastille
+        score={
+          item.score != null
+            ? applyColorCap(item.score, item.count_orange ?? 0, item.count_rouge ?? 0)
+            : null
+        }
+        tone={item.score_tone ?? null}
+      />
       {busy ? (
         <ActivityIndicator size="small" color={colors.rose} />
       ) : (

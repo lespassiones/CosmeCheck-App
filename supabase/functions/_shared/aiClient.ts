@@ -54,6 +54,8 @@ type LogEntry = {
   feature: AIFeature;
   provider: AIProvider;
   status: "success" | "fallback" | "error";
+  /** Modèle exact (ex. "gpt-4o-mini-search-preview") → coût précis côté admin. */
+  model?: string | null;
   tokens_in?: number | null;
   tokens_out?: number | null;
   duration_ms?: number | null;
@@ -71,6 +73,7 @@ export function logAI(entry: LogEntry): void {
         feature: entry.feature,
         provider: entry.provider,
         status: entry.status,
+        model: entry.model ?? null,
         tokens_in: entry.tokens_in ?? null,
         tokens_out: entry.tokens_out ?? null,
         duration_ms: entry.duration_ms ?? null,
@@ -102,6 +105,11 @@ export async function getCached<T = unknown>(cacheKey: string): Promise<T | null
       .eq("cache_key", cacheKey)
       .maybeSingle();
     if (!data) return null;
+    // Compteur de hits (fire-and-forget) → alimente le « cache hit rate » admin.
+    void sb
+      .schema("cosme_check")
+      .rpc("cosme_check_bump_ai_cache_hit", { p_key: cacheKey })
+      .then(() => undefined);
     return data.result as T;
   } catch {
     return null;
@@ -166,11 +174,14 @@ export async function mistralChat(opts: {
 export async function callWithFallback<T>(opts: {
   feature: AIFeature;
   userId?: string | null;
+  /** Modèle OpenAI primaire (défaut gpt-4o-mini) → coût précis côté admin. */
+  model?: string;
   primary: () => Promise<{ value: T; tokensIn?: number; tokensOut?: number }>;
   fallback?: () => Promise<{ value: T; provider: AIProvider }>;
   timeoutMs?: number;
 }): Promise<T> {
   const { feature, primary, fallback } = opts;
+  const primaryModel = opts.model ?? AI_MODEL;
   const timeoutMs = opts.timeoutMs ?? 10_000;
   const t0 = Date.now();
 
@@ -187,6 +198,7 @@ export async function callWithFallback<T>(opts: {
       feature,
       provider: "openai",
       status: "success",
+      model: primaryModel,
       tokens_in: result.tokensIn ?? null,
       tokens_out: result.tokensOut ?? null,
       duration_ms: Date.now() - t0,
@@ -199,6 +211,7 @@ export async function callWithFallback<T>(opts: {
         feature,
         provider: "openai",
         status: "error",
+        model: primaryModel,
         duration_ms: Date.now() - t0,
         user_id: opts.userId ?? null,
       });
@@ -210,6 +223,7 @@ export async function callWithFallback<T>(opts: {
         feature,
         provider: result.provider,
         status: "fallback",
+        model: result.provider === "mistral" ? MISTRAL_MODEL : primaryModel,
         duration_ms: Date.now() - t0,
         user_id: opts.userId ?? null,
       });
@@ -219,6 +233,7 @@ export async function callWithFallback<T>(opts: {
         feature,
         provider: "openai",
         status: "error",
+        model: primaryModel,
         duration_ms: Date.now() - t0,
         user_id: opts.userId ?? null,
       });

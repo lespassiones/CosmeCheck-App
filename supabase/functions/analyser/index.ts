@@ -23,6 +23,8 @@ import { gate } from "../_shared/gate.ts";
 import { serviceClient } from "../_shared/auth.ts";
 import { getCatalogScore } from "./catalog.ts";
 import { lookupEanByName } from "../_shared/eanLookup.ts";
+import { identifyEanAndCategory } from "../_shared/eanWebSearch.ts";
+import { dedupeKey } from "../_shared/dedupeKey.ts";
 import { sha256Hex } from "../_shared/aiClient.ts";
 import { applyColorCap, type ColorRating, computeScore, type ScoreTone, scoreLabel } from "./score.ts";
 import { isCleanInciInput, parseInciList } from "./parse.ts";
@@ -308,6 +310,7 @@ Deno.serve(async (req: Request) => {
               input_text: rawText,
               result_json: cachedResult,
               score: Number(((cachedResult.score as number) ?? 0).toFixed(2)),
+              ean: productEan?.slice(0, 32) ?? null,
             })
             .select("id")
             .single();
@@ -807,6 +810,7 @@ Deno.serve(async (req: Request) => {
         input_text: text,
         result_json: responsePayload,
         score: Number(score.toFixed(2)),
+        ean: body.productEan?.slice(0, 32) ?? null,
       })
       .select("id")
       .single();
@@ -894,28 +898,71 @@ Deno.serve(async (req: Request) => {
     })();
   }
 
-  // EAN lookup fire-and-forget : si brand+nom connus mais EAN inconnu, cherche sur OBF
+  // Résolution d'EAN fire-and-forget (brand+nom connus mais EAN inconnu = produit
+  // hors catalogue, typiquement trouvé sur internet). Pipeline :
+  //   1. Open Beauty Facts (gratuit). 2. Fallback recherche web GPT (checksum
+  //   validé). Trouvé → upsert catalogue (rejoint les 400k). 3. Échec des deux →
+  //   file `web_products` pour résolution manuelle côté admin.
   if (!productEan && body.brand && body.productLabel) {
     const eanBrand = body.brand;
     const eanLabel = body.productLabel;
-    void lookupEanByName(eanBrand, eanLabel).then(async (result) => {
-      if (!result) return;
+    const eanInci = body.text ?? null;
+    const coarseCatSlug = CATEGORY_ENUM_TO_SLUG[resolvedCategory ?? "autre"] ?? null;
+    const computedScore = Number(score.toFixed(4));
+    const catalogCount = itemsResponse.length;
+    void (async () => {
+      let foundEan: string | null = null;
+      let foundInci: string | null = null;
+      let sourceUrl: string | null = null;
+      let preciseCat: string | null = null;
+
+      const obf = await lookupEanByName(eanBrand, eanLabel);
+      if (obf) {
+        foundEan = obf.ean;
+        foundInci = obf.ingredientsText;
+      } else {
+        // UN SEUL appel GPT : code-barre + catégorie précise en même temps.
+        const id = await identifyEanAndCategory(eanBrand, eanLabel);
+        foundEan = id.ean;
+        sourceUrl = id.sourceUrl;
+        preciseCat = id.category;
+      }
+      // Catégorie précise GPT si dispo, sinon la catégorie grossière de l'analyse.
+      const catSlug = preciseCat ?? coarseCatSlug;
+
       try {
-        await serviceClient().rpc("cosme_check_upsert_catalog_product", {
-          p_ean: result.ean,
-          p_brand: eanBrand,
-          p_name: eanLabel,
-          p_ingredients_text: result.ingredientsText,
-          p_source_url: null,
-          p_category: null,
-          p_score: null,
-          p_score_label: null,
-          p_score_tone: null,
-          p_count_total: null,
-          p_image_url: null,
-        });
+        if (foundEan) {
+          // Produit internet identifié → ajout au catalogue avec NOTRE score
+          // calculé (évalué sur la liste d'ingrédients) + catégorie précise.
+          await serviceClient().rpc("cosme_check_upsert_catalog_product", {
+            p_ean: foundEan,
+            p_brand: eanBrand,
+            p_name: eanLabel,
+            p_ingredients_text: foundInci ?? eanInci,
+            p_source_url: sourceUrl,
+            p_category: catSlug,
+            p_score: computedScore,
+            p_score_label: scoreLabelText,
+            p_score_tone: scoreTone,
+            p_count_total: catalogCount,
+            p_image_url: null,
+          });
+        } else {
+          // Aucun EAN trouvé → on archive le produit (avec sa catégorie précise)
+          // pour traitement admin / saisie manuelle.
+          await serviceClient().rpc("cosme_check_log_web_product", {
+            p_dedupe_key: dedupeKey(eanBrand, eanLabel),
+            p_brand: eanBrand,
+            p_name: eanLabel,
+            p_category: catSlug,
+            p_ingredients_text: eanInci,
+            p_description: null,
+            p_image_url: null,
+            p_source_url: null,
+          });
+        }
       } catch { /* silent */ }
-    });
+    })();
   }
 
   const finalBody = { ...responsePayload, analysisId: savedAnalysisId, addedToRoutine };
