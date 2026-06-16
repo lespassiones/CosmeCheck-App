@@ -75,6 +75,17 @@ function isInTrace(item: AnalyseItem): boolean {
   );
 }
 
+// Allergènes parfumants BI-FONCTION : molécules listées comme allergène parfumant
+// réglementé MAIS très souvent employées comme conservateur/solvant (ex. Benzyl
+// Alcohol). Leur présence ne CONTREDIT pas franchement une promesse « sans
+// allergène » — le rôle réel dépend de la formulation → verdict « à nuancer ».
+const DUAL_USE_ALLERGEN_SLUGS = new Set<string>(["benzyl-alcohol"]);
+function isDualUseAllergen(it: AnalyseItem): boolean {
+  if (it.slug && DUAL_USE_ALLERGEN_SLUGS.has(it.slug)) return true;
+  const n = norm(it.name ?? it.input ?? "");
+  return n.includes("benzylalcohol");
+}
+
 function deriveVerdict({
   confirmingFound,
   confirmingWellDosed,
@@ -103,6 +114,45 @@ function unifiedScore({
   if (inTrace > 0) return Math.min(60, 35 + (inTrace - 1) * 5);
   if (cosmetic > 0) return Math.min(35, 20 + (cosmetic - 1) * 5);
   return 0;
+}
+
+/**
+ * Barème d'effet RECALIBRÉ (anti-surcrédit), à partir des matches DÉJÀ validés
+ * contre la formule. Distingue le niveau de preuve (documenté vs supportif vs
+ * visuel) pour qu'un seul ingrédient « supportif » ne suffise plus à donner
+ * « tenue » :
+ *   - ≥1 actif DOCUMENTÉ bien placé        → tenue   (80 + 5 par actif en plus)
+ *   - ≥2 actifs SUPPORTIFS bien placés     → tenue   (72 +)
+ *   - 1 seul actif supportif bien placé    → partielle (55)
+ *   - uniquement en trace (fin de liste)   → partielle (35)
+ *   - uniquement effet visuel/sensoriel    → partielle (30)
+ *   - rien de validé                        → non démontré (0)
+ */
+function gradeEffect(c: {
+  docWellDosed: number;
+  docTrace: number;
+  supWellDosed: number;
+  supTrace: number;
+  cosmetic: number;
+}): { verdict: CoherenceVerdict; score: number } {
+  const { docWellDosed, docTrace, supWellDosed, supTrace, cosmetic } = c;
+  if (docWellDosed >= 1) {
+    const extra = docWellDosed - 1 + supWellDosed;
+    return { verdict: "tenue", score: Math.min(100, 80 + extra * 5) };
+  }
+  if (supWellDosed >= 2) {
+    return { verdict: "tenue", score: Math.min(90, 72 + (supWellDosed - 2) * 5) };
+  }
+  if (supWellDosed === 1) {
+    return { verdict: "partielle", score: 55 };
+  }
+  if (docTrace + supTrace >= 1) {
+    return { verdict: "partielle", score: 35 };
+  }
+  if (cosmetic >= 1) {
+    return { verdict: "partielle", score: 30 };
+  }
+  return { verdict: "non_demontree", score: 0 };
 }
 
 export type LlmPromiseProposal = {
@@ -301,6 +351,30 @@ export function resolveAbsencePromise(
   }
 
   const sorted = offenders.slice().sort((a, b) => a.position - b.position);
+  const contradicting = sorted.slice(0, 5).map((it) => ({
+    name: it.name ?? it.input,
+    slug: it.slug,
+    position: it.position,
+  }));
+
+  // « Sans allergène parfumant » dont les SEULS fautifs sont des molécules
+  // bi-fonction (Benzyl Alcohol…) → « à nuancer » (partielle), pas « contredite ».
+  // On SIGNALE quand même l'ingrédient (jamais caché), mais sans crier au mensonge.
+  if (tag === "allergene-parfumant" && sorted.every((it) => isDualUseAllergen(it))) {
+    return {
+      slug: cat.slug,
+      label: cat.label,
+      excerpt: proposal.excerpt,
+      verdict: "partielle",
+      expectedActives: [],
+      foundActives: [],
+      cosmeticActives: [],
+      missingActives: [],
+      contradictingActives: contradicting,
+      score: 50,
+    };
+  }
+
   return {
     slug: cat.slug,
     label: cat.label,
@@ -310,11 +384,7 @@ export function resolveAbsencePromise(
     foundActives: [],
     cosmeticActives: [],
     missingActives: [],
-    contradictingActives: sorted.slice(0, 5).map((it) => ({
-      name: it.name ?? it.input,
-      slug: it.slug,
-      position: it.position,
-    })),
+    contradictingActives: contradicting,
     score: 0,
   };
 }
@@ -349,17 +419,25 @@ export function resolveOpenPromise(
   const foundDocumented: CoherencePromise["foundActives"] = [];
   const foundCosmetic: CoherencePromise["cosmeticActives"] = [];
 
+  // Compteurs par NIVEAU DE PREUVE (documenté/supportif/visuel) × DOSAGE
+  // (bien placé/trace) → barème recalibré (gradeEffect).
+  let docWellDosed = 0;
+  let docTrace = 0;
+  let supWellDosed = 0;
+  let supTrace = 0;
+
   const seenPositions = new Set<number>();
 
   for (const { match, item } of validated) {
     if (seenPositions.has(item.position)) continue;
     seenPositions.add(item.position);
+    const trace = isInTrace(item);
     if (match.evidence === "marketing") {
       foundCosmetic.push({
         name: item.name ?? match.item_name,
         slug: item.slug,
         position: item.position,
-        inTrace: isInTrace(item),
+        inTrace: trace,
         note: match.reason.trim().slice(0, 80) || "effet visuel/sensoriel",
       });
     } else {
@@ -367,18 +445,17 @@ export function resolveOpenPromise(
         name: item.name ?? match.item_name,
         slug: item.slug,
         position: item.position,
-        inTrace: isInTrace(item),
+        inTrace: trace,
       });
+      if (match.evidence === "documented") {
+        if (trace) docTrace++;
+        else docWellDosed++;
+      } else {
+        if (trace) supTrace++;
+        else supWellDosed++;
+      }
     }
   }
-
-  // Documenté + cosmétique : tout ingrédient confirmant compte.
-  const wellDosed =
-    foundDocumented.filter((f) => !f.inTrace).length
-    + foundCosmetic.filter((c) => !c.inTrace).length;
-  const trace =
-    foundDocumented.filter((f) => f.inTrace).length
-    + foundCosmetic.filter((c) => c.inTrace).length;
 
   // Règle d'absence : si le label commence par "sans " et qu'aucun ingrédient
   // correspondant n'a été trouvé dans la formule (ni matches ni missing), la
@@ -398,15 +475,12 @@ export function resolveOpenPromise(
     };
   }
 
-  const verdict = deriveVerdict({
-    confirmingFound: foundDocumented.length + foundCosmetic.length,
-    confirmingWellDosed: wellDosed,
-  });
-
-  const score = unifiedScore({
-    wellDosed,
-    inTrace: trace,
-    cosmetic: 0,
+  const { verdict, score } = gradeEffect({
+    docWellDosed,
+    docTrace,
+    supWellDosed,
+    supTrace,
+    cosmetic: foundCosmetic.length,
   });
 
   return {

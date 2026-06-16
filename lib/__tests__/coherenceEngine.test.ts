@@ -15,8 +15,10 @@
 import {
   resolvePromise,
   resolveAbsencePromise,
+  resolveOpenPromise,
   computeMetrics,
   type LlmPromiseProposal,
+  type OpenLlmMatch,
 } from '@/lib/coherence/engine'
 import { findCategoryBySlug } from '@/lib/coherence/claims'
 import type { CoherencePromise } from '@/lib/coherence/types'
@@ -97,6 +99,94 @@ describe('resolvePromise — barème unifié (golden)', () => {
     expect(p.verdict).toBe('non_demontree')
   });
 });
+
+describe('resolveOpenPromise — moteur unifié LLM + validation (golden)', () => {
+  const HYDRA: LlmPromiseProposal = { category_slug: 'autre', label: 'Hydratation', excerpt: 'hydrate' }
+  const NUTRI: LlmPromiseProposal = { category_slug: 'autre', label: 'Nutrition', excerpt: 'nourrit' }
+  const match = (slug: string, evidence: OpenLlmMatch['evidence']): OpenLlmMatch => ({
+    item_slug: slug,
+    item_name: slug,
+    evidence,
+    reason: 'r',
+  })
+
+  it('actif botanique DOCUMENTÉ validé et bien placé → tenue 80 (fix Phitofilos)', () => {
+    // Cas réel : la guimauve (mucilage) soutient l'hydratation. L'ancien catalogue
+    // l'ignorait (0 %). Le LLM la propose, on la valide contre l'INCI → tenue.
+    const items = [
+      item({ position: 1, slug: 'althaea-officinalis-root-powder', name: 'Althaea Officinalis Root Powder', thresholdContext: 'before_fragrance' }),
+    ]
+    const p = resolveOpenPromise(HYDRA, items, [match('althaea-officinalis-root-powder', 'documented')], [])
+    expect(p.verdict).toBe('tenue')
+    expect(p.score).toBe(80)
+    expect(p.foundActives.map((f) => f.slug)).toContain('althaea-officinalis-root-powder')
+  })
+
+  it('ANTI-HALLUCINATION : ingrédient cité absent de la formule → ignoré → non démontré 0', () => {
+    const items = [item({ position: 1, slug: 'aqua', name: 'Aqua' })]
+    // Le LLM cite "glycerin" qui n'est PAS dans la formule → doit être supprimé.
+    const p = resolveOpenPromise(HYDRA, items, [match('glycerin', 'documented')], [])
+    expect(p.verdict).toBe('non_demontree')
+    expect(p.score).toBe(0)
+    expect(p.foundActives).toHaveLength(0)
+  })
+
+  it('1 seul actif SUPPORTIF → partielle 55 (anti-surcrédit, fix Nutrition 85 %)', () => {
+    const items = [item({ position: 1, slug: 'fenugrec', name: 'Trigonella Foenum', thresholdContext: 'before_fragrance' })]
+    const p = resolveOpenPromise(NUTRI, items, [match('fenugrec', 'supportive')], [])
+    expect(p.verdict).toBe('partielle')
+    expect(p.score).toBe(55)
+  })
+
+  it('2 actifs SUPPORTIFS bien placés → tenue 72', () => {
+    const items = [
+      item({ position: 1, slug: 'a', name: 'A', thresholdContext: 'before_fragrance' }),
+      item({ position: 2, slug: 'b', name: 'B', thresholdContext: 'before_fragrance' }),
+    ]
+    const p = resolveOpenPromise(HYDRA, items, [match('a', 'supportive'), match('b', 'supportive')], [])
+    expect(p.verdict).toBe('tenue')
+    expect(p.score).toBe(72)
+  })
+
+  it('1 documenté + 1 supportif bien placés → tenue 85', () => {
+    const items = [
+      item({ position: 1, slug: 'a', name: 'A', thresholdContext: 'before_fragrance' }),
+      item({ position: 2, slug: 'b', name: 'B', thresholdContext: 'before_fragrance' }),
+    ]
+    const p = resolveOpenPromise(HYDRA, items, [match('a', 'documented'), match('b', 'supportive')], [])
+    expect(p.verdict).toBe('tenue')
+    expect(p.score).toBe(85)
+  })
+
+  it('actif documenté uniquement EN TRACE → partielle 35', () => {
+    const items = [
+      item({ position: 1, slug: 'parfum', name: 'Parfum', tags: ['parfum-synthese'] }),
+      item({ position: 2, slug: 'a', name: 'A', thresholdContext: 'after_fragrance' }),
+    ]
+    const p = resolveOpenPromise(HYDRA, items, [match('a', 'documented')], [])
+    expect(p.verdict).toBe('partielle')
+    expect(p.score).toBe(35)
+  })
+
+  it('effet uniquement VISUEL/sensoriel → partielle 30 (pas tenue)', () => {
+    const items = [item({ position: 1, slug: 'dimethicone', name: 'Dimethicone', thresholdContext: 'before_fragrance' })]
+    const p = resolveOpenPromise(
+      { category_slug: 'autre', label: 'Brillance', excerpt: 'brillance' },
+      items,
+      [match('dimethicone', 'marketing')],
+      [],
+    )
+    expect(p.verdict).toBe('partielle')
+    expect(p.score).toBe(30)
+  })
+
+  it('aucun match → non démontré 0', () => {
+    const items = [item({ position: 1, slug: 'aqua', name: 'Aqua' })]
+    const p = resolveOpenPromise(HYDRA, items, [], [])
+    expect(p.verdict).toBe('non_demontree')
+    expect(p.score).toBe(0)
+  })
+})
 
 describe('resolveAbsencePromise — promesse "sans X"', () => {
   const cat = findCategoryBySlug('absence_sulfate')!

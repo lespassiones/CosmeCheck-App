@@ -147,8 +147,8 @@ Si une phrase ne contient aucun de (a), (b), (c) → pas une promesse, passe.
 
 3. promesse vs unverifiable :
    ✓ EST UNE PROMESSE = un EFFET attendu sur la peau/cheveux/etc. OU une absence d'ingrédient. Toute phrase qui décrit un état de la peau ou des cheveux visé par le produit ("rend les mains douces", "laisse la peau souple", "donne du confort", "embellit le teint", "redonne de l'éclat") est une PROMESSE - même si le verbe est ambigu. Si l'utilisateur peut dire "je vérifie si la formule contient un actif qui fait ça", c'est une promesse.
-   ✗ EST UNVERIFIABLE = ni effet sur la peau/cheveux ni absence d'ingrédient :
-     - composition générale : "97 % d'origine naturelle", "à base de B5", "formule clean"
+   ✗ EST UNVERIFIABLE = ni effet sur la peau/cheveux ni absence d'ingrédient ni présence d'un actif nommé :
+     - composition VAGUE, sans actif nommé : "97 % d'origine naturelle", "formule clean", "à base d'ingrédients naturels"
      - certification : "Ecocert", "Cosmos Organic", "vegan", "cruelty-free", "bio"
      - sensoriel PUR (du produit lui-même, pas de la peau après usage) : "odeur sucrée", "texture fondante", "mousse rapidement", "fragrance fraîche du produit"
      - marketing_general : "véritable soin", "efficacité prouvée", "résultats visibles", sans cible précise
@@ -156,6 +156,14 @@ Si une phrase ne contient aucun de (a), (b), (c) → pas une promesse, passe.
    ⚠️ DANS LE DOUTE : si la phrase mentionne la PEAU / les CHEVEUX / les LÈVRES / les MAINS / les ONGLES / l'HALEINE / etc., classe-la en PROMESSE (catégorie listée si possible, sinon "autre"). Le bucket "unverifiable" est réservé aux mentions qui parlent UNIQUEMENT du produit en pot (composition, certification, label, odeur du produit) sans dire ce qu'il fait à la zone d'application.
 
 4. RÈGLE D'OR : si une phrase dit qu'un ingrédient FAIT quelque chose ("la provitamine B5 fortifie les cheveux"), c'est une PROMESSE d'effet. Si elle dit qu'un ingrédient N'EST PAS dedans ("sans sulfate"), c'est une PROMESSE d'absence. Si elle décrit un état souhaité pour la zone d'application après usage ("rend les mains douces", "peau veloutée"), c'est aussi une PROMESSE d'effet (en "autre" si aucune catégorie listée ne colle). Sinon c'est unverifiable.
+
+4bis. PRÉSENCE D'UN ACTIF NOMMÉ = PROMESSE VÉRIFIABLE (ne JAMAIS mettre en unverifiable) :
+   "enrichi en X", "à la X", "au X", "contient de la X", "formulé avec X", "à base de X" — où X est un
+   ingrédient/actif PRÉCIS et identifiable (spiruline, niacinamide / vitamine B3, acide hyaluronique, bambou,
+   ananas, caféine, aloe vera…). C'est une promesse de PRÉSENCE : on peut vérifier si X figure réellement
+   dans l'INCI. → category_slug="autre", label="Présence : X" (ex: "Présence : Spiruline", "Présence : Vitamine B3").
+   UNE entrée par actif nommé distinct. Reste unverifiable UNIQUEMENT la composition vague SANS actif nommé
+   ("97 % naturel", "formule clean", "actifs d'origine végétale" sans préciser lesquels).
 
 5. EXCERPT : verbatim exact (ou fragment fidèle), max 80 caractères.
 
@@ -168,17 +176,18 @@ Si une phrase ne contient aucun de (a), (b), (c) → pas une promesse, passe.
 ═══ EXEMPLE 1 (cheveux, claim pertinent) ═══
 
 Type : Cheveux
-Description : "Cette gelée hydrate les cheveux, fixe les boucles et limite les frisottis. Sans sulfate ni silicone, formulée à 96 % naturel, odeur de vanille."
+Description : "Cette gelée enrichie en spiruline hydrate les cheveux, fixe les boucles et limite les frisottis. Sans sulfate ni silicone, formulée à 96 % naturel, odeur de vanille."
 
 Sortie :
 - promises:
+  · {category_slug: "autre", label: "Présence : Spiruline", excerpt: "enrichie en spiruline"}  ← actif NOMMÉ → promesse de présence (vérifiable dans l'INCI), PAS unverifiable
   · {category_slug: "hydratation", label: "Hydratation", excerpt: "hydrate les cheveux"}
   · {category_slug: "autre", label: "Fixation des boucles", excerpt: "fixe les boucles"}
   · {category_slug: "anti_frisottis", label: "Anti-frisottis", excerpt: "limite les frisottis"}
   · {category_slug: "absence_sulfate", label: "Sans sulfate", excerpt: "sans sulfate"}
   · {category_slug: "absence_silicone", label: "Sans silicone", excerpt: "ni silicone"}
 - unverifiable:
-  · {excerpt: "formulée à 96 % naturel", reason: "composition"}
+  · {excerpt: "formulée à 96 % naturel", reason: "composition"}  ← composition VAGUE sans actif nommé → unverifiable
   · {excerpt: "odeur de vanille", reason: "sensoriel"}
 - out_of_scope: []
 
@@ -636,7 +645,8 @@ RÈGLES STRICTES (anti-hallucination) :
 3. Si AUCUN ingrédient de la liste ne soutient la promesse, retourne matches: [].
 4. Sois conservateur. Mieux vaut sous-citer que sur-citer. Si tu n'es pas sûr, ne cite pas.
 5. Pas plus de 6 matches au total.
-6. Tu peux aussi lister jusqu'à 5 actifs documentés qui auraient typiquement été utilisés pour cette promesse mais qui ne sont PAS dans la liste (champ "missing"). Noms en français de préférence.`;
+6. Tu peux aussi lister jusqu'à 5 actifs documentés qui auraient typiquement été utilisés pour cette promesse mais qui ne sont PAS dans la liste (champ "missing"). Noms en français de préférence.
+7. PROMESSE DE PRÉSENCE ("Présence : X") : la promesse affirme simplement que l'actif X est dans le produit. Cherche X (ou son nom INCI équivalent, ex: "spiruline" → "Spirulina Maxima Extract", "vitamine B3" → "Niacinamide", "acide hyaluronique" → "Sodium Hyaluronate") dans la liste. S'il y est → 1 match "documented" sur cet ingrédient. S'il N'y est PAS → matches: [] (la présence annoncée n'est pas confirmée par l'INCI). Ne mets PAS X dans "missing".`;
 
   const user = `Promesse à vérifier : "${promiseLabel}"
 Phrase exacte de la description : "${promiseExcerpt}"

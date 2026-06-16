@@ -39,7 +39,6 @@ import {
   reclassifyOpenProposals,
   resolveAbsencePromise,
   resolveOpenPromise,
-  resolvePromise,
 } from "./lib/engine.ts";
 import { findCategoryBySlug, isAbsenceCategory } from "./lib/claims.ts";
 import { loadProfileAndRestrictions } from "./lib/profile.ts";
@@ -217,6 +216,7 @@ Deno.serve(async (req: Request) => {
       .select("result_json, product_type")
       .eq("inci_hash", inciHash)
       .eq("description_hash", descHash)
+      .eq("algo_version", "v3")
       .maybeSingle();
     const cachedVal = (cacheRead.data as
       | { result_json: CacheVal; product_type: string | null }
@@ -251,15 +251,18 @@ Deno.serve(async (req: Request) => {
       );
       const dedupedProposals = dedupProposals(reclassifiedProposals);
 
-      // ─── Step 2: split catalogue (effect) / catalogue (absence) / open ──
+      // ─── Step 2: absence (déterministe, par tag) vs effet (LLM + validation) ──
+      // TOUTE promesse d'effet passe désormais par le chemin LLM qui valide chaque
+      // ingrédient cité contre la formule réelle (anti-hallucination). Plus de liste
+      // blanche d'actifs figée : elle ratait les actifs botaniques/ayurvédiques et
+      // produisait des « non démontré » à tort. Seules les promesses « sans X »
+      // restent déterministes (vérification par tag dans la formule).
       const cataloguePromises: CoherencePromise[] = [];
       const openProposals: typeof extraction.proposals = [];
       for (const p of dedupedProposals) {
         const cat = findCategoryBySlug(p.category_slug);
         if (cat && isAbsenceCategory(cat)) {
           cataloguePromises.push(resolveAbsencePromise(p, cat, parent.items));
-        } else if (cat) {
-          cataloguePromises.push(resolvePromise(p, parent.items));
         } else {
           openProposals.push(p);
         }
@@ -304,7 +307,7 @@ Deno.serve(async (req: Request) => {
               description_hash: descHash,
               result_json: val,
               product_type: productType,
-              algo_version: "v1",
+              algo_version: "v3",
             },
             { onConflict: "inci_hash,description_hash" },
           );
