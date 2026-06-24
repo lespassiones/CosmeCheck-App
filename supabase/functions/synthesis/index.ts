@@ -34,6 +34,7 @@ import {
   type ColorRating,
   generateSynthesis,
   loadUserContext,
+  SYNTH_PROMPT_VERSION,
 } from "./lib.ts";
 
 type Body = { analysisId?: string };
@@ -146,7 +147,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     supabase,
     user.id,
   );
-  const synthKey = restrictionsKey(restrictionsCtx.restrictions);
+  // La version du prompt entre dans la clé : bumper SYNTH_PROMPT_VERSION
+  // régénère les synthèses déjà persistées (sinon elles resteraient sur l'ancien
+  // format au prochain "Voir l'analyse complète").
+  const synthKey = `${restrictionsKey(restrictionsCtx.restrictions)}|v${SYNTH_PROMPT_VERSION}`;
 
   // ── 3c. Court-circuit : on réutilise la synthèse en cache UNIQUEMENT si elle a
   // été générée avec les MÊMES restrictions qu'aujourd'hui. Sinon elle est périmée

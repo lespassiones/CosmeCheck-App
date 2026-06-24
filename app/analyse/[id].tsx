@@ -39,6 +39,7 @@ import { fontFamilies, typography } from '@/constants/typography'
 import { applyRestrictions, getAnalysisById } from '@/lib/analysis/analyser'
 import { decodeHtml } from '@/lib/decodeHtml'
 import { parseAnalyseResponse, type AnalyseResponse } from '@/lib/analysis/types'
+import { db } from '@/lib/supabase/client'
 import { isProductCategory } from '@/lib/ai/categorize'
 import { categoryLabel } from '@/lib/categoryLabel'
 import { computeEssentiel, verdictToneFromScore, type EssentielData } from '@/lib/essentiel/engine'
@@ -52,6 +53,9 @@ import { leafLabelFromCategorySlug } from '@/constants/categories'
 import type { AnalysisRow } from '@/lib/supabase/types'
 import { useProfile } from '@/hooks/useProfile'
 import { useRoutine } from '@/hooks/useRoutine'
+
+/** Base du lien de partage web (page publique /a/[id] sur le twin web). */
+const SHARE_BASE_URL = 'https://cosme-check.com'
 
 type LoadState =
   | { status: 'loading' }
@@ -270,14 +274,20 @@ const AnalyseDetailScreen: FC = () => {
 
   const handleShare = useCallback(async () => {
     if (state.status !== 'ready') return
+    const url = `${SHARE_BASE_URL}/a/${id}`
     try {
+      // Rend l'analyse lisible publiquement (lecture seule) sur le web : la
+      // page /a/[id] affiche un aperçu sans connexion. RLS : le propriétaire
+      // peut flagger sa propre ligne. Fire-and-forget (ne bloque pas le partage).
+      void db().from('analyses').update({ shared: true }).eq('id', id)
       await Share.share({
-        message: `${state.title} — analyse CosmeCheck`,
+        message: `${state.title} — analyse CosmeCheck\n${url}`,
+        url,
       })
     } catch {
       /* user cancelled */
     }
-  }, [state])
+  }, [state, id])
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>

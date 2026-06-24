@@ -21,6 +21,46 @@ interface Props {
   color?: string
 }
 
+/**
+ * LogoMark — marque seule "trois points de couleur" (rose, vert, violet).
+ *
+ * Version détourée du logo (sans wordmark). À utiliser quand on veut la marque
+ * graphique pure, p. ex. en en-tête des écrans d'auth.
+ *
+ * Interface : <LogoMark size? gap? />
+ *   - size : diamètre de chaque point (défaut 16).
+ *   - gap  : espace entre les points (défaut ≈ 0,42 × size, fidèle au logo).
+ */
+const MARK_COLORS = ['#F6099B', '#54D41D', '#5F1EE1'] as const
+
+export const LogoMark: FC<{ size?: number; gap?: number }> = ({ size = 16, gap }) => {
+  const g = gap ?? Math.round(size * 0.42)
+
+  return (
+    <View style={markStyles.row} accessibilityRole="image" accessibilityLabel="Cosme Check">
+      {MARK_COLORS.map((c, i) => (
+        <View
+          key={c}
+          style={{
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            backgroundColor: c,
+            marginLeft: i === 0 ? 0 : g,
+          }}
+        />
+      ))}
+    </View>
+  )
+}
+
+const markStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+})
+
 export const Logo: FC<Props> = ({ size = 24, color = colors.ink }) => {
   const dot = Math.round(size * 0.62)
 

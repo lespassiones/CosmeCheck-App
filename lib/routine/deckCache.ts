@@ -8,8 +8,9 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
-// v2 : résolution de la catégorie manquante par EAN + plafond candidats relevé.
-const KEY = 'cosmecheck:routine_deck:v2'
+// v6 : EAN→catalog prioritaire + classifieur RAPIDE (via search_catalog, ~ms) +
+// garde-fou IA (validate-suggestions) qui re-route/retire les alternatives illogiques.
+const KEY = 'cosmecheck:routine_deck:v6'
 
 /** Signature stable d'une routine (ordre indépendant) : produits + fréquences. */
 export function routineSignature(

@@ -338,6 +338,24 @@ export function isProfileComplete(p: SkinProfile): boolean {
   return filled >= 2
 }
 
+/**
+ * Résumé texte court du profil peau pour contexte IA (≤ 200 chars).
+ * Ex: "Peau grasse. Préoccupations: acné, pores dilatés. Objectifs: atténuer boutons."
+ * Retourne null si le profil est vide.
+ */
+export function skinContextSummary(p: SkinProfile): string | null {
+  const parts: string[] = []
+  if (p.skinTypeFace) parts.push(`Peau ${SKIN_TYPE_FACE_LABEL[p.skinTypeFace].toLowerCase()}`)
+  if (p.concerns?.length) {
+    parts.push(`Préoccupations: ${p.concerns.slice(0, 3).map((c) => SKIN_CONCERN_LABEL[c]).join(', ')}`)
+  }
+  if (p.goals?.length) {
+    parts.push(`Objectifs: ${p.goals.slice(0, 3).map((g) => PROFILE_GOAL_LABEL[g]).join(', ')}`)
+  }
+  if (p.allergiesFreeform) parts.push(`Allergies: ${p.allergiesFreeform.slice(0, 80)}`)
+  return parts.length > 0 ? parts.join('. ') : null
+}
+
 // ─── Onboarding flag ──────────────────────────────────────────────────────
 
 /** Stocké à `preferences.onboardingShown` (racine, pas sous `skin`). */

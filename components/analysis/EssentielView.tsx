@@ -3,7 +3,7 @@
  * (CosmetWiki components/analyse/EssentielView.tsx).
  *
  *   1. Carte « L'essentiel »  : verdict en une phrase + pastille tonale.
- *   2. Carte « Ce qui est bien » : top 3 ingrédients verts + verbe d'action.
+ *   2. Carte « Ce qui est bien » : top 3 ingrédients verts (hors eau) + leurs fonctions.
  *   3. Carte « À surveiller »   : une ligne par tier problématique (famille +
  *      effet), ou « Tout va bien » si rien à signaler.
  *

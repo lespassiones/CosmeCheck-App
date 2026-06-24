@@ -21,7 +21,7 @@ import { spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
-import { Logo } from '@/components/shared/Logo'
+import { LogoMark } from '@/components/shared/Logo'
 import { SignInForm } from '@/components/auth/SignInForm'
 import { GoogleAuthButton } from '@/components/auth/GoogleAuthButton'
 
@@ -40,11 +40,10 @@ const SignInScreen: FC = () => {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.logoWrap}>
-              <Logo />
+              <LogoMark size={18} />
             </View>
 
             <View style={styles.header}>
-              <Text style={styles.title}>Bon retour 👋</Text>
               <Text style={styles.subtitle}>Connecte-toi pour continuer ton suivi beauté.</Text>
             </View>
 

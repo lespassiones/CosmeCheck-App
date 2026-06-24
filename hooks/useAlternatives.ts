@@ -83,7 +83,7 @@ async function fetchAlternativesPage(
       const isCat = key.startsWith('cat:')
       const { data, error } = isCat
         ? await supabase.rpc(
-            'cosme_check_get_alternatives_by_category' as never,
+            'cosme_check_alternatives_by_category_exact' as never,
             { p_category: key.slice(4), p_limit: RAW_PAGE, p_offset: offset } as never,
           )
         : await supabase.rpc(
@@ -148,16 +148,26 @@ export function useAlternatives({
     queryFn: () => resolveCatalogIdentity(brand, productName),
   })
   const ean = directEan ?? identityQuery.data?.ean ?? null
+  // Catégorie exacte résolue via le catalogue (slug complet, ex. "soins-corps/savon/savon-surgras").
+  // Prioritaire sur l'EAN : garantit un match exact et élimine tout débordement entre
+  // sous-catégories, même si la RPC par EAN ferait la même chose en interne.
+  const catalogCategory = identityQuery.data?.category ?? null
   const identityResolving = !directEan && identityQuery.isLoading && identityKey.length >= 3
 
-  // Repli par catégorie : seulement quand AUCUN ean n'est résoluble (produit
-  // internet absent du catalogue) ET qu'on ne résout plus l'identité.
+  // Repli par catégorie : quand aucun EAN ni catégorie catalogue n'est disponible
+  // (produit internet absent du catalogue).
   const catParam =
-    !ean && !identityResolving && (category?.trim().length ?? 0) >= 3
+    !ean && !catalogCategory && !identityResolving && (category?.trim().length ?? 0) >= 3
       ? (category as string).trim()
       : null
-  // Source unique d'alternatives : l'ean exact, sinon `cat:<catégorie>`.
-  const altKey = ean ?? (catParam ? `cat:${catParam}` : null)
+
+  // Clé d'alternatives — ordre de priorité :
+  //   1. Catégorie exacte catalogue  → cosme_check_alternatives_by_category_exact (match exact)
+  //   2. EAN direct (barcode/catalog) → cosme_check_get_alternatives (même catégorie via DB)
+  //   3. Catégorie de l'analyse       → cosme_check_alternatives_by_category_exact (match exact)
+  const altKey = catalogCategory
+    ? `cat:${catalogCategory}`
+    : ean ?? (catParam ? `cat:${catParam}` : null)
 
   // 2. Familles → noms INCI membres (caché 1h).
   const familySlugs = useMemo(

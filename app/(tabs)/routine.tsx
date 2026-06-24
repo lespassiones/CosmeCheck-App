@@ -70,8 +70,8 @@ import { buildSuggestions, cappedOf } from '@/lib/routine/buildSuggestions'
 import { routineSignature, readDeckCache, writeDeckCache } from '@/lib/routine/deckCache'
 import { compareInsightsKey, TTL_COMPARE_INSIGHTS_MS } from '@/lib/storage/aiCache'
 import { buildExclusionSet } from '@/lib/analysis/alternativesFilter'
+import { skinContextSummary } from '@/lib/skin/profile'
 import { fetchFamilyIngredientNames } from '@/lib/catalog/familyIngredientNames'
-import { categoryLabel } from '@/lib/categoryLabel'
 import { useKeepFavorite } from '@/hooks/useKeepFavorite'
 import { useLaunchAlternative } from '@/hooks/useLaunchAlternative'
 import { showToast } from '@/components/shared/Toast'
@@ -205,37 +205,107 @@ const RoutineScreen: FC = () => {
         familyIngredientNames: familyNames,
         allergiesFreeform: skin.allergiesFreeform,
       })
-      // 2bis. Catégorie manquante (produits scannés au code-barres : category=null sur
-      // l'analyse) → on la récupère du CATALOGUE via l'EAN. Sans ça ces produits sont
-      // éliminés faute de catégorie et ne reçoivent jamais d'alternative.
-      const missingEans = Array.from(
+      // 2bis. CATÉGORIE PRÉCISE (chemin taxonomique RÉEL du catalogue) de chaque
+      // produit à optimiser. On NE se fie PAS au `category_precise` existant (ancien
+      // classifieur LLM au vocabulaire incohérent avec le catalogue). On résout sur la
+      // vraie taxonomie : 1) EAN → `catalog.category` ; 2) sinon classification kNN
+      // (`cosme_check_classify_product_category` = vote des produits catalogue les plus
+      // ressemblants par nom/marque). Le chemin trouvé est PERSISTÉ officiellement sur
+      // l'analyse (instantané ensuite, et le produit rejoint la bonne taxonomie).
+      const candEans = Array.from(
         new Set(
           candidates
-            .map((c) => c.product)
-            .filter((it) => !(it.analysis?.category_precise || it.analysis?.category) && it.analysis?.ean)
-            .map((it) => String(it.analysis!.ean)),
+            .map((c) => c.product.analysis?.ean)
+            .filter((e): e is string => Boolean(e)),
         ),
       )
       const catByEan = new Map<string, string>()
-      if (missingEans.length > 0) {
-        const { data: catRows } = await db()
-          .from('catalog')
-          .select('ean,category')
-          .in('ean', missingEans)
+      if (candEans.length > 0) {
+        const { data: catRows } = await db().from('catalog').select('ean,category').in('ean', candEans)
         for (const r of (catRows as { ean: string; category: string | null }[] | null) ?? []) {
           if (r.category) catByEan.set(String(r.ean), r.category)
         }
       }
-      // 3. Alternatives (catalogue) — retire les produits sans alternative.
-      const sugg = await buildSuggestions(
+      const preciseByAnalysis = new Map<string, string>()
+      await Promise.all(
+        candidates.map(async (c) => {
+          const a = c.product.analysis
+          if (!a?.id) return
+          // EAN → catalog.category d'ABORD (rapide, indexé). Sinon classifieur par nom
+          // (réécrit pour réutiliser la recherche optimisée, ~ms, plus le tri lent).
+          // Les produits mal étiquetés dans le catalogue sont rattrapés ENSUITE par le
+          // garde-fou IA (validate-suggestions), qui re-route via le type réel.
+          let path: string | null = a.ean ? catByEan.get(String(a.ean)) ?? null : null
+          if (!path) {
+            const q = titleFor(c.product).trim()
+            if (q.length >= 3) {
+              const { data } = await supabase.rpc(
+                'cosme_check_classify_product_category' as never,
+                { p_query: q } as never,
+              )
+              path = (data as { category: string }[] | null)?.[0]?.category ?? null
+            }
+          }
+          if (path) {
+            preciseByAnalysis.set(a.id, path)
+            if (path !== a.category_precise) {
+              void db().from('analyses').update({ category_precise: path } as never).eq('id', a.id)
+            }
+          }
+        }),
+      )
+      // 3. Alternatives — MATCH EXACT du chemin précis (fini le débordement de catégorie).
+      let sugg = await buildSuggestions(
         candidates,
-        (it) =>
-          it.analysis?.category_precise ??
-          categoryLabel(it.analysis?.category as never) ??
-          (it.analysis?.ean ? catByEan.get(String(it.analysis.ean)) ?? null : null),
+        (it) => preciseByAnalysis.get(it.analysis?.id ?? '') ?? null,
         (it) => it.analysis?.ean ?? null,
         exclusion,
       )
+
+      // 3bis. GARDE-FOU IA (avant tout débit/affichage) : on demande au LLM si chaque
+      // alternative est du MÊME TYPE que le produit. Illogique → re-route via le type
+      // réel renvoyé (classifieur kNN → RPC exacte), sinon on RETIRE la suggestion
+      // (jamais de recommandation absurde affichée). 1 passe LLM, au build du deck (caché).
+      try {
+        const pairs = sugg.map((s) => ({
+          product: titleFor(s.product),
+          alternative: s.alternative.name ?? '',
+        }))
+        const skinContext = skinContextSummary(skin)
+        const { data: vData } = await supabase.functions.invoke('validate-suggestions', {
+          body: { items: pairs, skinContext },
+        })
+        const verdicts = (vData as { results?: { logical: boolean; product_type: string }[] } | null)?.results
+        if (Array.isArray(verdicts) && verdicts.length === sugg.length) {
+          const kept: typeof sugg = []
+          for (let i = 0; i < sugg.length; i++) {
+            if (verdicts[i].logical) {
+              kept.push(sugg[i])
+              continue
+            }
+            // Illogique → corriger la catégorie via le type réel donné par l'IA.
+            const type = (verdicts[i].product_type ?? '').trim()
+            if (type.length < 3) continue // pas de type fiable → on retire
+            const { data: cl } = await supabase.rpc(
+              'cosme_check_classify_product_category' as never,
+              { p_query: type } as never,
+            )
+            const leaf = (cl as { category: string }[] | null)?.[0]?.category
+            if (!leaf) continue
+            const fixedList = await buildSuggestions(
+              [{ product: sugg[i].product, info: sugg[i].info }],
+              () => leaf,
+              (it) => it.analysis?.ean ?? null,
+              exclusion,
+            )
+            if (fixedList[0]) kept.push(fixedList[0]) // sinon : retirée
+          }
+          sugg = kept
+        }
+      } catch {
+        // IA indisponible → on garde les suggestions telles quelles (ne bloque pas).
+      }
+
       if (sugg.length === 0) {
         showToast('Aucune alternative plus propre trouvée pour le moment.', 'info')
         return

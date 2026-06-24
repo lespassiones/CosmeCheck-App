@@ -79,8 +79,8 @@ describe('computeEssentiel — seuils de verdict (tone)', () => {
   });
 });
 
-describe('computeEssentiel — positives (verbes)', () => {
-  it('max 3 ingrédients verts avec verbe, triés par position (eau exclue)', () => {
+describe('computeEssentiel — positives (fonctions réelles)', () => {
+  it('max 3 ingrédients verts triés par position, eau exclue, fonctions affichées', () => {
     const items = [
       // Aqua (eau) est volontairement exclu de "Ce qui est bien" (cf. engine.isWaterName).
       item({ position: 0, name: 'Aqua', colorRating: 'Vert', allFunctions: ['Solvant'] }),
@@ -92,21 +92,73 @@ describe('computeEssentiel — positives (verbes)', () => {
     // Eau retirée → restent Glycerin, Tocopherol, Panthenol (3 max).
     expect(e.positives).toHaveLength(3)
     expect(e.positives.map((p) => p.name)).not.toContain('Aqua')
-    expect(e.positives[0].verb).toBe('attire l\'eau dans la peau')
+    // verb = fonctions réelles (plus de table de verbes mappés).
+    expect(e.positives[0].verb).toBe('Humectant')
   });
 
-  it('verbe contextuel : "Antistatique" sauté hors capillaire (default null)', () => {
+  it('plus de logique contextuelle : tout vert (sauf eau) est gardé avec ses fonctions', () => {
     const items = [
       item({ position: 0, name: 'X', colorRating: 'Vert', allFunctions: ['Antistatique'] }),
-      item({ position: 1, name: 'Glycerin', colorRating: 'Vert', allFunctions: ['Humectant'] }),
+      item({
+        position: 1,
+        name: 'Glycerin',
+        colorRating: 'Vert',
+        allFunctions: ['Humectant', "Agent d'entretien de la peau"],
+      }),
     ]
-    // catégorie creme_visage → Antistatique n'a pas de verbe → sauté
     const e = computeEssentiel(resp({ vert: 2, jaune: 0, orange: 0, rouge: 0 }, items), {
       category: 'creme_visage',
     })
-    expect(e.positives.map((p) => p.name)).not.toContain('X')
-    // "Glycerin" est ré-écrit en nom commun FR via inciCommonNames → "Glycérine"
+    // "X" (Antistatique) n'est PLUS sauté : on affiche tout vert non-eau.
+    expect(e.positives.map((p) => p.name)).toContain('X')
+    expect(e.positives.find((p) => p.name === 'X')?.verb).toBe('Antistatique')
+    // "Glycerin" → nom commun FR "Glycérine", fonctions jointes par " · ".
     expect(e.positives.map((p) => p.name)).toContain('Glycérine')
+    expect(e.positives.find((p) => p.name === 'Glycérine')?.verb).toBe(
+      "Humectant · Agent d'entretien de la peau",
+    )
+  });
+
+  it('eau/alcools/émulsifiants exclus, actif multi-fonction conservé, max 3 fonctions, "Non classé" ignoré', () => {
+    const items = [
+      item({ position: 0, name: 'Aqua', colorRating: 'Vert', allFunctions: ['Solvant'] }),
+      // Alcool gras → exclu par isAlcoholName (aide à la formulation)
+      item({
+        position: 1,
+        name: 'Cetearyl Alcohol',
+        colorRating: 'Vert',
+        allFunctions: [
+          'Emollient',
+          'Agent émulsifiant',
+          "Stabilisateur d'émulsion",
+          'Agent de contrôle de la viscosité',
+        ],
+      }),
+      // Émulsifiant pur (primaryFunction = "Agent émulsifiant") → exclu
+      item({
+        position: 2,
+        name: 'Glyceryl Stearate',
+        colorRating: 'Vert',
+        primaryFunction: 'Agent émulsifiant',
+        allFunctions: ['Agent émulsifiant'],
+      }),
+      item({ position: 3, name: 'Mystere', colorRating: 'Vert', allFunctions: ['Non classé'] }),
+      // Actif réel multi-fonction (primaryFunction ≠ émulsifiant) → conservé, 4 fns plafonnées à 3
+      item({
+        position: 4,
+        name: 'Niacinamide',
+        colorRating: 'Vert',
+        allFunctions: ['Vitamine', 'Agent hydratant', 'Anti-seborrhée', 'Antioxydant'],
+      }),
+    ]
+    const e = computeEssentiel(resp({ vert: 5, jaune: 0, orange: 0, rouge: 0 }, items))
+    // Aqua, Cetearyl Alcohol, Glyceryl Stearate, Mystere exclus ; reste Niacinamide.
+    expect(e.positives).toHaveLength(1)
+    expect(e.positives.map((p) => p.name)).not.toContain('Aqua')
+    expect(e.positives.map((p) => p.name)).not.toContain('Cetearyl Alcohol')
+    expect(e.positives.map((p) => p.name)).not.toContain('Glyceryl Stearate')
+    // 4 fonctions → plafonnées à 3
+    expect(e.positives[0].verb.split(' · ')).toHaveLength(3)
   });
 });
 

@@ -125,7 +125,7 @@ export const HistoryRowCard = memo(function HistoryRowCard({
             >
               <Ionicons
                 name="sparkles"
-                size={13}
+                size={12}
                 color={hasCoherence ? colors.success : colors.accent}
               />
               <Text
@@ -188,10 +188,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: spacing.sm,
     marginTop: spacing.sm,
   },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginRight: -spacing.md },
   kebab: {
     width: 32,
     height: 32,
@@ -211,12 +210,13 @@ const styles = StyleSheet.create({
   promesseCta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 5,
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: radius.full,
     borderWidth: 1,
     backgroundColor: 'transparent',
+    flexShrink: 0,
   },
-  promesseText: { ...typography.xsSemiBold },
+  promesseText: { ...typography.xsSemiBold, fontSize: 10 },
 })

@@ -3,7 +3,7 @@
  * view shown on top of the full analysis page:
  *
  *   1. A short verdict phrase + tone ("Formule très douce, rien à signaler.")
- *   2. The 3 main green ingredients with a one-verb effect ("hydrate")
+ *   2. The top 3 green ingredients (water excluded) with their real functions
  *   3. One concern line per problematic tier (jaune / orange / rouge) — a
  *      family label + a plain-French effect, with NO ingredient name cited
  *
@@ -556,7 +556,7 @@ const EMULSIFIER_FUNCTIONS = new Set([
   "Stabilisateur d'émulsion",
 ]);
 
-function pickPositives(items: AnalyseItem[], category: ProductCategory | null): Positive[] {
+function pickPositives(items: AnalyseItem[], _category: ProductCategory | null): Positive[] {
   const greens = items
     .filter((it) => it.colorRating === "Vert")
     .sort((a, b) => a.position - b.position);
@@ -566,28 +566,41 @@ function pickPositives(items: AnalyseItem[], category: ProductCategory | null): 
     if (out.length >= 3) break;
     const rawName = (it.name ?? it.input ?? "").trim();
     if (!rawName) continue;
-    // Eau — peu informatif pour l'utilisateur.
+    // Exclusions : eau, alcools gras, émulsifiants/stabilisateurs purs (aides à la
+    // formulation sans bénéfice cutané direct). On teste la FONCTION PRIMAIRE pour
+    // ne pas exclure une huile saponifiée dont "Agent émulsifiant" n'est que
+    // secondaire (ex. Huile de palme saponifiée → primaire = "Agent nettoyant").
     if (isWaterName(rawName) || it.slug === "aqua") continue;
-    // Alcools gras (béhénylique, cétylique…) et émulsifiants — aides à la
-    // formulation : lient ou texturisent, n'apportent pas de bénéfice peau.
     if (isAlcoholName(rawName)) continue;
-    const allFns = it.allFunctions?.length ? it.allFunctions : it.primaryFunction ? [it.primaryFunction] : [];
-    if (allFns.some((f) => EMULSIFIER_FUNCTIONS.has(f))) continue;
-    const verb = bestVerbForItem(it, category);
-    if (!verb) continue;
-    // Display-name priority:
-    //   1. it.translationFr  — DB French translation shown in the full
-    //      "Liste des ingrédients" sheet (e.g. "Glycérine / Glycérol",
-    //      "Ferment de radis"). Already properly cased, use as-is.
-    //   2. commonNameForRaw  — grand-public override for the ~50 most
-    //      visible ingredients (Aqua → eau, Persea Gratissima → huile
-    //      d'avocat) when translationFr is missing.
-    //   3. raw INCI          — final fallback, capitalised.
+    const primaryFn = (it.primaryFunction ?? "").trim();
+    if (EMULSIFIER_FUNCTIONS.has(primaryFn)) continue;
+
+    // Fonctions RÉELLES de l'ingrédient (1 à 3), affichées telles quelles.
+    // Dédoublonnées, sans "Non classé" (rôle non documenté). Plus de table de
+    // verbes ni de logique de famille/contexte : simple, automatique, rapide.
+    const rawFns = it.allFunctions?.length
+      ? it.allFunctions
+      : it.primaryFunction
+        ? [it.primaryFunction]
+        : [];
+    const seen = new Set<string>();
+    const fns: string[] = [];
+    for (const f of rawFns) {
+      const t = (f ?? "").trim();
+      if (!t || t === "Non classé") continue;
+      const key = t.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      fns.push(t);
+      if (fns.length >= 3) break;
+    }
+    if (fns.length === 0) continue;
+
+    // Nom affiché : traduction FR de la base, sinon nom commun grand-public,
+    // sinon INCI brut capitalisé.
     const trFr = it.translationFr?.trim();
-    const displayName = trFr
-      ? trFr
-      : capitalise(commonNameForRaw(rawName) ?? rawName);
-    out.push({ name: displayName, verb });
+    const displayName = trFr ? trFr : capitalise(commonNameForRaw(rawName) ?? rawName);
+    out.push({ name: displayName, verb: fns.join(" · ") });
   }
   return out;
 }

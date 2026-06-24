@@ -4,9 +4,11 @@
  * restrictions, score plafonné strictement meilleur). Retire le produit s'il
  * n'a aucune alternative valable.
  *
- * Réutilise l'index catégorie (RPC get_alternatives_by_category) + le filtre
- * restrictions + le plafond couleur (mêmes règles que les alternatives de la
- * fiche produit).
+ * Récupération par MATCH EXACT du chemin de catégorie (RPC
+ * cosme_check_alternatives_by_category_exact) -> pas de débordement entre
+ * sous-catégories. + filtre restrictions + plafond couleur (count_orange/rouge).
+ * La catégorie passée est le chemin précis résolu en amont (EAN -> catalog, sinon
+ * classification kNN), cf. app/(tabs)/routine.tsx openSuggestions.
  */
 import { supabase } from '@/lib/supabase/client'
 import { applyColorCap } from '@/lib/analysis/scoreCap'
@@ -75,7 +77,7 @@ export async function buildSuggestions<T>(
       if (!category || category.trim().length < 3) return null
       try {
         const { data, error } = await supabase.rpc(
-          'cosme_check_get_alternatives_by_category' as never,
+          'cosme_check_alternatives_by_category_exact' as never,
           { p_category: category, p_limit: 30, p_offset: 0 } as never,
         )
         if (error) return null
@@ -84,9 +86,9 @@ export async function buildSuggestions<T>(
         if (ownEan) alts = alts.filter((a) => a.ean !== ownEan)
         // respecte les restrictions du profil
         alts = filterAlternatives(alts, exclusion)
-        // strictement meilleur (plafonné) que le produit à optimiser
+        // strictement meilleur (plafonné) ET dans la zone verte (≥ 13 = "Bien")
         const own = c.info.cappedScore ?? 0
-        alts = alts.filter((a) => cappedOf(a) > own + 0.5)
+        alts = alts.filter((a) => cappedOf(a) > own + 0.5 && cappedOf(a) >= 13)
         alts.sort((a, b) => cappedOf(b) - cappedOf(a))
         const best = alts[0]
         if (!best) return null

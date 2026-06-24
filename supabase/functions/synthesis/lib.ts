@@ -468,7 +468,7 @@ export type SynthesisInput = {
   restrictionsBlock?: string | null;
 };
 
-const SYNTH_PROMPT_VERSION = 12;
+export const SYNTH_PROMPT_VERSION = 13;
 
 async function makeCacheKey(input: SynthesisInput): Promise<string> {
   const list = input.enriched
@@ -532,7 +532,7 @@ function buildPrompt(input: SynthesisInput): { system: string; user: string } {
 
   let system = baseSystem;
   if (input.profileBlock) {
-    system += `\n\n${input.profileBlock}\n\nQuand un ingrédient touche directement ce profil (peau sèche + alcool dénaturé, peau sensible + parfum chargé, etc.), souligne-le dans la puce concernée et adapte le closing.`;
+    system += `\n\n${input.profileBlock}\n\nDEUX directions de personnalisation, comme un conseiller/pharmacien qui s'adresse à CETTE personne :\n(1) POSITIF (bon pour toi) : repère les ingrédients VERTS dont le rôle répond DIRECTEMENT à une préoccupation, un objectif ou au type de peau du profil, et mets-les en avant comme un bénéfice personnel ("bon pour ta peau sèche", "intéressant pour tes imperfections"). N'invente jamais un bénéfice : si un vert ne correspond à rien du profil, ne force pas le lien.\n(2) VIGILANCE : quand un orange/rouge touche le profil (peau sèche + alcool dénaturé, peau sensible/réactive + parfum ou allergène parfumant), souligne-le dans sa puce et relie l'alerte à la peau de l'utilisateur ("sur ta peau réactive, ..."). Adapte aussi le closing au profil.`;
   }
   if (input.restrictionsBlock) {
     system += `\n\n${input.restrictionsBlock}\n\nC'est la liste de référence pour les ingrédients à signaler comme restreints (voir aussi le flag [restriction: X] sur les lignes d'ingrédients).`;
@@ -583,27 +583,29 @@ BLOC 1 (prose, 2 à 3 phrases, pas de puce) :
 - Phrase 1 (OUVERTURE) — règle :
   ${openingRule}
 - Phrase 2 (CONSTAT CHIFFRÉ, naturel) : ${total === 0 ? "Aucun ingrédient n'a pu être reconnu dans la liste fournie. Dis-le simplement, sans utiliser de chiffres comme \"0 sur 0\" ou \"0 ingrédient\". Exemple : \"Aucun ingrédient de cette liste n'est dans notre base, difficile d'aller plus loin.\" ou \"La formule n'a pas pu être lue, les ingrédients sont peut-être mal orthographiés ou trop fragmentés.\" (adapte selon le contexte)." : `"Sur les ${total} ingrédients identifiés, ${input.counts.Vert ?? 0} sont sans risque connu et ${(input.counts.Jaune ?? 0) + (input.counts.Orange ?? 0) + (input.counts.Rouge ?? 0)} méritent un coup d'œil." (varie la formulation, garde les chiffres).`}
-- Phrase 3 (TRANSITION, courte) : "Voici ce qui mérite ton attention :" ou similaire.
+- Phrase 3 (TRANSITION, courte) : "Voici ce qu'il faut retenir pour toi :" ou similaire (neutre : le détail commence par ce qui est BON, puis les points de vigilance).
 - ANTI-DOUBLON : ne cite jamais deux fois le même ingrédient dans le bloc 1. Si tu utilises la traduction française ("l'eau", "le beurre de karité"), n'ajoute pas le nom INCI entre parenthèses. Choisis UNE formulation par ingrédient.
 
 BLOC 2 (puces, chaque ligne commence par "- ", 4 à 7 puces max) :
 
-1. ROUGES : 1 puce par ingrédient rouge, avec un DANGER CONCRET BREF. Format :
-"- **NOM** (famille + rôle simple${hasMatches ? ", et si flag [restriction], ajouter \", dans tes restrictions\"" : ""}) : danger concret en 1 phrase. Position en fin de phrase si dispo."
+1. BON POUR TOI (1 à 2 puces, EN PREMIER) :
+${hasProfile
+    ? "- Repère les ingrédients VERTS dont le rôle répond DIRECTEMENT à une préoccupation, un objectif ou au type de peau du profil, et présente-les comme un point positif PERSONNALISÉ. Format : \"- **NOM** (rôle simple) : ce qu'il fait, ce qui est bon pour <préoccupation/type de peau cité du profil>.\" Maximum 2 puces, les plus pertinentes. N'invente AUCUN bénéfice : si un vert ne correspond à rien du profil, ne le force pas. Si vraiment aucun vert ne matche le profil, fais 1 puce \"Bon à savoir\" sur un vert notable (Niacinamide, Acide hyaluronique, Panthénol, Centella Asiatica)."
+    : "- 1 puce \"Bon à savoir\" sur UN vert notable (Niacinamide, Acide hyaluronique, Panthénol, Centella Asiatica) avec son bénéfice simple. Ignore eau / glycérine / propanediol / sodium hydroxide / pH ajusteurs."}
+- INTERDIT : ne jamais énumérer ce qui est absent (style "Sans parabens, sans sulfates..."). C'est déjà affiché dans le panneau Observations.
 
-2. ORANGES : applique la règle de groupage du system prompt :
+2. ROUGES : 1 puce par ingrédient rouge, avec un DANGER CONCRET BREF. Format :
+"- **NOM** (famille + rôle simple${hasMatches ? ", et si flag [restriction], ajouter \", dans tes restrictions\"" : ""}) : danger concret en 1 phrase. Position en fin de phrase si dispo."${hasProfile ? " Si l'alerte touche le profil (peau sensible/réactive, sèche...), relie-la : \"sur ta peau sensible, ...\"." : ""}
+
+3. ORANGES : applique la règle de groupage du system prompt :
 - 1 à 2 oranges isolés (familles différentes) → 1 puce par ingrédient avec effet concret bref.
-- 3 oranges OU plusieurs de la même famille (même tag dans [tags: ...]) → 1 puce groupée.
+- 3 oranges OU plusieurs de la même famille (même tag dans [tags: ...]) → 1 puce groupée.${hasProfile ? " Relie au profil quand pertinent." : ""}
 
-3. JAUNES :
+4. JAUNES :
 - 1 à 3 jaunes notables → 1 puce courte chacun.
 - Plus de 3 → 1 puce groupée "À surveiller selon les peaux sensibles : **NOM1**, **NOM2**, **NOM3**...".
 
-4. BONUS optionnel (max 1) :
-- "Bon à savoir" sur UN VERT notable (Niacinamide, Acide Hyaluronique, Panthénol, Centella Asiatica). Ignore eau / glycérine / propanediol / sodium hydroxide / pH ajusteurs.
-- INTERDIT : ne jamais énumérer ce qui est absent (style "Sans parabens, sans sulfates..."). Cette information est déjà affichée dans le panneau Observations, la répéter ici alourdit la synthèse.
-
-5. CLOSING (DERNIÈRE PUCE, obligatoire) — règle :
+5. CLOSING (DERNIÈRE PUCE, obligatoire), règle :
    ${closingRule}
 
 CONTRAINTES STRICTES :
@@ -633,7 +635,7 @@ ${orange.length ? orange.map(fmt).join("\n") : "(aucun)"}
 JAUNES (jusqu'à 8 cités) :
 ${yellow.length ? yellow.slice(0, 8).map(fmt).join("\n") + (yellow.length > 8 ? `\n- et ${yellow.length - 8} autres` : "") : "(aucun)"}
 
-VERTS notables (utilise UN seul pour la puce "Bon à savoir" si pertinent) :
+VERTS de la formule (sers-toi de cette liste pour la puce "Bon pour toi" : choisis 1 à 2 actifs qui collent au profil de l'utilisateur) :
 ${greenWithFunction.length ? greenWithFunction.join("\n") : "(aucun avec fonction connue)"}
 
 Écris maintenant la synthèse en suivant la structure (Bloc 1 prose, ligne vide, Bloc 2 puces). Pas de titre, pas de préambule, pas de signature.`;

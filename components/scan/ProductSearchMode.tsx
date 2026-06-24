@@ -140,7 +140,7 @@ interface Props {
 const MIN_QUERY    = 2
 const DEBOUNCE_MS  = 350
 const BROWSE_PAGE  = 24
-const SEARCH_PAGE  = 50   // résultats par page en mode recherche
+const SEARCH_PAGE  = 10   // résultats par page (chargés 10 par 10 au scroll)
 
 // ─── Persistance de la position de navigation entre montages ─────────────────
 // Sauvegarde le chemin + les produits fetchés en mémoire module (survive au
@@ -176,9 +176,9 @@ export const ProductSearchMode: FC<Props> = ({
         queryKey: catalogSearchKey(trimmed, offset),
         staleTime: CATALOG_SEARCH_STALE_MS,
         queryFn: async (): Promise<CatalogRow[]> => {
-          // RPC directe, indexée trigram (Phase 1, ~40ms à chaud). Le cache
-          // cross-user est assuré par le buffer cache Postgres ; React Query
-          // dédoublonne côté appareil (Phase 2).
+          // RPC à classement caché (table catalog_search_cache) : le tri
+          // coûteux ne tourne qu'1x par terme (TTL 1h), ensuite chaque page est
+          // un lookup PK (~20ms). React Query dédoublonne aussi côté appareil.
           const { data, error } = await supabase.rpc(
             'cosme_check_search_catalog' as never,
             { p_query: trimmed, p_limit: SEARCH_PAGE, p_offset: offset } as never,
