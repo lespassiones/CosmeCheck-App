@@ -73,6 +73,11 @@ interface Props {
   verdictScore?: number | null
   /** Nombre d'ingrédients pénalisants (orange + rouge) — quantifié dans la phrase. */
   penalizingCount?: number
+  /** Nombre d'ingrédients de l'analyse qui tombent dans les restrictions de
+   *  l'utilisateur — affiché en alerte dans la carte L'ESSENTIEL. */
+  restrictedCount?: number
+  /** Navigue vers /profile/restrictions (lien « Gérer vos restrictions »). */
+  onManageRestrictions?: () => void
 }
 
 export const EssentielView: FC<Props> = ({
@@ -82,10 +87,18 @@ export const EssentielView: FC<Props> = ({
   hideToggle = false,
   verdictScore,
   penalizingCount = 0,
+  restrictedCount = 0,
+  onManageRestrictions,
 }) => {
   return (
     <View style={styles.section} accessibilityLabel="Aperçu essentiel de l'analyse">
-      <VerdictCard verdict={data.verdict} verdictScore={verdictScore} penalizingCount={penalizingCount} />
+      <VerdictCard
+        verdict={data.verdict}
+        verdictScore={verdictScore}
+        penalizingCount={penalizingCount}
+        restrictedCount={restrictedCount}
+        onManageRestrictions={onManageRestrictions}
+      />
 
       {data.positives.length > 0 ? <PositivesCard positives={data.positives} /> : null}
 
@@ -125,12 +138,35 @@ function VerdictCard({
   verdict,
   verdictScore,
   penalizingCount = 0,
+  restrictedCount = 0,
+  onManageRestrictions,
 }: {
   verdict: EssentielData['verdict']
   verdictScore?: number | null
   penalizingCount?: number
+  restrictedCount?: number
+  onManageRestrictions?: () => void
 }) {
   const v = VERDICT_VISUAL[verdict.tone]
+
+  // « Vert » = pastille cœur ou feuille (score ≥ 13). Sur un produit vert qui
+  // contient malgré tout une restriction, on n'affiche QUE l'alerte restriction
+  // (pas de phrase « formule très douce » qui rassurerait à tort).
+  const tone = verdictToneFromScore(verdictScore)
+  const isGreen = tone === 'very-safe' || tone === 'safe'
+  const hasRestriction = restrictedCount > 0
+
+  // Règles :
+  //   vert + 0 restriction  → « Ne contient aucune… » + phrase verdict
+  //   vert + ≥1 restriction → « Contient N… » SEUL (pas de phrase)
+  //   non-vert              → phrase verdict toujours ; + « Contient N… » si restriction
+  const showRestrictionLine = isGreen || hasRestriction
+  const showVerdictPhrase = !(isGreen && hasRestriction)
+
+  const restrictionText = hasRestriction
+    ? `Contient ${restrictedCount} de vos restrictions`
+    : 'Ne contient aucune de vos restrictions'
+
   return (
     <WhiteCard padding={spacing.base} style={styles.cardRow}>
       <View style={styles.cardInner}>
@@ -144,9 +180,56 @@ function VerdictCard({
         )}
         <View style={styles.cardBody}>
           <Text style={styles.eyebrow}>L'ESSENTIEL</Text>
-          <Text style={styles.verdictPhrase}>
-            {buildVerdictPhrase(verdict.phrase, verdictScore, penalizingCount)}
-          </Text>
+
+          {showRestrictionLine ? (
+            <Pressable
+              onPress={onManageRestrictions}
+              disabled={!onManageRestrictions}
+              accessibilityRole="button"
+              accessibilityLabel={`${restrictionText}. Gérer vos restrictions.`}
+              style={({ pressed }) => [
+                styles.restrictionRow,
+                hasRestriction ? styles.restrictionRowAlert : styles.restrictionRowOk,
+                pressed && onManageRestrictions ? styles.restrictionRowPressed : null,
+              ]}
+            >
+              <Ionicons
+                name={hasRestriction ? 'shield-half' : 'shield-checkmark'}
+                size={14}
+                color={hasRestriction ? colors.rating.rouge.text : colors.rating.vert.text}
+              />
+              <Text
+                style={[
+                  styles.restrictionText,
+                  { color: hasRestriction ? colors.rating.rouge.text : colors.rating.vert.text },
+                ]}
+                numberOfLines={2}
+              >
+                {restrictionText}
+              </Text>
+              <View style={styles.manageRow}>
+                <Text
+                  style={[
+                    styles.manageText,
+                    { color: hasRestriction ? colors.rating.rouge.text : colors.rating.vert.text },
+                  ]}
+                >
+                  Gérer
+                </Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={12}
+                  color={hasRestriction ? colors.rating.rouge.text : colors.rating.vert.text}
+                />
+              </View>
+            </Pressable>
+          ) : null}
+
+          {showVerdictPhrase ? (
+            <Text style={[styles.verdictPhrase, showRestrictionLine && styles.verdictPhraseSpaced]}>
+              {buildVerdictPhrase(verdict.phrase, verdictScore, penalizingCount)}
+            </Text>
+          ) : null}
         </View>
       </View>
     </WhiteCard>
@@ -319,6 +402,44 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.gray900,
     lineHeight: 20,
+  },
+  verdictPhraseSpaced: {
+    marginTop: 8,
+  },
+  // Ligne restriction (alerte rose si match, vert discret sinon) — tappable → Gérer.
+  restrictionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginTop: 2,
+  },
+  restrictionRowAlert: {
+    backgroundColor: colors.rating.rouge.bg,
+  },
+  restrictionRowOk: {
+    backgroundColor: colors.rating.vert.bg,
+  },
+  restrictionRowPressed: {
+    opacity: 0.7,
+  },
+  restrictionText: {
+    flex: 1,
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  manageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    flexShrink: 0,
+  },
+  manageText: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 12,
   },
   list: {
     gap: 6,

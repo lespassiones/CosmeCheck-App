@@ -37,6 +37,7 @@ interface UseProfileReturn {
   isSaving: boolean
   isProfileComplete: boolean
   onboardingShown: boolean
+  paywallShown: boolean
   error: string | null
   saveSkin: (patch: Partial<SkinProfile>) => Promise<void>
   markOnboardingShown: () => Promise<void>
@@ -47,6 +48,7 @@ interface UseProfileReturn {
    * rebondisse pas vers l'onboarding pendant que la requête réseau est en vol.
    */
   completeOnboarding: (patch?: Partial<SkinProfile>) => Promise<void>
+  updateProfile: (updates: Record<string, unknown>) => Promise<void>
   refresh: () => void
 }
 
@@ -97,6 +99,10 @@ export function useProfile(): UseProfileReturn {
   const skin = useMemo(() => readSkinProfile(prefs), [prefs])
   const restrictions = useMemo(() => readRestrictions(prefs), [prefs])
   const onboardingShown = useMemo(() => readOnboardingShown(prefs), [prefs])
+  const paywallShown = useMemo(() => {
+    const val = prefs.paywall_shown
+    return typeof val === 'boolean' ? val : false
+  }, [prefs])
   const isProfileComplete = useMemo(
     () => computeProfileComplete(skin),
     [skin],
@@ -196,6 +202,19 @@ export function useProfile(): UseProfileReturn {
     [userId, queryClient, queryKey, profile?.preferences, mutation],
   )
 
+  const updateProfile = useCallback(
+    async (updates: Record<string, unknown>) => {
+      if (!userId) return
+      const current = asPrefsObject(
+        queryClient.getQueryData<UserProfileRow | null>(queryKey)?.preferences ??
+          profile?.preferences,
+      )
+      const next: Record<string, unknown> = { ...current, ...updates }
+      await mutation.mutateAsync(next)
+    },
+    [userId, queryClient, queryKey, profile?.preferences, mutation],
+  )
+
   const refresh = useCallback(() => {
     void refetch()
   }, [refetch])
@@ -211,10 +230,12 @@ export function useProfile(): UseProfileReturn {
     isSaving: mutation.isPending,
     isProfileComplete,
     onboardingShown,
+    paywallShown,
     error,
     saveSkin,
     markOnboardingShown,
     completeOnboarding,
+    updateProfile,
     refresh,
   }
 }

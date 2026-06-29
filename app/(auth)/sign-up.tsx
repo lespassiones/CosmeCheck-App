@@ -142,10 +142,12 @@ const styles = StyleSheet.create({
   title: {
     ...typography.h1,
     color: colors.ink,
+    textAlign: 'center',
   },
   subtitle: {
     ...typography.body,
     color: colors.inkMuted,
+    textAlign: 'center',
   },
   separator: {
     flexDirection: 'row',

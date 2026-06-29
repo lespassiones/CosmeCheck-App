@@ -1,72 +1,67 @@
 /**
  * Cache TTL des résultats de scan code-barres — clé = EAN, TTL = 12h.
  *
- * Utilise Deno.openKv() (supporté par le runtime Supabase Edge Functions).
- * En cas d'indisponibilité (runtime sans KV, ou permission manquante), on
- * dégrade SILENCIEUSEMENT : tout marche, juste sans cache. Aucune exception
- * remontée à l'appelant.
+ * MIGRATION (29 juin 2026) : remplace Deno.openKv() (indisponible) par
+ * table Postgres cosme_check.scan_cache.
+ * Dégradation silencieuse si DB indisponible ou hors Deno. Aucune exception remontée.
  */
 
 /** TTL des entrées : 12h. Au-delà, on re-scrape OBF/OPF. */
 export const BARCODE_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 
-const KV_PREFIX = ["barcode-cache"] as const;
-
-interface KvLike {
-  get(key: readonly unknown[]): Promise<{ value: unknown }>;
-  set(
-    key: readonly unknown[],
-    value: unknown,
-    opts: { expireIn: number },
-  ): Promise<unknown>;
-  close?(): void;
-}
-
-let cachedKv: KvLike | null = null;
-let kvInitFailed = false;
-
-async function openKv(): Promise<KvLike | null> {
-  if (cachedKv) return cachedKv;
-  if (kvInitFailed) return null;
-  try {
-    // Deno.openKv() peut ne pas être disponible (sandbox, perm manquante).
-    const maybe = (globalThis as { Deno?: { openKv?: () => Promise<KvLike> } })?.Deno?.openKv;
-    if (typeof maybe !== "function") {
-      kvInitFailed = true;
-      return null;
-    }
-    cachedKv = await maybe();
-    return cachedKv;
-  } catch {
-    kvInitFailed = true;
-    return null;
-  }
-}
-
 /**
- * Lit le résultat caché pour un EAN. Retourne `null` si miss, KV indispo, ou
- * format invalide. Ne throw jamais.
+ * Lit le résultat caché pour un EAN depuis la table scan_cache (Deno/Edge Functions only).
+ * Retourne `null` si miss, DB indispo, ou format invalide. Ne throw jamais.
  */
 export async function getCachedBarcodeResult<T>(ean: string): Promise<T | null> {
-  const kv = await openKv();
-  if (!kv) return null;
   try {
-    const res = await kv.get([...KV_PREFIX, ean]);
-    return (res.value as T) ?? null;
+    // Only in Deno environment
+    if (typeof Deno === 'undefined') return null;
+
+    const url = Deno.env.get("SUPABASE_URL") || "";
+    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    if (!url || !key) return null;
+
+    // Dynamic import only in Deno
+    // @deno-types="https://esm.sh/@supabase/supabase-js@2"
+    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+    const sb = createClient(url, key);
+
+    const { data, error } = await sb
+      .from("scan_cache")
+      .select("result_json")
+      .eq("ean", ean)
+      .gt("expires_at", new Date().toISOString())
+      .single();
+    if (error || !data) return null;
+    return (data.result_json as T) ?? null;
   } catch {
     return null;
   }
 }
 
 /**
- * Met en cache un résultat pour un EAN. Best-effort, non-bloquant côté
- * appelant (à invoquer via `void cacheBarcodeResult(...)`).
+ * Met en cache un résultat pour un EAN. Best-effort, non-bloquant.
+ * Invoque via `void cacheBarcodeResult(...)`.
  */
 export async function cacheBarcodeResult(ean: string, value: unknown): Promise<void> {
-  const kv = await openKv();
-  if (!kv) return;
   try {
-    await kv.set([...KV_PREFIX, ean], value, { expireIn: BARCODE_CACHE_TTL_MS });
+    // Only in Deno environment
+    if (typeof Deno === 'undefined') return;
+
+    const url = Deno.env.get("SUPABASE_URL") || "";
+    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    if (!url || !key) return;
+
+    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+    const sb = createClient(url, key);
+
+    const expiresAt = new Date(Date.now() + BARCODE_CACHE_TTL_MS).toISOString();
+    await sb.from("scan_cache").upsert({
+      ean,
+      result_json: value,
+      expires_at: expiresAt,
+    });
   } catch {
     // ignore
   }

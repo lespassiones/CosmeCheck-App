@@ -3,9 +3,9 @@
  * du web AnalyseResultPanel.tsx (CosmetWiki).
  *
  * Ordre des sections (miroir mobile du web) :
- *   1. EssentielView      (3 cartes déterministes — engine.computeEssentiel)
- *   2. BigScore           (IngredientBlob + score/20 + ColorBadge)
- *   3. RestrictionWarning (si des items sont restreints)
+ *   1. EssentielView      (3 cartes déterministes — engine.computeEssentiel ;
+ *                          la ligne « restrictions » vit dans la carte L'ESSENTIEL)
+ *   2. BigScore           (IngredientBlob + ratio reconnu)
  *   4. PenaltyStrip       (le verdict en chiffres)
  *   5. IngredientSpectrum (tap d'un carré → scroll jusqu'à l'ingrédient)
  *   6. Observations       (tags présents / absents, dépliables)
@@ -56,7 +56,6 @@ import { IngredientSpectrum } from './IngredientSpectrum'
 import { ObservationsCard } from './ObservationsCard'
 import { PenaltySummaryStrip } from './PenaltySummaryStrip'
 import { ProductRow } from './ProductRow'
-import { RestrictionWarning, RestrictionsOkBadge } from './RestrictionWarning'
 import { SynthesisCard } from './SynthesisCard'
 import { AlternativesCarousel } from './AlternativesCarousel'
 import { ProductToolsSection } from './ProductToolsSection'
@@ -390,6 +389,8 @@ export const AnalysisResultPanel: FC<Props> = ({
         hideToggle
         verdictScore={verdictScore}
         penalizingCount={penalizingCount}
+        restrictedCount={restrictedItems.length}
+        onManageRestrictions={onViewRestrictionsPress}
       />
 
       <View style={styles.toggleWrap}>
@@ -417,22 +418,10 @@ export const AnalysisResultPanel: FC<Props> = ({
             score={result.score}
             scoreLabel={result.scoreLabel}
             rating={rating}
-            imageUrl={productImageUrl}
             reduceMotion={reduceMotion}
           />
 
-          {/* 3. Restrictions — bandeau rose si un ingrédient matche tes
-              restrictions, sinon pilule verte « tout va bien » qui renvoie
-              quand même à la page Gérer. */}
-          {restrictedItems.length > 0 ? (
-            <RestrictionWarning
-              restrictedIngredients={restrictedItems}
-              onIngredientPress={onIngredientPress}
-              onViewRestrictionsPress={onViewRestrictionsPress}
-            />
-          ) : (
-            <RestrictionsOkBadge onPress={onViewRestrictionsPress} />
-          )}
+          {/* 3. (Restrictions désormais affichées dans L'ESSENTIEL en haut) */}
 
           {/* 4. Le verdict en chiffres */}
           <PenaltySummaryStrip counts={counts} />

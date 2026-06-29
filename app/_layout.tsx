@@ -33,6 +33,7 @@ import { ROUTES } from '@/constants/routes'
 import { resolveAuthRoute } from '@/lib/navigation/authRoute'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
+import { initRevenueCat, loginUser } from '@/lib/revenucat/client'
 import { CreditsExhaustedModal } from '@/components/shared/CreditsExhaustedModal'
 import {
   QUERY_PERSIST_BUSTER,
@@ -79,7 +80,7 @@ const asyncStoragePersister = createAsyncStoragePersister({
  */
 function AuthGuard() {
   const { isLoading: authLoading, isAuthenticated } = useAuth()
-  const { isProfileComplete, onboardingShown, isLoading: profileLoading } = useProfile()
+  const { isProfileComplete, onboardingShown, paywallShown, isLoading: profileLoading } = useProfile()
   const segments = useSegments()
   const router = useRouter()
 
@@ -104,6 +105,7 @@ function AuthGuard() {
       profileLoading,
       onboardingShown,
       isProfileComplete,
+      paywallShown,
       preOnbDone,
       group: segments[0],
     })
@@ -117,6 +119,9 @@ function AuthGuard() {
       case 'onboarding':
         router.replace(ROUTES.ONBOARDING.INDEX)
         break
+      case 'paywall':
+        router.replace(ROUTES.PAYWALL.INDEX as any)
+        break
       case 'home':
         router.replace(ROUTES.TABS.HOME)
         break
@@ -129,6 +134,7 @@ function AuthGuard() {
     profileLoading,
     onboardingShown,
     isProfileComplete,
+    paywallShown,
     preOnbDone,
     segments,
     router,
@@ -171,6 +177,27 @@ function CacheJanitor() {
   return null
 }
 
+/**
+ * Boot RevenueCat SDK au démarrage + login utilisateur quand authentifié.
+ */
+function RevenueCatInit() {
+  const { isAuthenticated, user } = useAuth()
+
+  // Boot SDK au startup
+  useEffect(() => {
+    void initRevenueCat()
+  }, [])
+
+  // Login utilisateur quand authentifié
+  useEffect(() => {
+    if (isAuthenticated && user?.id) {
+      void loginUser(user.id)
+    }
+  }, [isAuthenticated, user?.id])
+
+  return null
+}
+
 function RootNavigator() {
   return (
     <Stack
@@ -183,6 +210,7 @@ function RootNavigator() {
       <Stack.Screen name="(preonboarding)" options={{ animation: 'fade' }} />
       <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
       <Stack.Screen name="(onboarding)" />
+      <Stack.Screen name="(paywall)" options={{ presentation: 'modal' }} />
       <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
       <Stack.Screen name="advisor/index" options={{ animation: 'fade' }} />
       <Stack.Screen name="advisor/recommendations" />
@@ -233,6 +261,7 @@ export default function RootLayout() {
           <StatusBar style="dark" />
           <SplashController />
           <CacheJanitor />
+          <RevenueCatInit />
           <AuthGuard />
           <AppErrorBoundary>
             <RootNavigator />

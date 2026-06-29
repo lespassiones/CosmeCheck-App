@@ -23,6 +23,7 @@ import {
   View,
 } from 'react-native'
 import { useReducedMotion } from 'react-native-reanimated'
+import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -345,9 +346,28 @@ const AnalyseDetailScreen: FC = () => {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* En-tête produit : titre pleine largeur, catégorie, CTAs, partage + jauge */}
+          {/* En-tête produit : image + titre (image à gauche, titre à droite),
+              puis catégorie/marque, CTAs, partage + jauge */}
           <View style={styles.header}>
-            <Text style={styles.title} numberOfLines={3}>{state.title}</Text>
+            <View style={styles.titleRow}>
+              <View style={styles.titleImageSlot}>
+                {productImageUrl ? (
+                  <Image
+                    source={{ uri: productImageUrl }}
+                    style={styles.titleImage}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    transition={150}
+                    accessibilityIgnoresInvertColors
+                  />
+                ) : (
+                  <View style={styles.titleImagePlaceholder}>
+                    <Ionicons name="image-outline" size={24} color={colors.inkLight} />
+                  </View>
+                )}
+              </View>
+              <Text style={styles.title} numberOfLines={3}>{state.title}</Text>
+            </View>
             {(() => {
               // Priorité à la catégorie précise (famille/sous/feuille) pour les
               // produits analysés, sinon la feuille catalogue, sinon l'enum.
@@ -515,8 +535,36 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     gap: spacing.md,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  titleImageSlot: {
+    width: 76,
+    height: 76,
+    flexShrink: 0,
+  },
+  titleImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: radius.md,
+    backgroundColor: colors.gray100,
+  },
+  titleImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    borderRadius: radius.md,
+    backgroundColor: colors.gray100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   title: {
-    ...typography.h2,
+    flex: 1,
+    fontFamily: fontFamilies.bold,
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.2,
     color: colors.ink,
   },
   metaRow: {

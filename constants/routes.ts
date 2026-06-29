@@ -22,6 +22,11 @@ export const ROUTES = {
     INDEX: '/(onboarding)',
   },
 
+  // ── Paywall ──────────────────────────────────────────────────────
+  PAYWALL: {
+    INDEX: '/(paywall)',
+  },
+
   // ── Tabs ────────────────────────────────────────────────────────
   TABS: {
     HOME: '/(tabs)',

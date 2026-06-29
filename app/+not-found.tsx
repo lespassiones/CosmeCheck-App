@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { GlassCard } from '@/components/design/GlassCard'
-import { Logo } from '@/components/shared/Logo'
+import { LogoMark } from '@/components/shared/Logo'
 import { colors } from '@/constants/colors'
 import { ROUTES } from '@/constants/routes'
 import { radius, spacing } from '@/constants/spacing'
@@ -26,7 +26,7 @@ export default function NotFound() {
       <BackgroundGlow variant="auth" />
 
       <View style={styles.logoRow}>
-        <Logo size={26} />
+        <LogoMark size={18} />
       </View>
 
       <View style={styles.center}>

@@ -11,14 +11,12 @@
 
 import { memo, type FC } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
-import { Image } from 'expo-image'
-import { Ionicons } from '@expo/vector-icons'
 
 import { WhiteCard } from '@/components/design/WhiteCard'
 import { IngredientBlob, type BlobCounts } from '@/components/design/IngredientBlob'
 import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
-import { radius, spacing } from '@/constants/spacing'
+import { spacing } from '@/constants/spacing'
 import type { ColorRating } from '@/lib/analysis/types'
 
 interface Props {
@@ -28,8 +26,6 @@ interface Props {
   score: number
   scoreLabel: string
   rating: ColorRating
-  /** URL de l'image produit (si disponible) — sinon un placeholder est affiché. */
-  imageUrl?: string | null
   /** Désactive l'animation pop du blob (reduce-motion). */
   reduceMotion?: boolean
 }
@@ -38,43 +34,22 @@ const BigScoreCardBase: FC<Props> = ({
   counts,
   matched,
   total,
-  imageUrl,
   reduceMotion,
 }) => {
   return (
     <WhiteCard padding={spacing.lg}>
-      <View style={styles.row}>
-        {/* Emplacement image produit (placeholder générique tant qu'on n'a pas d'URL) */}
-        <View style={styles.imageSlot}>
-          {imageUrl ? (
-            <Image
-              source={{ uri: imageUrl }}
-              style={styles.image}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              transition={150}
-              accessibilityIgnoresInvertColors
-            />
-          ) : (
-            <View style={styles.imagePlaceholder}>
-              <Ionicons name="image-outline" size={28} color={colors.inkLight} />
-            </View>
-          )}
-        </View>
-
-        {/* Bloc droit : demi-donut + ratio */}
-        <View style={styles.donutSlot}>
-          <IngredientBlob
-            counts={counts}
-            variant="md"
-            width={160}
-            animate
-            reduceMotion={reduceMotion}
-          />
-          <Text style={styles.ratio}>
-            <Text style={styles.ratioStrong}>{matched}</Text> / {total} ingrédients reconnus
-          </Text>
-        </View>
+      {/* Demi-donut centré (l'image produit est désormais en en-tête, à côté du titre). */}
+      <View style={styles.donutSlot}>
+        <IngredientBlob
+          counts={counts}
+          variant="md"
+          width={160}
+          animate
+          reduceMotion={reduceMotion}
+        />
+        <Text style={styles.ratio}>
+          <Text style={styles.ratioStrong}>{matched}</Text> / {total} ingrédients reconnus
+        </Text>
       </View>
     </WhiteCard>
   )
@@ -82,35 +57,8 @@ const BigScoreCardBase: FC<Props> = ({
 
 export const BigScoreCard = memo(BigScoreCardBase)
 
-const IMAGE_SIZE = 110
-
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  imageSlot: {
-    width: IMAGE_SIZE,
-    height: IMAGE_SIZE,
-    flexShrink: 0,
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-    borderRadius: radius.md,
-    backgroundColor: colors.gray100,
-  },
-  imagePlaceholder: {
-    width: '100%',
-    height: '100%',
-    borderRadius: radius.md,
-    backgroundColor: colors.gray100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   donutSlot: {
-    flex: 1,
     alignItems: 'center',
   },
   ratio: {

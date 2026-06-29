@@ -9,7 +9,7 @@
  * vue `skin` fournie par useProfile, pour rester aligné avec le web.
  */
 
-import { type FC, useMemo } from 'react'
+import { type FC, useMemo, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
@@ -63,6 +63,9 @@ const TypeRow: FC<{ label: string; value: string }> = ({ label, value }) => (
 
 export const SkinProfileCard: FC<Props> = ({ skin, onEditPress, compact = false }) => {
   const started = isProfileStarted(skin)
+  // Carte repliée par défaut : on ne voit que le titre. Tap sur l'en-tête →
+  // déplie le détail (types de peau, préoccupations, objectifs).
+  const [expanded, setExpanded] = useState(false)
 
   const faceLabel = skin.skinTypeFace
     ? SKIN_TYPE_FACE_LABEL[skin.skinTypeFace as SkinTypeFace]
@@ -116,8 +119,22 @@ export const SkinProfileCard: FC<Props> = ({ skin, onEditPress, compact = false 
 
   return (
     <NeuCard padding={spacing.lg} interactive={false} style={styles.card}>
-      <View style={styles.headerRow}>
-        <Text style={styles.cardTitle}>Mon profil beauté</Text>
+      <View style={[styles.headerRow, expanded && styles.headerRowExpanded]}>
+        <Pressable
+          onPress={() => setExpanded((v) => !v)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          accessibilityLabel="Mon profil beauté"
+          hitSlop={8}
+          style={({ pressed }) => [styles.titlePress, pressed && styles.editPressed]}
+        >
+          <Text style={styles.cardTitle}>Mon profil beauté</Text>
+          <Ionicons
+            name={expanded ? 'chevron-up' : 'chevron-down'}
+            size={16}
+            color={colors.inkMuted}
+          />
+        </Pressable>
         <Pressable
           onPress={onEditPress}
           accessibilityRole="button"
@@ -130,31 +147,35 @@ export const SkinProfileCard: FC<Props> = ({ skin, onEditPress, compact = false 
         </Pressable>
       </View>
 
-      <View style={styles.types}>
-        {faceLabel ? <TypeRow label="Peau du visage" value={faceLabel} /> : null}
-        {bodyLabel ? <TypeRow label="Peau du corps" value={bodyLabel} /> : null}
-      </View>
-
-      {!compact && concernLabels.length > 0 ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Mes préoccupations principales</Text>
-          <View style={styles.chips}>
-            {concernLabels.map((label) => (
-              <ReadChip key={label} label={label} tone="rose" />
-            ))}
+      {expanded ? (
+        <>
+          <View style={styles.types}>
+            {faceLabel ? <TypeRow label="Peau du visage" value={faceLabel} /> : null}
+            {bodyLabel ? <TypeRow label="Peau du corps" value={bodyLabel} /> : null}
           </View>
-        </View>
-      ) : null}
 
-      {!compact && goalLabels.length > 0 ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Mes objectifs</Text>
-          <View style={styles.chips}>
-            {goalLabels.map((label) => (
-              <ReadChip key={label} label={label} tone="accent" />
-            ))}
-          </View>
-        </View>
+          {!compact && concernLabels.length > 0 ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Mes préoccupations principales</Text>
+              <View style={styles.chips}>
+                {concernLabels.map((label) => (
+                  <ReadChip key={label} label={label} tone="rose" />
+                ))}
+              </View>
+            </View>
+          ) : null}
+
+          {!compact && goalLabels.length > 0 ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Mes objectifs</Text>
+              <View style={styles.chips}>
+                {goalLabels.map((label) => (
+                  <ReadChip key={label} label={label} tone="accent" />
+                ))}
+              </View>
+            </View>
+          ) : null}
+        </>
       ) : null}
     </NeuCard>
   )
@@ -166,7 +187,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  headerRowExpanded: {
     marginBottom: spacing.md,
+  },
+  titlePress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   cardTitle: { ...typography.h4, color: colors.ink },
   editBtn: {

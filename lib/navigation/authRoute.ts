@@ -11,6 +11,7 @@ export type AuthRouteTarget =
   | 'signin'
   | 'preonboarding'
   | 'onboarding'
+  | 'paywall'
   | 'home'
   | null // null = aucune redirection (laisser passer / attendre)
 
@@ -22,6 +23,7 @@ export interface AuthRouteInput {
   profileLoading: boolean
   onboardingShown: boolean
   isProfileComplete: boolean
+  paywallShown: boolean
   /** Flag device pré-onboarding : `null` = lecture en cours. */
   preOnbDone: boolean | null
   /** `segments[0]` d'expo-router : `'(auth)'` | `'(onboarding)'` | `'(preonboarding)'` | … */
@@ -35,6 +37,7 @@ export function resolveAuthRoute(input: AuthRouteInput): AuthRouteTarget {
     profileLoading,
     onboardingShown,
     isProfileComplete,
+    paywallShown,
     preOnbDone,
     group,
   } = input
@@ -44,6 +47,7 @@ export function resolveAuthRoute(input: AuthRouteInput): AuthRouteTarget {
 
   const inAuthGroup = group === '(auth)'
   const inOnboarding = group === '(onboarding)'
+  const inPaywall = group === '(paywall)'
   const inPreOnboarding = group === '(preonboarding)'
 
   // 2. Pas de session.
@@ -61,7 +65,9 @@ export function resolveAuthRoute(input: AuthRouteInput): AuthRouteTarget {
 
   // 4. Sur une page auth/pré-onboarding alors qu'on est connecté → destination.
   if (inAuthGroup || inPreOnboarding) {
-    return needsOnboarding ? 'onboarding' : 'home'
+    if (needsOnboarding) return 'onboarding'
+    if (!paywallShown) return 'paywall'
+    return 'home'
   }
 
   // 5. Onboarding requis mais on n'y est pas → onboarding.
@@ -70,7 +76,18 @@ export function resolveAuthRoute(input: AuthRouteInput): AuthRouteTarget {
   // 6. On quitte l'onboarding UNIQUEMENT quand il a été explicitement terminé
   //    (onboardingShown=true). On NE se base PAS sur isProfileComplete : sinon
   //    remplir 2 sections en cours de questionnaire éjecterait l'utilisateur.
-  if (onboardingShown && inOnboarding) return 'home'
+  if (onboardingShown && inOnboarding) {
+    // Si paywall pas vu, aller au paywall sinon home
+    return !paywallShown ? 'paywall' : 'home'
+  }
+
+  // 7. Paywall pas vu et profil complet → paywall (sauf si on y est déjà).
+  if (onboardingShown && isProfileComplete && !paywallShown && !inPaywall) {
+    return 'paywall'
+  }
+
+  // 8. Quitter le paywall si vu.
+  if (paywallShown && inPaywall) return 'home'
 
   // Sinon : on laisse passer.
   return null

@@ -17,6 +17,8 @@ type CatalogRow = {
   score_label?: string;
   score_tone?: string;
   count_total?: number | null;
+  count_orange?: number | null;
+  count_rouge?: number | null;
   ingredients_text: string | null;
 };
 
