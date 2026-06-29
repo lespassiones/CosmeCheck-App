@@ -29,10 +29,13 @@ const LOW_RATIO = 0.1
 export const CreditsPill: FC = () => {
   const router = useRouter()
   const { isAuthenticated } = useAuth()
-  const { credits, remaining, limit } = useCredits()
+  const { credits, remaining, limit, error } = useCredits()
 
   // Masqué tant que non authentifié ou que la RPC n'a rien renvoyé.
   if (!isAuthenticated || !credits) return null
+
+  // Si la RPC retourne ok:false, masque silencieusement (indique une erreur serveur).
+  if (!credits.ok) return null
 
   const isLow = limit > 0 ? remaining / limit < LOW_RATIO : remaining <= 0
 

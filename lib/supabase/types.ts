@@ -220,9 +220,11 @@ export type UserCreditsRow = Database['cosme_check']['Tables']['user_credits']['
 /** Résultat de la RPC `cosme_check_get_credits`. */
 export interface Credits {
   ok: boolean
-  used: number
-  limit: number
-  remaining: number
+  used?: number
+  limit?: number
+  remaining?: number
+  renewal_period?: string
+  error?: string
 }
 
 /** Restrictions utilisateur (stockées dans preferences.restrictions). */
