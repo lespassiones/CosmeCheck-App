@@ -25,6 +25,7 @@ export type Json =
 export type Tier = 'free' | 'premium'
 export type RoutineFrequency = 'daily' | 'weekly' | 'monthly'
 export type FeedbackKind = 'feedback' | 'contact'
+export type RenewalPeriod = 'one_time' | 'daily' | 'weekly' | 'monthly' | 'yearly'
 
 // ─── Database (générique supabase-js) ──────────────────────────────────────
 // Les RPC `cosme_check_*` sont définies dans le schéma `public` (appel via
@@ -164,16 +165,71 @@ export interface Database {
           day: string
           used: number
           daily_limit: number
+          renewal_period?: string
+          renewal_interval_days?: number
+          last_renewal_at?: string
         }
         Insert: {
           user_id: string
           day?: string
           used?: number
           daily_limit?: number
+          renewal_period?: string
+          renewal_interval_days?: number
+          last_renewal_at?: string
         }
         Update: {
           used?: number
           daily_limit?: number
+          renewal_period?: string
+          renewal_interval_days?: number
+          last_renewal_at?: string
+        }
+      }
+      credit_tiers: {
+        Row: {
+          tier: string
+          credit_amount: number
+          renewal_period: RenewalPeriod
+          renewal_interval_days?: number
+          updated_at: string
+        }
+        Insert: {
+          tier: string
+          credit_amount: number
+          renewal_period: RenewalPeriod
+          renewal_interval_days?: number
+        }
+        Update: {
+          credit_amount?: number
+          renewal_period?: RenewalPeriod
+          renewal_interval_days?: number
+        }
+      }
+      user_credits_override: {
+        Row: {
+          id: number
+          user_id: string
+          credit_amount: number
+          renewal_period: RenewalPeriod
+          renewal_interval_days?: number
+          active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          user_id: string
+          credit_amount: number
+          renewal_period: RenewalPeriod
+          renewal_interval_days?: number
+          active?: boolean
+        }
+        Update: {
+          credit_amount?: number
+          renewal_period?: RenewalPeriod
+          renewal_interval_days?: number
+          active?: boolean
         }
       }
       user_feedback: {
@@ -223,7 +279,8 @@ export interface Credits {
   used?: number
   limit?: number
   remaining?: number
-  renewal_period?: string
+  renewal_period?: RenewalPeriod
+  renewal_interval_days?: number
   error?: string
 }
 
