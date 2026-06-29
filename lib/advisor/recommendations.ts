@@ -24,6 +24,35 @@ import {
 import { resolveExclusion, type ExcludeSpec } from '@/lib/advisor/excludeMap'
 import type { UserRestrictions } from '@/lib/supabase/types'
 
+/**
+ * Cache simple en mémoire pour les recommandations.
+ * TTL 30 minutes = évite les appels multiples au relâchement.
+ */
+const recommendationCache = new Map<
+  string,
+  { result: AdvisorRecoResult; expiry: number }
+>()
+
+function getCacheKey(opts: {
+  ingredients: string[]
+  form: string | null
+  restrictions: UserRestrictions
+  exclude?: string[]
+  allergiesFreeform?: string | null
+}): string {
+  return JSON.stringify({
+    ingredients: opts.ingredients.sort(),
+    form: opts.form,
+    families: (opts.restrictions.families ?? []).sort(),
+    ingredients_: (opts.restrictions.ingredients ?? [])
+      .map((i) => i.name)
+      .filter((n): n is string => !!n)
+      .sort(),
+    exclude: (opts.exclude ?? []).sort(),
+    allergies: opts.allergiesFreeform,
+  })
+}
+
 interface RecoRpcRow {
   ean: string
   brand: string | null
@@ -88,6 +117,13 @@ export async function fetchAdvisorRecommendations(opts: {
   /** Nb de produits à RÉCUPÉRER côté base (p_limit RPC, plafonné à 50). Défaut 24. */
   fetchLimit?: number
 }): Promise<AdvisorRecoResult> {
+  // Vérifier le cache (30 min TTL)
+  const cacheKey = getCacheKey(opts)
+  const cached = recommendationCache.get(cacheKey)
+  if (cached && Date.now() < cached.expiry) {
+    return cached.result
+  }
+
   const displayLimit = opts.limit ?? 10
   const fetchLimit = Math.min(opts.fetchLimit ?? 24, 50)
 
@@ -151,7 +187,13 @@ export async function fetchAdvisorRecommendations(opts: {
       )
       rawCount = Array.isArray(probe.data) ? (probe.data as unknown[]).length : 0
     }
-    return { products: strict.slice(0, displayLimit), rawCount, relaxation: null }
+    const result = { products: strict.slice(0, displayLimit), rawCount, relaxation: null }
+    // Mettre en cache
+    recommendationCache.set(cacheKey, {
+      result,
+      expiry: Date.now() + 30 * 60 * 1000, // 30 min
+    })
+    return result
   }
 
   // 2) STRICT vide AVEC contraintes ad-hoc -> RELÂCHEMENT : on cherche quelle
@@ -180,7 +222,13 @@ export async function fetchAdvisorRecommendations(opts: {
       { p_terms: opts.ingredients, p_form: opts.form, p_min_score: ADVISOR_MIN_SCORE, p_limit: 1, p_exclude_families: [], p_exclude_ingredients: [] } as never,
     )
     const rawCount = Array.isArray(probe.data) ? (probe.data as unknown[]).length : 0
-    return { products: [], rawCount, relaxation: null }
+    const result = { products: [], rawCount, relaxation: null }
+    // Mettre en cache
+    recommendationCache.set(cacheKey, {
+      result,
+      expiry: Date.now() + 30 * 60 * 1000, // 30 min
+    })
+    return result
   }
 
   const droppedLabels = best.dropped
@@ -188,7 +236,7 @@ export async function fetchAdvisorRecommendations(opts: {
     : adhoc.map((a) => a.spec.label) // cas « toutes lâchées »
   const keptLabels = best.dropped ? best.kept.map((a) => a.spec.label) : []
 
-  return {
+  const result = {
     products: [],
     rawCount: 0,
     relaxation: {
@@ -197,4 +245,10 @@ export async function fetchAdvisorRecommendations(opts: {
       products: best.products.slice(0, displayLimit),
     },
   }
+  // Mettre en cache
+  recommendationCache.set(cacheKey, {
+    result,
+    expiry: Date.now() + 30 * 60 * 1000, // 30 min
+  })
+  return result
 }
