@@ -24,8 +24,7 @@ import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { GlassCard } from '@/components/design/GlassCard'
 import { Reveal } from '@/components/design/Reveal'
 import { VerdictGlobalCard } from '@/components/promesses/VerdictGlobalCard'
-import { PromisesBarChart } from '@/components/promesses/PromisesBarChart'
-import { CoherenceTable } from '@/components/promesses/CoherenceTable'
+import { PromisesList } from '@/components/promesses/PromisesList'
 import { ConclusionCard } from '@/components/promesses/ConclusionCard'
 import { InferredPromisesCard } from '@/components/promesses/InferredPromisesCard'
 import { IngredientsPositionChart } from '@/components/promesses/IngredientsPositionChart'
@@ -116,7 +115,7 @@ const PromesseDetailScreen: FC = () => {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <BackgroundGlow variant="default" />
+      <BackgroundGlow variant="minimal" />
 
       <View style={styles.topBar}>
         <Pressable
@@ -163,18 +162,16 @@ const PromesseDetailScreen: FC = () => {
       ) : (
         <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.intro}>
-            <Text style={styles.h1}>Promesses du produit vs Formule réelle</Text>
+            <Text style={styles.h1}>Promesses vs formule réelle</Text>
             <Text style={styles.introSub}>
-              On compare ce qui est promis sur l&apos;emballage avec ce qui est vraiment dans la liste INCI
-              de <Text style={styles.introStrong}>{state.productName}</Text>.
+              Nous comparons les promesses de <Text style={styles.introStrong}>{state.productName}</Text> à sa formule réelle.
             </Text>
           </View>
 
           <Reveal stagger={70} duration={400} style={styles.cards}>
             {[
               <VerdictGlobalCard key="verdict" metrics={state.result.metrics} />,
-              <PromisesBarChart key="bars" promises={state.result.promises} />,
-              <CoherenceTable key="table" promises={state.result.promises} items={state.parentItems} />,
+              <PromisesList key="promises" promises={state.result.promises} items={state.parentItems} />,
               state.result.conclusion ? (
                 <ConclusionCard key="conclusion" conclusion={state.result.conclusion} />
               ) : null,

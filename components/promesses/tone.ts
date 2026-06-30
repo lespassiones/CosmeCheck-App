@@ -16,6 +16,8 @@ import type { CoherenceVerdict } from '@/lib/coherence/types'
 
 export interface VerdictTone {
   label: string
+  /** Libellé court pour les badges de ligne (mockup : « Tenu », « Partiel »…). */
+  badge: string
   solid: string
   soft: string
   ring: string
@@ -25,6 +27,7 @@ export interface VerdictTone {
 export const VERDICT_TONE: Record<CoherenceVerdict, VerdictTone> = {
   tenue: {
     label: 'Tenue',
+    badge: 'Tenu',
     solid: colors.verdict.tenue.DEFAULT,
     soft: colors.verdict.tenue.soft,
     ring: colors.verdict.tenue.ring,
@@ -32,6 +35,7 @@ export const VERDICT_TONE: Record<CoherenceVerdict, VerdictTone> = {
   },
   partielle: {
     label: 'Partielle',
+    badge: 'Partiel',
     solid: colors.verdict.partielle.DEFAULT,
     soft: colors.verdict.partielle.soft,
     ring: colors.verdict.partielle.ring,
@@ -39,6 +43,7 @@ export const VERDICT_TONE: Record<CoherenceVerdict, VerdictTone> = {
   },
   marketing: {
     label: 'Marketing',
+    badge: 'Marketing',
     solid: colors.verdict.marketing.DEFAULT,
     soft: colors.verdict.marketing.soft,
     ring: colors.verdict.marketing.ring,
@@ -46,6 +51,7 @@ export const VERDICT_TONE: Record<CoherenceVerdict, VerdictTone> = {
   },
   non_demontree: {
     label: 'Non démontré',
+    badge: 'Non démontré',
     solid: colors.verdict.non_demontree.DEFAULT,
     soft: colors.verdict.non_demontree.soft,
     ring: colors.verdict.non_demontree.ring,
@@ -53,11 +59,28 @@ export const VERDICT_TONE: Record<CoherenceVerdict, VerdictTone> = {
   },
   contredite: {
     label: 'Contredite',
+    badge: 'Contredite',
     solid: colors.verdict.contredite.DEFAULT,
     soft: colors.verdict.contredite.soft,
     ring: colors.verdict.contredite.ring,
     text: colors.verdict.contredite.text,
   },
+}
+
+/** Pluriel FR du libellé de verdict pour les pastilles de synthèse du hero. */
+export function verdictChipLabel(verdict: CoherenceVerdict, count: number): string {
+  switch (verdict) {
+    case 'tenue':
+      return `${count} tenue${count > 1 ? 's' : ''}`
+    case 'partielle':
+      return `${count} partielle${count > 1 ? 's' : ''}`
+    case 'marketing':
+      return `${count} marketing`
+    case 'non_demontree':
+      return `${count} non démontrée${count > 1 ? 's' : ''}`
+    case 'contredite':
+      return `${count} contredite${count > 1 ? 's' : ''}`
+  }
 }
 
 /** Couleur pastille selon le rating sécurité d'un ingrédient (Vert/Jaune/…). */

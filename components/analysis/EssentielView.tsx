@@ -19,7 +19,6 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
 import { WhiteCard } from '@/components/design/WhiteCard'
-import { CatalogPastille } from '@/components/shared/CatalogPastille'
 import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
 import { spacing } from '@/constants/spacing'
@@ -139,6 +138,26 @@ export const EssentielToggleButton: FC<{ expanded: boolean; onToggle: () => void
   )
 }
 
+// ── Icône « halo » (disque pastel clair + cercle central + ombre douce) ──────
+// Effet en 2 tons : un anneau pastel translucide derrière (plus clair) + un
+// cercle plein de la même teinte au centre, avec une ombre portée légère.
+// Toujours circulaire, pour les 4 blocs (y compris « ce qui est bien »).
+
+type IoniconName = React.ComponentProps<typeof Ionicons>['name']
+
+const HaloIcon: FC<{ name: IoniconName; iconColor: string; bg: string }> = ({
+  name,
+  iconColor,
+  bg,
+}) => (
+  <View style={styles.haloWrap}>
+    <View style={[styles.haloRing, { backgroundColor: bg }]} />
+    <View style={[styles.haloInner, { backgroundColor: bg }]}>
+      <Ionicons name={name} size={24} color={iconColor} />
+    </View>
+  </View>
+)
+
 // ── Cartes ───────────────────────────────────────────────────────────────────
 
 function VerdictCard({
@@ -156,7 +175,9 @@ function VerdictCard({
   onManageRestrictions?: () => void
   onShowRestrictedFamilies?: () => void
 }) {
-  const v = VERDICT_VISUAL[verdict.tone]
+  // Icône dérivée du score (même logique que la jauge verdict) ; fallback sur
+  // le ton calculé par le moteur quand le score est absent.
+  const pv = VERDICT_VISUAL[verdictScore != null ? verdictToneFromScore(verdictScore) : verdict.tone]
 
   // « Vert » = pastille cœur ou feuille (score ≥ 13). Sur un produit vert qui
   // contient malgré tout une restriction, on n'affiche QUE l'alerte restriction
@@ -179,14 +200,7 @@ function VerdictCard({
   return (
     <WhiteCard padding={spacing.base} style={styles.cardRow}>
       <View style={styles.cardInner}>
-        {/* Pastille IDENTIQUE au verdict global (jauge) : dérivée du score. */}
-        {verdictScore != null ? (
-          <CatalogPastille score={verdictScore} size={40} />
-        ) : (
-          <View style={[styles.iconCircle, { backgroundColor: v.badgeBg }]}>
-            <Ionicons name={v.icon} size={20} color={v.iconColor} />
-          </View>
-        )}
+        <HaloIcon name={pv.icon} iconColor={pv.iconColor} bg={pv.badgeBg} />
         <View style={styles.cardBody}>
           <Text style={styles.eyebrow}>L'ESSENTIEL</Text>
 
@@ -202,11 +216,6 @@ function VerdictCard({
                 pressed && onShowRestrictedFamilies ? styles.restrictionRowPressed : null,
               ]}
             >
-              <Ionicons
-                name={hasRestriction ? 'shield-half' : 'shield-checkmark'}
-                size={14}
-                color={hasRestriction ? colors.rating.rouge.text : colors.rating.vert.text}
-              />
               <Text
                 style={[
                   styles.restrictionText,
@@ -249,11 +258,12 @@ function PositivesCard({ positives }: { positives: EssentielData['positives'] })
   return (
     <WhiteCard padding={spacing.base}>
       <View style={styles.cardInnerTop}>
-        {/* Toujours un "+" vert (carré) : c'est le bloc du positif, quel que
-            soit le verdict global du produit. */}
-        <View style={[styles.iconSquare, { backgroundColor: colors.rating.vert.DEFAULT }]}>
-          <Ionicons name="shield-checkmark-outline" size={22} color="#FFFFFF" />
-        </View>
+        {/* Bloc du positif : cercle halo vert pâle (comme les autres). */}
+        <HaloIcon
+          name="shield-checkmark-outline"
+          iconColor={colors.rating.vert.text}
+          bg={colors.rating.vert.bg}
+        />
         <View style={styles.cardBody}>
           <Text style={styles.eyebrow}>CE QUI EST BIEN</Text>
           <View style={styles.list}>
@@ -284,9 +294,7 @@ function ConcernsCard({ concerns }: { concerns: EssentielData['concerns'] }) {
   return (
     <WhiteCard padding={spacing.base}>
       <View style={styles.cardInnerTop}>
-        <View style={[styles.iconCircle, { backgroundColor: v.badgeBg }]}>
-          <Ionicons name={v.icon} size={20} color={v.iconColor} />
-        </View>
+        <HaloIcon name={v.icon} iconColor={v.iconColor} bg={v.badgeBg} />
         <View style={styles.cardBody}>
           <Text style={styles.eyebrow}>À SURVEILLER</Text>
           <View style={styles.list}>
@@ -313,9 +321,7 @@ function AllClearCard() {
   return (
     <WhiteCard padding={spacing.base} style={styles.cardRow}>
       <View style={styles.cardInner}>
-        <View style={[styles.iconCircle, { backgroundColor: colors.rating.vert.bg }]}>
-          <Ionicons name="checkmark" size={20} color={colors.rating.vert.text} />
-        </View>
+        <HaloIcon name="checkmark" iconColor={colors.rating.vert.text} bg={colors.rating.vert.bg} />
         <View style={styles.cardBody}>
           <Text style={styles.eyebrow}>TOUT VA BIEN</Text>
           <Text style={styles.verdictPhrase}>Aucun ingrédient à signaler dans cette formule.</Text>
@@ -326,8 +332,6 @@ function AllClearCard() {
 }
 
 // ── Maps visuelles ───────────────────────────────────────────────────────────
-
-type IoniconName = React.ComponentProps<typeof Ionicons>['name']
 
 const VERDICT_VISUAL: Record<
   VerdictTone,
@@ -381,19 +385,32 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: spacing.base,
   },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  // Icône « halo » : disque pastel clair derrière (anneau) + cercle plein au
+  // centre + ombre douce. Toujours circulaire.
+  haloWrap: {
+    width: 54,
+    height: 54,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconSquare: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+  haloRing: {
+    position: 'absolute',
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    opacity: 0.4,
+  },
+  haloInner: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 2,
   },
   cardBody: {
     flex: 1,

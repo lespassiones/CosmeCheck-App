@@ -33,6 +33,7 @@ import { VerdictGauge } from '@/components/analysis/VerdictGauge'
 import { PromesseFlowModal } from '@/components/promesses/PromesseFlowModal'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { GlassCard } from '@/components/design/GlassCard'
+import { WhiteCard } from '@/components/design/WhiteCard'
 import { colors } from '@/constants/colors'
 import { ROUTES } from '@/constants/routes'
 import { radius, spacing } from '@/constants/spacing'
@@ -364,6 +365,8 @@ const AnalyseDetailScreen: FC = () => {
           {/* En-tête produit : image + titre (image à gauche, titre à droite),
               puis catégorie/marque, CTAs, partage + jauge */}
           <View style={styles.header}>
+            <WhiteCard padding={spacing.lg}>
+              <View style={styles.headerCardInner}>
             <View style={styles.titleRow}>
               <View style={styles.titleImageSlot}>
                 {productImageUrl ? (
@@ -443,6 +446,8 @@ const AnalyseDetailScreen: FC = () => {
                 </Text>
               </Pressable>
             </View>
+              </View>
+            </WhiteCard>
 
             <View style={styles.shareRow}>
               {/* Partage public : masqué si le flag admin est OFF (Paramètres). */}
@@ -553,6 +558,10 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     gap: spacing.md,
   },
+  // Contenu interne de la carte commune (image+titre / marque+catégorie / CTAs).
+  headerCardInner: {
+    gap: spacing.md,
+  },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -625,8 +634,22 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: radius.full,
   },
-  ctaBtnGreen: { backgroundColor: colors.success },
-  ctaBtnRose: { backgroundColor: colors.rose },
+  ctaBtnGreen: {
+    backgroundColor: colors.success,
+    shadowColor: colors.success,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.32,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  ctaBtnRose: {
+    backgroundColor: colors.rose,
+    shadowColor: colors.rose,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.32,
+    shadowRadius: 12,
+    elevation: 4,
+  },
   ctaBtnDisabled: { opacity: 0.7 },
   ctaText: {
     fontFamily: fontFamilies.bold,

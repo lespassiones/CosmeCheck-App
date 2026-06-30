@@ -24,8 +24,6 @@ import Svg, { Circle } from 'react-native-svg'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
-import { fr } from 'date-fns/locale'
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 
@@ -56,8 +54,8 @@ interface CoherenceRow {
 
 // ─── Anneau de progression (verdict %) ────────────────────────────────────────
 
-const RING_SIZE = 56
-const RING_STROKE = 5
+const RING_SIZE = 76
+const RING_STROKE = 6
 const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
 
@@ -106,19 +104,6 @@ const PromesseRing: FC<{ pct: number }> = ({ pct }) => {
   )
 }
 
-// ─── Format date court : "Aujourd'hui" / "Hier" / "10 mai" ───────────────────
-
-function formatItemDate(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  const today = new Date()
-  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
-  const days = Math.round((startOf(today) - startOf(d)) / 86_400_000)
-  if (days <= 0) return "Aujourd'hui"
-  if (days === 1) return 'Hier'
-  return format(d, 'd MMM', { locale: fr })
-}
-
 // ─── Écran ────────────────────────────────────────────────────────────────────
 
 const PromessesScreen: FC = () => {
@@ -164,7 +149,6 @@ const PromessesScreen: FC = () => {
   })
 
   const renderItem = ({ item }: { item: CoherenceRow }) => {
-    const dateLabel = formatItemDate(item.created_at)
     const productName =
       item.analyses?.product_label?.trim() ||
       item.analyses?.name?.trim() ||
@@ -201,13 +185,13 @@ const PromessesScreen: FC = () => {
               {brand}
             </Text>
           ) : null}
-          <Text style={styles.itemMetaPrimary} numberOfLines={1}>
+          <Text
+            style={[styles.itemMetaPrimary, { color: ringColor(metrics.tenuePct) }]}
+            numberOfLines={1}
+          >
             {supported}/{metrics.totalPromises} promesse
             {metrics.totalPromises > 1 ? 's' : ''} soutenue
             {supported > 1 ? 's' : ''}
-          </Text>
-          <Text style={styles.itemMetaSecondary} numberOfLines={1}>
-            indice marketing {metrics.marketingIndex} % · {dateLabel}
           </Text>
         </View>
 
@@ -354,14 +338,14 @@ const styles = StyleSheet.create({
   },
   ringPct: {
     fontFamily: fontFamilies.bold,
-    fontSize: 16,
+    fontSize: 22,
     color: colors.ink,
-    lineHeight: 18,
+    lineHeight: 24,
     includeFontPadding: false,
   },
   ringUnit: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 9,
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 12,
     color: colors.ink,
     marginLeft: 1,
     includeFontPadding: false,
@@ -382,15 +366,9 @@ const styles = StyleSheet.create({
   },
   itemMetaPrimary: {
     fontFamily: fontFamilies.medium,
-    fontSize: 11,
+    fontSize: 12,
     color: '#F59E0B',
     marginTop: 4,
-  },
-  itemMetaSecondary: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 11,
-    color: colors.inkMuted,
-    marginTop: 1,
   },
 
   center: { paddingTop: spacing['3xl'], alignItems: 'center' },
