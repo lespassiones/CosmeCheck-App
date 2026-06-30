@@ -76,6 +76,14 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "Code-barres invalide." }, { status: 400 });
   }
 
+  // Log the scan event (best-effort, awaited so the isolate doesn't get killed
+  // before the insert lands). Feeds the admin "Scans code-barres" metric.
+  try {
+    await g.supabase.rpc("cosme_check_log_scan", { p_kind: "barcode", p_ean: barcode });
+  } catch {
+    /* analytics best-effort — never block a scan */
+  }
+
   // Cache TTL 12h — évite un aller-retour DB pour les scans répétés.
   const cached = await getCachedBarcodeResult<Record<string, unknown>>(barcode);
   if (cached) {

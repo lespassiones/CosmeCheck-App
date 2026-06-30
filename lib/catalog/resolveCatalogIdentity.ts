@@ -32,7 +32,31 @@ export interface CatalogIdentity {
 export async function resolveCatalogIdentity(
   brand: string | null | undefined,
   name: string | null | undefined,
+  ean?: string | null | undefined,
 ): Promise<CatalogIdentity | null> {
+  // EAN EXACT d'abord (PK catalogue) = déterministe et fiable. La recherche
+  // texte brand+name échoue sur beaucoup de noms (tokens volume "20ml", etc.).
+  if (ean && ean.trim().length > 0) {
+    try {
+      const { data, error } = await supabase.rpc(
+        'cosme_check_get_product_by_ean' as never,
+        { p_ean: ean.trim() } as never,
+      )
+      if (!error) {
+        const row = ((data as { ean: string | null; score: number | null; category: string | null }[] | null) ?? [])[0]
+        if (row) {
+          return {
+            ean: row.ean ?? ean.trim(),
+            score: typeof row.score === 'number' ? row.score : null,
+            category: row.category ?? null,
+          }
+        }
+      }
+    } catch {
+      // Fallback recherche texte ci-dessous
+    }
+  }
+
   const query = [brand, name].filter(Boolean).join(' ').trim()
   if (query.length < 3) return null
   try {

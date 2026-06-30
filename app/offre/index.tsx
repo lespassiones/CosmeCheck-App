@@ -9,17 +9,19 @@
  * Intégré avec RevenueCat pour gérer les achats in-app et annulations.
  */
 
-import { useState, type FC } from 'react'
+import { useEffect, useState, type FC } from 'react'
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View, Linking, Alert } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { router } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
+
+import { ROUTES } from '@/constants/routes'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import Purchases from 'react-native-purchases'
+import { PACKAGE_TYPE, type PurchasesPackage } from 'react-native-purchases'
 
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { WhiteCard } from '@/components/design/WhiteCard'
-import { Logo } from '@/components/shared/Logo'
+import { LogoMark } from '@/components/shared/Logo'
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
@@ -45,14 +47,82 @@ const OffreScreen: FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('plans')
   const [cancelling, setCancelling] = useState(false)
   const { offerings, purchase, isLoading, customerInfo } = usePurchases()
-  const { profile } = useProfile()
+  const { profile, updateProfile } = useProfile()
   const isPremium = profile?.tier === 'premium'
 
+  // `fromOnboarding=1` : la page est ouverte comme PAYWALL post-onboarding
+  // (obligatoire mais skippable, Apple §3.1.1). On affiche un « Plus tard » et
+  // on marque `paywall_shown` au choix de l'utilisateur (skip ou achat) pour que
+  // l'AuthGuard ne reboucle pas dessus.
+  const params = useLocalSearchParams<{ fromOnboarding?: string }>()
+  const fromOnboarding = params.fromOnboarding === '1'
+
+  // Quitte le paywall d'onboarding : marque vu + va à l'accueil.
+  const dismissOnboardingPaywall = async () => {
+    try {
+      await updateProfile({ paywall_shown: true })
+    } finally {
+      router.replace(ROUTES.TABS.HOME)
+    }
+  }
+
+  // Déjà premium pendant l'onboarding (edge) → on ne bloque pas sur le paywall.
+  useEffect(() => {
+    if (fromOnboarding && isPremium) void dismissOnboardingPaywall()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromOnboarding, isPremium])
+
+  const handleBack = () => {
+    if (fromOnboarding) void dismissOnboardingPaywall()
+    else router.back()
+  }
+
   const handlePurchase = async () => {
-    const pkg = offerings?.current?.availablePackages.find(
-      (p: any) => p.identifier === (selected === 'monthly' ? 'rc_monthly' : 'rc_yearly')
-    )
-    if (pkg) await purchase(pkg)
+    // Les offerings ne sont pas encore chargés (ou indispo : pas de réseau,
+    // clé RC absente, store indisponible). On le DIT au lieu de ne rien faire.
+    const current = offerings?.current
+    const pkgs: PurchasesPackage[] = current?.availablePackages ?? []
+    if (!current || pkgs.length === 0) {
+      Alert.alert(
+        'Offre indisponible',
+        "Les abonnements ne se chargent pas pour le moment. Vérifie ta connexion et réessaie.",
+      )
+      return
+    }
+
+    // Sélection ROBUSTE par type de package (MONTHLY / ANNUAL). On ne se fie PAS
+    // à l'identifiant exact : RevenueCat les nomme `$rc_monthly` / `$rc_annual`,
+    // pas `rc_monthly` / `rc_yearly`. Repli par identifiant en dernier recours.
+    const wantAnnual = selected === 'yearly'
+    const pkg =
+      pkgs.find((p) => p.packageType === (wantAnnual ? PACKAGE_TYPE.ANNUAL : PACKAGE_TYPE.MONTHLY)) ??
+      pkgs.find((p) =>
+        p.identifier.toLowerCase().includes(wantAnnual ? 'annual' : 'month') ||
+        p.identifier.toLowerCase().includes(wantAnnual ? 'year' : 'month'),
+      ) ??
+      pkgs[0]
+
+    if (!pkg) {
+      Alert.alert(
+        'Plan introuvable',
+        "Ce plan n'est pas configuré dans la boutique pour le moment.",
+      )
+      return
+    }
+
+    try {
+      const ok = await purchase(pkg)
+      // Succès → true ; annulation utilisateur → false (silencieux, normal).
+      // Depuis l'onboarding : achat réussi → marque vu + accueil.
+      if (ok && fromOnboarding) await dismissOnboardingPaywall()
+    } catch {
+      Alert.alert(
+        'Achat impossible',
+        // En émulateur / build de dev, la facturation Google Play n'est pas
+        // disponible : il faut un build signé publié en test sur le Play Store.
+        "L'achat n'a pas pu aboutir. Les achats in-app nécessitent un build signé publié en test (Play Store / App Store) ; ils ne fonctionnent pas dans l'émulateur de développement.",
+      )
+    }
   }
 
   const handleCancelSubscription = () => {
@@ -93,7 +163,7 @@ const OffreScreen: FC = () => {
       {/* Header léger */}
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={handleBack}
           hitSlop={12}
           style={styles.backBtn}
           accessibilityRole="button"
@@ -101,7 +171,7 @@ const OffreScreen: FC = () => {
         >
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
-        <Logo size={14} />
+        <LogoMark size={14} />
         <View style={styles.backBtn} />
       </View>
 
@@ -359,6 +429,13 @@ const OffreScreen: FC = () => {
             <Text style={styles.ctaHint}>
               Accès complet. Annulez quand vous voulez.
             </Text>
+            {/* Paywall obligatoire mais SKIPPABLE (Apple §3.1.1) — uniquement
+                quand on arrive depuis l'onboarding. */}
+            {fromOnboarding && (
+              <Pressable onPress={() => void dismissOnboardingPaywall()} hitSlop={8} style={styles.laterBtn}>
+                <Text style={styles.laterText}>Plus tard</Text>
+              </Pressable>
+            )}
           </>
         )}
       </View>
@@ -647,5 +724,16 @@ const styles = StyleSheet.create({
     color: colors.inkLight,
     textAlign: 'center',
     marginTop: spacing.md,
+  },
+  laterBtn: {
+    alignSelf: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.xs,
+  },
+  laterText: {
+    ...typography.body,
+    color: colors.inkMuted,
+    textDecorationLine: 'underline',
   },
 })

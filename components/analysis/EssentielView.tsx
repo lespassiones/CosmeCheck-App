@@ -76,8 +76,12 @@ interface Props {
   /** Nombre d'ingrédients de l'analyse qui tombent dans les restrictions de
    *  l'utilisateur — affiché en alerte dans la carte L'ESSENTIEL. */
   restrictedCount?: number
+  /** Noms des familles restreintes présentes dans ce produit (ex: ["Parabens", "Sulfates"]) — pour la modal. */
+  restrictedFamilies?: string[]
   /** Navigue vers /profile/restrictions (lien « Gérer vos restrictions »). */
   onManageRestrictions?: () => void
+  /** Callback au tap sur la ligne restrictions — ouvre la modal des familles. */
+  onShowRestrictedFamilies?: () => void
 }
 
 export const EssentielView: FC<Props> = ({
@@ -88,7 +92,9 @@ export const EssentielView: FC<Props> = ({
   verdictScore,
   penalizingCount = 0,
   restrictedCount = 0,
+  restrictedFamilies = [],
   onManageRestrictions,
+  onShowRestrictedFamilies,
 }) => {
   return (
     <View style={styles.section} accessibilityLabel="Aperçu essentiel de l'analyse">
@@ -98,6 +104,7 @@ export const EssentielView: FC<Props> = ({
         penalizingCount={penalizingCount}
         restrictedCount={restrictedCount}
         onManageRestrictions={onManageRestrictions}
+        onShowRestrictedFamilies={onShowRestrictedFamilies}
       />
 
       {data.positives.length > 0 ? <PositivesCard positives={data.positives} /> : null}
@@ -140,12 +147,14 @@ function VerdictCard({
   penalizingCount = 0,
   restrictedCount = 0,
   onManageRestrictions,
+  onShowRestrictedFamilies,
 }: {
   verdict: EssentielData['verdict']
   verdictScore?: number | null
   penalizingCount?: number
   restrictedCount?: number
   onManageRestrictions?: () => void
+  onShowRestrictedFamilies?: () => void
 }) {
   const v = VERDICT_VISUAL[verdict.tone]
 
@@ -183,14 +192,14 @@ function VerdictCard({
 
           {showRestrictionLine ? (
             <Pressable
-              onPress={onManageRestrictions}
-              disabled={!onManageRestrictions}
+              onPress={onShowRestrictedFamilies}
+              disabled={!onShowRestrictedFamilies}
               accessibilityRole="button"
-              accessibilityLabel={`${restrictionText}. Gérer vos restrictions.`}
+              accessibilityLabel={restrictionText}
               style={({ pressed }) => [
                 styles.restrictionRow,
                 hasRestriction ? styles.restrictionRowAlert : styles.restrictionRowOk,
-                pressed && onManageRestrictions ? styles.restrictionRowPressed : null,
+                pressed && onShowRestrictedFamilies ? styles.restrictionRowPressed : null,
               ]}
             >
               <Ionicons

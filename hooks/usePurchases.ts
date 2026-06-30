@@ -74,12 +74,11 @@ export function usePurchases() {
 
       return false
     } catch (err) {
-      setState((prev) => ({
-        ...prev,
-        isLoading: false,
-        error: err instanceof Error ? err : new Error('Purchase failed'),
-      }))
-      return false
+      const error = err instanceof Error ? err : new Error('Purchase failed')
+      setState((prev) => ({ ...prev, isLoading: false, error }))
+      // On RELANCE : l'appelant (écran offre) doit pouvoir afficher un message.
+      // L'annulation utilisateur ne passe PAS ici (client renvoie null → false).
+      throw error
     }
   }
 

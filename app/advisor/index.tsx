@@ -27,6 +27,7 @@ import { ROUTES } from '@/constants/routes'
 import { radius, spacing } from '@/constants/spacing'
 import { fontFamilies, typography } from '@/constants/typography'
 import { useProfile } from '@/hooks/useProfile'
+import { useAppConfig } from '@/hooks/useAppConfig'
 import {
   isProfileStarted,
   SKIN_CONCERN_LABEL,
@@ -36,6 +37,7 @@ import {
 
 const AdvisorScreen: FC = () => {
   const { skin, firstName, isLoading } = useProfile()
+  const { config } = useAppConfig()
   const [summaryOpen, setSummaryOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   // Conversation active : id (null = nouvelle) + messages chargés depuis l'historique.
@@ -119,7 +121,14 @@ const AdvisorScreen: FC = () => {
           Un assistant factuel qui s'appuie sur ton profil et ta routine.
         </Text>
 
-        {isLoading ? null : !started ? (
+        {isLoading ? null : !config.flag_advisor ? (
+          <GlassCard style={styles.gateCard} padding={spacing.xl}>
+            <Text style={styles.gateTitle}>Bientôt de retour</Text>
+            <Text style={styles.gateText}>
+              Le Beauty Advisor est momentanément indisponible. Reviens un peu plus tard.
+            </Text>
+          </GlassCard>
+        ) : !started ? (
           <GlassCard style={styles.gateCard} padding={spacing.xl}>
             <Text style={styles.gateTitle}>Complète ton profil beauté</Text>
             <Text style={styles.gateText}>

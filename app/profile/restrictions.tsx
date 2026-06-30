@@ -195,11 +195,6 @@ const RestrictionsScreen: FC = () => {
     [persist],
   )
 
-  const removeFamily = useCallback(
-    (slug: string) => persist((r) => ({ ...r, families: r.families.filter((f) => f !== slug) })),
-    [persist],
-  )
-
   const removeIngredient = useCallback(
     (slug: string) =>
       persist((r) => ({ ...r, ingredients: r.ingredients.filter((i) => i.slug !== slug) })),
@@ -251,11 +246,6 @@ const RestrictionsScreen: FC = () => {
   const filteredResults = useMemo(
     () => results.filter((r) => !restrictions.ingredients.some((i) => i.slug === r.slug)),
     [results, restrictions.ingredients],
-  )
-
-  const familyName = useCallback(
-    (slug: string) => families.find((f) => f.slug === slug)?.name ?? slug,
-    [families],
   )
 
   return (
@@ -327,28 +317,6 @@ const RestrictionsScreen: FC = () => {
             />
           )}
 
-          {/* ── Familles sélectionnées (rappel + retrait rapide) ── */}
-          {tab === 'families' && restrictions.families.length > 0 ? (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Familles à éviter</Text>
-              <View style={styles.chips}>
-                {restrictions.families.map((slug) => (
-                  <View key={slug} style={styles.chip}>
-                    <Text style={styles.chipText}>{familyName(slug)}</Text>
-                    <Pressable
-                      hitSlop={8}
-                      disabled={isSaving}
-                      onPress={() => void removeFamily(slug)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Retirer ${familyName(slug)}`}
-                    >
-                      <Ionicons name="close" size={16} color={colors.inkMuted} />
-                    </Pressable>
-                  </View>
-                ))}
-              </View>
-            </View>
-          ) : null}
         </ScrollView>
       </SafeAreaView>
     </View>

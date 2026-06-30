@@ -47,8 +47,8 @@ import {
   type AnalyseResponse,
   type ColorRating,
 } from '@/lib/analysis/types'
-import { applyRestrictions, type AnalyseItemWithRestriction } from '@/lib/analysis/analyser'
 import { restrictionsKey } from '@/lib/analysis/restrictionsKey'
+import { checkRestrictions } from '@/lib/restrictions/check'
 
 import { BigScoreCard } from './BigScoreCard'
 import { EssentielView, EssentielToggleButton } from './EssentielView'
@@ -61,11 +61,10 @@ import { AlternativesCarousel } from './AlternativesCarousel'
 import { ProductToolsSection } from './ProductToolsSection'
 import { supabase } from '@/lib/supabase/client'
 import { ProcessingOverlay } from '@/components/shared/ProcessingOverlay'
-import { useQuery } from '@tanstack/react-query'
 import { useAlternatives } from '@/hooks/useAlternatives'
 import { useLaunchAlternative } from '@/hooks/useLaunchAlternative'
 import { useProfile } from '@/hooks/useProfile'
-import { fetchFamilyIngredientNames } from '@/lib/catalog/familyIngredientNames'
+import { useIngredientFamilies } from '@/hooks/useIngredientFamilies'
 import type { EssentielData } from '@/lib/essentiel/engine'
 
 interface Props {
@@ -129,6 +128,7 @@ export const AnalysisResultPanel: FC<Props> = ({
   const [detailsExpanded, setDetailsExpanded] = useState(false)
   const [filter, setFilter] = useState<TabKey>('all')
   const [listModalOpen, setListModalOpen] = useState(false)
+  const [familiesModalOpen, setFamiliesModalOpen] = useState(false)
   const modalScrollRef = useRef<ScrollView>(null)
 
   // ── Alternatives (recommandations same-category, filtrées restrictions/profil) ──
@@ -226,28 +226,45 @@ export const AnalysisResultPanel: FC<Props> = ({
   // Items restreints — recalculés en temps réel depuis les restrictions actuelles
   // du profil (pas le flag `is_restricted` stocké à l'analyse, qui peut être
   // périmé si l'utilisateur a modifié ses restrictions après l'analyse).
-  // Noms INCI membres des familles évitées (ex. « silicones » → Dimethicone…),
-  // résolus via RPC et cachés 1 h. INDISPENSABLE pour que les familles soient
-  // détectées dans la liste (sinon « aucun ingrédient restreint » à tort).
-  const familySlugs = useMemo(
-    () => [...restrictions.families].sort(),
-    [restrictions.families],
-  )
-  const { data: familyNames = [] } = useQuery({
-    queryKey: ['family-inci-names', familySlugs],
-    enabled: familySlugs.length > 0,
-    staleTime: 60 * 60 * 1000,
-    gcTime: 60 * 60 * 1000,
-    queryFn: () => fetchFamilyIngredientNames(familySlugs),
-  })
+  // DÉTECTION PAR TAG (parité EXACTE avec le web + le backend analyser) : on
+  // matche item.tags[] contre ingredient_families.tag_slug. Garantit que mobile
+  // et web affichent les MÊMES familles réellement présentes dans le produit
+  // (fini l'ancienne heuristique slice(0,N) qui montrait les mauvaises familles).
+  const { data: families = [] } = useIngredientFamilies()
 
-  const restrictedItems = useMemo(
-    () =>
-      (
-        applyRestrictions(result, restrictions, familyNames)
-          .items as AnalyseItemWithRestriction[]
-      ).filter((it) => it.is_restricted),
-    [result, restrictions, familyNames],
+  const restrictionMatches = useMemo(
+    () => checkRestrictions(result.items, restrictions, families),
+    [result.items, restrictions, families],
+  )
+
+  // Familles RÉELLEMENT présentes dans le produit (objets IngredientFamily,
+  // pour afficher le vrai nom DB, pas le slug brut).
+  const restrictedFamilies = useMemo(() => {
+    const familySlugsPresent = new Set(
+      restrictionMatches.filter((m) => m.kind === 'family').map((m) => m.slug),
+    )
+    return families
+      .filter((f) => familySlugsPresent.has(f.slug))
+      .map((f) => f.name)
+      .sort()
+  }, [restrictionMatches, families])
+
+  // Compte = familles uniques + ingrédients restreints uniques présents.
+  // Même formule que le web → "Contient N de vos restrictions" identique.
+  const restrictedCount = useMemo(() => {
+    const fam = new Set(
+      restrictionMatches.filter((m) => m.kind === 'family').map((m) => m.slug),
+    )
+    const ing = new Set(
+      restrictionMatches.filter((m) => m.kind === 'ingredient').map((m) => m.slug),
+    )
+    return fam.size + ing.size
+  }, [restrictionMatches])
+
+  // Positions des items restreints (pour le badge rouge dans la liste).
+  const restrictedPositions = useMemo(
+    () => new Set(restrictionMatches.map((m) => m.position)),
+    [restrictionMatches],
   )
 
   // Map nom-d'ingrédient → slug pour les liens dans les observations.
@@ -389,8 +406,10 @@ export const AnalysisResultPanel: FC<Props> = ({
         hideToggle
         verdictScore={verdictScore}
         penalizingCount={penalizingCount}
-        restrictedCount={restrictedItems.length}
+        restrictedCount={restrictedCount}
+        restrictedFamilies={restrictedFamilies}
         onManageRestrictions={onViewRestrictionsPress}
+        onShowRestrictedFamilies={() => setFamiliesModalOpen(true)}
       />
 
       <View style={styles.toggleWrap}>
@@ -546,7 +565,7 @@ export const AnalysisResultPanel: FC<Props> = ({
                       setListModalOpen(false)
                       onIngredientPress(slug)
                     }}
-                    isRestricted={(item as AnalyseItemWithRestriction).is_restricted}
+                    isRestricted={restrictedPositions.has(item.position)}
                   />
                 </View>
               ))
@@ -554,6 +573,62 @@ export const AnalysisResultPanel: FC<Props> = ({
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
+      {/* Modale : familles restreintes du produit */}
+      {restrictedFamilies.length > 0 ? (
+        <Modal
+          visible={familiesModalOpen}
+          animationType="fade"
+          transparent
+          onRequestClose={() => setFamiliesModalOpen(false)}
+        >
+          <Pressable
+            style={styles.familiesModalOverlay}
+            onPress={() => setFamiliesModalOpen(false)}
+            accessible={false}
+          >
+            <View style={styles.familiesModalContent}>
+              <View style={styles.familiesModalHeader}>
+                <Text style={styles.familiesModalTitle}>Familles restreintes</Text>
+                <Pressable
+                  onPress={() => setFamiliesModalOpen(false)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel="Fermer"
+                >
+                  <Ionicons name="close" size={22} color={colors.ink} />
+                </Pressable>
+              </View>
+              <ScrollView style={styles.familiesListContainer}>
+                <View style={styles.familiesList}>
+                  {restrictedFamilies.map((family, i) => (
+                    <View key={i} style={styles.familyItem}>
+                      <Ionicons
+                        name="shield-half"
+                        size={16}
+                        color={colors.rating.rouge.text}
+                        style={styles.familyIcon}
+                      />
+                      <Text style={styles.familyName}>{family}</Text>
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+              <Pressable
+                style={styles.familiesModalButton}
+                onPress={() => {
+                  setFamiliesModalOpen(false)
+                  onViewRestrictionsPress()
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Voir toutes mes familles"
+              >
+                <Text style={styles.familiesModalButtonText}>Voir toutes mes familles</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Modal>
+      ) : null}
 
       {/* Overlay pendant l'analyse d'une alternative choisie */}
       <ProcessingOverlay visible={isAnalyzing} message="On décode la composition…" />
@@ -773,5 +848,74 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.rating.vert.text,
     marginTop: spacing.sm,
+  },
+  familiesModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.base,
+  },
+  familiesModalContent: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    width: '100%',
+    maxWidth: 340,
+    paddingTop: spacing.lg,
+    maxHeight: '70%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  familiesListContainer: {
+    maxHeight: 250,
+    marginBottom: spacing.base,
+  },
+  familiesList: {
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
+  },
+  familiesModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.base,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  familiesModalTitle: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 16,
+    color: colors.ink,
+  },
+  familyItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  familyIcon: {
+    marginRight: 4,
+  },
+  familyName: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 14,
+    color: colors.ink,
+    flex: 1,
+  },
+  familiesModalButton: {
+    backgroundColor: colors.rating.rouge.bg,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+    paddingVertical: spacing.base,
+    borderRadius: radius.md,
+    alignItems: 'center',
+  },
+  familiesModalButtonText: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 14,
+    color: colors.rating.rouge.text,
   },
 })

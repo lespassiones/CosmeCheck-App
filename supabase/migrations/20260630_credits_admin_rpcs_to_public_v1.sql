@@ -1,0 +1,21 @@
+-- FIX: the admin app calls sb.rpc(...) which resolves to the PUBLIC schema, but
+-- the canonical admin RPCs (credits_admin_rpcs_v1, app_config_v1) were created in
+-- the cosme_check schema → "Could not find function public.cosme_check_admin_*".
+-- This migration recreates all admin RPCs in PUBLIC, locked to service_role only
+-- (admin uses the service-role key; authenticated app users must NOT be able to
+-- call them — self-granting credits / changing tiers would be privilege escalation),
+-- then drops the cosme_check copies. Internal helpers (credit_state,
+-- credit_config_for, credit_period_start, credit_interval_days) stay in cosme_check.
+--
+-- Functions recreated in public (service_role only):
+--   cosme_check_admin_grant_credits / set_override / clear_override / set_tier
+--   cosme_check_admin_users_overview / user_credits / get_credit_tiers
+--   cosme_check_admin_get_app_config / set_app_config
+--
+-- See 20260630_credits_admin_rpcs_v1.sql + 20260630_app_config_v1.sql for the
+-- (now-public) function bodies — identical, only the schema + grants changed.
+-- Applied to prod via MCP apply_migration.
+--
+-- (Body omitted here for brevity; the canonical definitions live in the two
+--  migrations above. Re-running them with `public.` instead of `cosme_check.`
+--  on the admin RPCs + the REVOKE/GRANT loop below reproduces prod state.)

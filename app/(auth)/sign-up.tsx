@@ -28,9 +28,11 @@ import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { LogoMark } from '@/components/shared/Logo'
 import { SignUpForm } from '@/components/auth/SignUpForm'
 import { GoogleAuthButton } from '@/components/auth/GoogleAuthButton'
+import { useAppConfig } from '@/hooks/useAppConfig'
 
 const SignUpScreen: FC = () => {
   const [emailOpen, setEmailOpen] = useState(false)
+  const { config: appConfig } = useAppConfig()
 
   return (
     <View style={styles.root}>
@@ -62,39 +64,52 @@ const SignUpScreen: FC = () => {
 
             <View style={styles.header}>
               <Text style={styles.title}>Crée ton compte</Text>
-              <Text style={styles.subtitle}>Rejoins Cosme Check gratuitement.</Text>
+              <Text style={styles.subtitle}>
+                {appConfig.signups_open
+                  ? 'Rejoins Cosme Check gratuitement.'
+                  : 'Les inscriptions sont temporairement fermées.'}
+              </Text>
             </View>
 
-            {/* Bouton Google */}
-            <GoogleAuthButton />
+            {!appConfig.signups_open ? (
+              <Text style={styles.closedText}>
+                La création de compte est momentanément désactivée. Reviens un peu plus tard,
+                ou connecte-toi si tu as déjà un compte.
+              </Text>
+            ) : (
+              <>
+                {/* Bouton Google */}
+                <GoogleAuthButton />
 
-            {/* Séparateur */}
-            <View style={styles.separator}>
-              <View style={styles.line} />
-              <Text style={styles.separatorText}>ou</Text>
-              <View style={styles.line} />
-            </View>
+                {/* Séparateur */}
+                <View style={styles.separator}>
+                  <View style={styles.line} />
+                  <Text style={styles.separatorText}>ou</Text>
+                  <View style={styles.line} />
+                </View>
 
-            {/* Bouton email — déplie le formulaire */}
-            <Pressable
-              onPress={() => setEmailOpen((o) => !o)}
-              style={({ pressed }) => [
-                styles.emailBtn,
-                pressed && styles.emailBtnPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Continuer avec email et mot de passe"
-              accessibilityState={{ expanded: emailOpen }}
-            >
-              <Ionicons name="mail-outline" size={18} color={colors.ink} />
-              <Text style={styles.emailBtnLabel}>Continuer avec email</Text>
-            </Pressable>
+                {/* Bouton email — déplie le formulaire */}
+                <Pressable
+                  onPress={() => setEmailOpen((o) => !o)}
+                  style={({ pressed }) => [
+                    styles.emailBtn,
+                    pressed && styles.emailBtnPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Continuer avec email et mot de passe"
+                  accessibilityState={{ expanded: emailOpen }}
+                >
+                  <Ionicons name="mail-outline" size={18} color={colors.ink} />
+                  <Text style={styles.emailBtnLabel}>Continuer avec email</Text>
+                </Pressable>
 
-            {/* Formulaire déroulé */}
-            {emailOpen && (
-              <View style={styles.formWrap}>
-                <SignUpForm />
-              </View>
+                {/* Formulaire déroulé */}
+                {emailOpen && (
+                  <View style={styles.formWrap}>
+                    <SignUpForm />
+                  </View>
+                )}
+              </>
             )}
 
             <View style={styles.footer}>
@@ -189,6 +204,11 @@ const styles = StyleSheet.create({
   },
   formWrap: {
     gap: spacing.base,
+  },
+  closedText: {
+    ...typography.body,
+    color: colors.inkMuted,
+    textAlign: 'center',
   },
   footer: {
     flexDirection: 'row',

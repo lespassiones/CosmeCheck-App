@@ -48,6 +48,9 @@ export function resolveAuthRoute(input: AuthRouteInput): AuthRouteTarget {
   const inAuthGroup = group === '(auth)'
   const inOnboarding = group === '(onboarding)'
   const inPaywall = group === '(paywall)'
+  // Le paywall post-onboarding est rendu par la page /offre (groupe 'offre').
+  // On la considère comme « sur le paywall » pour ne PAS reboucler dessus.
+  const inOffre = group === 'offre'
   const inPreOnboarding = group === '(preonboarding)'
 
   // 2. Pas de session.
@@ -81,8 +84,9 @@ export function resolveAuthRoute(input: AuthRouteInput): AuthRouteTarget {
     return !paywallShown ? 'paywall' : 'home'
   }
 
-  // 7. Paywall pas vu et profil complet → paywall (sauf si on y est déjà).
-  if (onboardingShown && isProfileComplete && !paywallShown && !inPaywall) {
+  // 7. Paywall pas vu et profil complet → paywall (sauf si on y est déjà, que
+  //    ce soit l'ancien groupe (paywall) ou la page /offre qui le remplace).
+  if (onboardingShown && isProfileComplete && !paywallShown && !inPaywall && !inOffre) {
     return 'paywall'
   }
 

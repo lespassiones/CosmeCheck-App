@@ -30,6 +30,9 @@ function rootKey(queryKey: unknown): string | null {
  *                          — réponses IA cachées séparément avec leur TTL.
  *  - 'catalog-search'      — résultats de recherche, transients (staleTime 60s).
  *                          Aucun intérêt à les garder 7 jours sur disque.
+ *  - 'appConfig'           — feature flags + mode maintenance ; doit toujours
+ *                          repartir frais (ne jamais servir un flag/maintenance
+ *                          périmé au cold start).
  *
  * Tout le reste est persisté (routine, dashboard, history, ingredient,
  * dailyPicks, etc.).
@@ -48,6 +51,7 @@ export function shouldPersistQueryKey(queryKey: unknown): boolean {
     'compare-insights',
     'routine-suggest',
     'catalog-search',
+    'appConfig',
   ])
   return !BLACKLIST.has(k)
 }

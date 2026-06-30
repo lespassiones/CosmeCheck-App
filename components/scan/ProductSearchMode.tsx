@@ -42,6 +42,7 @@ import { applyColorCap } from '@/lib/analysis/scoreCap'
 import { catalogSearchKey, CATALOG_SEARCH_STALE_MS } from '@/lib/catalog/searchCache'
 import { ROUTES } from '@/constants/routes'
 import { useAndroidBack } from '@/hooks/useAndroidBack'
+import { useAppConfig } from '@/hooks/useAppConfig'
 import { CatalogPastille } from '@/components/shared/CatalogPastille'
 import {
   CATEGORIES,
@@ -230,6 +231,9 @@ export const ProductSearchMode: FC<Props> = ({
   // Résolution INCI lazy
   const [resolvingEan, setResolvingEan]       = useState<string | null>(null)
 
+  // Feature flag admin (Paramètres) : « recherche approfondie internet ».
+  const { config: appConfig } = useAppConfig()
+
   // ── Recherche approfondie internet (manuelle, 1 crédit) ───────────────
   const [webResults, setWebResults]           = useState<WebCandidate[]>([])
   const [deepState, setDeepState]             = useState<DeepState>('idle')
@@ -289,6 +293,8 @@ export const ProductSearchMode: FC<Props> = ({
   const runDeepSearch = useCallback(async () => {
     const trimmed = debouncedQuery.trim()
     if (trimmed.length < 3 || deepState === 'running') return
+    // Garde feature flag : si désactivée côté admin, on ne débite rien.
+    if (!appConfig.flag_deep_search) return
     const reqId = ++webReqIdRef.current
     setDeepState('running')
     try {
@@ -317,7 +323,7 @@ export const ProductSearchMode: FC<Props> = ({
       if (reqId !== webReqIdRef.current) return
       setDeepState('error')
     }
-  }, [debouncedQuery, deepState, queryClient])
+  }, [debouncedQuery, deepState, queryClient, appConfig.flag_deep_search])
 
   // ── Pagination recherche (page suivante) ─────────────────────────────
   const loadMoreSearch = useCallback(async () => {
@@ -524,7 +530,8 @@ export const ProductSearchMode: FC<Props> = ({
     const catalogEmpty =
       searched && !searchLoading && !searchError && searchResults.length === 0
     const showWebSection = deepState === 'done' && webResults.length > 0
-    const canDeepSearch = debouncedQuery.trim().length >= 3
+    const canDeepSearch =
+      debouncedQuery.trim().length >= 3 && appConfig.flag_deep_search
 
     // Footer FlatList : spinner pagination + section internet + bloc approfondi
     const searchFooter = (

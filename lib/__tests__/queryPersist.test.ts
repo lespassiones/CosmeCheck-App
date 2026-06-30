@@ -38,6 +38,10 @@ describe('shouldPersistQueryKey', () => {
     expect(shouldPersistQueryKey(['catalog-search', 'garnier', 0])).toBe(false)
   })
 
+  it('exclut la config app (flags + maintenance, toujours frais)', () => {
+    expect(shouldPersistQueryKey(['appConfig'])).toBe(false)
+  })
+
   it('refuse les queryKey non-array / vides / non-string', () => {
     expect(shouldPersistQueryKey([])).toBe(false)
     expect(shouldPersistQueryKey(null)).toBe(false)

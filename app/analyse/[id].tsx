@@ -54,6 +54,7 @@ import { leafLabelFromCategorySlug } from '@/constants/categories'
 import type { AnalysisRow } from '@/lib/supabase/types'
 import { useProfile } from '@/hooks/useProfile'
 import { useRoutine } from '@/hooks/useRoutine'
+import { useAppConfig } from '@/hooks/useAppConfig'
 
 /** Base du lien de partage web (page publique /a/[id] sur le twin web). */
 const SHARE_BASE_URL = 'https://cosme-check.com'
@@ -96,18 +97,20 @@ const AnalyseDetailScreen: FC = () => {
   const reduceMotion = useReducedMotion()
   const { restrictions } = useProfile()
   const { addToRoutine, isInRoutine } = useRoutine()
+  const { config: appConfig } = useAppConfig()
   const [routinePending, setRoutinePending] = useState(false)
 
   // Hydrate l'URL image produit :
   //   1. cache AsyncStorage (instantané, mis en place au pick depuis catalogue
   //      / lien / web)
-  //   2. fallback catalogue via brand+name (RPC ILIKE) → 1 seul appel DB par
+  //   2. EAN si disponible (source de vérité déterministe)
+  //   3. fallback catalogue via brand+name (RPC ILIKE) → 1 seul appel DB par
   //      analyse historique, puis re-cachée pour les prochaines fois
   // Le schéma `analyses` n'a pas de colonne image_url, d'où ce mécanisme.
   useEffect(() => {
     if (!id || state.status !== 'ready') return
     let cancelled = false
-    void resolveAndCacheProductImage(id, state.brand, state.productLabel).then(
+    void resolveAndCacheProductImage(id, state.ean, state.brand, state.productLabel).then(
       (url) => {
         if (!cancelled) setProductImageUrl(url)
       },
@@ -124,7 +127,7 @@ const AnalyseDetailScreen: FC = () => {
   useEffect(() => {
     if (state.status !== 'ready') return
     let cancelled = false
-    void resolveCatalogIdentity(state.brand, state.productLabel).then((info) => {
+    void resolveCatalogIdentity(state.brand, state.productLabel, state.ean).then((info) => {
       if (cancelled || !info) return
       setCatalogScore(info.score)
       setLeafCategory(leafLabelFromCategorySlug(info.category))
@@ -177,20 +180,28 @@ const AnalyseDetailScreen: FC = () => {
     }
     setState({ status: 'loading' })
     // 1. Cache local d'abord (TTL 24h, hydrate instantanément).
+    let servedFromCache = false
     try {
       const cached = await getCachedAnalysisRow(id)
       if (cached) {
         setState(buildReadyState(cached))
-        return
+        servedFromCache = true
+        // PAS de return : on revalide en arrière-plan. Le serveur a pu enrichir
+        // la ligne après coup (ex. backfill de l'EAN d'une analyse créée sur web)
+        // → sinon l'image (EAN-only) et les alternatives resteraient vides ici
+        // alors qu'elles marchent sur le web qui lit toujours frais.
       }
     } catch {
       // AsyncStorage indisponible : on tombe sur la branche réseau.
     }
-    // 2. Miss → fetch DB.
+    // 2. Fetch DB (frais). Si on a déjà rendu le cache, c'est une revalidation
+    // silencieuse : on ne bascule en erreur que si on n'avait rien à afficher.
     try {
       const row = await getAnalysisById(id)
       if (!row) {
-        setState({ status: 'error', message: "Cette analyse est introuvable." })
+        if (!servedFromCache) {
+          setState({ status: 'error', message: "Cette analyse est introuvable." })
+        }
         return
       }
       const ready = buildReadyState(row)
@@ -200,11 +211,13 @@ const AnalyseDetailScreen: FC = () => {
         void cacheAnalysisRow(row).catch(() => {})
       }
     } catch (e) {
-      setState({
-        status: 'error',
-        message:
-          e instanceof Error ? e.message : "Impossible de charger l'analyse.",
-      })
+      if (!servedFromCache) {
+        setState({
+          status: 'error',
+          message:
+            e instanceof Error ? e.message : "Impossible de charger l'analyse.",
+        })
+      }
     }
   }, [id, buildReadyState])
 
@@ -275,6 +288,8 @@ const AnalyseDetailScreen: FC = () => {
 
   const handleShare = useCallback(async () => {
     if (state.status !== 'ready') return
+    // Garde feature flag (Paramètres admin) : partage public désactivé.
+    if (!appConfig.flag_public_share) return
     const url = `${SHARE_BASE_URL}/a/${id}`
     try {
       // Rend l'analyse lisible publiquement (lecture seule) sur le web : la
@@ -288,7 +303,7 @@ const AnalyseDetailScreen: FC = () => {
     } catch {
       /* user cancelled */
     }
-  }, [state, id])
+  }, [state, id, appConfig.flag_public_share])
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -430,16 +445,19 @@ const AnalyseDetailScreen: FC = () => {
             </View>
 
             <View style={styles.shareRow}>
-              <Pressable
-                onPress={handleShare}
-                style={({ pressed }) => [styles.shareBtn, pressed && styles.btnPressed]}
-                accessibilityRole="button"
-                accessibilityLabel="Partager"
-                hitSlop={6}
-              >
-                <Ionicons name="share-social-outline" size={16} color={colors.inkMuted} />
-                <Text style={styles.shareText}>Partager</Text>
-              </Pressable>
+              {/* Partage public : masqué si le flag admin est OFF (Paramètres). */}
+              {appConfig.flag_public_share && (
+                <Pressable
+                  onPress={handleShare}
+                  style={({ pressed }) => [styles.shareBtn, pressed && styles.btnPressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Partager"
+                  hitSlop={6}
+                >
+                  <Ionicons name="share-social-outline" size={16} color={colors.inkMuted} />
+                  <Text style={styles.shareText}>Partager</Text>
+                </Pressable>
+              )}
               <VerdictGauge tone={verdictTone} orientation="horizontal" style={styles.gauge} />
             </View>
           </View>

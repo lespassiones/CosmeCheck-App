@@ -41,6 +41,10 @@ export interface Database {
         Args: Record<string, never>
         Returns: Json
       }
+      cosme_check_get_app_config: {
+        Args: Record<string, never>
+        Returns: Json
+      }
       cosme_check_consume_credit: {
         Args: { p_feature: string }
         Returns: Json

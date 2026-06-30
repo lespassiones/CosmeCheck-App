@@ -43,7 +43,7 @@ interface LinkRow {
 const ProfileScreen: FC = () => {
   const insets = useSafeAreaInsets()
   const { user, signOut } = useAuth()
-  const { profile, skin, firstName, saveSkin, isSaving } = useProfile()
+  const { profile, skin, firstName, saveSkin, updateProfile, isSaving } = useProfile()
 
   const [editing, setEditing] = useState(false)
   const [confirmSignOut, setConfirmSignOut] = useState(false)
@@ -109,6 +109,15 @@ const ProfileScreen: FC = () => {
     await resetPreOnboarding()
     await signOut()
   }, [signOut])
+
+  // DEV uniquement : rouvre le questionnaire profil post-connexion (onboarding).
+  // On remet `onboardingShown=false` (sans toucher au profil beauté existant) :
+  // l'AuthGuard éjecte sinon de /(onboarding) dès que ce flag est vrai (règle 6).
+  // Le questionnaire est pré-rempli avec les réponses actuelles, pour révision.
+  const handleReplayOnboarding = useCallback(async () => {
+    await updateProfile({ onboardingShown: false })
+    router.replace(ROUTES.ONBOARDING.INDEX)
+  }, [updateProfile])
 
   // Suppression de compte DÉFINITIVE et IMMÉDIATE via l'Edge Function
   // `delete-account` (cascade DB → toutes les données purgées), puis sign-out.
@@ -260,6 +269,17 @@ const ProfileScreen: FC = () => {
                 >
                   <Ionicons name="refresh-outline" size={15} color={colors.inkMuted} />
                   <Text style={styles.devText}>Revoir l'onboarding (dev)</Text>
+                </Pressable>
+              )}
+
+              {__DEV__ && (
+                <Pressable
+                  style={styles.devBtn}
+                  onPress={() => void handleReplayOnboarding()}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="clipboard-outline" size={15} color={colors.inkMuted} />
+                  <Text style={styles.devText}>Revoir le questionnaire profil (dev)</Text>
                 </Pressable>
               )}
 

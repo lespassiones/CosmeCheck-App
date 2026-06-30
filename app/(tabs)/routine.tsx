@@ -47,6 +47,7 @@ import {
 import { useRoutine, type RoutineItem } from '@/hooks/useRoutine'
 import { useProfile } from '@/hooks/useProfile'
 import { useAuth } from '@/hooks/useAuth'
+import { useAppConfig } from '@/hooks/useAppConfig'
 import {
   readAiCache,
   routineSuggestKey,
@@ -126,6 +127,7 @@ const RoutineScreen: FC = () => {
   // ── Suggestions intelligentes (deck) ──────────────────────────────────────
   const qc = useQueryClient()
   const { user } = useAuth()
+  const { config: appConfig } = useAppConfig()
   const { keep, ensureAnalysisId } = useKeepFavorite()
   const { analyze: launchAlternative } = useLaunchAlternative()
   const [deckOpen, setDeckOpen] = useState(false)
@@ -172,6 +174,8 @@ const RoutineScreen: FC = () => {
 
   const openSuggestions = useCallback(async () => {
     if (deckLoading) return
+    // Garde feature flag (Paramètres admin) : si désactivée, ne rien lancer.
+    if (!appConfig.flag_suggestions) return
     setDeckLoading(true)
     try {
       // 0. Cache LOCAL persistant : routine inchangée → deck instantané, SANS crédit.
@@ -341,7 +345,7 @@ const RoutineScreen: FC = () => {
     } finally {
       setDeckLoading(false)
     }
-  }, [items, restrictions, skin, deckLoading, qc, seedKept])
+  }, [items, restrictions, skin, deckLoading, qc, seedKept, appConfig.flag_suggestions])
 
   const handleKeep = useCallback(
     async (s: DeckSuggestion) => {
@@ -790,24 +794,27 @@ const RoutineScreen: FC = () => {
               </View>
             )}
 
-            {/* ── Suggestions intelligentes (1 bouton → deck) ── */}
-            <WhiteCard padding={spacing.lg} style={styles.sectionCard}>
-              <Pressable
-                style={[styles.aiBtn, deckLoading && styles.aiBtnDisabled]}
-                onPress={openSuggestions}
-                disabled={deckLoading}
-                accessibilityRole="button"
-              >
-                {deckLoading ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <View style={styles.suggestRow}>
-                    <Ionicons name="sparkles" size={16} color="#FFFFFF" />
-                    <Text style={styles.aiBtnText}>Suggestions intelligentes</Text>
-                  </View>
-                )}
-              </Pressable>
-            </WhiteCard>
+            {/* ── Suggestions intelligentes (1 bouton → deck) ──
+                Masqué si la feature est désactivée côté admin (Paramètres). */}
+            {appConfig.flag_suggestions && (
+              <WhiteCard padding={spacing.lg} style={styles.sectionCard}>
+                <Pressable
+                  style={[styles.aiBtn, deckLoading && styles.aiBtnDisabled]}
+                  onPress={openSuggestions}
+                  disabled={deckLoading}
+                  accessibilityRole="button"
+                >
+                  {deckLoading ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <View style={styles.suggestRow}>
+                      <Ionicons name="sparkles" size={16} color="#FFFFFF" />
+                      <Text style={styles.aiBtnText}>Suggestions intelligentes</Text>
+                    </View>
+                  )}
+                </Pressable>
+              </WhiteCard>
+            )}
           </ScrollView>
         )}
       </SafeAreaView>

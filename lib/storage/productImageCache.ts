@@ -87,11 +87,12 @@ interface CatalogImageRow {
 
 /**
  * Résout l'URL image d'une analyse :
- *   1. cache local (instantané)
- *   2. fallback catalogue via RPC `cosme_check_search_catalog` (brand + name)
- *   3. cache le résultat trouvé pour les prochains affichages → 1 seul appel
- *      DB par analyse historique, puis instantané.
+ *   1. Cache local rapide (instantané pour analyses historiques)
+ *   2. Si pas de cache, EAN (SOURCE DE VÉRITÉ) ou fallback brand+name
+ *   3. Vérifie EAN EN ARRIÈRE-PLAN pour mettre à jour si changé
  *
+ * NOTE: EAN est la SEULE source de vérité. Cache utilisé pour rapidité,
+ * mais EAN vérifié en bg pour cohérence cross-device.
  * Utile pour les analyses faites AVANT l'introduction du cache (ou via une
  * source qui ne portait pas d'image — ex : barcode quand l'Edge Function ne
  * renvoyait pas encore l'imageUrl). Renvoie null si le produit n'est pas dans
@@ -99,31 +100,39 @@ interface CatalogImageRow {
  */
 export async function resolveAndCacheProductImage(
   analysisId: string,
+  ean: string | null | undefined,
   brand: string | null | undefined,
   name: string | null | undefined,
 ): Promise<string | null> {
-  // 1. Cache hit → instantané
-  const cached = await getProductImage(analysisId)
-  if (cached) return cached
-
-  // 2. Fallback catalogue : requête substring brand + name
-  const query = [brand, name].filter(Boolean).join(' ').trim()
-  if (query.length < 3) return null
-  try {
-    const { data, error } = await supabase.rpc(
-      'cosme_check_search_catalog' as never,
-      { p_query: query, p_limit: 1 } as never,
-    )
-    if (error) return null
-    const rows = (data as CatalogImageRow[] | null) ?? []
-    const url = rows[0]?.image_url ?? null
-    if (url) {
-      // 3. Cache pour la prochaine fois (1 seul appel DB par analyse historique)
-      await cacheProductImage(analysisId, url)
-      return url
+  // L'IMAGE EST PILOTÉE UNIQUEMENT PAR L'EAN (PK catalogue) = SOURCE DE VÉRITÉ
+  // UNIQUE. Un même EAN → une seule image, identique mobile ET web. AUCUN
+  // fallback flou par marque+nom (c'était la source de divergence : un même nom
+  // matchait des variantes différentes selon la plateforme).
+  if (ean) {
+    try {
+      const { data, error } = await supabase.rpc(
+        'cosme_check_get_product_by_ean' as never,
+        { p_ean: ean } as never,
+      )
+      if (!error) {
+        const row = ((data as CatalogImageRow[] | null) ?? [])[0]
+        if (row?.image_url) {
+          await cacheProductImage(analysisId, row.image_url)
+          return row.image_url
+        }
+      }
+    } catch {
+      // Lookup EAN échoué (réseau) → on retombe sur la dernière image EAN cachée.
     }
-  } catch {
-    return null
+    // EAN fourni mais lookup échoué/vide : dernière image EAN connue (cache).
+    return await getProductImage(analysisId)
   }
+
+  // Pas d'EAN (saisie manuelle / produit internet hors catalogue) : aucune image
+  // déterministe possible. On NE devine PAS via marque+nom. L'écran retombe sur
+  // result_json.imageUrl (valeur unique stockée, identique sur les 2 plateformes).
+  // ⚠️ `name`/`brand` sont conservés dans la signature pour compat appelants.
+  void brand
+  void name
   return null
 }

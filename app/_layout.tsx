@@ -35,6 +35,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
 import { initRevenueCat, loginUser } from '@/lib/revenucat/client'
 import { CreditsExhaustedModal } from '@/components/shared/CreditsExhaustedModal'
+import { MaintenanceGate } from '@/components/shared/MaintenanceGate'
 import {
   QUERY_PERSIST_BUSTER,
   QUERY_PERSIST_KEY,
@@ -120,7 +121,12 @@ function AuthGuard() {
         router.replace(ROUTES.ONBOARDING.INDEX)
         break
       case 'paywall':
-        router.replace(ROUTES.PAYWALL.INDEX as any)
+        // Le paywall EST la page /offre (UI custom). `fromOnboarding=1` y active
+        // le bouton « Plus tard » skippable + marque paywall_shown au choix.
+        router.replace({
+          pathname: ROUTES.OFFRE.INDEX as any,
+          params: { fromOnboarding: '1' },
+        })
         break
       case 'home':
         router.replace(ROUTES.TABS.HOME)
@@ -267,6 +273,7 @@ export default function RootLayout() {
             <RootNavigator />
             <CreditsExhaustedModal />
           </AppErrorBoundary>
+          <MaintenanceGate />
           <ToastHost />
           <OfflineBanner />
         </PersistQueryClientProvider>
