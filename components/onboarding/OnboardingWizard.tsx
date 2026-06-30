@@ -1,68 +1,349 @@
 /**
- * OnboardingWizard — orchestrateur du questionnaire en 3 étapes.
+ * OnboardingWizard - questionnaire profil en MICRO-ÉTAPES (refonte façon Flowfy).
  *
- * - State local `SkinProfile`, initialisé depuis useProfile().skin.
- * - À chaque onChange : merge dans le state + auto-save DÉBOUNCÉ ~600ms via
- *   useProfile().saveSkin(patch).
- * - Barre de progression segmentée (1/3, 2/3, 3/3).
- * - Boutons « Précédent » / « Suivant » (et « Passer » en étape < 3).
- *   Étape 3 → CTA « Entrer dans Cosme Check ».
- * - Fin (ou « Passer ») : flush du save en attente → markOnboardingShown()
- *   → router.replace(ROUTES.TABS.HOME).
+ * Au lieu de 3 grosses étapes denses, on enchaîne 11 micro-écrans (une question
+ * par écran), regroupés en 3 blocs pastel :
+ *   - Bloc « Ta peau » (violet)        : visage, corps, état des cheveux
+ *   - Bloc « Tes préoccupations » (rose): peau, cheveux, autre
+ *   - Bloc « Tes objectifs » (vert)    : visage, corps, cheveux, routine, autre
+ *
+ * Chrome : barre de progression globale animée + pastilles numérotées de
+ * sous-étape (1·2·3 du bloc courant), titre court SANS paragraphe explicatif,
+ * transitions glissées entre écrans, nav bas (Précédent / Suivant ou « C'est
+ * parti ! »), « Passer » discret (le questionnaire reste entièrement optionnel).
+ *
+ * Persistance INCHANGÉE : auto-save débouncé ~600ms via saveSkin, flush au
+ * finish, completeOnboarding optimiste+synchrone puis router.replace(HOME).
  */
 
-import { useCallback, useEffect, useRef, useState, type FC } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FC,
+  type ReactNode,
+} from 'react'
 import {
   ActivityIndicator,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native'
 import { useRouter } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
+import Animated, {
+  FadeInLeft,
+  FadeInRight,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated'
 
 import { useProfile } from '@/hooks/useProfile'
-import { type SkinProfile } from '@/lib/skin/profile'
+import {
+  HAIR_CONCERN_LABEL,
+  HAIR_PROBLEM_CONCERNS,
+  HAIR_STATE_CONCERNS,
+  PROFILE_GOAL_GROUPS,
+  PROFILE_GOAL_LABEL,
+  SKIN_CONCERN_LABEL,
+  SKIN_CONCERNS,
+  SKIN_TYPE_BODY_LABEL,
+  SKIN_TYPE_FACE_LABEL,
+  SKIN_TYPES_BODY,
+  SKIN_TYPES_FACE,
+  type HairConcern,
+  type ProfileGoal,
+  type SkinConcern,
+  type SkinProfile,
+  type SkinTypeBody,
+  type SkinTypeFace,
+} from '@/lib/skin/profile'
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
-import { Step1Skin } from '@/components/onboarding/Step1Skin'
-import { Step2Concerns } from '@/components/onboarding/Step2Concerns'
-import { Step3Goals } from '@/components/onboarding/Step3Goals'
+import {
+  FreeTextStep,
+  MultiSelectStep,
+  SingleSelectStep,
+  TONES,
+  type ToneKey,
+} from '@/components/onboarding/OnboardingControls'
 
-const TOTAL_STEPS = 3
 const SAVE_DEBOUNCE_MS = 600
 
-type StepIndex = 1 | 2 | 3
+type ChangeFn = (patch: Partial<SkinProfile>) => void
 
-const STEP_TITLES: Record<StepIndex, string> = {
-  1: 'Parlons de ta peau',
-  2: 'Tes préoccupations',
-  3: 'Tes objectifs',
+interface StepDef {
+  id: string
+  bloc: 1 | 2 | 3
+  blocLabel: string
+  tone: ToneKey
+  title: string
+  /** Auto-avance après sélection (choix unique uniquement). */
+  autoAdvance?: boolean
+  render: (p: SkinProfile, onChange: ChangeFn, onAdvance: () => void) => ReactNode
 }
 
+const goalOptions = (label: string) =>
+  PROFILE_GOAL_GROUPS.find((g) => g.label === label)!.goals.map((k) => ({
+    key: k,
+    label: PROFILE_GOAL_LABEL[k],
+  }))
+
+/** Toggle d'une clé dans un tableau (ajout/retrait), renvoie le nouveau tableau. */
+function toggleIn<T>(list: T[] | undefined, key: T): T[] {
+  const set = new Set<T>(list ?? [])
+  if (set.has(key)) set.delete(key)
+  else set.add(key)
+  return Array.from(set)
+}
+
+const STEPS: StepDef[] = [
+  // ── Bloc 1 : Ta peau (violet) ─────────────────────────────────────────
+  {
+    id: 'face',
+    bloc: 1,
+    blocLabel: 'Ta peau',
+    tone: 'violet',
+    title: 'Ton type de peau au visage ?',
+    render: (p, onChange) => (
+      <SingleSelectStep
+        tone="violet"
+        options={SKIN_TYPES_FACE.map((k) => ({ key: k, label: SKIN_TYPE_FACE_LABEL[k] }))}
+        selectedKey={p.skinTypeFace}
+        onPickKey={(key) =>
+          onChange({
+            skinTypeFace:
+              p.skinTypeFace === key ? undefined : (key as SkinTypeFace),
+            otherSkinTypeFace: undefined,
+          })
+        }
+        other={{
+          value: p.otherSkinTypeFace,
+          placeholder: 'Décris ta peau du visage',
+          onToggle: (open) =>
+            onChange(
+              open
+                ? { skinTypeFace: undefined }
+                : { otherSkinTypeFace: undefined },
+            ),
+          onChange: (t) => onChange({ otherSkinTypeFace: t }),
+        }}
+      />
+    ),
+  },
+  {
+    id: 'body',
+    bloc: 1,
+    blocLabel: 'Ta peau',
+    tone: 'violet',
+    title: 'Et la peau de ton corps ?',
+    render: (p, onChange) => (
+      <SingleSelectStep
+        tone="violet"
+        options={SKIN_TYPES_BODY.map((k) => ({ key: k, label: SKIN_TYPE_BODY_LABEL[k] }))}
+        selectedKey={p.skinTypeBody}
+        onPickKey={(key) =>
+          onChange({
+            skinTypeBody:
+              p.skinTypeBody === key ? undefined : (key as SkinTypeBody),
+            otherSkinTypeBody: undefined,
+          })
+        }
+        other={{
+          value: p.otherSkinTypeBody,
+          placeholder: 'Décris la peau de ton corps',
+          onToggle: (open) =>
+            onChange(
+              open
+                ? { skinTypeBody: undefined }
+                : { otherSkinTypeBody: undefined },
+            ),
+          onChange: (t) => onChange({ otherSkinTypeBody: t }),
+        }}
+      />
+    ),
+  },
+  {
+    id: 'hairState',
+    bloc: 1,
+    blocLabel: 'Ta peau',
+    tone: 'violet',
+    title: 'Comment sont tes cheveux ?',
+    render: (p, onChange) => (
+      <MultiSelectStep
+        tone="violet"
+        options={HAIR_STATE_CONCERNS.map((k) => ({ key: k, label: HAIR_CONCERN_LABEL[k] }))}
+        values={p.hairConcerns ?? []}
+        onToggle={(key) =>
+          onChange({ hairConcerns: toggleIn(p.hairConcerns, key as HairConcern) })
+        }
+        other={{
+          value: p.otherHair,
+          placeholder: "Décris l'état de tes cheveux",
+          onToggle: (open) =>
+            onChange(open ? {} : { otherHair: undefined }),
+          onChange: (t) => onChange({ otherHair: t }),
+        }}
+      />
+    ),
+  },
+
+  // ── Bloc 2 : Tes préoccupations (rose) ────────────────────────────────
+  {
+    id: 'skinConcerns',
+    bloc: 2,
+    blocLabel: 'Tes préoccupations',
+    tone: 'rose',
+    title: "Qu'est-ce qui te préoccupe ?",
+    render: (p, onChange) => (
+      <MultiSelectStep
+        tone="rose"
+        options={SKIN_CONCERNS.map((k) => ({ key: k, label: SKIN_CONCERN_LABEL[k] }))}
+        values={p.concerns ?? []}
+        onToggle={(key) =>
+          onChange({ concerns: toggleIn(p.concerns, key as SkinConcern) })
+        }
+      />
+    ),
+  },
+  {
+    id: 'hairConcerns',
+    bloc: 2,
+    blocLabel: 'Tes préoccupations',
+    tone: 'rose',
+    title: 'Et côté cheveux ?',
+    render: (p, onChange) => (
+      <MultiSelectStep
+        tone="rose"
+        options={HAIR_PROBLEM_CONCERNS.map((k) => ({ key: k, label: HAIR_CONCERN_LABEL[k] }))}
+        values={p.hairConcerns ?? []}
+        onToggle={(key) =>
+          onChange({ hairConcerns: toggleIn(p.hairConcerns, key as HairConcern) })
+        }
+      />
+    ),
+  },
+  {
+    id: 'otherConcern',
+    bloc: 2,
+    blocLabel: 'Tes préoccupations',
+    tone: 'rose',
+    title: 'Autre chose à signaler ?',
+    render: (p, onChange) => (
+      <FreeTextStep
+        value={p.otherConcerns}
+        placeholder="ex : tiraillements, allergie connue, ingrédient à éviter…"
+        onChange={(t) => onChange({ otherConcerns: t })}
+      />
+    ),
+  },
+
+  // ── Bloc 3 : Tes objectifs (vert) ─────────────────────────────────────
+  {
+    id: 'goalsFace',
+    bloc: 3,
+    blocLabel: 'Tes objectifs',
+    tone: 'vert',
+    title: 'Tes objectifs pour le visage',
+    render: (p, onChange) => (
+      <MultiSelectStep
+        tone="vert"
+        options={goalOptions('Visage')}
+        values={p.goals ?? []}
+        onToggle={(key) => onChange({ goals: toggleIn(p.goals, key as ProfileGoal) })}
+      />
+    ),
+  },
+  {
+    id: 'goalsBody',
+    bloc: 3,
+    blocLabel: 'Tes objectifs',
+    tone: 'vert',
+    title: 'Tes objectifs pour le corps',
+    render: (p, onChange) => (
+      <MultiSelectStep
+        tone="vert"
+        options={goalOptions('Corps')}
+        values={p.goals ?? []}
+        onToggle={(key) => onChange({ goals: toggleIn(p.goals, key as ProfileGoal) })}
+      />
+    ),
+  },
+  {
+    id: 'goalsHair',
+    bloc: 3,
+    blocLabel: 'Tes objectifs',
+    tone: 'vert',
+    title: 'Tes objectifs cheveux',
+    render: (p, onChange) => (
+      <MultiSelectStep
+        tone="vert"
+        options={goalOptions('Cheveux')}
+        values={p.goals ?? []}
+        onToggle={(key) => onChange({ goals: toggleIn(p.goals, key as ProfileGoal) })}
+      />
+    ),
+  },
+  {
+    id: 'goalsRoutine',
+    bloc: 3,
+    blocLabel: 'Tes objectifs',
+    tone: 'vert',
+    title: 'Et ta routine ?',
+    render: (p, onChange) => (
+      <MultiSelectStep
+        tone="vert"
+        options={goalOptions('Routine')}
+        values={p.goals ?? []}
+        onToggle={(key) => onChange({ goals: toggleIn(p.goals, key as ProfileGoal) })}
+      />
+    ),
+  },
+  {
+    id: 'otherGoal',
+    bloc: 3,
+    blocLabel: 'Tes objectifs',
+    tone: 'vert',
+    title: 'Un autre objectif en tête ?',
+    render: (p, onChange) => (
+      <FreeTextStep
+        value={p.otherGoals}
+        placeholder="Un objectif qui n'est pas dans la liste ?"
+        onChange={(t) => onChange({ otherGoals: t })}
+      />
+    ),
+  },
+]
+
+const TOTAL = STEPS.length
+
 interface Props {
-  /** Appelé à chaque changement d'étape — l'écran parent remonte le ScrollView. */
+  /** Conservé pour compat - le wizard gère désormais son propre scroll. */
   onStepChange?: () => void
 }
 
 export const OnboardingWizard: FC<Props> = ({ onStepChange }) => {
   const router = useRouter()
-  const { skin, saveSkin, completeOnboarding } = useProfile()
+  const { skin, firstName, saveSkin, completeOnboarding } = useProfile()
 
-  const [step, setStep] = useState<StepIndex>(1)
+  const [index, setIndex] = useState(0)
+  const [dir, setDir] = useState<1 | -1>(1)
   const [profile, setProfile] = useState<SkinProfile>(skin)
   const [finishing, setFinishing] = useState(false)
 
-  // Garde une trace du dernier patch en attente + son timer pour pouvoir le
-  // « flusher » immédiatement à la fin / au skip.
+  const scrollRef = useRef<ScrollView>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingRef = useRef<Partial<SkinProfile> | null>(null)
 
-  // Hydrate le state local quand le profil distant arrive (une seule fois utile,
-  // tant que l'utilisateur n'a rien touché).
+  // Hydrate l'état local depuis le profil distant (une seule fois utile).
   const hydratedRef = useRef(false)
   useEffect(() => {
     if (hydratedRef.current) return
@@ -79,19 +360,26 @@ export const OnboardingWizard: FC<Props> = ({ onStepChange }) => {
     [],
   )
 
-  // Remonte en haut à chaque changement d'étape (Suivant / Précédent). On passe
-  // par une ref pour ne dépendre QUE de `step` : sinon l'identité changeante du
-  // callback inline ferait scroller à chaque frappe dans un champ texte.
+  // Remonte le corps en haut à chaque changement d'étape.
   const onStepChangeRef = useRef(onStepChange)
   onStepChangeRef.current = onStepChange
   useEffect(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: false })
     onStepChangeRef.current?.()
-  }, [step])
+  }, [index])
+
+  // ── Barre de progression animée ────────────────────────────────────────
+  const progress = useSharedValue((index + 1) / TOTAL)
+  useEffect(() => {
+    progress.value = withTiming((index + 1) / TOTAL, { duration: 320 })
+  }, [index, progress])
+  const progressStyle = useAnimatedStyle(() => ({
+    width: `${progress.value * 100}%`,
+  }))
 
   const handleChange = useCallback(
     (patch: Partial<SkinProfile>) => {
       setProfile((prev) => ({ ...prev, ...patch }))
-      // Accumule les patchs en attente puis débounce un unique save.
       pendingRef.current = { ...(pendingRef.current ?? {}), ...patch }
       if (timerRef.current) clearTimeout(timerRef.current)
       timerRef.current = setTimeout(() => {
@@ -106,12 +394,14 @@ export const OnboardingWizard: FC<Props> = ({ onStepChange }) => {
 
   const goBack = useCallback(() => {
     Haptics.selectionAsync().catch(() => {})
-    setStep((s) => (s > 1 ? ((s - 1) as StepIndex) : s))
+    setDir(-1)
+    setIndex((i) => (i > 0 ? i - 1 : i))
   }, [])
 
   const goNext = useCallback(() => {
     Haptics.selectionAsync().catch(() => {})
-    setStep((s) => (s < TOTAL_STEPS ? ((s + 1) as StepIndex) : s))
+    setDir(1)
+    setIndex((i) => (i < TOTAL - 1 ? i + 1 : i))
   }, [])
 
   const finish = useCallback(() => {
@@ -120,99 +410,142 @@ export const OnboardingWizard: FC<Props> = ({ onStepChange }) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
       () => {},
     )
-    // Draine le dernier patch en attente (synchrone, sans attendre le réseau).
     if (timerRef.current) {
       clearTimeout(timerRef.current)
       timerRef.current = null
     }
     const pending = pendingRef.current
     pendingRef.current = null
-    // `completeOnboarding` marque le cache de façon optimiste ET SYNCHRONE
-    // (flag onboardingShown=true) avant le premier await, puis persiste en
-    // arrière-plan. On NE bloque PAS la navigation sur le réseau.
     void completeOnboarding(pending ?? undefined).catch(() => {})
     router.replace(ROUTES.TABS.HOME)
   }, [finishing, completeOnboarding, router])
 
+  const step = STEPS[index]
+  const tone = TONES[step.tone]
+  const isLast = index === TOTAL - 1
+
+  // Pastilles de sous-étape du bloc courant.
+  const blocSteps = useMemo(
+    () => STEPS.filter((s) => s.bloc === step.bloc),
+    [step.bloc],
+  )
+  const blocPos = useMemo(
+    () => blocSteps.findIndex((s) => s.id === step.id),
+    [blocSteps, step.id],
+  )
+
+  const enterAnim = dir === 1 ? FadeInRight : FadeInLeft
+
   return (
     <View style={styles.root}>
-      {/* ── Barre de progression ─────────────────────────────── */}
-      <View style={styles.progressRow}>
-        {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.progressSeg,
-              i < step ? styles.progressSegOn : styles.progressSegOff,
-            ]}
-          />
-        ))}
-      </View>
-      <View style={styles.headerRow}>
-        <Text style={styles.stepCount}>
-          Étape {step} sur {TOTAL_STEPS}
-        </Text>
-        <Text style={styles.stepTitle}>{STEP_TITLES[step]}</Text>
-      </View>
-
-      {/* ── Étape courante ───────────────────────────────────── */}
-      <View style={styles.stepBody}>
-        {step === 1 ? (
-          <Step1Skin value={profile} onChange={handleChange} />
-        ) : step === 2 ? (
-          <Step2Concerns value={profile} onChange={handleChange} />
-        ) : (
-          <Step3Goals value={profile} onChange={handleChange} />
-        )}
-      </View>
-
-      {/* ── Navigation ───────────────────────────────────────── */}
-      <View style={styles.nav}>
-        {step > 1 ? (
+      {/* ── Header : retour + Passer ──────────────────────────────────── */}
+      <View style={styles.topRow}>
+        {index > 0 ? (
           <Pressable
             onPress={goBack}
+            hitSlop={10}
             disabled={finishing}
-            style={({ pressed }) => [styles.btnGhost, pressed && styles.btnGhostPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Précédent"
+            style={styles.iconBtn}
           >
-            <Text style={styles.btnGhostText}>Précédent</Text>
+            <Ionicons name="chevron-back" size={24} color={colors.ink} />
           </Pressable>
         ) : (
-          <View style={styles.navSpacer} />
+          <View style={styles.iconBtn} />
         )}
+        <Pressable
+          onPress={finish}
+          disabled={finishing}
+          hitSlop={10}
+          style={({ pressed }) => pressed && { opacity: 0.5 }}
+        >
+          <Text style={styles.skipText}>Passer</Text>
+        </Pressable>
+      </View>
 
-        {step < TOTAL_STEPS ? (
-          <View style={styles.navRight}>
-            <Pressable
-              onPress={finish}
-              disabled={finishing}
-              style={({ pressed }) => [styles.btnSkip, pressed && { opacity: 0.6 }]}
-            >
-              <Text style={styles.btnSkipText}>Passer</Text>
-            </Pressable>
-            <Pressable
-              onPress={goNext}
-              style={({ pressed }) => [styles.btnPrimary, pressed && styles.btnPrimaryPressed]}
-            >
-              <Text style={styles.btnPrimaryText}>Suivant</Text>
-            </Pressable>
+      {/* ── Barre de progression globale ──────────────────────────────── */}
+      <View style={styles.progressTrack}>
+        <Animated.View
+          style={[styles.progressFill, { backgroundColor: tone.solid }, progressStyle]}
+        />
+      </View>
+
+      {/* ── En-tête de bloc : kicker + pastilles numérotées ───────────── */}
+      <View style={styles.blocHeader}>
+        <Text style={[styles.kicker, { color: tone.text }]}>
+          {index === 0 && firstName ? `Bonjour ${firstName}` : step.blocLabel}
+        </Text>
+        <View style={styles.dotsRow}>
+          {blocSteps.map((s, i) => {
+            const done = i < blocPos
+            const active = i === blocPos
+            return (
+              <View
+                key={s.id}
+                style={[
+                  styles.dot,
+                  active
+                    ? { backgroundColor: tone.solid }
+                    : done
+                      ? { backgroundColor: tone.soft }
+                      : { backgroundColor: colors.gray200 },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.dotText,
+                    active
+                      ? { color: colors.surface }
+                      : done
+                        ? { color: tone.text }
+                        : { color: colors.inkLight },
+                  ]}
+                >
+                  {i + 1}
+                </Text>
+              </View>
+            )
+          })}
+        </View>
+      </View>
+
+      {/* ── Titre + corps de l'étape (animé) ──────────────────────────── */}
+      <ScrollView
+        ref={scrollRef}
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View key={step.id} entering={enterAnim.duration(280)}>
+          <Text style={styles.title}>{step.title}</Text>
+          <View style={styles.stepBody}>
+            {step.render(profile, handleChange, goNext)}
           </View>
-        ) : (
-          <Pressable
-            onPress={finish}
-            disabled={finishing}
-            style={({ pressed }) => [
-              styles.btnPrimary,
-              pressed && styles.btnPrimaryPressed,
-              finishing && { opacity: 0.7 },
-            ]}
-          >
-            {finishing ? (
-              <ActivityIndicator color={colors.surface} />
-            ) : (
-              <Text style={styles.btnPrimaryText}>C&apos;est parti !</Text>
-            )}
-          </Pressable>
-        )}
+        </Animated.View>
+      </ScrollView>
+
+      {/* ── Navigation bas ────────────────────────────────────────────── */}
+      <View style={styles.nav}>
+        <Pressable
+          onPress={isLast ? finish : goNext}
+          disabled={finishing}
+          style={({ pressed }) => [
+            styles.btnPrimary,
+            { backgroundColor: tone.solid },
+            pressed && { opacity: 0.85 },
+            finishing && { opacity: 0.7 },
+          ]}
+        >
+          {finishing ? (
+            <ActivityIndicator color={colors.surface} />
+          ) : (
+            <Text style={styles.btnPrimaryText}>
+              {isLast ? "C'est parti !" : 'Suivant'}
+            </Text>
+          )}
+        </Pressable>
       </View>
     </View>
   )
@@ -220,90 +553,91 @@ export const OnboardingWizard: FC<Props> = ({ onStepChange }) => {
 
 const styles = StyleSheet.create({
   root: {
+    flex: 1,
     width: '100%',
   },
-  progressRow: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-    marginBottom: spacing.base,
-  },
-  progressSeg: {
-    flex: 1,
-    height: 5,
-    borderRadius: radius.full,
-  },
-  progressSegOn: {
-    backgroundColor: colors.accent,
-  },
-  progressSegOff: {
-    backgroundColor: colors.gray200,
-  },
-  headerRow: {
-    marginBottom: spacing.xl,
-  },
-  stepCount: {
-    ...typography.xsSemiBold,
-    color: colors.accent,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginBottom: spacing.xs,
-  },
-  stepTitle: {
-    ...typography.h2,
-    color: colors.ink,
-  },
-  stepBody: {
-    marginBottom: spacing.xl,
-  },
-  nav: {
+  topRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: spacing.md,
+    minHeight: 40,
   },
-  navSpacer: {
-    flex: 0,
+  iconBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
   },
-  navRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  btnGhost: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.base,
-    borderRadius: radius.full,
-  },
-  btnGhostPressed: {
-    opacity: 0.6,
-  },
-  btnGhostText: {
-    ...typography.button,
-    color: colors.inkMuted,
-  },
-  btnSkip: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
-  },
-  btnSkipText: {
+  skipText: {
     ...typography.smallMedium,
     color: colors.inkMuted,
   },
+  progressTrack: {
+    height: 5,
+    borderRadius: radius.full,
+    backgroundColor: colors.gray200,
+    overflow: 'hidden',
+    marginTop: spacing.sm,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: radius.full,
+  },
+  blocHeader: {
+    marginTop: spacing.xl,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  kicker: {
+    ...typography.xsSemiBold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  dot: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dotText: {
+    ...typography.xsSemiBold,
+    fontSize: 11,
+  },
+  body: {
+    flex: 1,
+    marginTop: spacing.lg,
+  },
+  bodyContent: {
+    paddingBottom: spacing.xl,
+  },
+  title: {
+    ...typography.h2,
+    color: colors.ink,
+    marginBottom: spacing.xl,
+  },
+  stepBody: {
+    width: '100%',
+  },
+  nav: {
+    paddingTop: spacing.md,
+  },
   btnPrimary: {
-    minHeight: 52,
+    minHeight: 54,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
     borderRadius: radius.full,
-    backgroundColor: colors.rose,
-    shadowColor: colors.rose,
+    shadowColor: colors.ink,
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.12,
     shadowRadius: 12,
-    elevation: 4,
-  },
-  btnPrimaryPressed: {
-    backgroundColor: colors.roseDeep,
+    elevation: 3,
   },
   btnPrimaryText: {
     ...typography.button,
