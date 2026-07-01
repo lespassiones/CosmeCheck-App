@@ -47,7 +47,6 @@ import {
   type AnalyseResponse,
   type ColorRating,
 } from '@/lib/analysis/types'
-import { restrictionsKey } from '@/lib/analysis/restrictionsKey'
 import { checkRestrictions } from '@/lib/restrictions/check'
 
 import { BigScoreCard } from './BigScoreCard'
@@ -56,7 +55,7 @@ import { IngredientSpectrum } from './IngredientSpectrum'
 import { ObservationsCard } from './ObservationsCard'
 import { PenaltySummaryStrip } from './PenaltySummaryStrip'
 import { ProductRow } from './ProductRow'
-import { SynthesisCard } from './SynthesisCard'
+import { PersonalInsightsCards, type PersonalBlocks } from './PersonalInsightsCards'
 import { AlternativesCarousel } from './AlternativesCarousel'
 import { ProductToolsSection } from './ProductToolsSection'
 import { supabase } from '@/lib/supabase/client'
@@ -146,76 +145,14 @@ export const AnalysisResultPanel: FC<Props> = ({
   })
   const { analyze, isAnalyzing } = useLaunchAlternative()
 
-  // ── Synthèse lazy ─────────────────────────────────────────────────────
-  // result.synthesis peut être déjà présent (analyses récentes / générées
-  // précédemment) → on l'utilise. Sinon, on la génère à la demande au moment
-  // où l'utilisateur déplie "Voir l'analyse complète".
-  const [lazySynthesis, setLazySynthesis] = useState<string | null>(null)
-  const [synthesisLoading, setSynthesisLoading] = useState(false)
-  const synthesisFetchedRef = useRef(false)
-
-  // Synthèse effective : celle stockée dans result_json, ou celle qu'on vient
-  // de générer dynamiquement. Sinon null → SynthesisCard montre l'état "indisponible".
-  //
-  // La synthèse stockée n'est valable que si elle a été générée avec les MÊMES
-  // restrictions qu'aujourd'hui. Sinon (ex. l'utilisateur a retiré une famille
-  // évitée) elle est périmée — elle dirait « X que tu as choisi d'éviter » alors
-  // que le badge live affiche « aucune restriction » → on la régénère.
-  const currentRestrictionsKey = useMemo(() => restrictionsKey(restrictions), [restrictions])
-  const storedSynthesisFresh =
-    result.synthesis != null && result.synthesisRestrictionsKey === currentRestrictionsKey
-  const effectiveSynthesis = (storedSynthesisFresh ? result.synthesis : null) ?? lazySynthesis
-
-  // Déclenche la génération à la première ouverture du détail, si on n'a pas
-  // déjà la synthèse en row ET qu'on a un analysisId.
-  useEffect(() => {
-    if (!detailsExpanded) return
-    if (effectiveSynthesis) return
-    if (synthesisFetchedRef.current) return
-    if (!analysisId) return
-    synthesisFetchedRef.current = true
-    setSynthesisLoading(true)
-    void (async () => {
-      try {
-        const { data, error } = await supabase.functions.invoke('synthesis', {
-          body: { analysisId },
-        })
-        if (error) return
-        const res = data as { synthesis?: string | null } | null
-        if (res?.synthesis) {
-          setLazySynthesis(res.synthesis)
-        }
-      } catch {
-        // Best-effort : erreur silencieuse, l'UI continue d'afficher
-        // "Synthèse indisponible" avec le bouton de retry.
-      } finally {
-        setSynthesisLoading(false)
-      }
-    })()
-  }, [detailsExpanded, analysisId, effectiveSynthesis])
-
-  /** Bouton "Réessayer" dans SynthesisCard quand l'auto-trigger a échoué. */
-  const handleRequestSynthesis = useCallback(() => {
-    if (!analysisId || synthesisLoading) return
-    synthesisFetchedRef.current = false
-    // Re-déclencher : on remet le flag à false → l'effet re-tirera l'appel
-    // au prochain render (puisque effectiveSynthesis est toujours null).
-    setSynthesisLoading(true)
-    void (async () => {
-      try {
-        const { data, error } = await supabase.functions.invoke('synthesis', {
-          body: { analysisId },
-        })
-        if (error) return
-        const res = data as { synthesis?: string | null } | null
-        if (res?.synthesis) setLazySynthesis(res.synthesis)
-      } catch {
-        /* silent */
-      } finally {
-        setSynthesisLoading(false)
-      }
-    })()
-  }, [analysisId, synthesisLoading])
+  // Synthèse SUPPRIMÉE : remplacée par les 3 blocs IA personnalisés
+  // (<PersonalInsightsCards/>, rendus juste sous L'ESSENTIEL). « Voir l'analyse
+  // complète » ne génère plus d'IA → gratuit, déroule uniquement le détail
+  // déterministe (liste d'ingrédients, observations, spectre).
+  const personalBlocks =
+    (result as { personalBlocks?: PersonalBlocks | null }).personalBlocks ?? null
+  const personalBlocksKey =
+    (result as { personalBlocksKey?: string | null }).personalBlocksKey ?? null
 
   // Couleur tonale du score (seuils web : tone du serveur prioritaire, sinon
   // dérivé du score).
@@ -412,6 +349,10 @@ export const AnalysisResultPanel: FC<Props> = ({
         onShowRestrictedFamilies={() => setFamiliesModalOpen(true)}
       />
 
+      {/* 3 blocs IA personnalisés (objectifs / peau / à surveiller) — lazy,
+          1 crédit à la génération, verrouillés→/offre si 0 crédit. */}
+      <PersonalInsightsCards analysisId={analysisId} initialBlocks={personalBlocks} initialBlocksKey={personalBlocksKey} />
+
       <View style={styles.toggleWrap}>
         <EssentielToggleButton
           expanded={detailsExpanded}
@@ -445,14 +386,7 @@ export const AnalysisResultPanel: FC<Props> = ({
           {/* 4. Le verdict en chiffres */}
           <PenaltySummaryStrip counts={counts} />
 
-          {/* 5. Synthèse — générée lazy au déploiement du détail */}
-          <SynthesisCard
-            synthesis={effectiveSynthesis}
-            items={result.items}
-            loading={synthesisLoading}
-            onRequestSynthesis={handleRequestSynthesis}
-            onIngredientPress={onIngredientPress}
-          />
+          {/* 5. (Synthèse supprimée — remplacée par les blocs IA en haut) */}
 
           {/* 6. Spectre positionnel */}
           {result.spectrum ? (

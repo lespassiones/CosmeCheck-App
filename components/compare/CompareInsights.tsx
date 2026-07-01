@@ -13,13 +13,14 @@
  */
 
 import { Fragment, useEffect, useMemo, useRef, useState, type FC, type ReactNode } from 'react'
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, DeviceEventEmitter, StyleSheet, Text, View } from 'react-native'
 
 import { GlassCard } from '@/components/design/GlassCard'
 import { colors } from '@/constants/colors'
 import { spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 import { supabase } from '@/lib/supabase/client'
+import { CREDITS_EXHAUSTED_EVENT } from '@/lib/credits/exhaustedStore'
 import {
   compareInsightsKey,
   readAiCache,
@@ -70,12 +71,27 @@ export const CompareInsights: FC<Props> = ({ aId, bId, nameA, nameB, shortNameA,
         }
 
         // 2. Miss → invoke.
-        const { data: res, error: invokeError } = await supabase.functions.invoke<Insights>(
+        const { data: res, error: invokeError, response } = await supabase.functions.invoke<Insights>(
           'compare-insights',
           { body: { aId, bId } },
         )
         if (!mounted.current) return
         if (invokeError || !res || typeof res.portraitA !== 'string') {
+          // 429 « crédits épuisés » → ouvre la modale globale (→ /offre).
+          const httpRes: Response | undefined =
+            response ?? ((invokeError as { context?: Response })?.context as Response | undefined)
+          if (httpRes?.status === 429) {
+            let used: number | undefined
+            let limit: number | undefined
+            try {
+              const b = (await httpRes.json()) as { credits?: { used?: number; limit?: number } }
+              used = b?.credits?.used
+              limit = b?.credits?.limit
+            } catch {
+              /* corps illisible */
+            }
+            DeviceEventEmitter.emit(CREDITS_EXHAUSTED_EVENT, { used, limit })
+          }
           setError(true)
           return
         }

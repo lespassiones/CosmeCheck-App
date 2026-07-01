@@ -123,8 +123,8 @@ describe('scoreLabel — seuils web (≥17 / ≥13 / ≥9)', () => {
   it('8.999 → rose', () => {
     expect(scoreLabel(8.999).tone).toBe('rose')
   });
-  it('0 → À éviter / rose', () => {
-    expect(scoreLabel(0)).toEqual({ label: 'À éviter', tone: 'rose' })
+  it('0 → Faible / rose', () => {
+    expect(scoreLabel(0)).toEqual({ label: 'Faible', tone: 'rose' })
   });
 });
 

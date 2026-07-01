@@ -4,9 +4,20 @@ import Purchases, {
 } from 'react-native-purchases'
 import { Platform } from 'react-native'
 
+// Clés publiques RevenueCat PAR PLATEFORME. Google Play exige la clé Android
+// (`goog_…`), distincte de la clé iOS (`appl_…`). On lit d'abord la clé
+// spécifique à la plateforme, avec repli sur l'ancienne clé générique
+// `EXPO_PUBLIC_REVENUCAT_PUBLIC_KEY` (rétro-compat : rien ne casse si elle
+// n'est pas encore renseignée).
 const API_KEY = {
-  ios: process.env.EXPO_PUBLIC_REVENUCAT_PUBLIC_KEY || '',
-  android: process.env.EXPO_PUBLIC_REVENUCAT_PUBLIC_KEY || '',
+  ios:
+    process.env.EXPO_PUBLIC_REVENUCAT_IOS_KEY ||
+    process.env.EXPO_PUBLIC_REVENUCAT_PUBLIC_KEY ||
+    '',
+  android:
+    process.env.EXPO_PUBLIC_REVENUCAT_ANDROID_KEY ||
+    process.env.EXPO_PUBLIC_REVENUCAT_PUBLIC_KEY ||
+    '',
 }
 
 export async function initRevenueCat(): Promise<void> {
@@ -15,6 +26,19 @@ export async function initRevenueCat(): Promise<void> {
       ios: API_KEY.ios,
       android: API_KEY.android,
     }) || API_KEY.ios
+
+    // GARDE ANTI-CRASH : RevenueCat ferme l'app si on configure une clé de test
+    // (`test_…`) dans un build RELEASE (protection anti-fraude). Tant qu'aucune
+    // clé publique de prod (`goog_…` / `appl_…`) n'est fournie, on n'initialise
+    // PAS le SDK en release : les achats restent inertes mais l'app ne crashe
+    // pas. En dev (Expo Go), la clé de test fonctionne normalement.
+    const isTestKey = apiKey.startsWith('test_')
+    if (!apiKey || (isTestKey && !__DEV__)) {
+      console.warn(
+        '[RevenueCat] non initialisé (clé de test en build release ou clé absente) — achats désactivés',
+      )
+      return
+    }
 
     await Purchases.configure({
       apiKey,

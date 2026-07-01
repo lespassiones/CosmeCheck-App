@@ -284,12 +284,68 @@ Deno.serve(async (req: Request) => {
       if (cachedResult && cacheTrustworthy) {
         cachedResult.items = recomputeThresholdContext(cachedItems);
         cachedResult.synthesis = null;
-        // SCORE = source de vérité catalog (INCI Beauty). On ne sert JAMAIS le
-        // score calculé en cache pour un produit présent au catalogue.
+
+        // GARANTIE D'INTÉGRITÉ : le cache product_analyses peut être incomplet
+        // (certaines lignes ETL n'ont QUE `items`). On (re)calcule TOUJOURS les
+        // comptes depuis items, sinon le result_json persisté sort sans `counts`
+        // → l'écran d'analyse affiche « illisible ». (bug juin 2026)
+        const cnt: Record<string, number> = { Vert: 0, Jaune: 0, Orange: 0, Rouge: 0, "Non reconnu": 0 };
+        for (const it of cachedItems) {
+          const c = (it as { colorRating?: ColorRating | null }).colorRating ?? null;
+          if (c === "Vert" || c === "Jaune" || c === "Orange" || c === "Rouge") cnt[c]++;
+          else cnt["Non reconnu"]++;
+        }
+        cachedResult.counts = {
+          total: cachedItems.length,
+          matched: cachedItems.length - cnt["Non reconnu"],
+          vert: cnt.Vert,
+          jaune: cnt.Jaune,
+          orange: cnt.Orange,
+          rouge: cnt.Rouge,
+          unknown: cnt["Non reconnu"],
+        };
+
+        // Spectre (5/10 premières positions) : le cache n'a pas toujours `spectrum`.
+        const bySpec = [...cachedItems].sort(
+          (a, b) =>
+            Number((a as { position?: number }).position ?? 0) -
+            Number((b as { position?: number }).position ?? 0),
+        );
+        const pickSpec = (n: number) =>
+          Array.from(
+            { length: Math.min(n, bySpec.length) },
+            (_, i) => (bySpec[i] as { colorRating?: ColorRating | null }).colorRating ?? null,
+          );
+        const existingSpec = cachedResult.spectrum as { top5?: unknown[] } | null | undefined;
+        if (!existingSpec || !Array.isArray(existingSpec.top5) || existingSpec.top5.length === 0) {
+          cachedResult.spectrum = { top5: pickSpec(5), top10: pickSpec(10) };
+        }
+
+        // SCORE = source de vérité catalog (INCI Beauty) si dispo. On ne sert
+        // JAMAIS le score calculé en cache pour un produit présent au catalogue.
         const ibScore = await getCatalogScore(productEan);
         if (ibScore != null) {
           const { label, tone } = scoreLabel(ibScore);
           cachedResult.score = ibScore;
+          cachedResult.scoreLabel = label;
+          cachedResult.scoreTone = tone;
+        } else if (typeof cachedResult.score !== "number") {
+          // Pas de score catalogue ET cache sans score → on le recalcule depuis
+          // items (formule pondérée + plafond couleur) plutôt que de persister
+          // un result_json sans `score`.
+          const computed = applyColorCap(
+            computeScore(
+              cachedItems.map((it) => ({
+                color_rating: (it as { colorRating?: ColorRating | null }).colorRating ?? null,
+                position: Number((it as { position?: number }).position ?? 0),
+              })),
+              cachedItems.length,
+            ),
+            cnt.Orange,
+            cnt.Rouge,
+          );
+          const { label, tone } = scoreLabel(computed);
+          cachedResult.score = computed;
           cachedResult.scoreLabel = label;
           cachedResult.scoreTone = tone;
         }
@@ -298,24 +354,20 @@ Deno.serve(async (req: Request) => {
         try {
           const autoName = body.productLabel?.slice(0, 200)
             ?? `Analyse du ${new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}`;
-          const { data: inserted } = await sbAuth
-            .schema("cosme_check")
-            .from("analyses")
-            .insert({
-              user_id: user.id,
-              name: autoName,
-              product_label: body.productLabel?.slice(0, 200) ?? null,
-              brand: body.brand?.slice(0, 120) ?? null,
-              product_type: body.productType?.slice(0, 120) ?? null,
-              category: (cachedResult.category as string | null) ?? null,
-              input_text: rawText,
-              result_json: cachedResult,
-              score: Number(((cachedResult.score as number) ?? 0).toFixed(2)),
-              ean: productEan?.slice(0, 32) ?? null,
-            })
-            .select("id")
-            .single();
-          savedAnalysisId = (inserted?.id as string) ?? null;
+          // Upsert dédupliqué : ré-analyser le même produit met à jour la ligne
+          // existante (pas de doublon dans l'historique).
+          const { data: upsertedId } = await sbAuth.rpc("cosme_check_upsert_analysis", {
+            p_name: autoName,
+            p_product_label: body.productLabel?.slice(0, 200) ?? null,
+            p_brand: body.brand?.slice(0, 120) ?? null,
+            p_product_type: body.productType?.slice(0, 120) ?? null,
+            p_category: (cachedResult.category as string | null) ?? null,
+            p_input_text: rawText,
+            p_result_json: cachedResult,
+            p_score: Number(((cachedResult.score as number) ?? 0).toFixed(2)),
+            p_ean: productEan?.slice(0, 32) ?? null,
+          });
+          savedAnalysisId = (upsertedId as string) ?? null;
         } catch { /* l'échec d'historique ne bloque pas la réponse */ }
 
         return jsonResponse({ ...cachedResult, analysisId: savedAnalysisId, addedToRoutine: false });
@@ -323,9 +375,11 @@ Deno.serve(async (req: Request) => {
     } catch { /* cache miss → pipeline complet */ }
   }
 
-  // ── 4. Débit du crédit (APRÈS les court-circuits) ───────────────────────
-  const charge = await g.consumeCredit("analyser");
-  if (!charge.ok) return charge.response;
+  // ── 4. Analyse GRATUITE (déterministe) ──────────────────────────────────
+  // L'analyse (score, classement, restrictions, liste d'ingrédients) ne débite
+  // plus de crédit : seule la personnalisation IA (Edge `personal-insights`,
+  // les 3 encarts perso) coûte 1 crédit. Permet à un utilisateur à 0 crédit de
+  // voir le classement + les restrictions d'un produit.
 
   // ── 5. Fast-path déterministe vs cascade IA ─────────────────────────────
   const skipAiParse = isCleanInciInput(rawText);
@@ -807,37 +861,37 @@ Deno.serve(async (req: Request) => {
   try {
     const autoName = body.productLabel?.slice(0, 200)
       ?? `Analyse du ${new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}`;
-    const { data: inserted, error: insertError } = await sbAuth
-      .schema("cosme_check")
-      .from("analyses")
-      .insert({
-        user_id: user.id,
-        name: autoName,
-        product_label: body.productLabel?.slice(0, 200) ?? null,
-        brand: body.brand?.slice(0, 120) ?? null,
-        product_type: body.productType?.slice(0, 120) ?? null,
-        category: resolvedCategory,
-        input_text: text,
-        result_json: responsePayload,
-        score: Number(score.toFixed(2)),
-        ean: body.productEan?.slice(0, 32) ?? null,
-      })
-      .select("id")
-      .single();
-    if (!insertError && inserted?.id) {
-      savedAnalysisId = inserted.id as string;
+    // Upsert dédupliqué : ré-analyser le même produit met à jour la ligne
+    // existante (un produit = une seule entrée d'historique).
+    const { data: upsertedId, error: insertError } = await sbAuth.rpc(
+      "cosme_check_upsert_analysis",
+      {
+        p_name: autoName,
+        p_product_label: body.productLabel?.slice(0, 200) ?? null,
+        p_brand: body.brand?.slice(0, 120) ?? null,
+        p_product_type: body.productType?.slice(0, 120) ?? null,
+        p_category: resolvedCategory,
+        p_input_text: text,
+        p_result_json: responsePayload,
+        p_score: Number(score.toFixed(2)),
+        p_ean: body.productEan?.slice(0, 32) ?? null,
+      },
+    );
+    const insertedId = (upsertedId as string) ?? null;
+    if (!insertError && insertedId) {
+      savedAnalysisId = insertedId;
       if (body.addToRoutine === true) {
         const { error: routineErr } = await sbAuth
           .schema("cosme_check")
           .from("routine_items")
           .upsert(
-            { user_id: user.id, analysis_id: inserted.id, frequency: "daily" },
+            { user_id: user.id, analysis_id: insertedId, frequency: "daily" },
             { onConflict: "user_id,analysis_id" },
           );
         if (!routineErr) addedToRoutine = true;
       }
       // Patch catégorie en arrière-plan si le LLM répond après la course 1.5 s.
-      const categorizeId = inserted.id as string;
+      const categorizeId = insertedId;
       void categoryPromise
         .then(async (cat) => {
           if (!cat || cat === resolvedCategory) return;

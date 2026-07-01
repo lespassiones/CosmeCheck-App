@@ -163,7 +163,7 @@ export const TipCarousel: FC<Props> = ({ tips }) => {
             }}
             style={styles.arrow}
           >
-            <Ionicons name="chevron-back" size={14} color={colors.accent} />
+            <Ionicons name="chevron-back" size={16} color={colors.accentDeep} />
           </Pressable>
 
           <View style={styles.dots}>
@@ -192,7 +192,7 @@ export const TipCarousel: FC<Props> = ({ tips }) => {
             }}
             style={styles.arrow}
           >
-            <Ionicons name="chevron-forward" size={14} color={colors.accent} />
+            <Ionicons name="chevron-forward" size={16} color={colors.accentDeep} />
           </Pressable>
         </View>
       )}
@@ -258,9 +258,9 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   arrow: {
-    width: 24,
-    height: 24,
-    borderRadius: radius.sm,
+    width: 28,
+    height: 28,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.accentSoft,

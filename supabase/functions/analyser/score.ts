@@ -74,5 +74,5 @@ export function scoreLabel(score: number): { label: string; tone: ScoreTone } {
   if (score >= 17) return { label: "Très bien", tone: "green" };
   if (score >= 13) return { label: "Bien", tone: "amber" };
   if (score >= 9) return { label: "Moyen", tone: "orange" };
-  return { label: "À éviter", tone: "rose" };
+  return { label: "Faible", tone: "rose" };
 }

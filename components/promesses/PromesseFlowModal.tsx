@@ -27,6 +27,7 @@
 import { type FC, useCallback, useEffect, useState } from 'react'
 import {
   ActivityIndicator,
+  DeviceEventEmitter,
   Modal,
   Pressable,
   ScrollView,
@@ -44,10 +45,38 @@ import { radius, spacing } from '@/constants/spacing'
 import { fontFamilies, typography } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { supabase } from '@/lib/supabase/client'
+import { CREDITS_EXHAUSTED_EVENT } from '@/lib/credits/exhaustedStore'
 import { ThinkingPhrases } from '@/components/shared/ThinkingPhrases'
 
 const MIN_MANUAL_DESC = 30
 const MAX_MANUAL_DESC = 4000
+
+/**
+ * Détecte un 429 « crédits épuisés » sur une réponse d'Edge Function et ouvre
+ * la modale globale (→ /offre). Renvoie true si c'était bien un épuisement de
+ * crédits (l'appelant affiche alors un message dédié plutôt qu'une erreur
+ * générique). Les 3 étapes du flow (identify / fetch-description / coherence)
+ * débitent chacune 1 crédit côté Edge.
+ */
+async function maybeCreditsExhausted(
+  error: unknown,
+  response: Response | undefined,
+): Promise<boolean> {
+  const res: Response | undefined =
+    response ?? ((error as { context?: Response })?.context as Response | undefined)
+  if (res?.status !== 429) return false
+  let used: number | undefined
+  let limit: number | undefined
+  try {
+    const body = (await res.json()) as { credits?: { used?: number; limit?: number } }
+    used = body?.credits?.used
+    limit = body?.credits?.limit
+  } catch {
+    /* corps illisible */
+  }
+  DeviceEventEmitter.emit(CREDITS_EXHAUSTED_EVENT, { used, limit })
+  return true
+}
 
 /** Phrases « thinking » affichées pendant l'analyse de cohérence. */
 const COHERENCE_PHRASES = [
@@ -136,11 +165,15 @@ export const PromesseFlowModal: FC<Props> = ({
       setStep('runningCoherence')
       setErrorMsg(null)
       try {
-        const { data, error } = await supabase.functions.invoke('coherence-analyze', {
+        const { data, error, response } = await supabase.functions.invoke('coherence-analyze', {
           body: { analysis_id: analysisId, description: desc, cacheable },
         })
         if (error) {
-          setErrorMsg("Échec de l'analyse de cohérence.")
+          setErrorMsg(
+            (await maybeCreditsExhausted(error, response))
+              ? 'Crédits épuisés. Passe Premium pour continuer.'
+              : "Échec de l'analyse de cohérence.",
+          )
           setStep('error')
           return
         }
@@ -166,11 +199,15 @@ export const PromesseFlowModal: FC<Props> = ({
     setStep('identifying')
     setErrorMsg(null)
     try {
-      const { data, error } = await supabase.functions.invoke('promesse-identify', {
+      const { data, error, response } = await supabase.functions.invoke('promesse-identify', {
         body: { inci, productLabel, brand, productType },
       })
       if (error) {
-        setErrorMsg('Identification impossible. Réessaie ou saisis la promesse manuellement.')
+        setErrorMsg(
+          (await maybeCreditsExhausted(error, response))
+            ? 'Crédits épuisés. Passe Premium pour continuer.'
+            : 'Identification impossible. Réessaie ou saisis la promesse manuellement.',
+        )
         setStep('error')
         return
       }
@@ -211,7 +248,7 @@ export const PromesseFlowModal: FC<Props> = ({
       setStep('fetchingDescription')
       setErrorMsg(null)
       try {
-        const { data, error } = await supabase.functions.invoke(
+        const { data, error, response } = await supabase.functions.invoke(
           'promesse-fetch-description',
           {
             body: {
@@ -225,7 +262,9 @@ export const PromesseFlowModal: FC<Props> = ({
         )
         if (error) {
           setErrorMsg(
-            'Impossible de récupérer la description du produit. Tu peux la saisir manuellement.',
+            (await maybeCreditsExhausted(error, response))
+              ? 'Crédits épuisés. Passe Premium pour continuer.'
+              : 'Impossible de récupérer la description du produit. Tu peux la saisir manuellement.',
           )
           setStep('error')
           return

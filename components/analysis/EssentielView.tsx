@@ -25,43 +25,6 @@ import { spacing } from '@/constants/spacing'
 import { verdictToneFromScore } from '@/lib/essentiel/engine'
 import type { ConcernTier, EssentielData, VerdictTone } from '@/lib/essentiel/engine'
 
-// Phrase L'ESSENTIEL — préfixe FIXE selon la pastille + qualificatif du compteur
-// d'ingrédients pénalisants (orange + rouge), propre à chaque niveau :
-//   œil → "à suivre" · triangle → "pénalisant(s)" · stop → "problématique(s)".
-const VERDICT_PHRASE: Record<
-  VerdictTone,
-  { prefix: string; noun: 'à suivre' | 'pénalisant' | 'problématique' | null }
-> = {
-  'very-safe': { prefix: 'Formule très douce', noun: null },
-  safe: { prefix: 'Formule globalement saine', noun: null },
-  caution: { prefix: 'Formule moyenne', noun: 'à suivre' },
-  warning: { prefix: 'Formule à suivre de près', noun: 'pénalisant' },
-  danger: { prefix: 'Formule à examiner attentivement', noun: 'problématique' },
-  'high-risk': { prefix: 'Formule à examiner attentivement', noun: 'problématique' },
-  unknown: { prefix: '', noun: null },
-}
-
-/**
- * Phrase L'ESSENTIEL : préfixe imposé par le SCORE (= la pastille), suivi
- * UNIQUEMENT du nombre d'ingrédients pénalisants (orange + rouge) avec le
- * qualificatif du niveau. Si aucun pénalisant (ou cœur/feuille) → juste le préfixe.
- */
-function buildVerdictPhrase(
-  enginePhrase: string,
-  verdictScore: number | null | undefined,
-  penalizingCount: number,
-): string {
-  if (verdictScore == null) return enginePhrase
-  const cfg = VERDICT_PHRASE[verdictToneFromScore(verdictScore)]
-  if (!cfg.prefix) return enginePhrase
-  if (!cfg.noun || penalizingCount <= 0) return `${cfg.prefix}.`
-  const plural = penalizingCount > 1
-  const ingr = plural ? 'ingrédients' : 'ingrédient'
-  const qual = cfg.noun === 'à suivre' ? 'à suivre' : plural ? `${cfg.noun}s` : cfg.noun
-  const count = penalizingCount === 1 ? 'un' : String(penalizingCount)
-  return `${cfg.prefix}, ${count} ${ingr} ${qual}.`
-}
-
 interface Props {
   data: EssentielData
   expanded: boolean
@@ -106,9 +69,8 @@ export const EssentielView: FC<Props> = ({
         onShowRestrictedFamilies={onShowRestrictedFamilies}
       />
 
-      {data.positives.length > 0 ? <PositivesCard positives={data.positives} /> : null}
-
-      {data.concerns.length > 0 ? <ConcernsCard concerns={data.concerns} /> : <AllClearCard />}
+      {/* « Ce qui est bien » / « À surveiller » remplacés par les 3 blocs IA
+          personnalisés (PersonalInsightsCards), rendus par le parent. */}
 
       {hideToggle ? null : (
         <View style={styles.toggleWrap}>
@@ -153,7 +115,7 @@ const HaloIcon: FC<{ name: IoniconName; iconColor: string; bg: string }> = ({
   <View style={styles.haloWrap}>
     <View style={[styles.haloRing, { backgroundColor: bg }]} />
     <View style={[styles.haloInner, { backgroundColor: bg }]}>
-      <Ionicons name={name} size={24} color={iconColor} />
+      <Ionicons name={name} size={20} color={iconColor} />
     </View>
   </View>
 )
@@ -179,20 +141,11 @@ function VerdictCard({
   // le ton calculé par le moteur quand le score est absent.
   const pv = VERDICT_VISUAL[verdictScore != null ? verdictToneFromScore(verdictScore) : verdict.tone]
 
-  // « Vert » = pastille cœur ou feuille (score ≥ 13). Sur un produit vert qui
-  // contient malgré tout une restriction, on n'affiche QUE l'alerte restriction
-  // (pas de phrase « formule très douce » qui rassurerait à tort).
-  const tone = verdictToneFromScore(verdictScore)
-  const isGreen = tone === 'very-safe' || tone === 'safe'
+  // La ligne restriction est TOUJOURS affichée : « Contient N… » s'il y a des
+  // restrictions, sinon « Ne contient aucune… ». La phrase verdict (« Formule
+  // moyenne… ») a été retirée : la pastille tonale + cette ligne suffisent et
+  // c'est l'info que l'utilisateur attend (parité avec le web).
   const hasRestriction = restrictedCount > 0
-
-  // Règles :
-  //   vert + 0 restriction  → « Ne contient aucune… » + phrase verdict
-  //   vert + ≥1 restriction → « Contient N… » SEUL (pas de phrase)
-  //   non-vert              → phrase verdict toujours ; + « Contient N… » si restriction
-  const showRestrictionLine = isGreen || hasRestriction
-  const showVerdictPhrase = !(isGreen && hasRestriction)
-
   const restrictionText = hasRestriction
     ? `Contient ${restrictedCount} de vos restrictions`
     : 'Ne contient aucune de vos restrictions'
@@ -204,50 +157,42 @@ function VerdictCard({
         <View style={styles.cardBody}>
           <Text style={styles.eyebrow}>L'ESSENTIEL</Text>
 
-          {showRestrictionLine ? (
-            <Pressable
-              onPress={onShowRestrictedFamilies}
-              disabled={!onShowRestrictedFamilies}
-              accessibilityRole="button"
-              accessibilityLabel={restrictionText}
-              style={({ pressed }) => [
-                styles.restrictionRow,
-                hasRestriction ? styles.restrictionRowAlert : styles.restrictionRowOk,
-                pressed && onShowRestrictedFamilies ? styles.restrictionRowPressed : null,
+          <Pressable
+            onPress={hasRestriction ? onShowRestrictedFamilies : onManageRestrictions}
+            disabled={!(hasRestriction ? onShowRestrictedFamilies : onManageRestrictions)}
+            accessibilityRole="button"
+            accessibilityLabel={restrictionText}
+            style={({ pressed }) => [
+              styles.restrictionRow,
+              hasRestriction ? styles.restrictionRowAlert : styles.restrictionRowOk,
+              pressed && onShowRestrictedFamilies ? styles.restrictionRowPressed : null,
+            ]}
+          >
+            <Text
+              style={[
+                styles.restrictionText,
+                { color: hasRestriction ? colors.rating.rouge.text : colors.rating.vert.text },
               ]}
+              numberOfLines={2}
             >
+              {restrictionText}
+            </Text>
+            <View style={styles.manageRow}>
               <Text
                 style={[
-                  styles.restrictionText,
+                  styles.manageText,
                   { color: hasRestriction ? colors.rating.rouge.text : colors.rating.vert.text },
                 ]}
-                numberOfLines={2}
               >
-                {restrictionText}
+                Gérer
               </Text>
-              <View style={styles.manageRow}>
-                <Text
-                  style={[
-                    styles.manageText,
-                    { color: hasRestriction ? colors.rating.rouge.text : colors.rating.vert.text },
-                  ]}
-                >
-                  Gérer
-                </Text>
-                <Ionicons
-                  name="chevron-forward"
-                  size={12}
-                  color={hasRestriction ? colors.rating.rouge.text : colors.rating.vert.text}
-                />
-              </View>
-            </Pressable>
-          ) : null}
-
-          {showVerdictPhrase ? (
-            <Text style={[styles.verdictPhrase, showRestrictionLine && styles.verdictPhraseSpaced]}>
-              {buildVerdictPhrase(verdict.phrase, verdictScore, penalizingCount)}
-            </Text>
-          ) : null}
+              <Ionicons
+                name="chevron-forward"
+                size={12}
+                color={hasRestriction ? colors.rating.rouge.text : colors.rating.vert.text}
+              />
+            </View>
+          </Pressable>
         </View>
       </View>
     </WhiteCard>
@@ -378,32 +323,32 @@ const styles = StyleSheet.create({
   cardInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.base,
+    gap: spacing.md,
   },
   cardInnerTop: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: spacing.base,
+    gap: spacing.md,
   },
   // Icône « halo » : disque pastel clair derrière (anneau) + cercle plein au
   // centre + ombre douce. Toujours circulaire.
   haloWrap: {
-    width: 54,
-    height: 54,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
   haloRing: {
     position: 'absolute',
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    opacity: 0.4,
-  },
-  haloInner: {
     width: 44,
     height: 44,
     borderRadius: 22,
+    opacity: 0.4,
+  },
+  haloInner: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#0F172A',
@@ -417,11 +362,11 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   eyebrow: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 11,
-    letterSpacing: 0.6,
-    color: colors.inkMuted,
-    marginBottom: 4,
+    fontFamily: fontFamilies.bold,
+    fontSize: 13,
+    letterSpacing: 0.3,
+    color: colors.ink,
+    marginBottom: 6,
   },
   verdictPhrase: {
     fontFamily: fontFamilies.semiBold,
@@ -454,8 +399,8 @@ const styles = StyleSheet.create({
   restrictionText: {
     flex: 1,
     fontFamily: fontFamilies.semiBold,
-    fontSize: 13,
-    lineHeight: 17,
+    fontSize: 12,
+    lineHeight: 16,
   },
   manageRow: {
     flexDirection: 'row',

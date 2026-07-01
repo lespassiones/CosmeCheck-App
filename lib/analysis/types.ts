@@ -151,22 +151,100 @@ export function getRatingColors(rating: ColorRating): { text: string; bg: string
   return map[rating]
 }
 
+// ── Reconstruction défensive (analyses persistées incomplètes) ───────────────
+// Le court-circuit cache EAN de l'Edge `analyser` a, pour certains produits,
+// persisté un result_json SANS `score` ni `counts` (juste `items`). Plutôt que
+// d'afficher « illisible », on recalcule ces champs depuis `items`. Le score
+// réel (INCI Beauty) est de toute façon ré-appliqué via le catalogue à l'écran.
+
+const RECON_PENALTY: Record<DbColorRating, number> = { Vert: 0, Jaune: 0.6, Orange: 2.0, Rouge: 4.0 }
+
+/** Tally des couleurs d'items → AnalyseCounts (forme minuscule). */
+function reconstructCounts(items: AnalyseItem[]): AnalyseCounts {
+  let vert = 0, jaune = 0, orange = 0, rouge = 0, unknown = 0
+  for (const it of items) {
+    switch (it.colorRating) {
+      case 'Vert': vert++; break
+      case 'Jaune': jaune++; break
+      case 'Orange': orange++; break
+      case 'Rouge': rouge++; break
+      default: unknown++
+    }
+  }
+  const total = items.length
+  return { total, matched: total - unknown, vert, jaune, orange, rouge, unknown }
+}
+
+/** Score 0-20 recalculé depuis items (même formule pondérée que lib/inci/parser). */
+function reconstructScoreFromItems(items: AnalyseItem[]): number {
+  const N = items.length
+  if (N === 0) return 0
+  let score = 20
+  let countOrange = 0
+  let countRouge = 0
+  for (const it of items) {
+    const c = it.colorRating
+    if (!c) continue
+    const weight = Math.log(N - it.position + 1) / Math.log(N + 1)
+    score -= (RECON_PENALTY[c] ?? 0) * weight
+    if (c === 'Orange') countOrange++
+    if (c === 'Rouge') countRouge++
+  }
+  score -= Math.max(0, countOrange - 3) * 0.4
+  score -= Math.max(0, countRouge - 2) * 0.8
+  return Math.max(0, Math.min(20, score))
+}
+
+function scoreToneFromScore(score: number): ScoreTone {
+  if (score >= 17) return 'green'
+  if (score >= 13) return 'amber'
+  if (score >= 9) return 'orange'
+  return 'rose'
+}
+
+function scoreLabelTextFromScore(score: number): string {
+  if (score >= 17) return 'Très bien'
+  if (score >= 13) return 'Bien'
+  if (score >= 9) return 'Moyen'
+  return 'Faible'
+}
+
 /** Parse défensif du result_json (jsonb) en AnalyseResponse. */
 export function parseAnalyseResponse(json: unknown): AnalyseResponse | null {
   if (!json || typeof json !== 'object') return null
   const r = json as Record<string, unknown>
-  if (typeof r.score !== 'number' || !r.counts || typeof r.counts !== 'object') return null
+  // `items` est le minimum vital : sans lui, l'analyse est irrécupérable.
+  if (!Array.isArray(r.items)) return null
+
   // Défensif : des analyses cachées ont des champs ATTENDUS-tableau corrompus en
   // objet/scalaire (ex. `tags` enrichi Wikidata = objet). On les re-coerce en
   // tableau pour qu'aucune itération downstream (computeEssentiel, rendu) ne casse.
-  if (Array.isArray(r.items)) {
-    r.items = r.items.map((raw) => {
-      if (!raw || typeof raw !== 'object') return raw
-      const it = raw as Record<string, unknown>
-      if ('tags' in it && !Array.isArray(it.tags)) it.tags = []
-      if ('allFunctions' in it && !Array.isArray(it.allFunctions)) it.allFunctions = []
-      return it
-    })
+  r.items = (r.items as unknown[]).map((raw) => {
+    if (!raw || typeof raw !== 'object') return raw
+    const it = raw as Record<string, unknown>
+    if ('tags' in it && !Array.isArray(it.tags)) it.tags = []
+    if ('allFunctions' in it && !Array.isArray(it.allFunctions)) it.allFunctions = []
+    return it
+  })
+
+  const items = r.items as AnalyseItem[]
+
+  // Reconstruction des champs manquants (court-circuit cache incomplet).
+  if (!r.counts || typeof r.counts !== 'object') r.counts = reconstructCounts(items)
+  if (typeof r.score !== 'number') r.score = reconstructScoreFromItems(items)
+  if (typeof r.scoreLabel !== 'string') r.scoreLabel = scoreLabelTextFromScore(r.score as number)
+  if (typeof r.scoreTone !== 'string') r.scoreTone = scoreToneFromScore(r.score as number)
+  if (!Array.isArray(r.observations)) r.observations = []
+  // Spectre : reconstruit depuis items (5/10 premières positions) si absent/vide
+  // (certaines lignes servies par le court-circuit cache n'ont pas de spectrum).
+  const sp = r.spectrum as { top5?: unknown[] } | null | undefined
+  if (!sp || typeof sp !== 'object' || !Array.isArray(sp.top5) || sp.top5.length === 0) {
+    const sorted = [...items].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+    const pick = (n: number): (DbColorRating | null)[] =>
+      Array.from({ length: Math.min(n, sorted.length) }, (_, i) => sorted[i]?.colorRating ?? null)
+    r.spectrum = { top5: pick(5), top10: pick(10) }
   }
+  if (!('synthesis' in r)) r.synthesis = null
+
   return json as AnalyseResponse
 }

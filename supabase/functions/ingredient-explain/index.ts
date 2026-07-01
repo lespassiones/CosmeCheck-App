@@ -25,7 +25,7 @@
  */
 import { handleOptions, jsonResponse } from "../_shared/cors.ts";
 import { getOptionalUser, serviceClient } from "../_shared/auth.ts";
-import { AI_MODEL, callWithFallback, hasOpenAI, openai } from "../_shared/aiClient.ts";
+import { AI_MODEL, hasMistral, hasOpenAI, logAI, MISTRAL_MODEL, mistralChat, openai } from "../_shared/aiClient.ts";
 import { NO_LONG_DASHES_RULE, stripLongDashes } from "../_shared/sanitize.ts";
 
 type ColorRating = "Vert" | "Jaune" | "Orange" | "Rouge";
@@ -62,8 +62,8 @@ async function explainIngredient(
     return { text: stripLongDashes(cached.explanation), cached: true };
   }
 
-  // 2. Pas d'IA → dégradation gracieuse.
-  if (!hasOpenAI()) {
+  // 2. Pas d'IA du tout → dégradation gracieuse.
+  if (!hasMistral() && !hasOpenAI()) {
     return { text: NO_EXPLANATION, cached: false };
   }
 
@@ -79,43 +79,55 @@ Tags : ${tags}
 
 Réponds avec UNIQUEMENT le texte de l'explication (3 phrases sur 3 lignes).`;
 
-  try {
-    const text = await callWithFallback<string>({
-      feature: "explain",
-      userId,
-      timeoutMs: 10_000,
-      primary: async () => {
-        const r = await openai().chat.completions.create({
-          model: AI_MODEL,
-          temperature: 0.4,
-          max_tokens: 220,
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: user },
-          ],
-        });
-        const raw = r.choices?.[0]?.message?.content?.trim() ?? "";
-        return {
-          value: stripLongDashes(raw),
-          tokensIn: r.usage?.prompt_tokens,
-          tokensOut: r.usage?.completion_tokens,
-        };
-      },
-      fallback: () => Promise.resolve({ value: NO_EXPLANATION, provider: "openai" }),
-    });
+  const messages = [
+    { role: "system" as const, content: system },
+    { role: "user" as const, content: user },
+  ];
 
-    if (text && text !== NO_EXPLANATION) {
-      // Cache permanent (une ligne par inci_id).
-      await sb
-        .schema("cosme_check")
-        .from("ingredient_explanations")
-        .upsert({ inci_id: ctx.inciId, explanation: text }, { onConflict: "inci_id" });
+  // 3. Génération : MISTRAL PRIMAIRE → GPT en repli.
+  let text = "";
+  const t0 = Date.now();
+
+  if (hasMistral()) {
+    try {
+      const raw = await mistralChat({ model: MISTRAL_MODEL, temperature: 0.4, maxTokens: 220, messages });
+      const cleaned = stripLongDashes((raw ?? "").trim());
+      if (cleaned) {
+        text = cleaned;
+        logAI({ feature: "explain", provider: "mistral", status: "success", duration_ms: Date.now() - t0, user_id: userId });
+      }
+    } catch {
+      logAI({ feature: "explain", provider: "mistral", status: "fallback", duration_ms: Date.now() - t0, user_id: userId });
     }
+  }
 
-    return { text, cached: false };
-  } catch {
+  // Repli GPT si Mistral indisponible / vide.
+  if (!text && hasOpenAI()) {
+    try {
+      const r = await openai().chat.completions.create({
+        model: AI_MODEL,
+        temperature: 0.4,
+        max_tokens: 220,
+        messages,
+      });
+      text = stripLongDashes((r.choices?.[0]?.message?.content ?? "").trim());
+      logAI({ feature: "explain", provider: "openai", status: "fallback", duration_ms: Date.now() - t0, user_id: userId });
+    } catch {
+      logAI({ feature: "explain", provider: "openai", status: "error", duration_ms: Date.now() - t0, user_id: userId });
+    }
+  }
+
+  if (!text) {
     return { text: NO_EXPLANATION, cached: false };
   }
+
+  // Cache permanent (une ligne par inci_id).
+  await sb
+    .schema("cosme_check")
+    .from("ingredient_explanations")
+    .upsert({ inci_id: ctx.inciId, explanation: text }, { onConflict: "inci_id" });
+
+  return { text, cached: false };
 }
 
 Deno.serve(async (req) => {

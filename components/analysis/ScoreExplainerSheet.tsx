@@ -299,7 +299,7 @@ const SimilarBar: FC<{ score: number; avg: number }> = ({ score, avg }) => {
         <View style={[styles.gaugeDot, { left: pctLeft(score) }]} />
       </View>
       <View style={styles.gaugeScale}>
-        <Text style={styles.gaugeScaleText}>À éviter</Text>
+        <Text style={styles.gaugeScaleText}>Faible</Text>
         <Text style={styles.gaugeScaleText}>Très bien</Text>
       </View>
       <View style={styles.gaugeLegend}>

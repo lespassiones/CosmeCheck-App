@@ -38,3 +38,6 @@ yarn-error.*
 .idea/
 .vscode/
 
+
+# Google Play service account (eas submit) - SECRET, ne jamais committer
+play-service-account.json

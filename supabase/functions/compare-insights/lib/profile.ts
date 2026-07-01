@@ -8,8 +8,73 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { IngredientFamily, UserRestrictions } from "./checkRestrictions.ts";
 
 type Prefs = Record<string, unknown> | null;
+
+/**
+ * Charge les restrictions BRUTES (familles slugs + ingrédients) et le référentiel
+ * des familles (slug, tag_slug, name) → pour la détection déterministe par item
+ * (checkRestrictions), identique aux fiches. Fail-closed : restrictions vides sur
+ * erreur.
+ */
+export async function loadRestrictionsForDetection(
+  sb: SupabaseClient,
+  userId: string,
+): Promise<{ restrictions: UserRestrictions; families: IngredientFamily[] }> {
+  const empty = { restrictions: { families: [], ingredients: [] }, families: [] as IngredientFamily[] };
+  try {
+    const { data } = await sb
+      .schema("cosme_check")
+      .from("user_profiles")
+      .select("preferences")
+      .eq("id", userId)
+      .maybeSingle();
+    const raw = (data?.preferences as { restrictions?: unknown } | null)?.restrictions;
+    if (!raw || typeof raw !== "object") return empty;
+    const r = raw as Record<string, unknown>;
+
+    const families = Array.isArray(r.families)
+      ? (r.families as unknown[]).filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+      : [];
+    const ingredients = Array.isArray(r.ingredients)
+      ? (r.ingredients as unknown[])
+          .map((it) => {
+            if (!it || typeof it !== "object") return null;
+            const o = it as Record<string, unknown>;
+            const name = typeof o.name === "string" ? o.name.trim() : "";
+            if (!name) return null;
+            const slug = typeof o.slug === "string" ? o.slug : null;
+            return { slug, name };
+          })
+          .filter((x): x is { slug: string | null; name: string } => x !== null)
+      : [];
+
+    if (families.length === 0 && ingredients.length === 0) return empty;
+
+    let famRef: IngredientFamily[] = [];
+    if (families.length > 0) {
+      try {
+        const { data: fams } = await sb
+          .schema("cosme_check")
+          .from("ingredient_families")
+          .select("slug, tag_slug, name")
+          .eq("active", true);
+        famRef = ((fams ?? []) as { slug: string; tag_slug: string | null; name: string }[]).map((f) => ({
+          slug: f.slug,
+          tagSlug: f.tag_slug,
+          name: f.name,
+        }));
+      } catch {
+        famRef = [];
+      }
+    }
+
+    return { restrictions: { families, ingredients }, families: famRef };
+  } catch {
+    return empty;
+  }
+}
 
 function readShort(r: Record<string, unknown>, key: string, max: number): string | null {
   const v = r[key];

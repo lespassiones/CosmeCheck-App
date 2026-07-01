@@ -1,0 +1,43 @@
+diff --git a/node_modules/whatwg-fetch/dist/fetch.umd.js b/node_modules/whatwg-fetch/dist/fetch.umd.js
+index 7a0d852..3acfa66 100644
+--- a/node_modules/whatwg-fetch/dist/fetch.umd.js
++++ b/node_modules/whatwg-fetch/dist/fetch.umd.js
+@@ -544,6 +544,17 @@
+       }
+ 
+       xhr.onload = function() {
++        // PATCH (CosmeCheck) : un statut 0 (réponse native sans ligne de statut,
++        // requête avortée, coupure réseau) faisait `new Response(body,{status:0})`
++        // plus bas, qui LÈVE dans le setTimeout détaché → erreur NON rattrapable
++        // (RedBox). On le traite comme une erreur réseau → reject propre, capté
++        // par les try/catch appelants. (Hors file:// qui a son propre repli.)
++        if (xhr.status === 0 && request.url.indexOf('file://') !== 0) {
++          setTimeout(function() {
++            reject(new TypeError('Network request failed'));
++          }, 0);
++          return;
++        }
+         var options = {
+           statusText: xhr.statusText,
+           headers: parseHeaders(xhr.getAllResponseHeaders() || '')
+diff --git a/node_modules/whatwg-fetch/fetch.js b/node_modules/whatwg-fetch/fetch.js
+index f39a983..fa085e8 100644
+--- a/node_modules/whatwg-fetch/fetch.js
++++ b/node_modules/whatwg-fetch/fetch.js
+@@ -538,6 +538,16 @@ export function fetch(input, init) {
+     }
+ 
+     xhr.onload = function() {
++      // PATCH (CosmeCheck) : un statut 0 (réponse native sans ligne de statut,
++      // requête avortée, coupure réseau) faisait `new Response(body,{status:0})`
++      // plus bas, qui LÈVE dans le setTimeout détaché → erreur NON rattrapable
++      // (RedBox). On le traite comme une erreur réseau → reject propre.
++      if (xhr.status === 0 && request.url.indexOf('file://') !== 0) {
++        setTimeout(function() {
++          reject(new TypeError('Network request failed'))
++        }, 0)
++        return
++      }
+       var options = {
+         statusText: xhr.statusText,
+         headers: parseHeaders(xhr.getAllResponseHeaders() || '')

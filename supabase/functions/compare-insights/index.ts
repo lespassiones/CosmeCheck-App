@@ -27,7 +27,8 @@ import {
   generateCompareInsights,
   shortenProductName,
 } from "./lib.ts";
-import { loadProfileAndRestrictions } from "./lib/profile.ts";
+import { loadProfileAndRestrictions, loadRestrictionsForDetection } from "./lib/profile.ts";
+import { checkRestrictions, detectedLabels, type CheckableItem } from "./lib/checkRestrictions.ts";
 
 Deno.serve(async (req) => {
   const pre = handleOptions(req);
@@ -86,10 +87,19 @@ Deno.serve(async (req) => {
     // 5. Profil utilisateur (best-effort, non-bloquant).
     const { profileBlock, restrictionsBlock, firstName } = await loadProfileAndRestrictions(sb, user.id);
 
+    // 5b. Détection DÉTERMINISTE des restrictions par produit (mêmes règles que
+    // les fiches : checkRestrictions par tag/slug). On donne la vérité terrain à
+    // l'IA au lieu de la laisser deviner (elle affirmait à tort « aucun interdit »).
+    const { restrictions, families } = await loadRestrictionsForDetection(sb, user.id);
+    const itemsA = (a.result_json?.items ?? []) as unknown as CheckableItem[];
+    const itemsB = (b.result_json?.items ?? []) as unknown as CheckableItem[];
+    const detectedA = detectedLabels(checkRestrictions(itemsA, restrictions, families));
+    const detectedB = detectedLabels(checkRestrictions(itemsB, restrictions, families));
+
     const insights = await generateCompareInsights(
       { name: shortA, result: a.result_json },
       { name: shortB, result: b.result_json },
-      { userId: user.id, profileBlock, restrictionsBlock, firstName },
+      { userId: user.id, profileBlock, restrictionsBlock, firstName, detectedA, detectedB },
     );
 
     if (!insights) {

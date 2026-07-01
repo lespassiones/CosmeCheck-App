@@ -23,7 +23,7 @@
  *
  * Entrée : { analysisId: string }
  * Sortie : { synthesis: string | null }  (ou { error } + status sur échec)
- * Crédit : 0.
+ * Crédit : 1 débité À LA GÉNÉRATION (gratuit en relecture, synthèse persistée).
  */
 import { handleOptions, jsonResponse } from "../_shared/cors.ts";
 import { getBearerToken, unauthorizedResponse, userClient } from "../_shared/auth.ts";
@@ -158,6 +158,30 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // → on régénère pour rester cohérent avec le badge live.
   if (resultJson.synthesis && resultJson.synthesisRestrictionsKey === synthKey) {
     return jsonResponse({ synthesis: stripAbsencesParagraph(resultJson.synthesis) });
+  }
+
+  // ── 3c-bis. Crédit : 1 crédit débité À LA GÉNÉRATION uniquement. ───────────
+  // La synthèse est persistée dans result_json → revoir une analyse déjà
+  // synthétisée repasse par le court-circuit ci-dessus (gratuit). On ne débite
+  // donc QUE la première génération (ou une régénération après changement de
+  // restrictions). Épuisé → 429 + payload `credits` (le client ouvre la modale).
+  const { data: creditData } = await supabase.rpc("cosme_check_consume_credit", {
+    p_feature: "synthesis",
+  });
+  const consume = (creditData ?? { ok: false }) as {
+    ok: boolean
+    used?: number
+    limit?: number
+    remaining?: number
+  };
+  if (!consume.ok) {
+    return jsonResponse(
+      {
+        error: "Tu as utilisé tous tes crédits du jour. Reviens demain.",
+        credits: { used: consume.used ?? 0, limit: consume.limit ?? 100, remaining: 0 },
+      },
+      { status: 429 },
+    );
   }
 
   try {

@@ -40,11 +40,12 @@ export const CreditsExhaustedModal: FC = () => {
 
   const limit = payload.limit ?? 100
 
-  // Fermer la modale puis revenir au dashboard : toute action qui suit
-  // referait un 429, le dashboard est l'atterrissage le plus sensé.
+  // « Plus tard » / tap backdrop : on FERME simplement la modale et on reste
+  // EXACTEMENT là où l'utilisateur était (on ne le renvoie plus au dashboard).
+  // « Découvrir Premium » fait un push vers /offre → un retour arrière le ramène
+  // pile sur cet écran.
   const close = () => {
     hide()
-    router.replace(ROUTES.TABS.HOME)
   }
 
   const goPremium = () => {

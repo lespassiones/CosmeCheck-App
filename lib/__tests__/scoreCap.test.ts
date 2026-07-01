@@ -6,7 +6,7 @@
 import { applyColorCap, scoreLabelFromScore } from '@/lib/analysis/scoreCap'
 
 describe('applyColorCap', () => {
-  it('1 rouge -> plafonne à < 9 (À éviter), peu importe le score initial', () => {
+  it('1 rouge -> plafonne à < 9 (Faible), peu importe le score initial', () => {
     expect(applyColorCap(19.5, 0, 1)).toBe(8.9)
     expect(applyColorCap(20, 5, 3)).toBe(8.9)
   })
@@ -33,7 +33,7 @@ describe('applyColorCap', () => {
   // doit basculer son LIBELLÉ une fois plafonné.
   it('le libellé suit bien le score plafonné', () => {
     const capped = applyColorCap(19.5, 0, 1)
-    expect(scoreLabelFromScore(capped)).toBe('À éviter')
+    expect(scoreLabelFromScore(capped)).toBe('Faible')
     const cappedOrange = applyColorCap(19, 1, 0)
     expect(scoreLabelFromScore(cappedOrange)).toBe('Moyen')
   })
@@ -46,7 +46,7 @@ describe('scoreLabelFromScore', () => {
     expect(scoreLabelFromScore(13)).toBe('Bien')
     expect(scoreLabelFromScore(12.99)).toBe('Moyen')
     expect(scoreLabelFromScore(9)).toBe('Moyen')
-    expect(scoreLabelFromScore(8.99)).toBe('À éviter')
-    expect(scoreLabelFromScore(0)).toBe('À éviter')
+    expect(scoreLabelFromScore(8.99)).toBe('Faible')
+    expect(scoreLabelFromScore(0)).toBe('Faible')
   })
 })

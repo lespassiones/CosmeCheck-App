@@ -25,6 +25,7 @@ import {
 } from 'react'
 import {
   ActivityIndicator,
+  DeviceEventEmitter,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -34,6 +35,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { CREDITS_EXHAUSTED_EVENT } from '@/lib/credits/exhaustedStore'
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -220,13 +222,19 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
 
         if (!res.ok) {
           const errBody = (await res.json().catch(() => null)) as
-            | { code?: string; error?: string }
+            | { code?: string; error?: string; credits?: { used?: number; limit?: number } }
             | null
           if (res.status === 429 && errBody?.code === 'no_credits') {
             failWith(
               errBody.error ??
                 "Tu as utilisé tous tes crédits du jour. Reviens demain ou passe en Premium pour en avoir plus 💜",
             )
+            // En plus du message dans le fil, on ouvre la modale globale
+            // « Crédits épuisés » (→ /offre) pour proposer l'abonnement.
+            DeviceEventEmitter.emit(CREDITS_EXHAUSTED_EVENT, {
+              used: errBody.credits?.used,
+              limit: errBody.credits?.limit,
+            })
           } else if (res.status === 429) {
             failWith('Tu vas un peu vite 😅 Patiente une minute et réessaie.')
           } else {

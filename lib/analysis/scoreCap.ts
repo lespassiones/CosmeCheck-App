@@ -21,5 +21,5 @@ export function scoreLabelFromScore(score: number): string {
   if (score >= 17) return 'Très bien'
   if (score >= 13) return 'Bien'
   if (score >= 9) return 'Moyen'
-  return 'À éviter'
+  return 'Faible'
 }

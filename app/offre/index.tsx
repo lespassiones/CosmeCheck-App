@@ -33,6 +33,7 @@ type PlanId = 'monthly' | 'yearly'
 type Tab = 'plans' | 'subscription'
 
 const BENEFITS: { icon: keyof typeof Ionicons.glyphMap; text: string }[] = [
+  { icon: 'person-circle', text: 'Expérience personnalisée' },
   { icon: 'flask', text: '100 crédits par mois' },
   { icon: 'shield-checkmark', text: 'Analyses illimitées' },
   { icon: 'git-compare', text: 'Advisor Premium' },

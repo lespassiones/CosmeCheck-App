@@ -47,8 +47,18 @@ export type CompareInsights = {
   howToChoose: string;
 };
 
-// v6 : portraits en langage courant (pas de noms INCI, pas de conseils d'action).
-const PROMPT_VERSION = 6;
+// v7 : détection DÉTERMINISTE des restrictions injectée (fini l'IA qui affirmait
+// à tort « aucun ingrédient interdit »). v6 : portraits en langage courant.
+const PROMPT_VERSION = 7;
+
+type ProfileOpts = {
+  profileBlock?: string | null;
+  restrictionsBlock?: string | null;
+  firstName?: string | null;
+  /** Restrictions RÉELLEMENT détectées (déterministe) dans chaque produit. */
+  detectedA?: string[];
+  detectedB?: string[];
+};
 
 // ── shortenProductName (port verbatim du web) ───────────────────────────────
 
@@ -160,7 +170,7 @@ function flagged(
 function buildPrompt(
   a: CompareSideInput,
   b: CompareSideInput,
-  opts: { profileBlock?: string | null; restrictionsBlock?: string | null; firstName?: string | null } = {},
+  opts: ProfileOpts = {},
 ): { system: string; user: string } {
   const sideBlock = (label: string, side: CompareSideInput) => {
     const c = side.result.counts;
@@ -177,6 +187,20 @@ function buildPrompt(
 
   const firstName = opts.firstName ?? null;
   const profileSection = [opts.profileBlock, opts.restrictionsBlock].filter(Boolean).join("\n\n");
+
+  // Vérité terrain déterministe : quelles restrictions de l'utilisateur chaque
+  // produit contient RÉELLEMENT (mêmes règles que les fiches). L'IA DOIT s'y
+  // tenir et ne jamais inventer « aucun ingrédient interdit ».
+  const detA = opts.detectedA ?? [];
+  const detB = opts.detectedB ?? [];
+  const restrictionTruth = opts.restrictionsBlock
+    ? [
+        "RESTRICTIONS DE L'UTILISATEUR RÉELLEMENT PRÉSENTES (détection déterministe = VÉRITÉ ABSOLUE, ne la contredis JAMAIS) :",
+        `- ${a.name} : ${detA.length ? detA.join(", ") : "aucune de ses restrictions"}`,
+        `- ${b.name} : ${detB.length ? detB.join(", ") : "aucune de ses restrictions"}`,
+        "RÈGLE : pour toute mention d'ingrédient interdit / de restriction de l'utilisateur, base-toi UNIQUEMENT sur cette liste. N'écris JAMAIS qu'un produit « ne contient aucun ingrédient interdit dans votre liste » (ni équivalent) s'il apparaît ci-dessus avec des restrictions. Quand un produit contient des restrictions, mentionne-le clairement en langage courant.",
+      ].join("\n")
+    : "";
 
   const system =
     "Tu es un conseiller cosmétique bienveillant qui s'adresse directement à l'utilisateur. " +
@@ -223,7 +247,7 @@ ${sideBlock("PRODUIT 2", b)}
 NOMS À UTILISER DANS LE TEXTE (verbatim) :
 - Produit 1 : "${a.name}"
 - Produit 2 : "${b.name}"
-${firstName ? `\nPRÉNOM DE L'UTILISATEUR : ${firstName}\n` : ""}${profileSection ? `\n${profileSection}\n` : ""}
+${firstName ? `\nPRÉNOM DE L'UTILISATEUR : ${firstName}\n` : ""}${profileSection ? `\n${profileSection}\n` : ""}${restrictionTruth ? `\n${restrictionTruth}\n` : ""}
 JSON avec exactement ces 4 clés :
 
 {
@@ -239,7 +263,8 @@ CONTRAINTES ABSOLUES
 - Zéro nom INCI en majuscules dans portraitA et portraitB.
 - Zéro 'à tester', 'à utiliser avec précaution', 'recommandé', 'déconseillé'.
 - Zéro 'produit A' / 'produit B' / 'A' / 'B' comme étiquette.
-- Ne cite pas les notes /20, ne mentionne pas 'score' ou 'note'.`;
+- Ne cite pas les notes /20, ne mentionne pas 'score' ou 'note'.
+- Restrictions : n'affirme JAMAIS « aucun ingrédient interdit dans votre liste » (ni équivalent) si la liste 'RESTRICTIONS RÉELLEMENT PRÉSENTES' montre des restrictions pour un produit ; reflète fidèlement cette liste.`;
 
   return { system, user };
 }
@@ -274,7 +299,7 @@ function tryParse(raw: string): CompareInsights | null {
 async function callMistralFallback(
   a: CompareSideInput,
   b: CompareSideInput,
-  profileOpts: { profileBlock?: string | null; restrictionsBlock?: string | null; firstName?: string | null } = {},
+  profileOpts: ProfileOpts = {},
 ): Promise<CompareInsights | null> {
   if (!hasMistral()) return null;
   const { system, user } = buildPrompt(a, b, profileOpts);
@@ -293,23 +318,24 @@ async function callMistralFallback(
 export async function generateCompareInsights(
   a: CompareSideInput,
   b: CompareSideInput,
-  opts: {
-    userId?: string | null;
-    profileBlock?: string | null;
-    restrictionsBlock?: string | null;
-    firstName?: string | null;
-  } = {},
+  opts: { userId?: string | null } & ProfileOpts = {},
 ): Promise<CompareInsights | null> {
-  const profileOpts = {
+  const profileOpts: ProfileOpts = {
     profileBlock: opts.profileBlock ?? null,
     restrictionsBlock: opts.restrictionsBlock ?? null,
     firstName: opts.firstName ?? null,
+    detectedA: opts.detectedA ?? [],
+    detectedB: opts.detectedB ?? [],
   };
 
-  // Cache user-specific quand un profil est présent, global sinon.
+  // Cache user-specific quand un profil est présent, global sinon. On inclut la
+  // détection déterministe des restrictions → une détection différente (donc un
+  // texte différent) ne réutilise pas un ancien cache.
   let profileFingerprint: string | undefined;
   if (profileOpts.profileBlock || profileOpts.restrictionsBlock) {
-    const raw = (profileOpts.profileBlock ?? "") + "|" + (profileOpts.restrictionsBlock ?? "");
+    const raw =
+      (profileOpts.profileBlock ?? "") + "|" + (profileOpts.restrictionsBlock ?? "") +
+      "|A:" + (profileOpts.detectedA ?? []).join(",") + "|B:" + (profileOpts.detectedB ?? []).join(",");
     profileFingerprint = (await sha256Hex(raw)).slice(0, 16);
   }
   const cacheKey = await makeCacheKey(a, b, profileFingerprint);

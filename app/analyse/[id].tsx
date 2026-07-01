@@ -292,11 +292,16 @@ const AnalyseDetailScreen: FC = () => {
     // Garde feature flag (Paramètres admin) : partage public désactivé.
     if (!appConfig.flag_public_share) return
     const url = `${SHARE_BASE_URL}/a/${id}`
+    // Rend l'analyse lisible publiquement (lecture seule) sur la page /a/[id].
+    // IMPORTANT : on ATTEND l'update (sinon en fire-and-forget il ne se termine
+    // pas avant l'ouverture de la feuille de partage → flag jamais persisté →
+    // lien partagé en 404). RLS : le propriétaire peut flagger sa ligne.
     try {
-      // Rend l'analyse lisible publiquement (lecture seule) sur le web : la
-      // page /a/[id] affiche un aperçu sans connexion. RLS : le propriétaire
-      // peut flagger sa propre ligne. Fire-and-forget (ne bloque pas le partage).
-      void db().from('analyses').update({ shared: true }).eq('id', id)
+      await db().from('analyses').update({ shared: true }).eq('id', id)
+    } catch {
+      /* best-effort : on partage quand même */
+    }
+    try {
       await Share.share({
         message: `${state.title} — analyse CosmeCheck\n${url}`,
         url,
@@ -365,7 +370,7 @@ const AnalyseDetailScreen: FC = () => {
           {/* En-tête produit : image + titre (image à gauche, titre à droite),
               puis catégorie/marque, CTAs, partage + jauge */}
           <View style={styles.header}>
-            <WhiteCard padding={spacing.lg}>
+            <WhiteCard padding={spacing.md}>
               <View style={styles.headerCardInner}>
             <View style={styles.titleRow}>
               <View style={styles.titleImageSlot}>
@@ -380,34 +385,38 @@ const AnalyseDetailScreen: FC = () => {
                   />
                 ) : (
                   <View style={styles.titleImagePlaceholder}>
-                    <Ionicons name="image-outline" size={24} color={colors.inkLight} />
+                    <Ionicons name="image-outline" size={28} color={colors.inkLight} />
                   </View>
                 )}
               </View>
-              <Text style={styles.title} numberOfLines={3}>{state.title}</Text>
-            </View>
-            {(() => {
-              // Priorité à la catégorie précise (famille/sous/feuille) pour les
-              // produits analysés, sinon la feuille catalogue, sinon l'enum.
-              const preciseLeaf = state.categoryPrecise
-                ? leafLabelFromCategorySlug(state.categoryPrecise)
-                : null
-              const chipLabel = leafCategory || preciseLeaf || state.categoryText
-              return (chipLabel || state.brand) ? (
-              <View style={styles.metaRow}>
-                {chipLabel ? (
-                  <View style={styles.categoryChip}>
-                    <Text style={styles.categoryText} numberOfLines={1}>
-                      {chipLabel}
-                    </Text>
-                  </View>
-                ) : null}
-                {state.brand ? (
-                  <Text style={styles.brandText} numberOfLines={1}>{state.brand}</Text>
-                ) : null}
+              {/* Colonne droite : titre, puis marque + sous-catégorie SOUS le
+                  titre (l'image à gauche remplit la hauteur de cette colonne). */}
+              <View style={styles.titleTextCol}>
+                <Text style={styles.title} numberOfLines={3}>{state.title}</Text>
+                {(() => {
+                  // Priorité à la catégorie précise (famille/sous/feuille) pour
+                  // les produits analysés, sinon la feuille catalogue, sinon l'enum.
+                  const preciseLeaf = state.categoryPrecise
+                    ? leafLabelFromCategorySlug(state.categoryPrecise)
+                    : null
+                  const chipLabel = leafCategory || preciseLeaf || state.categoryText
+                  return (chipLabel || state.brand) ? (
+                    <View style={styles.metaRow}>
+                      {chipLabel ? (
+                        <View style={styles.categoryChip}>
+                          <Text style={styles.categoryText} numberOfLines={1}>
+                            {chipLabel}
+                          </Text>
+                        </View>
+                      ) : null}
+                      {state.brand ? (
+                        <Text style={styles.brandText} numberOfLines={1}>{state.brand}</Text>
+                      ) : null}
+                    </View>
+                  ) : null
+                })()}
               </View>
-            ) : null
-            })()}
+            </View>
 
             <View style={styles.ctaRow}>
               <Pressable
@@ -564,12 +573,15 @@ const styles = StyleSheet.create({
   },
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
+    alignItems: 'flex-start',
+    gap: spacing.base,
   },
   titleImageSlot: {
-    width: 76,
-    height: 76,
+    // Taille FIXE (bornée) : image agrandie qui occupe la hauteur du bloc
+    // titre + marque/sous-cat, sans dépendre du contenu (évite tout
+    // débordement). Plus large/haute que l'ancien 76×76.
+    width: 104,
+    height: 118,
     flexShrink: 0,
   },
   titleImage: {
@@ -586,8 +598,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: {
+  // Colonne droite : titre + (sous-cat / marque) empilés sous le titre.
+  titleTextCol: {
     flex: 1,
+    minWidth: 0,
+    justifyContent: 'flex-start',
+    gap: spacing.sm,
+  },
+  title: {
     fontFamily: fontFamilies.bold,
     fontSize: 20,
     lineHeight: 26,
@@ -599,7 +617,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexWrap: 'wrap',
     gap: spacing.sm,
-    marginTop: -spacing.xs,
   },
   categoryChip: {
     alignSelf: 'flex-start',
@@ -631,7 +648,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 5,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 12,
+    paddingVertical: 9,
     borderRadius: radius.full,
   },
   ctaBtnGreen: {

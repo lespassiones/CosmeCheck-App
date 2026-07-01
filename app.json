@@ -63,6 +63,14 @@
           "photosPermission": "CosmeCheck accède à vos photos pour analyser les emballages de produits.",
           "cameraPermission": "CosmeCheck utilise la caméra pour photographier les listes d'ingrédients."
         }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://de.sentry.io/",
+          "organization": "REMPLACER_PAR_TON_ORG_SLUG",
+          "project": "REMPLACER_PAR_TON_PROJECT_SLUG"
+        }
       ]
     ],
     "experiments": {
@@ -72,7 +80,9 @@
       "router": {},
       "eas": {
         "projectId": "17bf525d-eff2-4a63-a42f-eaa886a7b8b8"
-      }
+      },
+      "privacyUrl": "https://cosme-check.com/privacy",
+      "supportEmail": "contact@cosme-check.com"
     },
     "runtimeVersion": {
       "policy": "appVersion"

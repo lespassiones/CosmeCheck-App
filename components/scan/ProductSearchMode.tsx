@@ -663,7 +663,7 @@ export const ProductSearchMode: FC<Props> = ({
               <View style={styles.searchHeader}>
                 <Text style={styles.sectionKicker}>DANS NOTRE BASE</Text>
                 <Text style={styles.sectionSubtitle}>
-                  Du meilleur au moins bon — {searchResults.length}{searchHasMore ? '+' : ''} résultats
+                  {searchResults.length}{searchHasMore ? '+' : ''} résultats
                 </Text>
               </View>
             ) : null
