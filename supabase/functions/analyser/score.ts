@@ -108,7 +108,8 @@ export function pastilleTone(
       ceiling = Math.max(ceiling, cap);
     } else if (color === "Orange") {
       cntOrange++;
-      const cap = z === "Tete" ? 2 : 1; // Orange / Jaune
+      // V2 (allègement) : un orange isolé ne plafonne qu'à Jaune (rien en queue).
+      const cap = z === "Queue" ? 0 : 1;
       ceiling = Math.max(ceiling, cap);
     }
   });
@@ -116,8 +117,11 @@ export function pastilleTone(
   if (cntOrange >= 4) ceiling = Math.max(ceiling, 2); // ≥4 orange -> au moins Orange
 
   const ratio = stot ? sgood / stot : 0;
-  const comp = ratio >= 0.85 ? 0 : ratio >= 0.6 ? 1 : ratio >= 0.35 ? 2 : 3;
-  const final = Math.max(ceiling, comp);
+  const comp = ratio >= 0.8 ? 0 : ratio >= 0.55 ? 1 : ratio >= 0.32 ? 2 : 3;
+  // Sans AUCUN rouge, la composition seule ne peut pas descendre en "rouge"
+  // (danger) : un produit 100 % orange = orange (warning), pas danger.
+  const compCapped = cntRouge === 0 ? Math.min(comp, 2) : comp;
+  const final = Math.max(ceiling, compCapped);
   const reason = `plafond=${UNRANK[ceiling]} - compo=${UNRANK[comp]} (ratio ${ratio.toFixed(2)}) - ${n} ingr.`;
   if (final === 3) return { tone: cntRouge >= 2 ? "high-risk" : "danger", reason, ...base };
   if (final === 2) return { tone: "warning", reason, ...base };
@@ -147,10 +151,13 @@ export function synthScore(p: PastilleResult): number | null {
   return Math.round((b + w * ratio) * 100) / 100;
 }
 
-/** Map a numeric score (0-20) to a qualitative label + tone. Seuils ≥17/≥13/≥9. */
+/** Map a numeric score (0-20) to a qualitative label + tone. Tone : ≥13 vert (convention unique). */
 export function scoreLabel(score: number): { label: string; tone: ScoreTone } {
+  // TONE aligné sur catalog.f_score_tone (>=13 vert) = convention unique
+  // (mobile/web/DB). Le LABEL garde "Très bien" dès 17.
   if (score >= 17) return { label: "Très bien", tone: "green" };
-  if (score >= 13) return { label: "Bien", tone: "amber" };
-  if (score >= 9) return { label: "Moyen", tone: "orange" };
+  if (score >= 13) return { label: "Bien", tone: "green" };
+  if (score >= 9) return { label: "Moyen", tone: "amber" };
+  if (score >= 5) return { label: "Faible", tone: "orange" };
   return { label: "Faible", tone: "rose" };
 }

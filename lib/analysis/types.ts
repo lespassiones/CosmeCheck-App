@@ -191,9 +191,12 @@ function reconstructScoreFromItems(items: AnalyseItem[]): number {
 }
 
 function scoreToneFromScore(score: number): ScoreTone {
-  if (score >= 17) return 'green'
-  if (score >= 13) return 'amber'
-  if (score >= 9) return 'orange'
+  // Convention UNIQUE, alignée sur catalog.f_score_tone (source des 490k) et
+  // getColorRatingFromScore : >=13 vert. NE PAS diverger (sinon même score,
+  // couleur différente mobile/web).
+  if (score >= 13) return 'green'
+  if (score >= 9) return 'amber'
+  if (score >= 5) return 'orange'
   return 'rose'
 }
 

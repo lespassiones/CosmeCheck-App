@@ -85,15 +85,19 @@ export function pastilleTone(
       ceiling = Math.max(ceiling, z === 'Tete' ? 3 : z === 'Corps' ? 2 : 1)
     } else if (color === 'Orange') {
       cntOrange++
-      ceiling = Math.max(ceiling, z === 'Tete' ? 2 : 1)
+      // V2 (allègement) : un orange isolé ne plafonne qu'à Jaune (rien en queue).
+      ceiling = Math.max(ceiling, z === 'Queue' ? 0 : 1)
     }
   })
   if (cntRouge >= 2) ceiling = Math.max(ceiling, 2)
   if (cntOrange >= 4) ceiling = Math.max(ceiling, 2)
 
   const ratio = stot ? sgood / stot : 0
-  const comp = ratio >= 0.85 ? 0 : ratio >= 0.6 ? 1 : ratio >= 0.35 ? 2 : 3
-  const final = Math.max(ceiling, comp)
+  const comp = ratio >= 0.8 ? 0 : ratio >= 0.55 ? 1 : ratio >= 0.32 ? 2 : 3
+  // Sans AUCUN rouge, la composition seule ne peut pas descendre en "rouge"
+  // (danger) : un produit 100 % orange = orange (warning), pas danger.
+  const compCapped = cntRouge === 0 ? Math.min(comp, 2) : comp
+  const final = Math.max(ceiling, compCapped)
   const reason = `plafond=${UNRANK[ceiling]} compo=${UNRANK[comp]} (ratio ${ratio.toFixed(2)}) ${n} ingr.`
   if (final === 3) return { tone: cntRouge >= 2 ? 'high-risk' : 'danger', reason, ...base }
   if (final === 2) return { tone: 'warning', reason, ...base }

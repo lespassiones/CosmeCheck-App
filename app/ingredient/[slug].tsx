@@ -36,7 +36,6 @@ import { ColorBadge } from '@/components/design/ColorBadge'
 import { GlassCard } from '@/components/design/GlassCard'
 import { Reveal } from '@/components/design/Reveal'
 import { ExplainIngredient } from '@/components/ingredient/ExplainIngredient'
-import { IngredientProductRow } from '@/components/ingredient/IngredientProductRow'
 import { StatCard } from '@/components/ingredient/StatCard'
 import type { IngredientDetail, IngredientProductHit } from '@/components/ingredient/types'
 import {
@@ -215,7 +214,6 @@ export default IngredientDetailScreen
 
 const ReadyView: FC<{ ing: IngredientDetail; products: IngredientProductHit[] }> = ({
   ing,
-  products,
 }) => {
   const rating = useMemo(() => normalizeColor(ing.color_rating), [ing.color_rating])
   const name = prettyName(ing.name)
@@ -234,11 +232,6 @@ const ReadyView: FC<{ ing: IngredientDetail; products: IngredientProductHit[] }>
       .slice(0, 5)
   }, [ing.category_breakdown])
 
-  const otherTranslations = useMemo(() => {
-    if (!ing.translations) return [] as [string, string][]
-    return Object.entries(ing.translations).filter(([k]) => k !== 'fr')
-  }, [ing.translations])
-
   const techRows = useMemo(() => {
     const rows: { label: string; value: string | null | undefined; mono?: boolean }[] = [
       { label: 'Nom INCI', value: ing.name },
@@ -252,9 +245,6 @@ const ReadyView: FC<{ ing: IngredientDetail; products: IngredientProductHit[] }>
       (r) => r.value && (typeof r.value !== 'string' || r.value.trim().length > 0),
     )
   }, [ing])
-
-  const visibleProducts = products.slice(0, PRODUCTS_VISIBLE)
-  const moreCount = Math.max(products.length - PRODUCTS_VISIBLE, 0)
 
   return (
     <ScrollView
@@ -402,55 +392,6 @@ const ReadyView: FC<{ ing: IngredientDetail; products: IngredientProductHit[] }>
           </Section>
         ) : null}
 
-        {/* Autres langues */}
-        {otherTranslations.length > 0 ? (
-          <Section title="Autres langues" divider>
-            <View style={styles.langWrap}>
-              {otherTranslations.map(([lang, v]) => {
-                const showLabel = !lang.startsWith('alt_')
-                return (
-                  <View key={lang} style={styles.langPill}>
-                    <Text style={styles.langText}>
-                      {showLabel ? `${lang.toUpperCase()} · ${v}` : v}
-                    </Text>
-                  </View>
-                )
-              })}
-            </View>
-          </Section>
-        ) : null}
-
-        {/* Produits contenant cet ingrédient */}
-        <Section
-          title={
-            products.length > 0
-              ? `Présent dans ${products.length} produit${products.length > 1 ? 's' : ''}`
-              : 'Produits'
-          }
-          divider
-        >
-          {products.length === 0 ? (
-            <GlassCard style={styles.emptyCard} padding={spacing.xl} opacity={0.5}>
-              <Text style={styles.emptyText}>
-                {ing.details_scraped
-                  ? 'Aucun produit indexé pour cet ingrédient.'
-                  : 'Les produits seront indexés quand le pipeline aura enrichi cette fiche.'}
-              </Text>
-            </GlassCard>
-          ) : (
-            <View style={styles.productList}>
-              {visibleProducts.map((p) => (
-                <IngredientProductRow key={p.product_id} product={p} rating={rating} />
-              ))}
-              {moreCount > 0 ? (
-                <Text style={styles.moreProducts}>
-                  +{moreCount} autre{moreCount > 1 ? 's' : ''} produit
-                  {moreCount > 1 ? 's' : ''} dans notre base
-                </Text>
-              ) : null}
-            </View>
-          )}
-        </Section>
       </Reveal>
     </ScrollView>
   )

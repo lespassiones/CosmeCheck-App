@@ -323,10 +323,10 @@ Deno.serve(async (req: Request) => {
 
         // SCORE = source de vérité catalogue CosmeCheck si dispo. On ne sert
         // JAMAIS le score calculé en cache pour un produit présent au catalogue.
-        const ibScore = await getCatalogScore(productEan);
-        if (ibScore != null) {
-          const { label, tone } = scoreLabel(ibScore);
-          cachedResult.score = ibScore;
+        const catScore = await getCatalogScore(productEan);
+        if (catScore != null) {
+          const { label, tone } = scoreLabel(catScore);
+          cachedResult.score = catScore;
           cachedResult.scoreLabel = label;
           cachedResult.scoreTone = tone;
         } else if (typeof cachedResult.score !== "number") {
