@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
   },
   btnGhost: { backgroundColor: colors.gray100 },
   btnGhostText: { ...typography.buttonSmall, color: colors.inkMuted },
-  btnPrimary: { backgroundColor: colors.rose },
+  btnPrimary: { backgroundColor: colors.success },
   btnPrimaryText: { ...typography.buttonSmall, color: colors.surface },
   btnDanger: { backgroundColor: colors.error },
   btnDisabled: { opacity: 0.6 },

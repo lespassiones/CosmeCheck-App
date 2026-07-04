@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
   saveBtn: {
     height: 52,
     borderRadius: radius.full,
-    backgroundColor: colors.rose,
+    backgroundColor: colors.success,
     alignItems: 'center',
     justifyContent: 'center',
   },

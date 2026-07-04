@@ -72,7 +72,7 @@ export async function collectOpenAIWebCandidates(
     "",
     "RÈGLES CRITIQUES :",
     `1. Renvoie au maximum ${limit} candidats. UN SEUL candidat par produit unique — pas 5 URLs différentes du même produit chez 5 pharmacies. Si tu trouves un produit identique chez plusieurs marchands, ne le liste qu'UNE fois (préfère la source qui expose la composition INCI).`,
-    "2. PRIORITÉ ABSOLUE aux URLs qui exposent une liste INCI complète : INCIDecoder, INCIBeauty, Cosmétothèque, site officiel de la marque, fiche produit Sephora/Marionnaud/Nocibé. Ces sources sont MEILLEURES qu'une page marchande generique.",
+    "2. PRIORITÉ ABSOLUE aux URLs qui exposent une liste INCI complète : INCIDecoder, Cosmétothèque, site officiel de la marque, fiche produit Sephora/Marionnaud/Nocibé. Ces sources sont MEILLEURES qu'une page marchande generique.",
     "3. URLs autorisées ensuite : marchands reconnus avec fiche produit détaillée (Amazon, Auchan, Carrefour, pharmacies en ligne). INTERDIT : YouTube, TikTok, Instagram, Pinterest, réseaux sociaux.",
     "4. N'invente AUCUNE URL. Si tu n'es pas certain qu'une URL existe vraiment, omets ce candidat.",
     "5. Pour chaque candidat : brand (marque exacte), productName (nom sans répéter la marque), url (lien direct).",

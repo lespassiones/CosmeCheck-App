@@ -444,17 +444,17 @@ const styles = StyleSheet.create({
   submit: {
     height: 52,
     borderRadius: radius.full,
-    backgroundColor: colors.rose,
+    backgroundColor: colors.success,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.rose,
+    shadowColor: colors.success,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 4,
   },
   submitPressed: {
-    backgroundColor: colors.roseDeep,
+    backgroundColor: colors.successDeep,
   },
   submitDisabled: {
     opacity: 0.6,

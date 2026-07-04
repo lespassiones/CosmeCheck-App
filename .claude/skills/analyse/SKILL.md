@@ -48,7 +48,7 @@ Pour chaque RPC de recherche, fais un `EXPLAIN (ANALYZE, BUFFERS)` avec un terme
 
 ### 4. Normalisation des scores + plafond couleur (cohérence métier, priorité user)
 Le user veut la garantie que **les scores produits sont normalisés avec le blocus des couleurs**.
-- Confirme la source de vérité : `catalog.score` = vrai score INCI Beauty (cf. mémoire `catalog-score-is-incibeauty`). Vérifie qu'aucun écran ne montre `result_json.score` (calculé, décalage ~15%) là où il devrait montrer le score plafonné.
+- Confirme la source de vérité : `catalog.score` = score catalogue CosmeCheck (notation propriétaire, référence). Vérifie qu'aucun écran ne montre `result_json.score` (calculé, décalage ~15%) là où il devrait montrer le score plafonné.
 - Vérifie le **sidecar** `product_score_cap` (compteurs + score plafonné précomputés) : est-il à jour ? Les 7 RPC catalogue le lisent-elles au lieu de détoaster `product_analyses` ?
 - Vérifie `applyColorCap` côté client + `count_orange`/`count_rouge` renvoyés par les RPC search/browse (le badge ne doit pas montrer le score brut vert quand l'analyse plafonne en orange/rouge).
 - Cohérence : combien de produits ont `score NULL` (pas encore découvrables) ? Cache EAN empoisonné (cf. mémoire `product-analyses-poisoned-cache`) toujours sain ?

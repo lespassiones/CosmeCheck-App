@@ -30,6 +30,7 @@ import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
 import { supabase } from '@/lib/supabase/client'
+import { ScanPreviewCard, type ScanPreview } from './ScanPreviewCard'
 
 interface Props {
   /** Appelé quand l'INCI est disponible (produit trouvé). */
@@ -49,6 +50,7 @@ const BARCODE_RE = /^\d{8,14}$/
 type ScanState =
   | { kind: 'scanning' }
   | { kind: 'looking-up'; barcode: string }
+  | { kind: 'preview'; barcode: string; inci: string; name?: string; brand?: string; preview: ScanPreview }
   | { kind: 'not-found'; barcode: string; reason: 'incomplete' | 'registered' }
   | { kind: 'unavailable'; barcode: string }
   | { kind: 'error'; message: string }
@@ -104,7 +106,7 @@ export const BarcodeScanner: FC<Props> = ({
         return
       }
       const hit = data as
-        | { found?: boolean; reason?: string; ingredientsText?: string; brand?: string | null; productName?: string | null }
+        | { found?: boolean; reason?: string; ingredientsText?: string; brand?: string | null; productName?: string | null; preview?: ScanPreview }
         | null
       if (!hit?.found) {
         const reason = hit?.reason === 'incomplete' ? 'incomplete' : 'registered'
@@ -116,18 +118,14 @@ export const BarcodeScanner: FC<Props> = ({
         setState({ kind: 'not-found', barcode, reason: 'incomplete' })
         return
       }
-      onInciReadyRef.current(
-        inci,
-        hit.productName ?? undefined,
-        barcode,
-        hit.brand ?? undefined,
-      )
-      // Réarme tout de suite : la navigation va pousser l'écran d'analyse
-      // par-dessus (la caméra est coupée pendant l'analyse via isActive, et le
-      // garde anti-doublon empêche un re-scan immédiat du même code). Si
-      // l'analyse échoue sans naviguer, on est quand même prêt à rescanner.
-      lockedRef.current = false
-      setState({ kind: 'scanning' })
+      // APERÇU INSTANTANÉ : on affiche la carte (haut d'analyse) SANS lancer
+      // l'analyse. Le tap « Voir le produit » lancera l'analyse complète.
+      const preview: ScanPreview = hit.preview ?? {
+        ean: barcode, brand: hit.brand ?? null, name: hit.productName ?? null,
+        category: null, score: null, scoreTone: null, scoreLabel: null,
+        countOrange: 0, countRouge: 0, imageUrl: null,
+      }
+      setState({ kind: 'preview', barcode, inci, name: hit.productName ?? undefined, brand: hit.brand ?? undefined, preview })
     } catch {
       setState({ kind: 'unavailable', barcode })
     }
@@ -239,6 +237,14 @@ export const BarcodeScanner: FC<Props> = ({
 
       {/* Produit non analysable maintenant (inconnu OU connu sans INCI) :
           même message vert + animation rejouée à chaque scan. */}
+      {state.kind === 'preview' && (
+        <ScanPreviewCard
+          preview={state.preview}
+          onSeeProduct={() => onInciReadyRef.current(state.inci, state.name, state.barcode, state.brand)}
+          onClose={resume}
+        />
+      )}
+
       {state.kind === 'not-found' && (
         <Animated.View
           key={state.barcode}
@@ -251,9 +257,14 @@ export const BarcodeScanner: FC<Props> = ({
               Ce produit a été enregistré et sera référencé très prochainement.
             </Text>
           </View>
-          <Pressable style={[styles.secondaryBtn, { marginTop: spacing.md }]} onPress={resume} hitSlop={8}>
-            <Text style={styles.secondaryBtnText}>Scanner un autre code</Text>
-          </Pressable>
+          <View style={[styles.btnRow, { marginTop: spacing.md }]}>
+            <Pressable style={styles.primaryBtn} onPress={onFallbackToSearch} hitSlop={8}>
+              <Text style={styles.primaryBtnText}>Rechercher le produit</Text>
+            </Pressable>
+            <Pressable style={styles.secondaryBtn} onPress={resume} hitSlop={8}>
+              <Text style={styles.secondaryBtnText}>Scanner un autre</Text>
+            </Pressable>
+          </View>
         </Animated.View>
       )}
 
@@ -355,7 +366,7 @@ const styles = StyleSheet.create({
   registeredText: { ...typography.smallSemiBold, color: colors.success, flex: 1 },
   btnRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
   primaryBtn: {
-    backgroundColor: colors.rose,
+    backgroundColor: colors.success,
     borderRadius: radius.md,
     paddingHorizontal: spacing.base,
     paddingVertical: spacing.sm,
@@ -374,7 +385,7 @@ const styles = StyleSheet.create({
   permTitle: { ...typography.h4, color: colors.ink },
   permText: { ...typography.small, color: colors.inkMuted, textAlign: 'center', paddingHorizontal: spacing.lg },
   permCta: {
-    backgroundColor: colors.rose,
+    backgroundColor: colors.success,
     borderRadius: radius.lg,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,

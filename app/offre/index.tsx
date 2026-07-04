@@ -412,7 +412,7 @@ const OffreScreen: FC = () => {
               disabled={isLoading || !offerings}
             >
               <LinearGradient
-                colors={[colors.rose, colors.roseDeep]}
+                colors={[colors.success, colors.successDeep]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={[styles.cta, (isLoading || !offerings) && styles.ctaDisabled]}

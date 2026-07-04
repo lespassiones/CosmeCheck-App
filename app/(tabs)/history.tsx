@@ -93,9 +93,8 @@ function emptyCounts(): CountsTuple {
 function buildItem(row: AnalysisRow, latestCoherenceId: string | null): HistoryItem {
   const parsed = parseAnalyseResponse(row.result_json)
 
-  const rating: ColorRating = parsed
-    ? toneToColorRating(parsed.scoreTone)
-    : getColorRatingFromScore(row.score ?? 0)
+  // Couleur dérivée UNIQUEMENT du score (source unique) → même pastille partout.
+  const rating: ColorRating = getColorRatingFromScore(parsed?.score ?? row.score ?? 0)
 
   const counts: CountsTuple = parsed
     ? {
@@ -553,7 +552,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: colors.rose,
+    backgroundColor: colors.success,
     paddingHorizontal: spacing.base,
     paddingVertical: 8,
     borderRadius: radius.full,

@@ -656,7 +656,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radius.md,
-    backgroundColor: colors.rose,
+    backgroundColor: colors.success,
   },
   relaxBtnPressed: { opacity: 0.85 },
   relaxBtnText: {
@@ -820,7 +820,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.rose,
+    backgroundColor: colors.success,
     alignItems: 'center',
     justifyContent: 'center',
   },

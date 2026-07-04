@@ -194,15 +194,15 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     minHeight: 54,
     borderRadius: radius.full,
-    backgroundColor: colors.rose,
-    shadowColor: colors.rose,
+    backgroundColor: colors.success,
+    shadowColor: colors.success,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 4,
   },
   ctaPressed: {
-    backgroundColor: colors.roseDeep,
+    backgroundColor: colors.successDeep,
   },
   ctaText: {
     ...typography.button,

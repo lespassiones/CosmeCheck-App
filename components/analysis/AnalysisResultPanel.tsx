@@ -84,7 +84,7 @@ interface Props {
   /** Marque + nom du produit — servent à résoudre les alternatives (catalogue). */
   brand?: string | null
   productName?: string | null
-  /** Score global (INCI Beauty) — pour que la pastille L'ESSENTIEL soit
+  /** Score global (notation propriétaire CosmeCheck) - pour que la pastille L'ESSENTIEL soit
    *  identique à la jauge du verdict. */
   verdictScore?: number | null
   /** Nombre d'ingrédients pénalisants (orange + rouge) — affiché dans la phrase. */
@@ -154,11 +154,9 @@ export const AnalysisResultPanel: FC<Props> = ({
   const personalBlocksKey =
     (result as { personalBlocksKey?: string | null }).personalBlocksKey ?? null
 
-  // Couleur tonale du score (seuils web : tone du serveur prioritaire, sinon
-  // dérivé du score).
-  const rating: ColorRating = result.scoreTone
-    ? toneToColorRating(result.scoreTone)
-    : getColorRatingFromScore(result.score)
+  // Couleur dérivée UNIQUEMENT du score (source unique ; jamais du scoreTone
+  // stocké) → la même pastille partout (analyse = reco = recherche = browse).
+  const rating: ColorRating = getColorRatingFromScore(result.score)
 
   // Items restreints — recalculés en temps réel depuis les restrictions actuelles
   // du profil (pas le flag `is_restricted` stocké à l'analyse, qui peut être

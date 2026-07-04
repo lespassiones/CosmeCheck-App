@@ -34,13 +34,13 @@ describe('computeOptimizeInfo', () => {
     expect(r.cappedScore).toBe(18)
   })
 
-  it('1 rouge → plafonné ≤ 8.9 (tier orange) + à optimiser + badge ALIGNÉ orange', () => {
-    // Le produit est plafonné à 8.9 = tier ORANGE : le badge suit la couleur du
-    // produit (orange « à surveiller »), pas l'ingrédient rouge. Harmonisation.
-    const r = computeOptimizeInfo(mk({ score: 19, rouge: 1, items: [{ name: 'METHYLISOTHIAZOLINONE', colorRating: 'Rouge', tags: ['conservateur'] }] }))
+  it('rouge → score déjà bas (pastille position-aware), à optimiser + badge rouge', () => {
+    // Plus de color cap : notre pastille fait DÉJÀ chuter le score quand un rouge
+    // est présent (score ~4). Le badge suit la couleur de tier du produit (< 5 = rouge).
+    const r = computeOptimizeInfo(mk({ score: 4, rouge: 1, items: [{ name: 'METHYLISOTHIAZOLINONE', colorRating: 'Rouge', tags: ['conservateur'] }] }))
     expect(r.isToOptimize).toBe(true)
-    expect(r.cappedScore).toBeLessThanOrEqual(8.9)
-    expect(r.dangerColor).toBe('orange')
+    expect(r.cappedScore).toBe(4) // pas de re-plafonnement
+    expect(r.dangerColor).toBe('rouge')
     expect(r.dangerLabel).toBe('Conservateur')
   })
 
@@ -73,7 +73,7 @@ describe('selectToOptimize', () => {
   const products = [
     { id: 'clean', r: mk({ score: 19, items: [{ name: 'AQUA', colorRating: 'Vert' }] }) },
     { id: 'orange', r: mk({ score: 12, orange: 1, items: [{ name: 'DIMETHICONE', colorRating: 'Orange' }] }) },
-    { id: 'rouge', r: mk({ score: 19, rouge: 1, items: [{ name: 'X', colorRating: 'Rouge' }] }) },
+    { id: 'rouge', r: mk({ score: 4, rouge: 1, items: [{ name: 'X', colorRating: 'Rouge' }] }) },
     { id: 'restr', r: mk({ score: 15, items: [{ name: 'PARFUM', colorRating: 'Jaune', is_restricted: true }] }) },
   ]
 

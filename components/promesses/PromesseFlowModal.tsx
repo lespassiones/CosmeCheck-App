@@ -592,7 +592,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.rose,
+    backgroundColor: colors.success,
     borderRadius: radius.full,
     paddingVertical: 14,
     paddingHorizontal: spacing.xl,

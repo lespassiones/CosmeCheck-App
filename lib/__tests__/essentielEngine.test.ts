@@ -30,6 +30,7 @@ function item(partial: Partial<AnalyseItem> & { position: number }): AnalyseItem
 function resp(
   counts: { vert: number; jaune: number; orange: number; rouge: number; matched?: number },
   items: AnalyseItem[] = [],
+  score: number | null = 15,
 ): AnalyseResponse {
   const total = counts.vert + counts.jaune + counts.orange + counts.rouge
   return {
@@ -42,7 +43,7 @@ function resp(
       rouge: counts.rouge,
       unknown: 0,
     },
-    score: 0,
+    score,
     scoreLabel: '',
     scoreTone: 'green',
     items,
@@ -52,30 +53,34 @@ function resp(
   } as AnalyseResponse
 }
 
-describe('computeEssentiel — seuils de verdict (tone)', () => {
-  it('matched 0 → unknown', () => {
-    expect(computeEssentiel(resp({ vert: 0, jaune: 0, orange: 0, rouge: 0, matched: 0 })).verdict.tone).toBe('unknown')
+// NOUVEAU CONTRAT : le ton du verdict dérive du SCORE (pastille propriétaire, qui
+// intègre déjà la règle douce + le plafond par position), plus des comptes bruts.
+// Seuils verdictToneFromScore : >=17 very-safe / >=13 safe / >=9 caution / >=5 warning / <5 danger.
+// La nuance high-risk est réappliquée depuis les comptes (>=2 rouge).
+describe('computeEssentiel — verdict dérivé du score', () => {
+  it('score null (rien de reconnu) → unknown', () => {
+    expect(computeEssentiel(resp({ vert: 0, jaune: 0, orange: 0, rouge: 0, matched: 0 }, [], null)).verdict.tone).toBe('unknown')
   });
-  it('aucun problème → very-safe', () => {
-    expect(computeEssentiel(resp({ vert: 5, jaune: 0, orange: 0, rouge: 0 })).verdict.tone).toBe('very-safe')
+  it('score >=17 → very-safe', () => {
+    expect(computeEssentiel(resp({ vert: 5, jaune: 0, orange: 0, rouge: 0 }, [], 18.5)).verdict.tone).toBe('very-safe')
   });
-  it('1 jaune → safe', () => {
-    expect(computeEssentiel(resp({ vert: 3, jaune: 1, orange: 0, rouge: 0 })).verdict.tone).toBe('safe')
+  it('score 13-17 → safe (règle douce : verts dominants)', () => {
+    expect(computeEssentiel(resp({ vert: 3, jaune: 1, orange: 0, rouge: 0 }, [], 15)).verdict.tone).toBe('safe')
   });
-  it('4 jaunes → caution', () => {
-    expect(computeEssentiel(resp({ vert: 1, jaune: 4, orange: 0, rouge: 0 })).verdict.tone).toBe('caution')
+  it('score 9-13 → caution', () => {
+    expect(computeEssentiel(resp({ vert: 1, jaune: 4, orange: 0, rouge: 0 }, [], 11)).verdict.tone).toBe('caution')
   });
-  it('1 orange → warning', () => {
-    expect(computeEssentiel(resp({ vert: 1, jaune: 0, orange: 1, rouge: 0 })).verdict.tone).toBe('warning')
+  it('score 5-9 → warning', () => {
+    expect(computeEssentiel(resp({ vert: 1, jaune: 0, orange: 1, rouge: 0 }, [], 7)).verdict.tone).toBe('warning')
   });
-  it('3 oranges → danger', () => {
-    expect(computeEssentiel(resp({ vert: 1, jaune: 0, orange: 3, rouge: 0 })).verdict.tone).toBe('danger')
+  it('score <5 → danger', () => {
+    expect(computeEssentiel(resp({ vert: 1, jaune: 0, orange: 3, rouge: 0 }, [], 3)).verdict.tone).toBe('danger')
   });
-  it('1 rouge → danger', () => {
-    expect(computeEssentiel(resp({ vert: 1, jaune: 0, orange: 0, rouge: 1 })).verdict.tone).toBe('danger')
+  it('score <5 + 1 rouge → danger', () => {
+    expect(computeEssentiel(resp({ vert: 1, jaune: 0, orange: 0, rouge: 1 }, [], 3)).verdict.tone).toBe('danger')
   });
-  it('2 rouges → high-risk', () => {
-    expect(computeEssentiel(resp({ vert: 1, jaune: 0, orange: 0, rouge: 2 })).verdict.tone).toBe('high-risk')
+  it('score <5 + >=2 rouge → high-risk', () => {
+    expect(computeEssentiel(resp({ vert: 1, jaune: 0, orange: 0, rouge: 2 }, [], 1)).verdict.tone).toBe('high-risk')
   });
 });
 

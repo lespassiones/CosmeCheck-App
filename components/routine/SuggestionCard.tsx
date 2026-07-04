@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
   badgeVertText: { ...typography.xs, color: '#047857', fontWeight: '600' },
   keepBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
-    backgroundColor: colors.rose, borderRadius: radius.full, paddingVertical: spacing.md,
+    backgroundColor: colors.success, borderRadius: radius.full, paddingVertical: spacing.md,
     marginTop: spacing.lg, minHeight: 50,
   },
   keepBtnDone: { backgroundColor: colors.success },

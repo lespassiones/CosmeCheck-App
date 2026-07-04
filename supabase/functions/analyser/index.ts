@@ -26,7 +26,7 @@ import { lookupEanByName } from "../_shared/eanLookup.ts";
 import { identifyEanAndCategory } from "../_shared/eanWebSearch.ts";
 import { dedupeKey } from "../_shared/dedupeKey.ts";
 import { sha256Hex } from "../_shared/aiClient.ts";
-import { applyColorCap, type ColorRating, computeScore, type ScoreTone, scoreLabel } from "./score.ts";
+import { type ColorRating, pastilleTone, type ScoreTone, scoreLabel, synthScore } from "./score.ts";
 import { isCleanInciInput, parseInciList } from "./parse.ts";
 import {
   EU_ALLERGENS_TOTAL,
@@ -321,7 +321,7 @@ Deno.serve(async (req: Request) => {
           cachedResult.spectrum = { top5: pickSpec(5), top10: pickSpec(10) };
         }
 
-        // SCORE = source de vérité catalog (INCI Beauty) si dispo. On ne sert
+        // SCORE = source de vérité catalogue CosmeCheck si dispo. On ne sert
         // JAMAIS le score calculé en cache pour un produit présent au catalogue.
         const ibScore = await getCatalogScore(productEan);
         if (ibScore != null) {
@@ -330,20 +330,18 @@ Deno.serve(async (req: Request) => {
           cachedResult.scoreLabel = label;
           cachedResult.scoreTone = tone;
         } else if (typeof cachedResult.score !== "number") {
-          // Pas de score catalogue ET cache sans score → on le recalcule depuis
-          // items (formule pondérée + plafond couleur) plutôt que de persister
-          // un result_json sans `score`.
-          const computed = applyColorCap(
-            computeScore(
-              cachedItems.map((it) => ({
-                color_rating: (it as { colorRating?: ColorRating | null }).colorRating ?? null,
-                position: Number((it as { position?: number }).position ?? 0),
-              })),
-              cachedItems.length,
-            ),
-            cnt.Orange,
-            cnt.Rouge,
+          // Pas de score catalogue ET cache sans score → pastille propriétaire
+          // (couleur + position + composition) synthétisée en score, plutôt que
+          // de persister un result_json sans `score`.
+          const past = pastilleTone(
+            cachedItems.map((it) => ({
+              color: (it as { colorRating?: ColorRating | null }).colorRating ?? null,
+              position: Number((it as { position?: number }).position ?? 0),
+            })),
+            cachedItems.length,
+            false,
           );
+          const computed = synthScore(past) ?? 0;
           const { label, tone } = scoreLabel(computed);
           cachedResult.score = computed;
           cachedResult.scoreLabel = label;
@@ -548,32 +546,26 @@ Deno.serve(async (req: Request) => {
   }
   const matched = enriched.length - counts["Non reconnu"];
 
-  // Score CALCULÉ (notre algo) — utilisé seulement si le produit n'est PAS au
-  // catalogue (produit internet). Pour un produit connu, on lui substitue le
-  // score INCI Beauty de catalog.score juste après.
-  let score = computeScore(
-    enriched.map((r) => ({ color_rating: r.effective_color, position: r.position_idx })),
+  // NOTATION PROPRIÉTAIRE CosmeCheck, pastille couleur : position +
+  // composition, plafond par zone intégré. Synthétisée en score 0–20 pour rester
+  // compatible avec tout le code existant (`verdictToneFromScore`, tri, RPC).
+  // Utilisé tel quel pour un produit internet ; remplacé par le score précalculé
+  // (product_score_cap) juste après pour un produit du catalogue.
+  const pastille = pastilleTone(
+    enriched.map((r) => ({ color: r.effective_color, position: r.position_idx })),
     enriched.length,
+    false,
   );
+  let score = synthScore(pastille) ?? 0;
   let { label: scoreLabelText, tone: scoreTone } = scoreLabel(score);
 
-  // SOURCE DE VÉRITÉ : si l'EAN est au catalogue, le score = catalog.score
-  // (INCI Beauty). On ne montre/persiste JAMAIS le score calculé pour un produit
-  // connu, et on n'écrasera pas catalog.score (voir upsert plus bas).
+  // SOURCE DE VÉRITÉ : si l'EAN est au catalogue, on sert le score précalculé
+  // (catalog.score = NOTRE pastille synthétisée en bulk) → pastille identique
+  // partout (recherche, catalogue, analyse). On n'écrase pas catalog.score.
   const catalogScore = productEan ? await getCatalogScore(productEan) : null;
   const isCatalogProduct = catalogScore != null;
   if (isCatalogProduct) {
     score = catalogScore as number;
-    const lab = scoreLabel(score);
-    scoreLabelText = lab.label;
-    scoreTone = lab.tone;
-  }
-
-  // Plancher de sécurité par couleur : ≥1 rouge OU ≥3 orange → pastille ≤ triangle ;
-  // 1-2 orange → pastille ≤ œil (indépendant de la position). S'applique même au score IB.
-  const cappedScore = applyColorCap(score, counts["Orange"], counts["Rouge"]);
-  if (cappedScore !== score) {
-    score = cappedScore;
     const lab = scoreLabel(score);
     scoreLabelText = lab.label;
     scoreTone = lab.tone;
@@ -932,9 +924,9 @@ Deno.serve(async (req: Request) => {
 
     void (async () => {
       const { upsertCatalogProduct } = await import("./catalog.ts");
-      // Produit DÉJÀ au catalogue (score INCI Beauty) → on NE touche PAS au score
+      // Produit DÉJÀ au catalogue (score propriétaire CosmeCheck) - on NE touche PAS au score
       // (score/label/tone = null = on garde l'existant). Produit nouveau/internet
-      // → on écrit notre score calculé pour l'amorcer.
+      // - on écrit notre score calculé pour l'amorcer.
       await upsertCatalogProduct({
         ean: productEan,
         brand: body.brand ?? null,

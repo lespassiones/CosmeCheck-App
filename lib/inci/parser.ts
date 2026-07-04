@@ -283,7 +283,7 @@ export function computeScore(
     if (m.color_rating === 'Rouge') countRouge++;
   }
   // Cocktail effect: extra penalty when problematic ingredients accumulate,
-  // regardless of position (mirrors INCI Beauty's methodology).
+  // regardless of position (our proprietary positional methodology).
   score -= Math.max(0, countOrange - 3) * 0.4;
   score -= Math.max(0, countRouge - 2) * 0.8;
   return Math.max(0, Math.min(20, score));

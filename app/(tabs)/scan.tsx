@@ -478,7 +478,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
     borderRadius: radius.full,
-    backgroundColor: colors.rose,
+    backgroundColor: colors.success,
   },
   resumePrimaryText: { ...typography.smallSemiBold, color: colors.surface },
 })

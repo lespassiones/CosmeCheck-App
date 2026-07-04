@@ -101,6 +101,21 @@ Deno.serve(async (req: Request) => {
       ingredientsText: row.ingredients_text,
       source: "catalog" as const,
       confidence: 1.0,
+      // Aperçu INSTANTANÉ pour la carte de scan (haut d'analyse) — lu direct du
+      // catalogue, aucune analyse lancée. L'analyse complète ne tourne qu'au tap
+      // « Voir le produit ».
+      preview: {
+        ean: row.ean,
+        brand: row.brand,
+        name: row.name,
+        category: row.category ?? null,
+        score: typeof row.score === "number" ? row.score : null,
+        scoreTone: row.score_tone ?? null,
+        scoreLabel: row.score_label ?? null,
+        countOrange: row.count_orange ?? 0,
+        countRouge: row.count_rouge ?? 0,
+        imageUrl: row.image_url ?? null,
+      },
     };
     void cacheBarcodeResult(barcode, payload);
     return jsonResponse(payload);

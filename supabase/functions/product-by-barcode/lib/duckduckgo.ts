@@ -112,7 +112,7 @@ const NOISE_PREFIX_RE =
 
 const EDITORIAL_DOMAINS = new Set([
   "quechoisir.org", "comprendrechoisir.com", "60millions-mag.com",
-  "incibeauty.com", "inci-beauty.com", "incidecoder.com", "cosmopolitan.fr",
+  "incidecoder.com", "cosmopolitan.fr",
   "elle.fr", "vogue.fr", "marieclaire.fr", "biba-magazine.fr", "lemonde.fr",
   "lefigaro.fr", "femmeactuelle.fr", "version-femina.fr", "topsante.com",
   "santemagazine.fr", "doctissimo.fr", "passeportsante.net", "amazon.fr",

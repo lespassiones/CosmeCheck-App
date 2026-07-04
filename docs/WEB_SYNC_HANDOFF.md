@@ -212,7 +212,7 @@ if (countOrange >= 1)                     return Math.min(score, 12.9) // Moyen
 return score
 // libellé : >=17 "Très bien", >=13 "Bien", >=9 "Moyen", <9 "À éviter"
 ```
-ET l'écran d'analyse doit utiliser la MÊME base : `catalog.score` (INCI Beauty) résolu
+ET l'écran d'analyse doit utiliser la MÊME base : `catalog.score` (notation propriétaire CosmeCheck) résolu
 par marque+nom si dispo, sinon le score calculé, PLAFONNÉ avec les mêmes seuils. Sinon
 décalage liste vs détail.
 
@@ -300,8 +300,8 @@ DON'T :
 - NE PAS faire confiance aveuglément à `catalog.category` (5 à 16 % faux). D'où le
   classifieur kNN + le garde-fou IA.
 - NE PAS afficher de note /20 ni dévoiler l'algo. Badges seulement.
-- NE PAS recalculer la note INCI Beauty d'un produit catalogue depuis les ingrédients :
-  `catalog.score` est la source de vérité (import externe). Le score calculé diffère ~15 %.
+- NE PAS recalculer la note d'un produit catalogue depuis les ingrédients :
+  `catalog.score` est la source de vérité (score propriétaire CosmeCheck). Le score calculé diffère ~15 %.
 
 DO :
 - Toujours appliquer `applyColorCap` AVANT de choisir la couleur d'un badge de LISTE, et

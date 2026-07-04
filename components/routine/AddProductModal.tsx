@@ -52,9 +52,9 @@ interface AnalysisRow {
 }
 
 function ratingFor(row: AnalysisRow): ColorRating {
+  // Couleur dérivée UNIQUEMENT du score (source unique) → même pastille partout.
   const parsed = parseAnalyseResponse(row.result_json)
-  if (parsed) return toneToColorRating(parsed.scoreTone)
-  return getColorRatingFromScore(row.score ?? 0)
+  return getColorRatingFromScore(parsed?.score ?? row.score ?? 0)
 }
 
 function titleFor(row: AnalysisRow): string {

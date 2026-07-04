@@ -284,7 +284,7 @@ async function rpcBattery() {
 
   section('15. RPC — filtre QUALITÉ : aucun ingrédient noté Orange/Rouge dans les recos')
   {
-    // Régression du bug « Kojic Acid Body Lotion » (score INCI Beauty 20 mais 9 pénalisants).
+    // Régression du bug « Kojic Acid Body Lotion » (score catalogue 20 mais 9 pénalisants).
     // Échantillon d'INCI notoirement Orange/Rouge : aucun ne doit apparaître dans une reco.
     const PENAL = ['mineral oil', 'petrolatum', 'paraffinum liquidum', 'dimethicone', 'cyclopentasiloxane',
       'cyclohexasiloxane', 'methylparaben', 'propylparaben', 'butylparaben', 'ceteareth-25', 'laureth-7', 'bht']

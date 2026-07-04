@@ -32,21 +32,6 @@ export function scoreToSlot(score: number | null | undefined): PastilleSlot | nu
   return { bg: '#F43F5E', iconColor: '#FFFFFF', icon: 'stop' }
 }
 
-function toneToSlot(tone: string | null | undefined): PastilleSlot | null {
-  switch (tone) {
-    case 'rose':
-      return { bg: '#F43F5E', iconColor: '#FFFFFF', icon: 'stop' }
-    case 'orange':
-      return { bg: '#F97316', iconColor: '#FFFFFF', icon: 'triangle' }
-    case 'amber':
-      return { bg: '#34D399', iconColor: '#022C22', icon: 'leaf' }
-    case 'green':
-      return { bg: '#34D399', iconColor: '#022C22', icon: 'heart' }
-    default:
-      return null
-  }
-}
-
 export const PastilleIcon: FC<{ kind: PastilleKind; size: number; color: string }> = ({
   kind,
   size,
@@ -95,13 +80,15 @@ export const PastilleIcon: FC<{ kind: PastilleKind; size: number; color: string 
   }
 }
 
-/** Pastille ronde colorée + icône, dérivée du score (ou du tone en fallback). */
+/** Pastille ronde colorée + icône, dérivée UNIQUEMENT du score (source unique ;
+ *  on ne lit JAMAIS un score_tone stocké → la même pastille partout). */
 export const CatalogPastille: FC<{
   score: number | null | undefined
+  /** @deprecated ignoré — la pastille vient du score. Gardé pour compat appelants. */
   tone?: string | null
   size?: number
-}> = ({ score, tone, size = 32 }) => {
-  const slot = scoreToSlot(score) ?? toneToSlot(tone)
+}> = ({ score, size = 32 }) => {
+  const slot = scoreToSlot(score)
   if (!slot) return null
   const icon = Math.round(size * 0.44)
   return (

@@ -30,8 +30,8 @@ interface Props {
   expanded: boolean
   onToggle: () => void
   hideToggle?: boolean
-  /** Score global (INCI Beauty) — la pastille L'ESSENTIEL en dérive, identique
-   *  à la jauge du verdict (cœur/feuille/œil/triangle/stop). */
+  /** Score global (notation propriétaire CosmeCheck) - la pastille L'ESSENTIEL en dérive, identique
+   *  à la jauge du verdict (coeur/feuille/oeil/triangle/stop). */
   verdictScore?: number | null
   /** Nombre d'ingrédients pénalisants (orange + rouge) — quantifié dans la phrase. */
   penalizingCount?: number
@@ -95,7 +95,7 @@ export const EssentielToggleButton: FC<{ expanded: boolean; onToggle: () => void
       <Text style={styles.toggleText}>
         {expanded ? 'Masquer le détail' : "Voir l'analyse complète"}
       </Text>
-      <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={15} color={colors.gray700} />
+      <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={15} color="#FFFFFF" />
     </Pressable>
   )
 }
@@ -451,22 +451,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.success,
     borderRadius: 9999,
     paddingHorizontal: 20,
     paddingVertical: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowColor: colors.success,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.32,
+    shadowRadius: 12,
+    elevation: 4,
   },
   toggleBtnPressed: {
     opacity: 0.8,
   },
   toggleText: {
-    fontFamily: fontFamilies.medium,
+    fontFamily: fontFamilies.semiBold,
     fontSize: 13,
-    color: colors.gray700,
+    color: '#FFFFFF',
   },
 })

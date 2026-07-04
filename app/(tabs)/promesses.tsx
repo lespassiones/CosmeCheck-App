@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
-    backgroundColor: colors.rose,
+    backgroundColor: colors.success,
     borderRadius: radius.full,
     paddingHorizontal: spacing.md,
     paddingVertical: 8,
@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
     borderRadius: radius.full,
-    backgroundColor: colors.rose,
+    backgroundColor: colors.success,
   },
   emptyCtaText: { ...typography.button, color: '#FFFFFF' },
 })

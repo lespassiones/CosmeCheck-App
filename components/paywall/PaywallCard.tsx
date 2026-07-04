@@ -145,18 +145,18 @@ const styles = StyleSheet.create({
   button: {
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.rose,
+    borderColor: colors.success,
     borderRadius: 12,
     paddingVertical: spacing.md,
     alignItems: 'center',
   },
   buttonPrimary: {
-    backgroundColor: colors.rose,
-    borderColor: colors.rose,
+    backgroundColor: colors.success,
+    borderColor: colors.success,
   },
   buttonText: {
     ...typography.button,
-    color: colors.rose,
+    color: colors.success,
     fontWeight: '600',
   },
   buttonTextPrimary: {

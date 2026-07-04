@@ -821,7 +821,16 @@ export function computeEssentiel(
   result: AnalyseResponse,
   opts?: EssentielOptions,
 ): EssentielData {
-  const tone = pickTone(result.counts);
+  // SOURCE DE VÉRITÉ = le score (pastille propriétaire, qui intègre déjà la règle
+  // douce et le plafond par position). On ne dérive plus le ton des comptes bruts
+  // (pickTone violait la règle douce : jaune>=4 -> caution même avec bcp de verts).
+  // Fallback sur pickTone(counts) uniquement si le produit n'a pas de score (non noté).
+  let tone = verdictToneFromScore(result.score);
+  if (tone === "unknown") {
+    tone = pickTone(result.counts);
+  } else if (tone === "danger" && result.counts.rouge >= 2) {
+    tone = "high-risk"; // préserve la nuance ">=2 rouge" pour la formulation
+  }
   const phrase = pickPhrase(tone, result.counts);
   const resolvedCategory: ProductCategory | null =
     (opts?.category && opts.category !== "autre" ? opts.category : null)

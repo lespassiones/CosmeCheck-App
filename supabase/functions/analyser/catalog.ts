@@ -7,7 +7,7 @@
 import { serviceClient } from "../_shared/auth.ts";
 
 /**
- * Lit le score CATALOGUE (= score INCI Beauty, source de vérité) pour un EAN.
+ * Lit le score CATALOGUE (notation propriétaire CosmeCheck, source de vérité) pour un EAN.
  * Renvoie null si l'EAN n'est pas au catalogue (produit internet) ou sans score.
  * Sert à ne JAMAIS afficher/persister un score recalculé pour un produit connu.
  */

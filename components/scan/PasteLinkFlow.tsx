@@ -349,7 +349,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.rose,
+    backgroundColor: colors.success,
     borderRadius: radius.lg,
     paddingVertical: spacing.base,
     marginTop: spacing.md,

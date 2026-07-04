@@ -301,7 +301,7 @@
 - Tags (ex: "#endocrinien", "#allergène", "#naturel")
 - Description courte en français
 - Liste des produits analysés qui contiennent cet ingrédient (dans l'historique personnel)
-- Sources réglementaires si pertinent (INCI Beauty, CosIng)
+- Sources réglementaires si pertinent (CosIng)
 
 ---
 

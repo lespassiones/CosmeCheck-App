@@ -71,6 +71,7 @@ export const colors = {
 
   // ── États & Feedback ─────────────────────────────────────────────
   success: '#16A34A',
+  successDeep: '#15803D', // Vert foncé — état pressed/hover des CTA primaires
   successSoft: '#DCFCE7',
   warning: '#CA8A04',
   warningSoft: '#FEF9C3',

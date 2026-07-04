@@ -1,18 +1,21 @@
 /**
- * Plancher de sécurité par couleur — version client (miroir de
- * supabase/functions/analyser/score.ts:applyColorCap). Indépendant de la position :
- *   - ≥ 1 rouge   OU  ≥ 3 orange → pastille au max "triangle" (score < 9)
- *   - 1 ou 2 orange              → pastille au max "œil"      (score < 13)
- * Ne fait que PLAFONNER (jamais remonter). Utilisé pour que l'écran d'analyse
- * ET les recommandations affichent la même note plafonnée.
+ * NEUTRALISÉ (juillet 2026) — le color cap n'est PLUS appliqué.
+ *
+ * Depuis le passage à la notation propriétaire par PASTILLE, le score (0-20) est
+ * déjà synthétisé dans la bande de la pastille, qui intègre le plafond PAR
+ * POSITION (moteur `lib/analysis/pastille.ts`). Re-plafonner ici (règle aveugle
+ * à la position : ≥1 rouge → 8.9) sur-pénaliserait à tort un produit dont le
+ * rouge est en fin de liste, et divergerait du score du catalogue.
+ *
+ * On garde la fonction (signature inchangée) pour ne pas casser les appelants
+ * (recommandations, alternatives, routine, recherche) : elle renvoie désormais
+ * le score tel quel. À supprimer quand tous les appels auront été retirés.
  */
 export function applyColorCap(
   score: number,
-  countOrange: number,
-  countRouge: number,
+  _countOrange: number,
+  _countRouge: number,
 ): number {
-  if (countRouge >= 1 || countOrange >= 3) return Math.min(score, 8.9)
-  if (countOrange >= 1) return Math.min(score, 12.9)
   return score
 }
 

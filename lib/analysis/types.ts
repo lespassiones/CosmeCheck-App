@@ -8,6 +8,7 @@
  * - L'API renvoie les couleurs d'ingrédients en CAPITALISÉ ('Vert'…) — type
  *   `DbColorRating`. Utiliser `normalizeColor()` au parsing.
  */
+import { pastilleTone, synthScore } from './pastille'
 
 export type ColorRating = 'vert' | 'jaune' | 'orange' | 'rouge'
 export type DbColorRating = 'Vert' | 'Jaune' | 'Orange' | 'Rouge'
@@ -123,11 +124,14 @@ export function toneToColorRating(tone: ScoreTone): ColorRating {
   return TONE_TO_RATING[tone]
 }
 
-/** Seuils RÉELS du web : ≥17 vert · ≥13 jaune · ≥9 orange · sinon rouge. */
+/** Couleur (ColorRating) dérivée UNIQUEMENT du score — convention PASTILLE
+ *  (identique à scoreToSlot / verdictToneFromScore) : ≥13 vert · ≥9 jaune ·
+ *  ≥5 orange · <5 rouge. Source unique : on ne passe JAMAIS par un score_tone
+ *  stocké → la couleur d'un produit est la même partout. */
 export function getColorRatingFromScore(score: number): ColorRating {
-  if (score >= 17) return 'vert'
-  if (score >= 13) return 'jaune'
-  if (score >= 9) return 'orange'
+  if (score >= 13) return 'vert'
+  if (score >= 9) return 'jaune'
+  if (score >= 5) return 'orange'
   return 'rouge'
 }
 
@@ -155,9 +159,7 @@ export function getRatingColors(rating: ColorRating): { text: string; bg: string
 // Le court-circuit cache EAN de l'Edge `analyser` a, pour certains produits,
 // persisté un result_json SANS `score` ni `counts` (juste `items`). Plutôt que
 // d'afficher « illisible », on recalcule ces champs depuis `items`. Le score
-// réel (INCI Beauty) est de toute façon ré-appliqué via le catalogue à l'écran.
-
-const RECON_PENALTY: Record<DbColorRating, number> = { Vert: 0, Jaune: 0.6, Orange: 2.0, Rouge: 4.0 }
+// réel (notation propriétaire CosmeCheck) est de toute façon ré-appliqué via le catalogue à l'écran.
 
 /** Tally des couleurs d'items → AnalyseCounts (forme minuscule). */
 function reconstructCounts(items: AnalyseItem[]): AnalyseCounts {
@@ -175,24 +177,17 @@ function reconstructCounts(items: AnalyseItem[]): AnalyseCounts {
   return { total, matched: total - unknown, vert, jaune, orange, rouge, unknown }
 }
 
-/** Score 0-20 recalculé depuis items (même formule pondérée que lib/inci/parser). */
+/** Score 0-20 reconstruit depuis items via la pastille propriétaire (couleur +
+ *  position), synthétisée dans la bande du ton — même moteur que l'Edge analyser
+ *  et le bulk catalogue. Ne s'applique qu'aux result_json incomplets (fallback). */
 function reconstructScoreFromItems(items: AnalyseItem[]): number {
-  const N = items.length
-  if (N === 0) return 0
-  let score = 20
-  let countOrange = 0
-  let countRouge = 0
-  for (const it of items) {
-    const c = it.colorRating
-    if (!c) continue
-    const weight = Math.log(N - it.position + 1) / Math.log(N + 1)
-    score -= (RECON_PENALTY[c] ?? 0) * weight
-    if (c === 'Orange') countOrange++
-    if (c === 'Rouge') countRouge++
-  }
-  score -= Math.max(0, countOrange - 3) * 0.4
-  score -= Math.max(0, countRouge - 2) * 0.8
-  return Math.max(0, Math.min(20, score))
+  if (items.length === 0) return 0
+  const past = pastilleTone(
+    items.map((it) => ({ color: it.colorRating, position: it.position })),
+    items.length,
+    false,
+  )
+  return synthScore(past) ?? 0
 }
 
 function scoreToneFromScore(score: number): ScoreTone {

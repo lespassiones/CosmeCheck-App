@@ -43,10 +43,12 @@ const TONE_VISUAL: Record<Tone, { bg: string; text: string }> = {
   neutre: { bg: colors.gray100, text: colors.inkMuted },
 }
 
+// Icônes DISTINCTES des pastilles de notation (cœur/feuille/œil/triangle/stop)
+// pour éviter toute confusion visuelle. Le drapeau (résumé) est conservé.
 const BLOCK_ORDER: { key: keyof PersonalBlocks; icon: IoniconName }[] = [
   { key: 'goals', icon: 'flag-outline' },
-  { key: 'skin', icon: 'leaf-outline' },
-  { key: 'watch', icon: 'eye-outline' },
+  { key: 'skin', icon: 'body-outline' },
+  { key: 'watch', icon: 'alert-circle-outline' },
 ]
 
 type State =

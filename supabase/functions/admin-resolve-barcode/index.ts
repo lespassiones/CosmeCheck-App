@@ -18,7 +18,7 @@ import { handleOptions, jsonResponse } from "../_shared/cors.ts";
 import { serviceClient } from "../_shared/auth.ts";
 import { AI_MODEL_SEARCH, hasOpenAI, logAI, openai } from "../_shared/aiClient.ts";
 import { parseInciList } from "../analyser/parse.ts";
-import { applyColorCap, computeScore, scoreLabel, type ColorRating } from "../analyser/score.ts";
+import { pastilleTone, scoreLabel, type ColorRating, synthScore } from "../analyser/score.ts";
 import { slugifyCategoryPath } from "../_shared/eanWebSearch.ts";
 
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -190,7 +190,14 @@ Deno.serve(async (req) => {
     color_rating: r.color_rating,
     position: (r.position_idx ?? 0) + 1,
   }));
-  const score = computeScore(matches, tokens.length);
+  // Notation propriétaire par pastille (position + composition), synthétisée en
+  // score 0–20 — plus de formule INCI ni de color cap (le plafond est intégré).
+  const pastille = pastilleTone(
+    matches.map((m) => ({ color: m.color_rating, position: m.position })),
+    tokens.length,
+    false,
+  );
+  const score = synthScore(pastille) ?? 0;
   let countOrange = 0, countRouge = 0;
   for (const m of matches) {
     if (m.color_rating === "Orange") countOrange++;
@@ -198,7 +205,7 @@ Deno.serve(async (req) => {
   }
   const { label, tone } = scoreLabel(score);
 
-  // ── 3. Upsert catalogue (score brut ; le plafond s'applique à l'affichage). ─
+  // ── 3. Upsert catalogue (score pastille final ; plus de plafond séparé). ─
   try {
     await svc.rpc("cosme_check_upsert_catalog_product", {
       p_ean: ean,
@@ -225,7 +232,7 @@ Deno.serve(async (req) => {
     ean,
     name,
     brand,
-    score: Number(applyColorCap(score, countOrange, countRouge).toFixed(1)),
+    score: Number(score.toFixed(1)),
     rawScore: Number(score.toFixed(1)),
     scoreLabel: label,
     category: catSlug,
