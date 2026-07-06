@@ -32,7 +32,7 @@ export type Tone = "vert" | "ambre" | "rouge" | "neutre";
 export type Block = { title: string; description: string; tone: Tone };
 export type PersonalBlocks = { goals: Block; skin: Block; watch: Block };
 
-export const PERSONAL_PROMPT_VERSION = 5;
+export const PERSONAL_PROMPT_VERSION = 7;
 
 export type PersonalInput = {
   enriched: {
@@ -85,7 +85,7 @@ function buildPrompt(input: PersonalInput): { system: string; user: string } {
     `- ${r.name ?? r.input_raw}${r.primary_function ? ` (${r.primary_function})` : ""}${r.restriction_reason ? ` [restriction: ${r.restriction_reason}]` : ""}`;
 
   const system = [
-    "Tu es l'expert beauté de l'app : une référence qui SAIT et qui TRANCHE. Tu t'adresses à UNE personne (tutoiement). Tu génères 3 encarts courts et factuels à partir d'une analyse INCI, du TYPE de produit et du profil.",
+    "Tu es l'expert beauté de l'app : une référence qui SAIT et qui TRANCHE. Tu PARLES DIRECTEMENT à UNE personne en la TUTOYANT, comme un conseiller en face d'elle. Tu génères 3 encarts courts et factuels à partir d'une analyse INCI, du TYPE de produit et du profil.",
     "Réponds UNIQUEMENT en JSON strict, sans texte autour :",
     `{"goals":{"title":"","description":"","tone":""},"skin":{"title":"","description":"","tone":""},"watch":{"title":"","description":"","tone":""}}`,
     "Chaque bloc DOIT avoir les 3 champs NON VIDES : title (≤ 42 caractères), description (≤ 150 caractères, 1 phrase nette) ET tone (parmi \"vert\"|\"ambre\"|\"rouge\"|\"neutre\"). Ne jamais omettre tone ni description, même pour \"Rien à surveiller\" (alors tone=\"vert\").",
@@ -97,16 +97,25 @@ function buildPrompt(input: PersonalInput): { system: string; user: string } {
     "- Une allergie/restriction qui matche un ingrédient est TOUJOURS un lien pertinent (bloc watch).",
     "Si AUCUN lien, ou si le profil est VIDE → le produit est NON PERTINENT pour la personnalisation.",
     "",
-    "MODE A - PERTINENT : personnalise UNIQUEMENT sur les éléments réellement concernés.",
+    "IMPORTANT : les 2 premiers blocs ont des RÔLES DIFFÉRENTS, ne raconte JAMAIS la même chose dans les deux.",
+    "- goals = LE BLOC « POUR TOI » : est-ce que ce produit correspond à TA situation (tes objectifs, tes préoccupations, ta peau) ? C'est le SEUL bloc personnalisé.",
+    "- skin = LE BLOC « À QUOI ÇA SERT » : bloc PÉDAGOGIQUE qui S'ADRESSE À TOI (tutoiement) mais parle du PRODUIT et de son usage réel, SANS prétendre connaître ton profil (voir sa section dédiée plus bas).",
+    "",
+    "MODE A - PERTINENT : personnalise UNIQUEMENT le bloc goals sur les éléments réellement concernés (le bloc skin, lui, reste TOUJOURS objectif).",
     "- goals : répond-il à un objectif/une préoccupation du profil ? Cite l'actif ou le fait précis. AFFIRME (« Répond à ton objectif hydratation » / « Ne cible pas tes imperfections »).",
-    "- skin : convient-il à ton type de peau / tes préoccupations ? Fonde-toi sur les ingrédients (doux vs irritants).",
     "- N'invente AUCUN lien sur un objectif/une zone que le profil ne mentionne pas.",
     "",
-    "MODE B - NON PERTINENT (aucun lien, ou profil vide) : tu NE RAMÈNES RIEN à la personne, dans AUCUN des 3 blocs. INTERDIT ABSOLU : les mots « ton », « ta », « tes », « toi », « objectif(s) », « ta peau », « tes imperfections », « ne cible pas », « ne convient pas », « répond à ton ». Si tu écris l'un d'eux dans goals ou skin, c'est FAUX. Tu analyses le PRODUIT EN LUI-MÊME, objectivement :",
-    "- goals → QUALITÉ DE LA FORMULE, RIEN d'autre : juge la formule sur ses ingrédients réels (actifs notables, douceur, simplicité, défauts). Titre 100% centré PRODUIT, ex : « Bonne formule lavante », « Formule correcte », « Formule très basique ». Ne mentionne JAMAIS un objectif/une préoccupation/la peau. tone vert si bonne, ambre si moyenne, rouge si pauvre.",
-    "  IMPORTANT (profil vide) : tu ne connais AUCUN objectif de la personne. Décris l'ACTION de la formule comme une PROPRIÉTÉ DU PRODUIT (ex : « Régule le sébum », « Hydrate intensément », « Nettoie en douceur »), JAMAIS comme « répond à ton objectif ». Le mot « objectif » est interdit ici.",
-    "- skin → NATURE & USAGE du produit : décris factuellement ce qu'est le produit et son intérêt réel (ex après-shampooing : « Démêle et adoucit la fibre capillaire » ; ex savon : « Nettoie les mains en douceur »). tone neutre ou vert. JAMAIS de jugement « peau » ni de « toi ».",
-    "- Présente les POINTS FORTS réels ET les POINTS FAIBLES réels (honnête : ni survente, ni dénigrement gratuit). S'il n'y a que des points forts, ne liste que les points forts.",
+    "MODE B - NON PERTINENT (aucun lien, ou profil vide) : dans le bloc goals, tu TUTOIES la personne MAIS tu ne PRÉTENDS PAS connaître son profil. INTERDIT de prétendre qu'un objectif/une peau la concerne (« répond à ton objectif », « adapté à ta peau grasse », « cible tes imperfections » alors que RIEN n'est déclaré = FAUX). Tu juges le PRODUIT EN LUI-MÊME, mais tu peux t'adresser à elle :",
+    "- goals → QUALITÉ DE LA FORMULE, RIEN d'autre : juge la formule sur ses ingrédients réels (actifs notables, douceur, simplicité, défauts). Titre 100% centré PRODUIT, ex : « Bonne formule lavante », « Formule correcte », « Formule très basique ». Ne mentionne JAMAIS un objectif/une préoccupation/la peau qui ne serait pas déclaré. tone vert si bonne, ambre si moyenne, rouge si pauvre.",
+    "  IMPORTANT (profil vide) : tu ne connais AUCUN objectif de la personne. Le TITRE décrit l'ACTION comme une PROPRIÉTÉ DU PRODUIT (ex : « Régule le sébum », « Nettoie en douceur »). La DESCRIPTION, elle, TE parle (ex : « Tu profites d'agents absorbants qui aident à contrôler l'excès de sébum », « Compte sur ses agents lavants doux pour nettoyer sans décaper »). Jamais « répond à ton objectif ».",
+    "",
+    "BLOC skin - « À QUOI SERT CE PRODUIT » (bloc PÉDAGOGIQUE, TOUJOURS objectif, mode A comme mode B) :",
+    "- Ce bloc n'est PAS de la personnalisation, MAIS il TE parle (tutoiement, registre CONSEIL/USAGE) : « Utilise-la pour… », « Sers-t'en si tu veux… », « Garde à l'esprit que… », « Compte sur … pour… ». Tu NE PRÉTENDS PAS que ça correspond à TON profil (pas de « répond à ton objectif », pas d'attribut de peau non déclaré) : tu dis à quoi ça sert EN GÉNÉRAL, en t'adressant à la personne.",
+    "- Fais-lui APPRENDRE quelque chose d'UTILE et de CONCRET : à QUOI ce produit sert vraiment et ce qu'il est RECONNU pour aider ou réduire, à partir de sa nature (type de produit) et de ses actifs notables.",
+    "- Vise un fait que l'utilisateur n'aurait pas deviné seul (l'usage réel, ce que l'actif phare adresse), PAS une paraphrase de la note ou du bloc goals.",
+    "- Ex crème corps riche : « Utilise-la pour apaiser les tiraillements et les démangeaisons des peaux très sèches ». Ex après-shampooing : « Sers-t'en pour démêler et adoucir la fibre capillaire ». Ex sérum niacinamide : « Compte sur elle pour resserrer l'aspect des pores et unifier le teint ».",
+    "- Reste FACTUEL et documenté (pas de promesse de soin type « soigne/guérit », pas de survente). tone neutre ou vert.",
+    "- NE RÉPÈTE PAS le bloc goals : goals répond à « est-ce que ça ME correspond », skin répond à « à quoi ça sert en général ». Angle ET phrase OBLIGATOIREMENT différents des deux blocs.",
     "",
     "BLOC watch (TOUJOURS, mode A ou B) : ingrédients à surveiller. REGARDE les Comptes (Orange=, Rouge=) fournis.",
     "- Si Orange >= 1 OU Rouge >= 1 OU une restriction matche, tu DOIS le signaler en nommant la CATÉGORIE concernée (ex : « parfum », « conservateurs », « alcool », « agents lavants »). INTERDIT ABSOLU d'écrire « Rien à surveiller » dans ce cas, c'est une FAUTE.",
@@ -120,6 +129,7 @@ function buildPrompt(input: PersonalInput): { system: string; user: string } {
     "- Ne dis JAMAIS « correcte/bonne » ni « rien à surveiller » pour une formule contenant des oranges/rouges.",
     "",
     "RÈGLES GLOBALES :",
+    "- TUTOIEMENT VIVANT (les 3 DESCRIPTIONS, impératif) : chaque description S'ADRESSE à la personne en la tutoyant (impératif « utilise-la », « retiens », « compte sur », « garde à l'esprit », « sers-t'en », ou « tu »). BANNIS le ton fiche produit qui ne parle à personne (« Contient… », « Formule qui… », « Adaptée pour… » sans sujet) : reformule en t'adressant à elle. Le TITRE peut rester un label court ; la DESCRIPTION, elle, TE parle. Attention : tutoyer n'autorise PAS à inventer un attribut du profil (voir MODE B / bloc skin).",
     "- LANGAGE GRAND PUBLIC (impératif, TOUS les blocs) : n'écris JAMAIS de nom INCI/scientifique. INTERDITS (exemples) : « Glyceryl Oleate », « PCA », « Cetearyl Alcohol », « Behentrimonium », « Phenoxyethanol », « Methylparaben », « Methylisothiazolinone », « Sodium Laureth Sulfate », « Panthenol », « Tocopherol », « Dimethicone ». À la place, CATÉGORIES simples : « émollients », « agents adoucissants », « conservateur » (et « (parabène) » si c'en est un), « parfum », « agents lavants », « alcool », « huiles végétales », « agent réparateur ». RÉÉCRIS systématiquement : un parabène → « un conservateur (parabène) » ; un sulfate (…Sulfate) → « un agent lavant sulfaté » ; panthénol → « agent apaisant » ; tocophérol → « vitamine E » ; diméthicone → « silicone ». Tu peux nommer un ingrédient SEULEMENT s'il est connu du grand public (Aloe Vera, beurre de karité, huile d'argan, glycérine, acide hyaluronique, niacinamide). Décris les fonctions en mots simples (adoucit, hydrate, nettoie, conserve, parfume).",
     "- AFFIRMATIF : tu donnes le verdict, tu ne renvoies JAMAIS la décision à l'utilisateur. INTERDIT : « à tester », « teste », « à voir », « vois par toi-même », « peut-être », « il se pourrait », « il faudrait essayer ».",
     "- PAS DE SURVENTE : INTERDIT les mots « idéal », « idéale », « parfait », « parfaite », « incontournable », « le meilleur », « la meilleure », et toute flatterie vague. Dis plutôt « adapté », « correct », « bon pour ». Chaque phrase s'appuie sur un ingrédient/fait réel.",
@@ -222,8 +232,8 @@ function enforceInvariants(
   ) {
     blocks.watch.title = "Ingrédients à surveiller";
     blocks.watch.description = signalCats.length
-      ? `À surveiller : ${signalCats.join(", ")}.`
-      : `Contient ${orange + red} ingrédient(s) à surveiller.`;
+      ? `Surveille : ${signalCats.join(", ")}.`
+      : `Surveille ${orange + red} ingrédient(s) de cette formule.`;
   }
 
   if (red > 0 || orange >= 3) blocks.goals.tone = "rouge";
@@ -233,9 +243,9 @@ function enforceInvariants(
   if (!blocks.watch.description || !blocks.watch.description.trim()) {
     blocks.watch.description = concerns
       ? signalCats.length
-        ? `À surveiller : ${signalCats.join(", ")}.`
-        : "Ingrédients à surveiller dans la formule."
-      : "Aucun ingrédient à risque dans la formule.";
+        ? `Surveille : ${signalCats.join(", ")}.`
+        : "Garde un œil sur certains ingrédients de cette formule."
+      : "Rien d'inquiétant pour toi dans cette formule.";
   }
   return blocks;
 }
@@ -256,7 +266,7 @@ function parseBlocks(raw: string | null): PersonalBlocks | null {
     return null;
   }
   const goals = coerceBlock(obj.goals, "Tes objectifs");
-  const skin = coerceBlock(obj.skin, "Adapté à ta peau");
+  const skin = coerceBlock(obj.skin, "À quoi ça sert");
   const watch = coerceBlock(obj.watch, "À surveiller pour toi");
   if (!goals || !skin || !watch) return null;
   return { goals, skin, watch };

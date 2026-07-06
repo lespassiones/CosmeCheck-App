@@ -276,9 +276,6 @@ const OffreScreen: FC = () => {
             {/* Bénéfices — tous personnalisés « pour toi ». */}
             <WhiteCard padding={spacing.lg}>
               <BenefitRow>
-                <Text style={styles.benefitBold}>100 crédits</Text> chaque mois pour analyser tes produits
-              </BenefitRow>
-              <BenefitRow>
                 Analyse de chaque produit <Text style={styles.benefitBold}>personnalisée</Text> à ton profil
               </BenefitRow>
               <BenefitRow>
@@ -290,8 +287,11 @@ const OffreScreen: FC = () => {
               <BenefitRow>
                 Analyse des <Text style={styles.benefitBold}>promesses produit</Text> selon ton profil
               </BenefitRow>
-              <BenefitRow last>
+              <BenefitRow>
                 Amélioration de ta routine, <Text style={styles.benefitBold}>sur-mesure</Text>
+              </BenefitRow>
+              <BenefitRow last>
+                <Text style={styles.benefitBold}>100 crédits/mois</Text> pour trouver les produits faits pour toi
               </BenefitRow>
             </WhiteCard>
 

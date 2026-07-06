@@ -45,8 +45,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated'
 import { Ionicons } from '@expo/vector-icons'
-// expo/fetch : implémentation streaming fiable sous React Native (SDK 54).
-import { fetch as expoFetch } from 'expo/fetch'
+import MaskedView from '@react-native-masked-view/masked-view'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useRouter } from 'expo-router'
 import { useQueryClient } from '@tanstack/react-query'
 
@@ -54,13 +54,18 @@ import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 import { supabase } from '@/lib/supabase/client'
-import { useProfile } from '@/hooks/useProfile'
 import { useLaunchAlternative } from '@/hooks/useLaunchAlternative'
 import { AlternativesCarousel } from '@/components/analysis/AlternativesCarousel'
 import { ProcessingOverlay } from '@/components/shared/ProcessingOverlay'
-import { parseRecoBlock, stripRecoBlock } from '@/lib/advisor/recoBlock'
-import { fetchAdvisorRecommendations } from '@/lib/advisor/recommendations'
-import { buildAdvisorApiMessages } from '@/lib/advisor/apiMessages'
+import {
+  askAdvisorAgent,
+  makeLoadingSequence,
+  advisorLoadingColor,
+  ADVISOR_LOADING_STEPS,
+  AdvisorNoCreditsError,
+  AdvisorRateLimitError,
+  AdvisorUnavailableError,
+} from '@/lib/advisor/agentClient'
 import { prefetchProductsAnalyses } from '@/lib/analysis/eanAnalysisPrefetch'
 import {
   createConversation,
@@ -101,7 +106,6 @@ const SUGGESTED_PROMPTS = [
 ]
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? ''
-const SUPABASE_ANON = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ''
 
 function getTime() {
   return new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
@@ -143,8 +147,11 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
   )
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
+  // Tick pour faire tourner les messages de chargement pendant l'attente de l'agent.
+  const [loadingTick, setLoadingTick] = useState(0)
+  // Ordre aléatoire des phrases de chargement, régénéré à chaque envoi.
+  const loadingSeqRef = useRef<string[]>(ADVISOR_LOADING_STEPS.slice())
   const scrollRef = useRef<ScrollView>(null)
-  const { restrictions, skin } = useProfile()
   const { analyze, isAnalyzing } = useLaunchAlternative()
   const router = useRouter()
   const qc = useQueryClient()
@@ -156,17 +163,41 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
     return () => clearTimeout(t)
   }, [messages])
 
+  // Messages de chargement rotatifs pendant l'attente de l'agent : intervalle
+  // ALÉATOIRE (1,4 s à 3,2 s) pour un rythme naturel, pas mécanique.
+  useEffect(() => {
+    if (!streaming) return
+    setLoadingTick(0)
+    let id: ReturnType<typeof setTimeout>
+    const tick = () => {
+      const delay = 1400 + Math.random() * 1800
+      id = setTimeout(() => {
+        setLoadingTick((t) => t + 1)
+        tick()
+      }, delay)
+    }
+    tick()
+    return () => clearTimeout(id)
+  }, [streaming])
+
   const send = useCallback(
     async (rawText: string) => {
       const text = rawText.trim()
       if (!text || streaming) return
+      // Nouvel ordre aléatoire des phrases de chargement pour cet envoi.
+      loadingSeqRef.current = makeLoadingSequence()
       setStreaming(true)
 
       const userMsg: ChatMsg = { role: 'user', content: text, time: getTime() }
-      // Historique envoyé à l'API : sans les messages purement UI, avec le bloc RECO
-      // reconstruit sur les réponses passées (cf. lib/advisor/apiMessages — bug
-      // multi-tours : sans ça l'IA arrête d'émettre le bloc aux tours suivants).
-      const apiMessages = buildAdvisorApiMessages(messages, userMsg.content)
+      // Historique envoyé à l'agent : plain {role, content}, sans les messages
+      // purement UI (accueil). L'agent ne parse pas de bloc technique : le contenu
+      // visible suffit (le serveur tronque aux 12 derniers tours).
+      const apiMessages = [
+        ...messages
+          .filter((m) => !m.uiOnly)
+          .map((m) => ({ role: m.role, content: m.content })),
+        { role: 'user' as const, content: userMsg.content },
+      ]
       setMessages((prev) => [...prev, userMsg, { role: 'assistant', content: '', time: getTime() }])
       setInput('')
 
@@ -184,7 +215,6 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
       // Pour sauvegarder la réponse de l'assistant en fin de tour.
       let finalAssistant = ''
       let finalProducts: AlternativeProduct[] = []
-      let finalCriteria: { ingredients: string[]; form: string | null; exclude?: string[] } | null = null
 
       const updateLastAssistant = (patch: Partial<ChatMsg>) =>
         setMessages((prev) => {
@@ -210,122 +240,73 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
           return
         }
 
-        const res = await expoFetch(`${SUPABASE_URL}/functions/v1/advisor-chat`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-            apikey: SUPABASE_ANON,
-          },
-          body: JSON.stringify({ messages: apiMessages }),
-        })
+        // EAN déjà affichés dans la conversation → l'agent les exclut pour que
+        // « montre-m'en d'autres » renvoie de NOUVEAUX produits.
+        const seenEans = Array.from(
+          new Set(
+            messages.flatMap((m) => (m.products ?? []).map((p) => p.ean)).filter(Boolean),
+          ),
+        )
+        // Agent : réponse JSON en UN appel (texte + produits DÉJÀ vérifiés côté
+        // serveur). L'effet « streaming » est rendu côté client : on dévoile le
+        // texte en machine à écrire, PUIS on affiche les cartes produit.
+        const result = await askAdvisorAgent(apiMessages, token, seenEans)
+        finalAssistant = result.reply
+        finalProducts = result.products
 
-        if (!res.ok) {
-          const errBody = (await res.json().catch(() => null)) as
-            | { code?: string; error?: string; credits?: { used?: number; limit?: number } }
-            | null
-          if (res.status === 429 && errBody?.code === 'no_credits') {
-            failWith(
-              errBody.error ??
-                "Tu as utilisé tous tes crédits du jour. Reviens demain ou passe en Premium pour en avoir plus 💜",
-            )
-            // En plus du message dans le fil, on ouvre la modale globale
-            // « Crédits épuisés » (→ /offre) pour proposer l'abonnement.
-            DeviceEventEmitter.emit(CREDITS_EXHAUSTED_EVENT, {
-              used: errBody.credits?.used,
-              limit: errBody.credits?.limit,
-            })
-          } else if (res.status === 429) {
-            failWith('Tu vas un peu vite 😅 Patiente une minute et réessaie.')
-          } else {
-            failWith(
-              'Le conseiller IA est momentanément indisponible. Réessaie dans un instant.',
-            )
-          }
-          return
+        // 1) Dévoilement progressif du texte (~1,2 s max quelle que soit la longueur).
+        const full = finalAssistant
+        const steps = Math.min(full.length, 46)
+        const chunk = Math.max(1, Math.ceil(full.length / steps))
+        for (let i = chunk; i < full.length; i += chunk) {
+          updateLastAssistant({ content: full.slice(0, i) })
+          await new Promise((r) => setTimeout(r, 26))
         }
+        updateLastAssistant({ content: full })
 
-        const body = res.body
-        if (!body) {
-          // Pas de stream : on tente une lecture texte complète.
-          const full = await res.text().catch(() => '')
-          replaceLastAssistant(full.trim() || "Je n'ai pas pu générer de réponse cette fois-ci.")
-          return
-        }
-
-        const reader = body.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buffer += decoder.decode(value, { stream: true })
-          // On masque le bloc technique <<<RECO>>> dès qu'il commence à arriver.
-          updateLastAssistant({ content: stripRecoBlock(buffer) })
-        }
-        buffer += decoder.decode()
-
-        const visible = stripRecoBlock(buffer).trim()
-        finalAssistant = visible || "Je n'ai pas pu générer de réponse cette fois-ci."
-        updateLastAssistant({ content: finalAssistant })
-
-        // Si l'advisor a émis un bloc RECO, on récupère les produits sûrs
-        // (catalogue, badge feuille minimum, filtrés par les restrictions) et on
-        // les affiche en carrousel sous la réponse.
-        const reco = parseRecoBlock(buffer)
-        if (reco) {
-          finalCriteria = { ingredients: reco.ingredients, form: reco.form, exclude: reco.exclude }
+        // 2) Puis les cartes produit (vérifiées) apparaissent, juste après le texte.
+        if (result.products.length > 0) {
+          await new Promise((r) => setTimeout(r, 180))
           updateLastAssistant({
+            products: result.products,
             recoTried: true,
-            recoLoading: true,
-            recoCriteria: finalCriteria,
+            recoLoading: false,
+            recoEmptyReason: null,
+            recoRelaxation: null,
+            recoCriteria: undefined,
           })
-          try {
-            const res = await fetchAdvisorRecommendations({
-              ingredients: reco.ingredients,
-              form: reco.form,
-              exclude: reco.exclude,
-              restrictions,
-              allergiesFreeform: skin.allergiesFreeform,
-              limit: 10,
-            })
-            finalProducts = res.products
-            // Préchargement LECTURE SEULE : pendant que la personne lit, on prépare
-            // l'analyse des produits visibles → clic instantané ensuite.
-            prefetchProductsAnalyses(qc, res.products.map((p) => p.ean))
-            // Carrousel vide : distingue « tout filtré par tes restrictions »
-            // de « rien trouvé pour ce besoin ».
-            const emptyReason: 'restrictions' | 'none' | null =
-              res.products.length > 0 ? null : res.rawCount > 0 ? 'restrictions' : 'none'
-            updateLastAssistant({
-              products: res.products,
-              recoLoading: false,
-              recoEmptyReason: emptyReason,
-              recoRelaxation: res.relaxation ?? null,
-            })
-          } catch {
-            updateLastAssistant({ products: [], recoLoading: false, recoEmptyReason: 'none' })
-          }
+          // Préchargement LECTURE SEULE des analyses → clic instantané ensuite.
+          prefetchProductsAnalyses(qc, result.products.map((p) => p.ean))
         }
 
-        // Sauvegarde la réponse de l'assistant (avec ses produits) dans l'historique.
+        // Sauvegarde la réponse (avec ses produits vérifiés) dans l'historique.
         if (convId) {
           void saveAdvisorMessage(convId, {
             role: 'assistant',
             content: finalAssistant,
             products: finalProducts,
-            recoCriteria: finalCriteria,
+            recoCriteria: null,
           })
         }
-      } catch {
-        failWith('Connexion interrompue. Vérifie ta connexion et réessaie.')
+      } catch (err) {
+        if (err instanceof AdvisorNoCreditsError) {
+          failWith(err.message)
+          // Ouvre la modale globale « Crédits épuisés » (→ /offre).
+          DeviceEventEmitter.emit(CREDITS_EXHAUSTED_EVENT, { used: err.used, limit: err.limit })
+        } else if (err instanceof AdvisorRateLimitError) {
+          failWith('Tu vas un peu vite 😅 Patiente une minute et réessaie.')
+        } else if (err instanceof AdvisorUnavailableError) {
+          failWith('Le conseiller IA est momentanément indisponible. Réessaie dans un instant.')
+        } else {
+          failWith('Connexion interrompue. Vérifie ta connexion et réessaie.')
+        }
       } finally {
         setStreaming(false)
-        // L'advisor débite 1 crédit côté serveur → on rafraîchit la pastille.
+        // L'agent débite le(s) crédit(s) côté serveur → on rafraîchit la pastille.
         void qc.invalidateQueries({ queryKey: ['credits'] })
       }
     },
-    [messages, streaming, restrictions, skin, qc],
+    [messages, streaming, qc],
   )
 
   // L'utilisateur accepte le compromis : on charge le set relâché dans le carrousel.
@@ -356,7 +337,15 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
       >
         {messages.map((m, i) => (
           <Fragment key={i}>
-            <MessageBubble msg={m} isLast={i === messages.length - 1} streaming={streaming} />
+            <MessageBubble
+              msg={m}
+              isLast={i === messages.length - 1}
+              streaming={streaming}
+              loadingLabel={
+                loadingSeqRef.current[loadingTick % loadingSeqRef.current.length]
+              }
+              loadingColor={advisorLoadingColor(loadingTick)}
+            />
             {m.role === 'assistant' && m.recoTried ? (
               <View style={styles.recoWrap}>
                 {m.recoRelaxation && !m.recoLoading && (m.products?.length ?? 0) === 0 ? (
@@ -477,11 +466,13 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
 
 // ─── Bulle de message ────────────────────────────────────────────────────────
 
-const MessageBubble: FC<{ msg: ChatMsg; isLast: boolean; streaming: boolean }> = ({
-  msg,
-  isLast,
-  streaming,
-}) => {
+const MessageBubble: FC<{
+  msg: ChatMsg
+  isLast: boolean
+  streaming: boolean
+  loadingLabel?: string
+  loadingColor?: string
+}> = ({ msg, isLast, streaming, loadingLabel, loadingColor }) => {
   const isUser = msg.role === 'user'
   const showDots = !isUser && msg.content.length === 0 && streaming && isLast
 
@@ -497,7 +488,12 @@ const MessageBubble: FC<{ msg: ChatMsg; isLast: boolean; streaming: boolean }> =
           {isUser ? (
             <Text style={styles.userText}>{msg.content}</Text>
           ) : showDots ? (
-            <TypingDots />
+            <View style={styles.loadingRow}>
+              <TypingDots />
+              {loadingLabel ? (
+                <ShimmerText text={loadingLabel} color={loadingColor ?? colors.gray500} />
+              ) : null}
+            </View>
           ) : (
             <MarkdownMessage content={msg.content} />
           )}
@@ -633,6 +629,54 @@ const Dot: FC<{ delay: number }> = ({ delay }) => {
   return <Animated.View style={[styles.dot, style, delay > 0 && { marginLeft: 4 }]} />
 }
 
+// Texte de chargement coloré avec un BALAYAGE LUMINEUX qui passe sur les lettres
+// (MaskedView = forme des lettres, LinearGradient blanc animé en translation).
+const SHIMMER_BAND = 56
+const ShimmerText: FC<{ text: string; color: string }> = ({ text, color }) => {
+  const [w, setW] = useState(0)
+  const tx = useSharedValue(-SHIMMER_BAND)
+  useEffect(() => {
+    if (w <= 0) return
+    tx.value = -SHIMMER_BAND
+    tx.value = withRepeat(
+      withTiming(w + SHIMMER_BAND, { duration: 1300, easing: Easing.linear }),
+      -1,
+      false,
+    )
+  }, [w, text, tx])
+  const sweep = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }] }))
+  return (
+    <MaskedView
+      style={styles.shimmerBox}
+      maskElement={
+        <Text style={[styles.loadingLabel, styles.shimmerMask]} numberOfLines={1}>
+          {text}
+        </Text>
+      }
+    >
+      {/* Sizer invisible : donne au MaskedView la largeur exacte du texte. */}
+      <Text
+        style={[styles.loadingLabel, styles.shimmerSizer]}
+        numberOfLines={1}
+        onLayout={(e) => setW(e.nativeEvent.layout.width)}
+      >
+        {text}
+      </Text>
+      {/* Remplissage couleur des lettres. */}
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: color }]} />
+      {/* Bande blanche qui balaie. */}
+      <Animated.View style={[StyleSheet.absoluteFill, sweep]}>
+        <LinearGradient
+          colors={['transparent', 'rgba(255,255,255,0.95)', 'transparent']}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={styles.shimmerBand}
+        />
+      </Animated.View>
+    </MaskedView>
+  )
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   recoWrap: { paddingHorizontal: spacing.xs, marginTop: -spacing.sm },
@@ -707,6 +751,20 @@ const styles = StyleSheet.create({
     borderColor: colors.gray100,
     borderBottomLeftRadius: radius.sm,
   },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  loadingLabel: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 12.5,
+    color: colors.gray500,
+  },
+  shimmerBox: { height: 18, justifyContent: 'center' },
+  shimmerMask: { color: '#000', backgroundColor: 'transparent' },
+  shimmerSizer: { opacity: 0 },
+  shimmerBand: { width: SHIMMER_BAND, height: 18 },
   userText: {
     fontFamily: fontFamilies.regular,
     fontSize: 14,

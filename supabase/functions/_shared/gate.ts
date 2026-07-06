@@ -127,6 +127,7 @@ export async function gate(req: Request, opts: GateOptions): Promise<GateOk | Ga
         response: jsonError(
           {
             error: "Tu as utilisé tous tes crédits du jour. Reviens demain.",
+            code: "no_credits",
             credits: { used, limit, remaining: 0 },
           },
           429,

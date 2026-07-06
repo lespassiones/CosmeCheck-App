@@ -31,7 +31,7 @@ export type PersonalBlocks = { goals: Block; skin: Block; watch: Block }
 // `PERSONAL_PROMPT_VERSION` de supabase/functions/personal-insights/lib.ts.
 // Sert à détecter des blocs persistés PÉRIMÉS (générés sous un ancien prompt)
 // et à déclencher un rafraîchissement silencieux (gratuit, déjà payé).
-export const PERSONAL_BLOCKS_VERSION = 5
+export const PERSONAL_BLOCKS_VERSION = 7
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name']
 
@@ -44,10 +44,11 @@ const TONE_VISUAL: Record<Tone, { bg: string; text: string }> = {
 }
 
 // Icônes DISTINCTES des pastilles de notation (cœur/feuille/œil/triangle/stop)
-// pour éviter toute confusion visuelle. Le drapeau (résumé) est conservé.
+// pour éviter toute confusion visuelle. Le drapeau (« pour toi ») est conservé ;
+// l'ampoule (« à quoi ça sert », bloc pédagogique) remplace la silhouette peau.
 const BLOCK_ORDER: { key: keyof PersonalBlocks; icon: IoniconName }[] = [
   { key: 'goals', icon: 'flag-outline' },
-  { key: 'skin', icon: 'body-outline' },
+  { key: 'skin', icon: 'bulb-outline' },
   { key: 'watch', icon: 'alert-circle-outline' },
 ]
 

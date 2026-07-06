@@ -21,6 +21,7 @@ import { useProfile } from '@/hooks/useProfile'
 import { resolveCatalogIdentity } from '@/lib/catalog/resolveCatalogIdentity'
 import { fetchFamilyIngredientNames } from '@/lib/catalog/familyIngredientNames'
 import { applyColorCap } from '@/lib/analysis/scoreCap'
+import { orderByTierShuffled } from '@/lib/analysis/tierShuffle'
 import {
   buildExclusionSet,
   filterAlternatives,
@@ -33,6 +34,9 @@ import { supabase } from '@/lib/supabase/client'
 const RAW_PAGE = 40
 /** Plafond de lignes brutes scannées pour trouver des produits « propres ». */
 const SCAN_CAP = 240
+/** Taille du VIVIER accumulé quand on mélange (graine) : donne de la variété
+ *  dans chaque tier au lieu de toujours afficher les mêmes premiers. */
+const POOL_MIN = 32
 const HOUR = 60 * 60 * 1000
 
 interface AltRpcRow {
@@ -108,6 +112,13 @@ export interface UseAlternativesParams {
    * on cherche alors des alternatives de la même catégorie via l'index inversé.
    */
   category?: string | null
+  /**
+   * Graine du mélange « aléatoire contrôlé » (typiquement l'ID de l'analyse).
+   * Fournie → les alternatives sont mélangées DANS chaque tier de pastille
+   * (variété par analyse, stable pour une analyse donnée). Absente → tri par
+   * score classique (ex. page « Voir tout »).
+   */
+  seed?: string | null
   initialCount: number
   step: number
   enabled?: boolean
@@ -131,6 +142,7 @@ export function useAlternatives({
   brand,
   productName,
   category,
+  seed,
   initialCount,
   step,
   enabled = true,
@@ -215,6 +227,12 @@ export function useAlternatives({
   targetRef.current = target
   exclusionRef.current = exclusion
 
+  // Vivier à accumuler : plus large que l'affichage quand on mélange (graine),
+  // pour que le tirage dans chaque tier ait de la variété.
+  const poolTarget = seed ? Math.max(target, POOL_MIN) : target
+  const poolTargetRef = useRef(poolTarget)
+  poolTargetRef.current = poolTarget
+
   // Filtré (restrictions/profil) PUIS re-trié par score PLAFONNÉ (plancher
   // couleur) : les recommandations réellement bonnes remontent en premier, et
   // la note affichée = celle qu'on verra au clic.
@@ -245,7 +263,7 @@ export function useAlternatives({
     try {
       while (
         filterAlternatives(rawRef.current, exclusionRef.current).length <
-          targetRef.current &&
+          poolTargetRef.current &&
         !exhaustedRef.current &&
         offsetRef.current < SCAN_CAP
       ) {
@@ -272,16 +290,23 @@ export function useAlternatives({
 
   useEffect(() => {
     if (!enabled || !altKey || !exclusionReady) return
-    if (filtered.length < target && !exhausted && offsetRef.current < SCAN_CAP) {
+    if (filtered.length < poolTarget && !exhausted && offsetRef.current < SCAN_CAP) {
       void fill()
     }
-  }, [enabled, altKey, exclusionReady, filtered.length, target, exhausted, fill])
+  }, [enabled, altKey, exclusionReady, filtered.length, poolTarget, exhausted, fill])
 
   const loadMore = useCallback(() => {
     setTarget((t) => t + step)
   }, [step])
 
-  const products = filtered.slice(0, target)
+  // Mélange « aléatoire contrôlé » DANS chaque tier de pastille quand une graine
+  // (ID d'analyse) est fournie ; sinon tri par score classique.
+  const displayPool = seed
+    ? orderByTierShuffled(filtered, seed, (p) =>
+        applyColorCap(p.score ?? 0, p.countOrange, p.countRouge),
+      )
+    : filtered
+  const products = displayPool.slice(0, target)
   const canScanMore = !exhausted && scanned < SCAN_CAP
   const hasMore = filtered.length > target || canScanMore
 

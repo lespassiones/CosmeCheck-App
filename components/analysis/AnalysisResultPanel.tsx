@@ -140,6 +140,9 @@ export const AnalysisResultPanel: FC<Props> = ({
     brand,
     productName,
     category,
+    // Graine = ID de l'analyse → alternatives mélangées DANS chaque tier de
+    // pastille, différentes à chaque analyse mais stables pour celle-ci.
+    seed: analysisId ?? null,
     initialCount: 10,
     step: 10,
   })
