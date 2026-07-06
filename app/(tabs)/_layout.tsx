@@ -12,19 +12,21 @@
 
 import type { FC } from 'react'
 import { Pressable, StyleSheet, View } from 'react-native'
-import { Tabs, useRouter } from 'expo-router'
-import { LinearGradient } from 'expo-linear-gradient'
+import { Tabs, useRouter, usePathname } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { BottomTabBar } from '@/components/navigation/BottomTabBar'
 import { BurgerMenu } from '@/components/navigation/BurgerMenu'
-import { SparklesIcon } from '@/components/navigation/NavIcons'
-import { gradients } from '@/constants/gradients'
+import { colors } from '@/constants/colors'
 import { ROUTES } from '@/constants/routes'
 
 const TabsLayout: FC = () => {
   const router = useRouter()
   const insets = useSafeAreaInsets()
+  const pathname = usePathname()
+  // Masqué pendant le scan (caméra plein écran) : le bouton ne doit pas gêner.
+  const onScan = pathname?.includes('/scan') ?? false
 
   return (
     <View style={styles.root}>
@@ -42,27 +44,21 @@ const TabsLayout: FC = () => {
       {/* Bouton burger flottant (haut-droite) + drawer */}
       <BurgerMenu />
 
-      {/* Bouton flottant Beauty Advisor — au-dessus de la barre du bas.
-          (Toujours visible dans les tabs : /advisor est une route hors-tabs.) */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Ouvrir Beauty Advisor"
-        onPress={() => router.push(ROUTES.ADVISOR.INDEX)}
-        style={[
-          styles.advisorBtn,
-          { bottom: insets.bottom + 88 },
-        ]}
-        hitSlop={6}
-      >
-        <LinearGradient
-          colors={gradients.darkGlass.colors}
-          start={gradients.darkGlass.start}
-          end={gradients.darkGlass.end}
-          style={styles.advisorGradient}
+      {/* Bouton flottant Beauty Advisor — clair + icône chatbot.
+          Masqué pendant le scan (caméra plein écran). */}
+      {!onScan && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Ouvrir Beauty Advisor"
+          onPress={() => router.push(ROUTES.ADVISOR.INDEX)}
+          style={[styles.advisorBtn, { bottom: insets.bottom + 88 }]}
+          hitSlop={6}
         >
-          <SparklesIcon size={20} color="#FBBF24" />
-        </LinearGradient>
-      </Pressable>
+          <View style={styles.advisorInner}>
+            <Ionicons name="chatbubble-ellipses" size={22} color={colors.rose} />
+          </View>
+        </Pressable>
+      )}
     </View>
   )
 }
@@ -79,18 +75,19 @@ const styles = StyleSheet.create({
     width: 48,
     borderRadius: 24,
     shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.45,
-    shadowRadius: 16,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    elevation: 8,
   },
-  advisorGradient: {
+  advisorInner: {
     flex: 1,
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(0,0,0,0.06)',
   },
 })
 

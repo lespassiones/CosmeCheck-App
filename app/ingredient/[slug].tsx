@@ -260,7 +260,7 @@ const ReadyView: FC<{ ing: IngredientDetail; products: IngredientProductHit[] }>
             <ColorBadge rating={rating} variant="chip" size="md" label={RATING_LABEL[rating]} />
           ) : null}
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-          {ing.cas_number ? (
+          {false && ing.cas_number ? (
             <View style={styles.casRow}>
               <Text style={styles.casLabel}>CAS</Text>
               <Text style={styles.casValue}>{ing.cas_number}</Text>
@@ -282,7 +282,7 @@ const ReadyView: FC<{ ing: IngredientDetail; products: IngredientProductHit[] }>
               )}
             </StatCard>
 
-            {hasPrevalence ? (
+            {false && hasPrevalence ? (
               <StatCard label="Prévalence">
                 <Text style={styles.statNumber}>
                   {Number(ing.prevalence_pct).toFixed(2)}
@@ -330,8 +330,8 @@ const ReadyView: FC<{ ing: IngredientDetail; products: IngredientProductHit[] }>
         {/* Bloc IA — Edge Functions, dégradation gracieuse */}
         <ExplainIngredient slug={ing.slug} />
 
-        {/* Fonctions INCI détaillées */}
-        {hasFunctions ? (
+        {/* Fonctions INCI détaillées — MASQUÉ (code conservé) */}
+        {false && hasFunctions ? (
           <Section title="Fonctions INCI" divider>
             <View style={styles.fnDetailList}>
               {ing.functions!.map((f, i) => (
@@ -346,8 +346,8 @@ const ReadyView: FC<{ ing: IngredientDetail; products: IngredientProductHit[] }>
           </Section>
         ) : null}
 
-        {/* Répartition par catégorie */}
-        {breakdown.length > 0 ? (
+        {/* Répartition par catégorie — MASQUÉ (code conservé) */}
+        {false && breakdown.length > 0 ? (
           <Section title="Répartition par catégorie de produit" divider>
             <View style={styles.breakdownList}>
               {breakdown.map(([cat, val]) => {
@@ -378,8 +378,8 @@ const ReadyView: FC<{ ing: IngredientDetail; products: IngredientProductHit[] }>
           </Section>
         ) : null}
 
-        {/* Informations techniques */}
-        {techRows.length > 0 ? (
+        {/* Informations techniques — MASQUÉ (code conservé, non affiché) */}
+        {false && techRows.length > 0 ? (
           <Section title="Informations techniques" divider>
             <View style={styles.techGrid}>
               {techRows.map((r) => (

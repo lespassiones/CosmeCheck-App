@@ -18,11 +18,15 @@ import type { AlternativeProduct } from '@/lib/analysis/alternativesFilter'
 interface Props {
   productTitle: string
   productScore: number | null
+  /** Photo du produit de la routine (catalogue), sinon placeholder. */
+  productImageUrl?: string | null
   dangerLabel: string | null
   dangerColor: 'rouge' | 'orange' | null
   alternative: AlternativeProduct
   /** Score plafonné de l'alternative (pour les pastilles). */
   alternativeScore: number
+  /** Justification IA personnalisée (« pour ta peau sensible… »). */
+  reason?: string | null
   keeping: boolean
   /** Déjà ajouté en favori → bouton verrouillé (anti-doublon). */
   kept: boolean
@@ -34,10 +38,12 @@ interface Props {
 export const SuggestionCard: FC<Props> = ({
   productTitle,
   productScore,
+  productImageUrl,
   dangerLabel,
   dangerColor,
   alternative,
   alternativeScore,
+  reason,
   keeping,
   kept,
   onKeep,
@@ -54,12 +60,28 @@ export const SuggestionCard: FC<Props> = ({
         <Ionicons name="trending-up" size={16} color={colors.success} />
       </View>
 
+      {reason ? (
+        <Text style={styles.reason} numberOfLines={3}>
+          {reason}
+        </Text>
+      ) : null}
+
       {/* Avant → Après */}
       <View style={styles.compareRow}>
         <View style={styles.side}>
-          <View style={styles.thumbPlaceholder}>
-            <Ionicons name="cube-outline" size={26} color={colors.inkLight} />
-          </View>
+          {productImageUrl ? (
+            <Image
+              source={{ uri: productImageUrl }}
+              style={styles.thumb}
+              contentFit="contain"
+              cachePolicy="memory-disk"
+              transition={120}
+            />
+          ) : (
+            <View style={styles.thumbPlaceholder}>
+              <Ionicons name="cube-outline" size={26} color={colors.inkLight} />
+            </View>
+          )}
           <Text style={styles.sideTitle} numberOfLines={2}>{productTitle}</Text>
           <TierDots score={productScore} />
           {dangerColor ? (
@@ -154,6 +176,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.base,
   },
   headerText: { ...typography.bodySemiBold, color: colors.accent },
+  reason: { ...typography.small, color: colors.inkMuted, marginTop: spacing.xs, marginBottom: spacing.sm },
   compareRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   side: { flex: 1, alignItems: 'center', gap: spacing.sm },
   arrowWrap: {

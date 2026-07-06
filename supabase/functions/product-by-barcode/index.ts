@@ -36,12 +36,15 @@ const REGISTERED = {
 type RequestBody = { barcode?: string; hp?: string };
 
 // INCI lists have many short comma-separated tokens. Marketing text has few
-// commas and long sentences. Threshold: ≥5 tokens, average length ≤40 chars.
+// commas and very long sentences. Threshold: ≥5 tokens, average length ≤80 chars.
+// 80 is generous enough for long botanical INCI names like
+// "Hippophae Rhamnoides (Sea Buckthorn) Seed Oil" (46 chars) while still
+// blocking marketing paragraphs (typically >100 chars per comma-separated phrase).
 function looksLikeInci(text: string): boolean {
   const tokens = text.split(/[,;]/).map((t) => t.trim()).filter(Boolean);
   if (tokens.length < 5) return false;
   const avgLen = tokens.reduce((s, t) => s + t.length, 0) / tokens.length;
-  return avgLen <= 40;
+  return avgLen <= 80;
 }
 
 Deno.serve(async (req: Request) => {

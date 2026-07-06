@@ -45,10 +45,13 @@ export interface DeckSuggestion {
   productAnalysisId: string | null
   productTitle: string
   productScore: number | null
+  productImageUrl?: string | null
   dangerLabel: string | null
   dangerColor: 'rouge' | 'orange' | null
   alternative: AlternativeProduct
   alternativeScore: number
+  /** Justification IA « pourquoi pour toi » (personnalisée au profil). */
+  reason?: string | null
 }
 
 interface Props {
@@ -156,10 +159,12 @@ export const SuggestionsDeck: FC<Props> = ({
     <SuggestionCard
       productTitle={s.productTitle}
       productScore={s.productScore}
+      productImageUrl={s.productImageUrl}
       dangerLabel={s.dangerLabel}
       dangerColor={s.dangerColor}
       alternative={s.alternative}
       alternativeScore={s.alternativeScore}
+      reason={s.reason}
       keeping={keepingKey === s.key}
       kept={keptKeys.has(s.key)}
       onKeep={() => onKeep(s)}

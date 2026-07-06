@@ -1,47 +1,50 @@
 /**
- * OffreScreen — page Premium avec RevenueCat.
+ * OffreScreen — paywall Premium de Cosme Check (RevenueCat).
  *
- * Présente l'offre Premium de Cosme Check : hero avec Logo, deux plans
- * (mensuel 4,99 €/mois et annuel 49,99 €/an, tous deux avec essai 3 jours),
- * la liste des avantages Premium, puis un CTA principal "Débuter l'essai".
+ * Vue PLANS (mockup validé) : jauge de notation en hero, titre « Débloque ton
+ * analyse personnalisée », 5 bénéfices tous personnalisés « pour toi », bandeau
+ * de réassurance, deux plans côte à côte (Annuel 49,99 € mis en avant /
+ * Mensuel 9,99 €), CTA rose « Commencer l'essai gratuit », mentions légales.
  *
- * Si utilisateur est premium: affiche "Mon abonnement" avec status + bouton annuler.
- * Intégré avec RevenueCat pour gérer les achats in-app et annulations.
+ * S'affiche : après onboarding (paywall skippable, Apple §3.1.1), quand les
+ * crédits sont épuisés, depuis la sidebar et depuis le profil.
+ *
+ * Si l'utilisateur est premium : onglet « Mon abonnement » (statut + gestion).
+ * Achats via RevenueCat (mobile) ; le web branchera Stripe plus tard.
  */
 
-import { useEffect, useState, type FC } from 'react'
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View, Linking, Alert } from 'react-native'
+import { useEffect, useState, type FC, type ReactNode } from 'react'
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { router, useLocalSearchParams } from 'expo-router'
-
-import { ROUTES } from '@/constants/routes'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { PACKAGE_TYPE, type PurchasesPackage } from 'react-native-purchases'
+import Purchases, { PACKAGE_TYPE, type PurchasesPackage } from 'react-native-purchases'
 
-import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { WhiteCard } from '@/components/design/WhiteCard'
 import { LogoMark } from '@/components/shared/Logo'
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
-import { shadows } from '@/constants/shadows'
+import { ROUTES } from '@/constants/routes'
 import { usePurchases } from '@/hooks/usePurchases'
 import { useProfile } from '@/hooks/useProfile'
 
 type PlanId = 'monthly' | 'yearly'
 type Tab = 'plans' | 'subscription'
 
-const BENEFITS: { icon: keyof typeof Ionicons.glyphMap; text: string }[] = [
-  { icon: 'person-circle', text: 'Expérience personnalisée' },
-  { icon: 'flask', text: '100 crédits par mois' },
-  { icon: 'shield-checkmark', text: 'Analyses illimitées' },
-  { icon: 'git-compare', text: 'Advisor Premium' },
-  { icon: 'sparkles', text: 'Comparaisons avancées' },
-  { icon: 'time', text: 'Historique complet' },
-  { icon: 'document-text', text: 'Priorité support' },
-  { icon: 'rocket', text: 'Accès anticipé' },
-]
+const GAUGE = require('@/assets/images/paywall-gauge.webp')
 
 const OffreScreen: FC = () => {
   const [selected, setSelected] = useState<PlanId>('yearly')
@@ -51,14 +54,12 @@ const OffreScreen: FC = () => {
   const { profile, updateProfile } = useProfile()
   const isPremium = profile?.tier === 'premium'
 
-  // `fromOnboarding=1` : la page est ouverte comme PAYWALL post-onboarding
-  // (obligatoire mais skippable, Apple §3.1.1). On affiche un « Plus tard » et
-  // on marque `paywall_shown` au choix de l'utilisateur (skip ou achat) pour que
-  // l'AuthGuard ne reboucle pas dessus.
+  // `fromOnboarding=1` : paywall post-onboarding (obligatoire mais skippable,
+  // Apple §3.1.1). On affiche « Plus tard » et on marque `paywall_shown` au
+  // choix (skip ou achat) pour que l'AuthGuard ne reboucle pas dessus.
   const params = useLocalSearchParams<{ fromOnboarding?: string }>()
   const fromOnboarding = params.fromOnboarding === '1'
 
-  // Quitte le paywall d'onboarding : marque vu + va à l'accueil.
   const dismissOnboardingPaywall = async () => {
     try {
       await updateProfile({ paywall_shown: true })
@@ -73,14 +74,12 @@ const OffreScreen: FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromOnboarding, isPremium])
 
-  const handleBack = () => {
+  const handleClose = () => {
     if (fromOnboarding) void dismissOnboardingPaywall()
     else router.back()
   }
 
   const handlePurchase = async () => {
-    // Les offerings ne sont pas encore chargés (ou indispo : pas de réseau,
-    // clé RC absente, store indisponible). On le DIT au lieu de ne rien faire.
     const current = offerings?.current
     const pkgs: PurchasesPackage[] = current?.availablePackages ?? []
     if (!current || pkgs.length === 0) {
@@ -91,9 +90,8 @@ const OffreScreen: FC = () => {
       return
     }
 
-    // Sélection ROBUSTE par type de package (MONTHLY / ANNUAL). On ne se fie PAS
-    // à l'identifiant exact : RevenueCat les nomme `$rc_monthly` / `$rc_annual`,
-    // pas `rc_monthly` / `rc_yearly`. Repli par identifiant en dernier recours.
+    // Sélection ROBUSTE par type de package (ANNUAL / MONTHLY). RevenueCat les
+    // nomme `$rc_annual` / `$rc_monthly` : on ne se fie PAS à l'identifiant exact.
     const wantAnnual = selected === 'yearly'
     const pkg =
       pkgs.find((p) => p.packageType === (wantAnnual ? PACKAGE_TYPE.ANNUAL : PACKAGE_TYPE.MONTHLY)) ??
@@ -104,32 +102,34 @@ const OffreScreen: FC = () => {
       pkgs[0]
 
     if (!pkg) {
-      Alert.alert(
-        'Plan introuvable',
-        "Ce plan n'est pas configuré dans la boutique pour le moment.",
-      )
+      Alert.alert('Plan introuvable', "Ce plan n'est pas configuré dans la boutique pour le moment.")
       return
     }
 
     try {
       const ok = await purchase(pkg)
-      // Succès → true ; annulation utilisateur → false (silencieux, normal).
-      // Depuis l'onboarding : achat réussi → marque vu + accueil.
       if (ok && fromOnboarding) await dismissOnboardingPaywall()
     } catch {
       Alert.alert(
         'Achat impossible',
-        // En émulateur / build de dev, la facturation Google Play n'est pas
-        // disponible : il faut un build signé publié en test sur le Play Store.
         "L'achat n'a pas pu aboutir. Les achats in-app nécessitent un build signé publié en test (Play Store / App Store) ; ils ne fonctionnent pas dans l'émulateur de développement.",
       )
     }
   }
 
+  const handleRestore = async () => {
+    try {
+      await Purchases.restorePurchases()
+      Alert.alert('Achats restaurés', 'Tes achats ont bien été restaurés.')
+    } catch {
+      Alert.alert('Restauration impossible', "Impossible de restaurer tes achats pour le moment.")
+    }
+  }
+
   const handleCancelSubscription = () => {
     Alert.alert(
-      'Annuler l\'abonnement',
-      'Êtes-vous sûr? Vous perdrez accès à Premium et retournerez aux 5 crédits gratuits.',
+      "Annuler l'abonnement",
+      'Êtes-vous sûr ? Vous perdrez accès à Premium et retournerez aux crédits gratuits.',
       [
         { text: 'Garder mon abonnement', style: 'cancel' },
         {
@@ -138,107 +138,80 @@ const OffreScreen: FC = () => {
           onPress: async () => {
             setCancelling(true)
             try {
-              // Ouvrir le portail de gestion des abonnements
-              const url = Platform.OS === 'ios'
-                ? 'itms-apps://apps.apple.com/account/subscriptions'
-                : 'https://play.google.com/store/account/subscriptions'
+              const url =
+                Platform.OS === 'ios'
+                  ? 'itms-apps://apps.apple.com/account/subscriptions'
+                  : 'https://play.google.com/store/account/subscriptions'
               await Linking.openURL(url)
-            } catch (err) {
+            } catch {
               Alert.alert(
                 'Erreur',
-                'Impossible d\'ouvrir le portail d\'annulation. Veuillez annuler directement depuis les parametres de votre telephone.'
+                "Impossible d'ouvrir le portail d'annulation. Annulez directement depuis les paramètres de votre téléphone.",
               )
             } finally {
               setCancelling(false)
             }
           },
         },
-      ]
+      ],
     )
   }
 
+  const priceLine = selected === 'yearly' ? 'Puis 49,99 €/an.' : 'Puis 7,99 €/mois.'
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <BackgroundGlow variant="default" />
-
-      {/* Header léger */}
+      {/* Header — croix de fermeture (gauche) + logo (centré). */}
       <View style={styles.header}>
         <Pressable
-          onPress={handleBack}
+          onPress={handleClose}
           hitSlop={12}
-          style={styles.backBtn}
+          style={styles.closeBtn}
           accessibilityRole="button"
-          accessibilityLabel="Retour"
+          accessibilityLabel="Fermer"
         >
-          <Ionicons name="chevron-back" size={22} color={colors.ink} />
+          <Ionicons name="close" size={26} color={colors.ink} />
         </Pressable>
-        <LogoMark size={14} />
-        <View style={styles.backBtn} />
+        <LogoMark size={16} />
+        <View style={styles.closeBtn} />
       </View>
 
-      {/* Tabs — si premium, affiche les deux onglets (Plans à gauche) */}
+      {/* Onglets si premium (Plans / Mon abonnement). */}
       {isPremium && (
         <View style={styles.tabsContainer}>
-          <Pressable
-            onPress={() => setActiveTab('plans')}
-            style={[styles.tab, activeTab === 'plans' && styles.tabActive]}
-          >
-            <Text
-              style={[styles.tabText, activeTab === 'plans' && styles.tabTextActive]}
-            >
-              Plans
-            </Text>
+          <Pressable onPress={() => setActiveTab('plans')} style={[styles.tab, activeTab === 'plans' && styles.tabActive]}>
+            <Text style={[styles.tabText, activeTab === 'plans' && styles.tabTextActive]}>Plans</Text>
           </Pressable>
           <Pressable
             onPress={() => setActiveTab('subscription')}
             style={[styles.tab, activeTab === 'subscription' && styles.tabActive]}
           >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === 'subscription' && styles.tabTextActive,
-              ]}
-            >
-              Mon abonnement
-            </Text>
+            <Text style={[styles.tabText, activeTab === 'subscription' && styles.tabTextActive]}>Mon abonnement</Text>
           </Pressable>
         </View>
       )}
 
-      {/* Main content area with scroll */}
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Contenu conditionnel: abonnement ou plans */}
+      <ScrollView style={styles.flex1} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {activeTab === 'subscription' && isPremium ? (
-          // === MON ABONNEMENT ===
+          // ═══ MON ABONNEMENT ═══
           <>
             <View style={styles.subscriptionHero}>
-              <Ionicons name="diamond" size={48} color={colors.rose} />
-              <Text style={styles.subscriptionTitle}>Vous êtes Premium! ⭐</Text>
-              <Text style={styles.subscriptionSubtitle}>
-                Profitez de tous les avantages de votre abonnement
-              </Text>
+              <Ionicons name="diamond" size={44} color={colors.rose} />
+              <Text style={styles.subscriptionTitle}>Tu es Premium ⭐</Text>
+              <Text style={styles.subscriptionSubtitle}>Profite de tous les avantages de ton abonnement.</Text>
             </View>
 
-            {/* Status Card */}
             <WhiteCard padding={spacing.lg}>
               <View style={styles.statusRow}>
-                <View style={styles.statusIcon}>
-                  <Ionicons name="checkmark-circle" size={24} color={colors.success} />
-                </View>
+                <Ionicons name="checkmark-circle" size={24} color="#16A34A" style={styles.statusIcon} />
                 <View style={styles.statusContent}>
                   <Text style={styles.statusLabel}>Statut</Text>
                   <Text style={styles.statusValue}>Actif</Text>
                 </View>
               </View>
-
               {customerInfo?.latestExpirationDate && (
                 <View style={[styles.statusRow, styles.statusRowBorder]}>
-                  <View style={styles.statusIcon}>
-                    <Ionicons name="calendar" size={24} color={colors.accent} />
-                  </View>
+                  <Ionicons name="calendar" size={24} color={colors.rose} style={styles.statusIcon} />
                   <View style={styles.statusContent}>
                     <Text style={styles.statusLabel}>Renouvellement</Text>
                     <Text style={styles.statusValue}>
@@ -247,143 +220,117 @@ const OffreScreen: FC = () => {
                   </View>
                 </View>
               )}
-
-              <View style={[styles.statusRow, styles.statusRowBorder]}>
-                <View style={styles.statusIcon}>
-                  <Ionicons name="wallet-outline" size={24} color={colors.rose} />
-                </View>
-                <View style={styles.statusContent}>
-                  <Text style={styles.statusLabel}>Crédits mensuels</Text>
-                  <Text style={styles.statusValue}>100 crédits</Text>
-                </View>
-              </View>
             </WhiteCard>
 
-            {/* Info */}
-            <View style={styles.infoBox}>
-              <Ionicons name="information-circle" size={20} color={colors.accent} />
-              <Text style={styles.infoText}>
-                Pour gérer votre abonnement ou annuler, utilisez le bouton ci-dessous.
-              </Text>
-            </View>
           </>
         ) : (
-          // === PLANS ===
+          // ═══ PLANS (paywall) ═══
           <>
-            {/* Hero — fond crème doux, look cosmétique haut de gamme */}
-            <View style={styles.hero}>
-          <View style={styles.heroBadge}>
-            <Ionicons name="diamond" size={14} color={colors.roseDeep} />
-            <Text style={styles.heroBadgeText}>PREMIUM</Text>
-          </View>
-          <Text style={styles.heroTitle}>Passe à Premium</Text>
-          <Text style={styles.heroTagline}>
-            Analyse sans limites et débloque tout le potentiel de Cosme Check.
-          </Text>
-        </View>
+            {/* Hero — jauge de notation (aiguille vers le vert). */}
+            <Image source={GAUGE} style={styles.gauge} resizeMode="contain" />
 
-        {/* Plans */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Choisis ton plan</Text>
+            <Text style={styles.title}>
+              Débloque ton analyse{'\n'}
+              <Text style={styles.titleAccent}>personnalisée</Text>
+            </Text>
+            <Text style={styles.subtitle}>
+              Chaque produit, chaque conseil, chaque alternative : pensés pour toi, ta peau et ton profil.
+            </Text>
 
-          {/* Yearly */}
-          <Pressable
-            onPress={() => setSelected('yearly')}
-            style={[styles.planCard, selected === 'yearly' && styles.planCardActive]}
-          >
-            <WhiteCard padding={spacing.lg}>
-              <View style={styles.planRow}>
-                <View style={styles.planRadio}>
-                  <Ionicons
-                    name={selected === 'yearly' ? 'radio-button-on' : 'radio-button-off'}
-                    size={22}
-                    color={selected === 'yearly' ? colors.rose : colors.inkLight}
-                  />
-                </View>
-
-                <View style={styles.planInfo}>
-                  <View style={styles.planLabelRow}>
-                    <Text style={styles.planLabel}>Annuel</Text>
-                    <View style={styles.planBadge}>
-                      <Text style={styles.planBadgeText}>3 jours gratuits</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.planNote}>soit ≈ 4,17 €/mois</Text>
-                </View>
-
-                <View style={styles.planPriceCol}>
-                  <Text style={styles.planPrice}>49,99 €</Text>
-                  <Text style={styles.planPeriod}>/ an</Text>
-                </View>
-              </View>
-            </WhiteCard>
-          </Pressable>
-
-          {/* Monthly */}
-          <Pressable
-            onPress={() => setSelected('monthly')}
-            style={[styles.planCard, selected === 'monthly' && styles.planCardActive]}
-          >
-            <WhiteCard padding={spacing.lg}>
-              <View style={styles.planRow}>
-                <View style={styles.planRadio}>
-                  <Ionicons
-                    name={selected === 'monthly' ? 'radio-button-on' : 'radio-button-off'}
-                    size={22}
-                    color={selected === 'monthly' ? colors.rose : colors.inkLight}
-                  />
-                </View>
-
-                <View style={styles.planInfo}>
-                  <View style={styles.planLabelRow}>
-                    <Text style={styles.planLabel}>Mensuel</Text>
-                    <View style={styles.planBadge}>
-                      <Text style={styles.planBadgeText}>3 jours gratuits</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.planNote}>flexible</Text>
-                </View>
-
-                <View style={styles.planPriceCol}>
-                  <Text style={styles.planPrice}>4,99 €</Text>
-                  <Text style={styles.planPeriod}>/ mois</Text>
-                </View>
-              </View>
-            </WhiteCard>
-          </Pressable>
-        </View>
-
-        {/* Avantages */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Tout ce que tu débloques</Text>
-          <WhiteCard padding={spacing.lg}>
-            {BENEFITS.map((b, i) => (
-              <View
-                key={b.text}
-                style={[styles.benefitRow, i === BENEFITS.length - 1 && styles.benefitRowLast]}
+            {/* Plans côte à côte — juste après l'accroche. */}
+            <View style={styles.plansRow}>
+              <Pressable
+                onPress={() => setSelected('yearly')}
+                style={[styles.planCol, selected === 'yearly' && styles.planColActive]}
               >
-                <View style={styles.benefitIcon}>
-                  <Ionicons name={b.icon} size={18} color={colors.rose} />
+                <View style={styles.saveBadge}>
+                  <Text style={styles.saveBadgeText}>ÉCONOMISE 48%</Text>
                 </View>
-                <Text style={styles.benefitText}>{b.text}</Text>
-                <Ionicons name="checkmark-circle" size={20} color={colors.success} />
-              </View>
-            ))}
-          </WhiteCard>
-        </View>
+                <Text style={styles.planName}>Annuel</Text>
+                <Text style={[styles.planBigPrice, selected === 'yearly' && styles.planBigPriceActive]}>49,99 €</Text>
+                <Text style={styles.planSub}>~4,17 €/mois</Text>
+                <Ionicons
+                  name={selected === 'yearly' ? 'radio-button-on' : 'radio-button-off'}
+                  size={22}
+                  color={selected === 'yearly' ? colors.success : colors.inkLight}
+                  style={styles.planRadio}
+                />
+              </Pressable>
+
+              <Pressable
+                onPress={() => setSelected('monthly')}
+                style={[styles.planCol, selected === 'monthly' && styles.planColActive]}
+              >
+                <Text style={styles.planName}>Mensuel</Text>
+                <Text style={[styles.planBigPrice, selected === 'monthly' && styles.planBigPriceActive]}>7,99 €</Text>
+                <Text style={styles.planSub}>/mois</Text>
+                <Ionicons
+                  name={selected === 'monthly' ? 'radio-button-on' : 'radio-button-off'}
+                  size={22}
+                  color={selected === 'monthly' ? colors.success : colors.inkLight}
+                  style={styles.planRadio}
+                />
+              </Pressable>
+            </View>
+
+            {/* Bénéfices — tous personnalisés « pour toi ». */}
+            <WhiteCard padding={spacing.lg}>
+              <BenefitRow>
+                <Text style={styles.benefitBold}>100 crédits</Text> chaque mois pour analyser tes produits
+              </BenefitRow>
+              <BenefitRow>
+                Analyse de chaque produit <Text style={styles.benefitBold}>personnalisée</Text> à ton profil
+              </BenefitRow>
+              <BenefitRow>
+                <Text style={styles.benefitBold}>Alternatives</Text> plus propres choisies pour toi
+              </BenefitRow>
+              <BenefitRow>
+                Suggestions et <Text style={styles.benefitBold}>conseils adaptés</Text> à ta peau
+              </BenefitRow>
+              <BenefitRow>
+                Analyse des <Text style={styles.benefitBold}>promesses produit</Text> selon ton profil
+              </BenefitRow>
+              <BenefitRow last>
+                Amélioration de ta routine, <Text style={styles.benefitBold}>sur-mesure</Text>
+              </BenefitRow>
+            </WhiteCard>
+
+            {/* Réassurance */}
+            <View style={styles.reassure}>
+              <Ionicons name="lock-closed" size={14} color={colors.inkMuted} />
+              <Text style={styles.reassureText}>Sans engagement · Annulable en 1 tap · Essai gratuit 3 jours</Text>
+              <Ionicons name="shield-checkmark" size={16} color="#16A34A" />
+            </View>
+
+            {/* Légal */}
+            <Text style={styles.legal}>
+              Renouvellement automatique via Google Play / App Store sauf annulation 24 h avant la fin de période.
+              Gérable dans les réglages du compte.
+            </Text>
+
+            {/* Liens */}
+            <View style={styles.linksRow}>
+              <Pressable onPress={() => router.push(ROUTES.LEGAL.CGU)} hitSlop={8}>
+                <Text style={styles.link}>Conditions d'utilisation</Text>
+              </Pressable>
+              <Text style={styles.linkDot}>·</Text>
+              <Pressable onPress={handleRestore} hitSlop={8}>
+                <Text style={styles.link}>Restaurer mes achats</Text>
+              </Pressable>
+              <Text style={styles.linkDot}>·</Text>
+              <Pressable onPress={() => router.push(ROUTES.LEGAL.PRIVACY)} hitSlop={8}>
+                <Text style={styles.link}>Politique de confidentialité</Text>
+              </Pressable>
+            </View>
           </>
         )}
       </ScrollView>
 
-      {/* CTA — fixé en bas */}
-      <View style={styles.ctaContainer}>
+      {/* Footer CTA — toujours visible, ne scrolle pas. */}
+      <View style={styles.footer}>
         {isPremium && activeTab === 'subscription' ? (
-          // Bouton annulation
           <>
-            <Pressable
-              onPress={handleCancelSubscription}
-              disabled={cancelling}
-            >
+            <Pressable onPress={handleCancelSubscription} disabled={cancelling}>
               <LinearGradient
                 colors={[colors.roseDeep, '#c41e3a']}
                 start={{ x: 0, y: 0 }}
@@ -391,47 +338,29 @@ const OffreScreen: FC = () => {
                 style={[styles.cta, cancelling && styles.ctaDisabled]}
               >
                 {cancelling ? (
-                  <ActivityIndicator color={colors.surface} size="small" />
+                  <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
                   <>
-                    <Ionicons name="trash-outline" size={18} color={colors.surface} />
+                    <Ionicons name="trash-outline" size={18} color="#FFFFFF" />
                     <Text style={styles.ctaText}>Annuler l'abonnement</Text>
                   </>
                 )}
               </LinearGradient>
             </Pressable>
-            <Text style={styles.ctaHint}>
-              Vous pouvez annuler n'importe quand.
-            </Text>
+            <Text style={styles.ctaHint}>Tu peux annuler quand tu veux.</Text>
           </>
         ) : (
-          // Bouton achat
           <>
-            <Pressable
-              onPress={handlePurchase}
-              disabled={isLoading || !offerings}
-            >
-              <LinearGradient
-                colors={[colors.success, colors.successDeep]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[styles.cta, (isLoading || !offerings) && styles.ctaDisabled]}
-              >
+            <Pressable onPress={handlePurchase} disabled={isLoading || !offerings}>
+              <View style={[styles.cta, styles.ctaGreen, (isLoading || !offerings) && styles.ctaDisabled]}>
                 {isLoading ? (
-                  <ActivityIndicator color={colors.surface} size="small" />
+                  <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
-                  <>
-                    <Ionicons name="sparkles" size={18} color={colors.surface} />
-                    <Text style={styles.ctaText}>Débuter l'essai 3 jours</Text>
-                  </>
+                  <Text style={styles.ctaText}>Commencer l'essai gratuit</Text>
                 )}
-              </LinearGradient>
+              </View>
             </Pressable>
-            <Text style={styles.ctaHint}>
-              Accès complet. Annulez quand vous voulez.
-            </Text>
-            {/* Paywall obligatoire mais SKIPPABLE (Apple §3.1.1) — uniquement
-                quand on arrive depuis l'onboarding. */}
+            <Text style={styles.ctaHint}>{priceLine} Annule quand tu veux.</Text>
             {fromOnboarding && (
               <Pressable onPress={() => void dismissOnboardingPaywall()} hitSlop={8} style={styles.laterBtn}>
                 <Text style={styles.laterText}>Plus tard</Text>
@@ -444,36 +373,55 @@ const OffreScreen: FC = () => {
   )
 }
 
+/** Une ligne de bénéfice : coche ronde verte + texte (mots-clés en gras). */
+const BenefitRow: FC<{ children: ReactNode; last?: boolean }> = ({ children, last }) => (
+  <View style={[styles.benefitRow, last && styles.benefitRowLast]}>
+    <View style={styles.benefitCheck}>
+      <Ionicons name="checkmark" size={15} color="#FFFFFF" />
+    </View>
+    <Text style={styles.benefitText}>{children}</Text>
+  </View>
+)
+
 export default OffreScreen
 
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: '#FBF6EF',
   },
+  flex1: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.base,
     paddingTop: spacing.sm,
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.xs,
   },
-  backBtn: {
+  footer: {
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    backgroundColor: '#FBF6EF',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.06)',
+  },
+  closeBtn: {
     width: 40,
     height: 40,
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: -8,
   },
 
-  // Tabs
+  // Onglets (premium)
   tabsContainer: {
     flexDirection: 'row',
     paddingHorizontal: spacing.base,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
-    backgroundColor: colors.surface,
   },
   tab: {
     flex: 1,
@@ -482,28 +430,222 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
-  tabActive: {
-    borderBottomColor: colors.rose,
-  },
-  tabText: {
-    ...typography.body,
-    color: colors.inkMuted,
-  },
-  tabTextActive: {
-    color: colors.rose,
-    fontWeight: '600',
-  },
+  tabActive: { borderBottomColor: colors.rose },
+  tabText: { ...typography.body, color: colors.inkMuted },
+  tabTextActive: { color: colors.rose, fontWeight: '600' },
 
   scroll: {
     paddingHorizontal: spacing.base,
-    paddingBottom: spacing.lg,
+    paddingBottom: spacing.xl,
   },
 
-  // Subscription Hero
+  // Hero jauge
+  gauge: {
+    width: 224,
+    height: 154,
+    alignSelf: 'center',
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  title: {
+    ...typography.h1,
+    color: colors.ink,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
+  titleAccent: {
+    ...typography.h1,
+    color: colors.rose,
+  },
+  subtitle: {
+    ...typography.body,
+    color: colors.inkMuted,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+    marginBottom: spacing.lg,
+    paddingHorizontal: spacing.sm,
+  },
+
+  // Bénéfices
+  benefitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm + 2,
+  },
+  benefitRowLast: {},
+  benefitCheck: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#16A34A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
+  },
+  benefitText: {
+    ...typography.body,
+    color: colors.ink,
+    flex: 1,
+  },
+  benefitBold: {
+    ...typography.bodySemiBold,
+    color: colors.ink,
+  },
+
+  // Réassurance
+  reassure: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: spacing.lg,
+    marginBottom: spacing.lg,
+    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    backgroundColor: '#F7F1E8',
+    borderRadius: radius.md,
+  },
+  reassureText: {
+    ...typography.xs,
+    color: colors.inkMuted,
+    flexShrink: 1,
+  },
+
+  // Plans côte à côte
+  plansRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  planCol: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: radius.card,
+    borderWidth: 2,
+    borderColor: '#ECECEC',
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+    paddingHorizontal: spacing.sm,
+    alignItems: 'center',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  planColActive: {
+    borderColor: colors.success,
+  },
+  saveBadge: {
+    position: 'absolute',
+    top: -11,
+    alignSelf: 'center',
+    backgroundColor: colors.success,
+    borderRadius: radius.full,
+    paddingVertical: 3,
+    paddingHorizontal: 10,
+  },
+  saveBadgeText: {
+    ...typography.xsSemiBold,
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
+  planName: {
+    ...typography.bodySemiBold,
+    color: colors.ink,
+    marginBottom: 6,
+  },
+  planBigPrice: {
+    ...typography.h2,
+    color: colors.success,
+  },
+  planBigPriceActive: {
+    color: colors.successDeep,
+  },
+  planSub: {
+    ...typography.small,
+    color: colors.inkMuted,
+    marginTop: 2,
+  },
+  planRadio: {
+    marginTop: spacing.sm,
+  },
+
+  // CTA
+  ctaWrap: {
+    marginTop: spacing.xs,
+  },
+  cancelWrap: {
+    marginTop: spacing.lg,
+  },
+  cta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    height: 56,
+    borderRadius: radius.full,
+  },
+  ctaGreen: {
+    backgroundColor: colors.success,
+  },
+  ctaDisabled: {
+    opacity: 0.6,
+  },
+  ctaText: {
+    ...typography.button,
+    color: '#FFFFFF',
+  },
+  ctaHint: {
+    ...typography.small,
+    color: colors.inkMuted,
+    textAlign: 'center',
+    marginTop: spacing.md,
+  },
+
+  // Légal + liens
+  legal: {
+    ...typography.xs,
+    color: colors.inkLight,
+    textAlign: 'center',
+    marginTop: spacing.md,
+    lineHeight: 16,
+  },
+  linksRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: spacing.md,
+  },
+  link: {
+    ...typography.xs,
+    color: colors.inkMuted,
+    textDecorationLine: 'underline',
+  },
+  linkDot: {
+    ...typography.xs,
+    color: colors.inkLight,
+  },
+  laterBtn: {
+    alignSelf: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.sm,
+  },
+  laterText: {
+    ...typography.body,
+    color: colors.inkMuted,
+    textDecorationLine: 'underline',
+  },
+
+  // Abonnement (premium)
   subscriptionHero: {
     alignItems: 'center',
     padding: spacing.xl,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
+    marginTop: spacing.sm,
     backgroundColor: '#FDF6EC',
     borderRadius: radius.card,
     borderWidth: 1,
@@ -521,8 +663,6 @@ const styles = StyleSheet.create({
     color: '#7C2D12',
     textAlign: 'center',
   },
-
-  // Status
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -532,209 +672,8 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
-  statusIcon: {
-    marginRight: spacing.md,
-  },
-  statusContent: {
-    flex: 1,
-  },
-  statusLabel: {
-    ...typography.small,
-    color: colors.inkMuted,
-    marginBottom: 2,
-  },
-  statusValue: {
-    ...typography.bodySemiBold,
-    color: colors.ink,
-  },
-
-  // Info Box
-  infoBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    padding: spacing.md,
-    backgroundColor: colors.accentSoft,
-    borderRadius: radius.md,
-    marginTop: spacing.lg,
-    gap: spacing.sm,
-  },
-  infoText: {
-    ...typography.small,
-    color: colors.accent,
-    flex: 1,
-  },
-
-  // Hero
-  hero: {
-    borderRadius: radius.card,
-    padding: spacing.xl,
-    marginBottom: spacing.xl,
-    overflow: 'hidden',
-    backgroundColor: '#FDF6EC',
-    borderWidth: 1,
-    borderColor: 'rgba(190,18,60,0.10)',
-  },
-  heroBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: 'rgba(190,18,60,0.18)',
-    borderRadius: radius.full,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    marginBottom: spacing.md,
-  },
-  heroBadgeText: {
-    ...typography.xsSemiBold,
-    color: colors.roseDeep,
-    marginLeft: 4,
-    letterSpacing: 1,
-  },
-  heroTitle: {
-    ...typography.h1,
-    color: colors.roseDeep,
-    marginBottom: spacing.sm,
-  },
-  heroTagline: {
-    ...typography.body,
-    color: '#7C2D12',
-  },
-
-  // Sections
-  section: {
-    marginBottom: spacing.xl,
-  },
-  sectionTitle: {
-    ...typography.h4,
-    color: colors.ink,
-    marginBottom: spacing.md,
-  },
-
-  // Plans
-  planCard: {
-    marginBottom: spacing.md,
-    borderWidth: 2,
-    borderColor: 'transparent',
-    borderRadius: radius.card,
-  },
-  planCardActive: {
-    borderColor: colors.rose,
-  },
-  planRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  planRadio: {
-    marginRight: spacing.md,
-  },
-  planInfo: {
-    flex: 1,
-  },
-  planLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
-  planLabel: {
-    ...typography.bodySemiBold,
-    color: colors.ink,
-    marginRight: spacing.sm,
-  },
-  planBadge: {
-    backgroundColor: colors.roseSoft,
-    borderRadius: radius.full,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-  },
-  planBadgeText: {
-    ...typography.xsSemiBold,
-    color: colors.roseDeep,
-  },
-  planNote: {
-    ...typography.small,
-    color: colors.inkMuted,
-    marginTop: 2,
-  },
-  planPriceCol: {
-    alignItems: 'flex-end',
-    marginLeft: spacing.sm,
-  },
-  planPrice: {
-    ...typography.h4,
-    color: colors.ink,
-  },
-  planPeriod: {
-    ...typography.xs,
-    color: colors.inkMuted,
-  },
-
-  // Avantages
-  benefitRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  benefitRowLast: {
-    borderBottomWidth: 0,
-  },
-  benefitIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.md,
-    backgroundColor: colors.roseSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing.md,
-  },
-  benefitText: {
-    ...typography.body,
-    color: colors.ink,
-    flex: 1,
-  },
-
-  // CTA — fixé en bas
-  ctaContainer: {
-    paddingHorizontal: spacing.base,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
-    backgroundColor: colors.bg,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-  },
-  cta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 56,
-    borderRadius: radius.full,
-  },
-  ctaDisabled: {
-    opacity: 0.6,
-  },
-  ctaText: {
-    ...typography.button,
-    color: colors.surface,
-    marginLeft: spacing.sm,
-  },
-  ctaHint: {
-    ...typography.xs,
-    color: colors.inkLight,
-    textAlign: 'center',
-    marginTop: spacing.md,
-  },
-  laterBtn: {
-    alignSelf: 'center',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    marginTop: spacing.xs,
-  },
-  laterText: {
-    ...typography.body,
-    color: colors.inkMuted,
-    textDecorationLine: 'underline',
-  },
+  statusIcon: { marginRight: spacing.md },
+  statusContent: { flex: 1 },
+  statusLabel: { ...typography.small, color: colors.inkMuted, marginBottom: 2 },
+  statusValue: { ...typography.bodySemiBold, color: colors.ink },
 })

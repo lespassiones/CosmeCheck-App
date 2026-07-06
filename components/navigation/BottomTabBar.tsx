@@ -121,6 +121,11 @@ export const BottomTabBar: FC<BottomTabBarProps> = ({ state, navigation }) => {
 
   const scanFocused = activeName === 'scan'
 
+  // Scan code-barres = plein écran immersif (comme INCI Beauty) : on masque la
+  // navbar pendant le scan caméra. Les autres modes gardent la barre.
+  const scanMode = (state.routes.find((r) => r.name === 'scan')?.params as { mode?: string } | undefined)?.mode
+  if (scanFocused && scanMode === 'barcode') return null
+
   return (
     <View
       style={[styles.container, { paddingBottom: Math.max(insets.bottom, 12) }]}

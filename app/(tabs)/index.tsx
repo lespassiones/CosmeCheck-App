@@ -3,9 +3,9 @@
  *
  * Salutation STATIQUE « Bonjour {firstName} 👋 » + filet (#c5ccd6) + sous-titre
  * « Décrypte tes cosmétiques en un clin d'œil » avec soulignement ondulé (SVG)
- * sous « en un clin d'œil ». Puis TipCarousel, la grille (dernière analyse +
- * routine) avec demi-donut IngredientBlob + PenaltyPill, et deux cartes promo
- * en dégradé (Beauty Advisor / Promesses) avec illustrations en débord.
+ * sous « en un clin d'œil ». Puis TipCarousel, et une GRILLE 2×2 de 4 tuiles
+ * (Dernière analyse · Ta routine · Beauty Advisor · Promesses vs Formule) —
+ * chacune = titre + icône/illustration + chevron, sans texte de données.
  *
  * Données via react-query (enabled si user). ScrollView + pull-to-refresh.
  * Apparition animée via Reveal, fond via BackgroundGlow.
@@ -24,24 +24,20 @@ import {
 } from 'react-native'
 import Svg, { Path } from 'react-native-svg'
 import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { colors } from '@/constants/colors'
-import { gradients } from '@/constants/gradients'
 import { radius, spacing } from '@/constants/spacing'
 import { fontFamilies, typography } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { db } from '@/lib/supabase/client'
 import type { AnalysisRow } from '@/lib/supabase/types'
 import { parseAnalyseResponse } from '@/lib/analysis/types'
-import { summarizeRoutine, type RoutineSummary } from '@/lib/routine/summary'
 import { tipsForCarousel } from '@/lib/tips'
 import type { BlobCounts } from '@/components/design/IngredientBlob'
 import { IngredientBlob } from '@/components/design/IngredientBlob'
-import { WhiteCard } from '@/components/design/WhiteCard'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { Reveal } from '@/components/design/Reveal'
 import { ScreenHeader } from '@/components/shared/ScreenHeader'
@@ -49,12 +45,12 @@ import { TipCarousel } from '@/components/home/TipCarousel'
 import { DailyPicksCard } from '@/components/home/DailyPicksCard'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
-import { useRoutine } from '@/hooks/useRoutine'
 
 const EMPTY_COUNTS: BlobCounts = { vert: 0, jaune: 0, orange: 0, rouge: 0 }
 
-const ADVISOR_ILLUSTRATION = require('@/assets/images/advisor-illustration.webp')
 const PROMESSE_ILLUSTRATION = require('@/assets/images/promesse-illustration.webp')
+const ROUTINE_ILLUSTRATION = require('@/assets/images/routine.webp')
+const ADVISOR_ILLUSTRATION = require('@/assets/images/advisor.webp')
 
 // ─── Types des requêtes ───────────────────────────────────────────────────────
 
@@ -92,137 +88,43 @@ const WavyUnderline: FC<{ width: number }> = ({ width }) => {
   )
 }
 
-// ─── Carte « Dernière analyse » ───────────────────────────────────────────────
+// ─── Tuile générique de la grille ─────────────────────────────────────────────
 
-const LastAnalysisCard: FC<{ last: LastAnalysis | null; onPress: () => void }> = ({
-  last,
-  onPress,
-}) => {
-  const counts = useMemo<BlobCounts>(
-    () => (last ? countsFromResultJson(last.result_json) ?? EMPTY_COUNTS : EMPTY_COUNTS),
-    [last],
-  )
-
-  if (!last) {
-    return (
-      <WhiteCard onPress={onPress}>
-        <View style={styles.cardHeadEmerald}>
-          <Ionicons name="shield-checkmark" size={16} color="#16A34A" />
-          <Text style={styles.kickerEmerald}>Dernière analyse</Text>
-        </View>
-        <Text style={styles.emptyBody}>
-          Aucune analyse pour le moment. Lance ta première analyse via le bouton scan.
-        </Text>
-      </WhiteCard>
-    )
-  }
-
-  const title = last.product_label?.trim() || last.name?.trim() || 'Analyse'
-  const matched = counts.vert + counts.jaune + counts.orange + counts.rouge
-  const pctSansPenalite =
-    matched > 0 ? Math.round((counts.vert / matched) * 100) : null
-
-  return (
-    <WhiteCard onPress={onPress}>
-      <View style={styles.cardHeadRow}>
-        <View style={styles.cardHeadEmerald}>
-          <Ionicons name="shield-checkmark" size={16} color="#16A34A" />
-          <Text style={styles.kickerEmerald}>Dernière analyse</Text>
-        </View>
-        <Text style={styles.seeMore}>Voir →</Text>
-      </View>
-
-      <View style={styles.cardBodyRow}>
-        <View style={styles.cardBodyText}>
-          <Text style={styles.cardTitle} numberOfLines={1}>
-            {title}
-          </Text>
-          {pctSansPenalite !== null && (
-            <View style={styles.penaltyInline}>
-              <Ionicons name="leaf" size={12} color="#16A34A" />
-              <Text style={styles.penaltyPct}>{pctSansPenalite} %</Text>
-              <Text style={styles.penaltyLabel}>sans pénalité</Text>
-            </View>
-          )}
-        </View>
-        <View style={styles.blobSlot}>
-          <IngredientBlob counts={counts} variant="md" neumorphic width={170} />
-        </View>
-      </View>
-    </WhiteCard>
-  )
+type TileTheme = {
+  bg: string
+  title: string
+  chevronBg: string
+  chevron: string
 }
 
-// ─── Carte « Routine » ────────────────────────────────────────────────────────
+const THEMES: Record<'green' | 'pink' | 'purple', TileTheme> = {
+  green: { bg: '#E4F3E9', title: '#15803D', chevronBg: 'rgba(255,255,255,0.75)', chevron: '#15803D' },
+  pink: { bg: '#FCE3EC', title: '#E11D48', chevronBg: 'rgba(255,255,255,0.75)', chevron: '#E11D48' },
+  purple: { bg: '#ECE6FA', title: '#6D28D9', chevronBg: 'rgba(255,255,255,0.75)', chevron: '#6D28D9' },
+}
 
-const RoutineCard: FC<{ summary: RoutineSummary | undefined; onPress: () => void }> = ({
-  summary,
-  onPress,
-}) => {
-  const count = summary?.count ?? 0
-  const counts = summary?.counts ?? EMPTY_COUNTS
-
-  if (count === 0) {
-    return (
-      <WhiteCard onPress={onPress}>
-        <View style={styles.cardHeadRose}>
-          <Ionicons name="heart" size={16} color={colors.rose} />
-          <Text style={styles.kickerRose}>Ta routine</Text>
-        </View>
-        <Text style={styles.emptyBody}>
-          Crée ta routine pour suivre ton exposition cumulée.
-        </Text>
-        <Text style={styles.seeMoreStart}>Commencer →</Text>
-      </WhiteCard>
-    )
-  }
-
-  const total = counts.vert + counts.jaune + counts.orange + counts.rouge
-  const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0)
-  const breakdown = (
-    [
-      { pct: pct(counts.vert), label: 'sans pénalité', dot: '#22C55E' },
-      { pct: pct(counts.jaune), label: 'pén. faible', dot: '#FACC15' },
-      { pct: pct(counts.orange), label: 'pén. moyenne', dot: '#F97316' },
-      { pct: pct(counts.rouge), label: 'pén. forte', dot: '#EF4444' },
-    ] as const
-  ).filter((b) => b.pct > 0)
-
+const DashboardTile: FC<{
+  theme: 'green' | 'pink' | 'purple'
+  title: string
+  onPress: () => void
+  children: React.ReactNode
+}> = ({ theme, title, onPress, children }) => {
+  const t = THEMES[theme]
   return (
-    <WhiteCard onPress={onPress}>
-      <View style={styles.cardHeadRow}>
-        <View style={styles.cardHeadRose}>
-          <Ionicons name="heart" size={16} color={colors.rose} />
-          <Text style={styles.kickerRose}>Ta routine</Text>
-        </View>
-        <Text style={styles.seeMore}>Voir →</Text>
-      </View>
-
-      <View style={styles.cardBodyRowEnd}>
-        <View style={styles.cardBodyText}>
-          <Text style={styles.cardTitle}>
-            {count} produit{count > 1 ? 's' : ''} actif{count > 1 ? 's' : ''}
-          </Text>
-          {breakdown.length > 0 && (
-            <View style={styles.breakdownList}>
-              {breakdown.map((b, i) => (
-                <View key={b.label}>
-                  {i > 0 && <View style={styles.breakdownSep} />}
-                  <View style={styles.breakdownRow}>
-                    <View style={[styles.breakdownDot, { backgroundColor: b.dot }]} />
-                    <Text style={styles.breakdownPct}>{b.pct} %</Text>
-                    <Text style={styles.breakdownLabel}>{b.label}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-        <View style={styles.blobSlot}>
-          <IngredientBlob counts={counts} variant="md" neumorphic width={170} />
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={title.replace(/\n/g, ' ')}
+      style={[styles.tile, { backgroundColor: t.bg }]}
+    >
+      <View style={styles.tileHead}>
+        <Text style={[styles.tileTitle, { color: t.title }]}>{title}</Text>
+        <View style={[styles.tileChevron, { backgroundColor: t.chevronBg }]}>
+          <Ionicons name="chevron-forward" size={15} color={t.chevron} />
         </View>
       </View>
-    </WhiteCard>
+      <View style={styles.tileArt}>{children}</View>
+    </Pressable>
   )
 }
 
@@ -259,15 +161,6 @@ const DashboardScreen: FC = () => {
     },
   })
 
-  // Routine — on dérive du cache react-query `['routine', userId]` au lieu de
-  // re-requêter Supabase : `useRoutine()` charge déjà items + analyses jointes,
-  // et son cache est invalidé automatiquement à chaque add/remove/frequency.
-  const { items: routineItems } = useRoutine()
-  const routineSummary = useMemo<RoutineSummary>(
-    () => summarizeRoutine(routineItems.map((it) => ({ analysis: it.analysis }))),
-    [routineItems],
-  )
-
   const onRefresh = useCallback(async () => {
     if (!userId) return
     setRefreshing(true)
@@ -290,6 +183,10 @@ const DashboardScreen: FC = () => {
 
   const scrollRef = useRef<ScrollView>(null)
   const lastAnalysis = lastAnalysisQuery.data ?? null
+  const lastCounts = useMemo<BlobCounts>(
+    () => (lastAnalysis ? countsFromResultJson(lastAnalysis.result_json) ?? EMPTY_COUNTS : EMPTY_COUNTS),
+    [lastAnalysis],
+  )
   const greetingName = firstName?.trim()
 
   return (
@@ -331,89 +228,62 @@ const DashboardScreen: FC = () => {
           {/* Astuce du jour (carrousel) */}
           <TipCarousel tips={tips} />
 
-          {/* Grille : dernière analyse + routine */}
-          <View style={styles.grid}>
-            <LastAnalysisCard
-              last={lastAnalysis}
+          {/* Grille 2×2 — 4 tuiles simples (titre + icône + chevron). */}
+          <View style={styles.tilesGrid}>
+            <DashboardTile
+              theme="green"
+              title={'Dernière\nanalyse'}
               onPress={
                 lastAnalysis
                   ? () => router.push(ROUTES.ANALYSE.DETAIL(lastAnalysis.id))
                   : () => router.push(ROUTES.TABS.SCAN)
               }
-            />
-            <RoutineCard
-              summary={routineSummary}
+            >
+              {lastAnalysis ? (
+                <View style={styles.blobSlot}>
+                  <IngredientBlob counts={lastCounts} variant="md" neumorphic width={132} />
+                </View>
+              ) : (
+                <Ionicons name="leaf" size={52} color="#86C99A" />
+              )}
+            </DashboardTile>
+
+            <DashboardTile
+              theme="pink"
+              title={'Ma\nroutine'}
               onPress={() => router.push(ROUTES.TABS.ROUTINE)}
-            />
+            >
+              <Image
+                source={ROUTINE_ILLUSTRATION}
+                style={styles.routineArt}
+                resizeMode="contain"
+              />
+            </DashboardTile>
+
+            <DashboardTile
+              theme="purple"
+              title={'Beauty\nAdvisor'}
+              onPress={() => router.push(ROUTES.ADVISOR.INDEX)}
+            >
+              <Image
+                source={ADVISOR_ILLUSTRATION}
+                style={styles.advisorArt}
+                resizeMode="contain"
+              />
+            </DashboardTile>
+
+            <DashboardTile
+              theme="green"
+              title={'Promesses\nvs Formule'}
+              onPress={() => router.push(ROUTES.PROMESSES.NOUVELLE)}
+            >
+              <Image
+                source={PROMESSE_ILLUSTRATION}
+                style={styles.promesseArt}
+                resizeMode="contain"
+              />
+            </DashboardTile>
           </View>
-
-          {/* Cartes promo en dégradé */}
-          <Pressable
-            onPress={() => router.push(ROUTES.ADVISOR.INDEX)}
-            style={styles.promoCard}
-          >
-            <LinearGradient
-              colors={gradients.advisorCard.colors}
-              locations={gradients.advisorCard.locations}
-              start={gradients.advisorCard.start}
-              end={gradients.advisorCard.end}
-              style={styles.promoGradient}
-            >
-              <View style={styles.advisorImageSlot}>
-                <Image
-                  source={ADVISOR_ILLUSTRATION}
-                  style={styles.advisorImage}
-                  resizeMode="contain"
-                />
-              </View>
-              <View style={styles.promoTextSlot}>
-                <Text style={styles.advisorTitle}>Beauty Advisor ✨</Text>
-                <Text style={styles.advisorDesc}>
-                  Pose tes questions sur ta routine. L&apos;assistant s&apos;appuie sur ton
-                  profil et tes analyses.
-                </Text>
-                <View style={styles.advisorChip}>
-                  <Ionicons name="chatbubble-ellipses-outline" size={14} color="#FFFFFF" />
-                  <Text style={styles.advisorChipText}>Poser une question</Text>
-                </View>
-              </View>
-            </LinearGradient>
-          </Pressable>
-
-          <Pressable
-            onPress={() => router.push(ROUTES.PROMESSES.NOUVELLE)}
-            style={styles.promoCard}
-          >
-            <LinearGradient
-              colors={gradients.promessesCard.colors}
-              locations={gradients.promessesCard.locations}
-              start={gradients.promessesCard.start}
-              end={gradients.promessesCard.end}
-              style={styles.promoGradient}
-            >
-              <View style={styles.promesseImageSlot}>
-                <Image
-                  source={PROMESSE_ILLUSTRATION}
-                  style={styles.promesseImage}
-                  resizeMode="contain"
-                />
-              </View>
-              <View style={styles.promesseTextSlot}>
-                <View style={styles.promesseChip}>
-                  <Text style={styles.promesseChipText}>Promesses vs Formule</Text>
-                </View>
-                <Text style={styles.promesseDesc}>
-                  Vérifie si la description marketing d&apos;un produit correspond vraiment à
-                  sa composition INCI.
-                </Text>
-              </View>
-              <View style={styles.promesseArrow}>
-                <View style={styles.promesseArrowBtn}>
-                  <Ionicons name="chevron-forward" size={14} color="#15803D" />
-                </View>
-              </View>
-            </LinearGradient>
-          </Pressable>
 
           {/* Quizz & idées reçues du jour */}
           <View style={styles.dailyPicksWrap}>
@@ -455,252 +325,66 @@ const styles = StyleSheet.create({
   wavy: {
     marginTop: -2,
   },
-  // Grille
-  grid: {
+  // Grille 2×2
+  tilesGrid: {
     marginTop: spacing.base,
-    gap: spacing.md,
-  },
-  cardHeadRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
-  cardHeadEmerald: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  cardHeadRose: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  kickerEmerald: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 13,
-    color: '#16A34A',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  kickerRose: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 13,
-    color: colors.rose,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  seeMore: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 12,
-    color: '#F43F5E',
-  },
-  seeMoreStart: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 12,
-    color: '#F43F5E',
-    marginTop: spacing.xs,
-  },
-  cardBodyRow: {
-    marginTop: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.base,
-  },
-  cardBodyRowEnd: {
-    marginTop: spacing.xs,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: spacing.base,
-  },
-  cardBodyText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  cardTitle: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 17,
-    color: '#111111',
-  },
-  penaltyInline: {
-    marginTop: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  penaltyPct: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 12,
-    color: '#16A34A',
-  },
-  penaltyLabel: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 12,
-    color: '#16A34A',
-    fontStyle: 'italic',
-  },
-  breakdownList: {
-    marginTop: spacing.sm,
-  },
-  breakdownRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 6,
-  },
-  breakdownSep: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-  },
-  breakdownDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  breakdownPct: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 12,
-    color: '#374151',
-  },
-  breakdownLabel: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 12,
-    color: '#6B7280',
-    fontStyle: 'italic',
-  },
-  blobSlot: {
-    width: 170,
-    flexShrink: 0,
-    // Annule le padding droit de la carte pour aligner le donut sur le bord
-    // (comme le `-mr-5` du web).
-    marginRight: -spacing.lg,
-  },
-  emptyBody: {
-    ...typography.small,
-    color: colors.inkMuted,
-    marginTop: spacing.sm,
-  },
-  // Cartes promo — même drop shadow que WhiteCard pour rester homogène.
-  promoCard: {
-    marginTop: spacing.base,
+  tile: {
+    width: '48%',
+    minHeight: 158,
     borderRadius: radius.card,
+    padding: spacing.md,
+    marginBottom: spacing.md,
     overflow: 'hidden',
-    backgroundColor: '#FFFFFF',
     shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 4,
   },
-  promoGradient: {
+  tileHead: {
     flexDirection: 'row',
-    alignItems: 'stretch',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
   },
-  // Advisor
-  advisorImageSlot: {
-    width: 100,
-    flexShrink: 0,
-    justifyContent: 'flex-end',
-  },
-  advisorImage: {
-    position: 'absolute',
-    bottom: -10,
-    left: 4,
-    height: '115%',
-    width: 100,
-  },
-  promoTextSlot: {
-    flex: 1,
-    minWidth: 0,
-    paddingVertical: spacing.md,
-    paddingLeft: spacing.md,
-    paddingRight: spacing.sm,
-  },
-  advisorTitle: {
+  tileTitle: {
     fontFamily: fontFamilies.bold,
     fontSize: 16,
-    color: '#FFFFFF',
+    lineHeight: 20,
     letterSpacing: -0.2,
+    flexShrink: 1,
   },
-  advisorDesc: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 11,
-    lineHeight: 15,
-    color: 'rgba(255,255,255,0.8)',
-    marginTop: 4,
-  },
-  advisorChip: {
-    alignSelf: 'flex-start',
-    marginTop: spacing.sm,
-    flexDirection: 'row',
+  tileChevron: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
-    gap: 6,
-    borderRadius: radius.lg,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-  },
-  advisorChipText: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 11,
-    color: '#FFFFFF',
-  },
-  // Promesses
-  promesseImageSlot: {
-    width: 110,
-    flexShrink: 0,
     justifyContent: 'center',
   },
-  promesseImage: {
-    position: 'absolute',
-    top: '5%',
-    left: 8,
-    height: '90%',
-    width: 100,
-  },
-  promesseTextSlot: {
+  tileArt: {
     flex: 1,
-    minWidth: 0,
-    paddingVertical: spacing.base,
-    paddingLeft: spacing.lg,
-    paddingRight: spacing.base,
-  },
-  promesseChip: {
-    alignSelf: 'flex-start',
-    borderRadius: radius.md,
-    backgroundColor: 'rgba(22,163,74,0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 2,
-    marginBottom: spacing.sm,
-  },
-  promesseChipText: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 11,
-    color: '#15803D',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  promesseDesc: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 11,
-    lineHeight: 15,
-    color: 'rgba(58,90,58,0.8)',
-  },
-  promesseArrow: {
-    justifyContent: 'center',
-    paddingRight: spacing.base,
-    flexShrink: 0,
-  },
-  promesseArrowBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#DFF5DF',
-    shadowColor: '#7DAD7D',
-    shadowOffset: { width: 3, height: 3 },
-    shadowOpacity: 0.6,
-    shadowRadius: 8,
-    elevation: 3,
+    justifyContent: 'flex-end',
+    marginTop: spacing.sm,
+    minHeight: 76,
+  },
+  blobSlot: {
+    width: 132,
+    alignItems: 'center',
+  },
+  routineArt: {
+    width: 128,
+    height: 82,
+  },
+  advisorArt: {
+    width: 112,
+    height: 83,
+  },
+  promesseArt: {
+    width: 92,
+    height: 82,
   },
 })

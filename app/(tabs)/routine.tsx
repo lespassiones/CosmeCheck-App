@@ -66,13 +66,8 @@ import { AddProductModal } from '@/components/routine/AddProductModal'
 import { RoutineSimulationModal } from '@/components/routine/RoutineSimulationModal'
 import { SuggestionsDeck, type DeckSuggestion } from '@/components/routine/SuggestionsDeck'
 import { applyRestrictions } from '@/lib/analysis/analyser'
-import { selectToOptimize } from '@/lib/routine/optimize'
-import { buildSuggestions, cappedOf } from '@/lib/routine/buildSuggestions'
-import { routineSignature, readDeckCache, writeDeckCache } from '@/lib/routine/deckCache'
+import { applyColorCap } from '@/lib/analysis/scoreCap'
 import { compareInsightsKey, TTL_COMPARE_INSIGHTS_MS } from '@/lib/storage/aiCache'
-import { buildExclusionSet } from '@/lib/analysis/alternativesFilter'
-import { skinContextSummary } from '@/lib/skin/profile'
-import { fetchFamilyIngredientNames } from '@/lib/catalog/familyIngredientNames'
 import { useKeepFavorite } from '@/hooks/useKeepFavorite'
 import { useLaunchAlternative } from '@/hooks/useLaunchAlternative'
 import { showToast } from '@/components/shared/Toast'
@@ -117,7 +112,7 @@ const RoutineScreen: FC = () => {
   const insets = useSafeAreaInsets()
   const { items, isLoading, addToRoutine, removeFromRoutine, updateFrequency, isInRoutine } =
     useRoutine()
-  const { restrictions, skin } = useProfile()
+  const { restrictions } = useProfile()
   const restrictionsCount = restrictions.families.length + restrictions.ingredients.length
 
   const [addOpen, setAddOpen] = useState(false)
@@ -178,174 +173,128 @@ const RoutineScreen: FC = () => {
     if (!appConfig.flag_suggestions) return
     setDeckLoading(true)
     try {
-      // 0. Cache LOCAL persistant : routine inchangée → deck instantané, SANS crédit.
-      const sig = routineSignature(items)
-      const cached = await readDeckCache<DeckSuggestion>(sig)
-      if (cached && cached.length > 0) {
-        await seedKept(cached)
-        setDeck(cached)
-        setDeckOpen(true)
-        return
-      }
-      // 1. Produits à optimiser (top 8), restrictions appliquées.
-      const candidates = selectToOptimize(
-        items,
-        (it) => {
-          const parsed = parseAnalyseResponse(it.analysis?.result_json)
-          return parsed ? (applyRestrictions(parsed, restrictions) as AnalyseResponse) : null
-        },
-        8,
-      )
-      if (candidates.length === 0) {
-        showToast('Ta routine est déjà au top ✨ aucun produit à optimiser.', 'success')
-        return
-      }
-      // 2. Restrictions → ensemble d'exclusion.
-      const familyNames = restrictions.families.length
-        ? await fetchFamilyIngredientNames([...restrictions.families].sort())
-        : []
-      const exclusion = buildExclusionSet({
-        restrictions,
-        familyIngredientNames: familyNames,
-        allergiesFreeform: skin.allergiesFreeform,
-      })
-      // 2bis. CATÉGORIE PRÉCISE (chemin taxonomique RÉEL du catalogue) de chaque
-      // produit à optimiser. On NE se fie PAS au `category_precise` existant (ancien
-      // classifieur LLM au vocabulaire incohérent avec le catalogue). On résout sur la
-      // vraie taxonomie : 1) EAN → `catalog.category` ; 2) sinon classification kNN
-      // (`cosme_check_classify_product_category` = vote des produits catalogue les plus
-      // ressemblants par nom/marque). Le chemin trouvé est PERSISTÉ officiellement sur
-      // l'analyse (instantané ensuite, et le produit rejoint la bonne taxonomie).
-      const candEans = Array.from(
-        new Set(
-          candidates
-            .map((c) => c.product.analysis?.ean)
-            .filter((e): e is string => Boolean(e)),
-        ),
-      )
-      const catByEan = new Map<string, string>()
-      if (candEans.length > 0) {
-        const { data: catRows } = await db().from('catalog').select('ean,category').in('ean', candEans)
-        for (const r of (catRows as { ean: string; category: string | null }[] | null) ?? []) {
-          if (r.category) catByEan.set(String(r.ean), r.category)
-        }
-      }
-      const preciseByAnalysis = new Map<string, string>()
-      await Promise.all(
-        candidates.map(async (c) => {
-          const a = c.product.analysis
-          if (!a?.id) return
-          // EAN → catalog.category d'ABORD (rapide, indexé). Sinon classifieur par nom
-          // (réécrit pour réutiliser la recherche optimisée, ~ms, plus le tri lent).
-          // Les produits mal étiquetés dans le catalogue sont rattrapés ENSUITE par le
-          // garde-fou IA (validate-suggestions), qui re-route via le type réel.
-          let path: string | null = a.ean ? catByEan.get(String(a.ean)) ?? null : null
-          if (!path) {
-            const q = titleFor(c.product).trim()
-            if (q.length >= 3) {
-              const { data } = await supabase.rpc(
-                'cosme_check_classify_product_category' as never,
-                { p_query: q } as never,
-              )
-              path = (data as { category: string }[] | null)?.[0]?.category ?? null
-            }
+      // On envoie TOUS les produits de la routine ; le SERVEUR (Edge Function
+      // routine-smart-suggest) décide qui reçoit une suggestion (orange/rouge |
+      // restreint | jaune>vert), résout la catégorie, choisit la meilleure
+      // alternative par IA (profil + restrictions), débite 1 crédit PAR produit
+      // généré et met en cache (0 crédit ensuite / incrémental). Le client ne fait
+      // qu'appeler + afficher — parité garantie avec le web.
+      const reqItems = items
+        .map((it) => {
+          const a = it.analysis
+          const parsed = a?.result_json ? parseAnalyseResponse(a.result_json) : null
+          if (!parsed || !a?.id) return null
+          const withR = applyRestrictions(parsed, restrictions) as AnalyseResponse
+          const rItems = (Array.isArray(withR.items) ? withR.items : []) as { is_restricted?: boolean }[]
+          const restrictedCount = rItems.filter((x) => x.is_restricted).length
+          const counts = withR.counts ?? { vert: 0, jaune: 0, orange: 0, rouge: 0 }
+          const score = typeof withR.score === 'number' ? withR.score : 20
+          const cappedScore = applyColorCap(score, counts.orange ?? 0, counts.rouge ?? 0)
+          return {
+            analysisId: a.id,
+            name: titleFor(it),
+            ean: a.ean ?? null,
+            category: a.category_precise ?? null,
+            counts: {
+              vert: counts.vert ?? 0,
+              jaune: counts.jaune ?? 0,
+              orange: counts.orange ?? 0,
+              rouge: counts.rouge ?? 0,
+            },
+            cappedScore,
+            restrictedCount,
           }
-          if (path) {
-            preciseByAnalysis.set(a.id, path)
-            if (path !== a.category_precise) {
-              void db().from('analyses').update({ category_precise: path } as never).eq('id', a.id)
-            }
-          }
-        }),
-      )
-      // 3. Alternatives — MATCH EXACT du chemin précis (fini le débordement de catégorie).
-      let sugg = await buildSuggestions(
-        candidates,
-        (it) => preciseByAnalysis.get(it.analysis?.id ?? '') ?? null,
-        (it) => it.analysis?.ean ?? null,
-        exclusion,
-      )
-
-      // 3bis. GARDE-FOU IA (avant tout débit/affichage) : on demande au LLM si chaque
-      // alternative est du MÊME TYPE que le produit. Illogique → re-route via le type
-      // réel renvoyé (classifieur kNN → RPC exacte), sinon on RETIRE la suggestion
-      // (jamais de recommandation absurde affichée). 1 passe LLM, au build du deck (caché).
-      try {
-        const pairs = sugg.map((s) => ({
-          product: titleFor(s.product),
-          alternative: s.alternative.name ?? '',
-        }))
-        const skinContext = skinContextSummary(skin)
-        const { data: vData } = await supabase.functions.invoke('validate-suggestions', {
-          body: { items: pairs, skinContext },
         })
-        const verdicts = (vData as { results?: { logical: boolean; product_type: string }[] } | null)?.results
-        if (Array.isArray(verdicts) && verdicts.length === sugg.length) {
-          const kept: typeof sugg = []
-          for (let i = 0; i < sugg.length; i++) {
-            if (verdicts[i].logical) {
-              kept.push(sugg[i])
-              continue
-            }
-            // Illogique → corriger la catégorie via le type réel donné par l'IA.
-            const type = (verdicts[i].product_type ?? '').trim()
-            if (type.length < 3) continue // pas de type fiable → on retire
-            const { data: cl } = await supabase.rpc(
-              'cosme_check_classify_product_category' as never,
-              { p_query: type } as never,
-            )
-            const leaf = (cl as { category: string }[] | null)?.[0]?.category
-            if (!leaf) continue
-            const fixedList = await buildSuggestions(
-              [{ product: sugg[i].product, info: sugg[i].info }],
-              () => leaf,
-              (it) => it.analysis?.ean ?? null,
-              exclusion,
-            )
-            if (fixedList[0]) kept.push(fixedList[0]) // sinon : retirée
-          }
-          sugg = kept
-        }
-      } catch {
-        // IA indisponible → on garde les suggestions telles quelles (ne bloque pas).
+        .filter((x): x is NonNullable<typeof x> => x !== null)
+
+      if (reqItems.length === 0) {
+        showToast('Ajoute des produits à ta routine pour recevoir des suggestions.', 'info')
+        return
       }
 
-      if (sugg.length === 0) {
-        showToast('Aucune alternative plus propre trouvée pour le moment.', 'info')
+      const { data, error } = await supabase.functions.invoke('routine-smart-suggest', {
+        body: { items: reqItems },
+      })
+      if (error) {
+        showToast('Suggestions indisponibles. Réessaie.', 'error')
         return
       }
-      // 4. Débit d'1 crédit (seulement si on a des suggestions).
-      const { data: credit } = await supabase.rpc(
-        'cosme_check_consume_credit' as never,
-        { p_feature: 'routine_suggest' } as never,
-      )
-      if ((credit as { ok?: boolean } | null)?.ok !== true) {
-        showToast('Crédits épuisés pour aujourd’hui.', 'info')
-        router.push(ROUTES.OFFRE.INDEX)
-        return
-      }
+      // Crédits potentiellement débités côté serveur → rafraîchir la pilule.
       void qc.invalidateQueries({ queryKey: ['credits'] })
-      // 5. Mappe → deck + cache local (instantané la prochaine fois).
-      const deckData: DeckSuggestion[] = sugg.map((s) => ({
-        key: s.product.analysis?.id ?? `${s.alternative.ean}`,
-        productAnalysisId: s.product.analysis?.id ?? null,
-        productTitle: titleFor(s.product),
-        productScore: s.info.cappedScore,
-        dangerLabel: s.info.dangerLabel,
-        dangerColor: s.info.dangerColor,
-        alternative: s.alternative,
-        alternativeScore: cappedOf(s.alternative),
-      }))
-      void writeDeckCache(sig, deckData)
+
+      type AltOut = {
+        ean: string
+        brand: string | null
+        name: string | null
+        image_url: string | null
+        score: number
+        score_label: string
+        score_tone: string
+        ingredients_text: string | null
+      }
+      type SuggestionOut = {
+        analysisId: string
+        productName: string
+        productScore: number | null
+        productImageUrl: string | null
+        dangerColor: 'rouge' | 'orange' | null
+        alternative: AltOut | null
+        reason: string | null
+        locked: boolean
+      }
+      const resp = (data ?? {}) as { suggestions?: SuggestionOut[] }
+      const suggestions = resp.suggestions ?? []
+      const withAlt = suggestions.filter((s) => s.alternative)
+      const anyLocked = suggestions.some((s) => s.locked)
+
+      if (withAlt.length === 0) {
+        if (anyLocked) {
+          showToast('Crédits épuisés pour aujourd’hui.', 'info')
+          router.push(ROUTES.OFFRE.INDEX)
+        } else {
+          showToast('Ta routine est déjà au top ✨ aucun produit à optimiser.', 'success')
+        }
+        return
+      }
+
+      const deckData: DeckSuggestion[] = withAlt.map((s) => {
+        const alt = s.alternative!
+        return {
+          key: s.analysisId,
+          productAnalysisId: s.analysisId,
+          productTitle: s.productName,
+          productScore: s.productScore,
+          productImageUrl: s.productImageUrl,
+          dangerLabel:
+            s.dangerColor === 'rouge' ? 'À éviter' : s.dangerColor === 'orange' ? 'À surveiller' : null,
+          dangerColor: s.dangerColor,
+          alternative: {
+            ean: alt.ean,
+            brand: alt.brand,
+            name: alt.name,
+            imageUrl: alt.image_url,
+            score: alt.score,
+            scoreLabel: alt.score_label,
+            scoreTone: alt.score_tone,
+            countTotal: null,
+            ingredientsText: alt.ingredients_text,
+            countOrange: 0,
+            countRouge: 0,
+          },
+          alternativeScore: alt.score,
+          reason: s.reason,
+        }
+      })
       await seedKept(deckData)
       setDeck(deckData)
       setDeckOpen(true)
+      if (anyLocked) showToast('Crédits épuisés pour certains produits. Reviens demain.', 'info')
     } catch {
       showToast('Suggestions indisponibles. Réessaie.', 'error')
     } finally {
       setDeckLoading(false)
     }
-  }, [items, restrictions, skin, deckLoading, qc, seedKept, appConfig.flag_suggestions])
+  }, [items, restrictions, deckLoading, qc, seedKept, appConfig.flag_suggestions])
 
   const handleKeep = useCallback(
     async (s: DeckSuggestion) => {

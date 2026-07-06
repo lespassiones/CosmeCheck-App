@@ -71,6 +71,11 @@ export const ScanPreviewCard = memo(function ScanPreviewCard({ preview, onSeePro
       entering={FadeInDown.duration(320).springify().damping(18)}
       style={styles.card}
     >
+      <Pressable
+        onPress={onSeeProduct}
+        accessibilityRole="button"
+        accessibilityLabel="Ouvrir l'analyse complète"
+      >
       <View style={styles.topRow}>
         <View style={styles.imageWrap}>
           {preview.imageUrl ? (
@@ -115,6 +120,7 @@ export const ScanPreviewCard = memo(function ScanPreviewCard({ preview, onSeePro
           <Text style={styles.seeText}>Voir le produit</Text>
         </Pressable>
       </View>
+      </Pressable>
     </Animated.View>
   )
 })

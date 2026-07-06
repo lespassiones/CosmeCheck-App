@@ -69,6 +69,9 @@ export const BarcodeScanner: FC<Props> = ({
   // Dernier code scanné + timestamp : évite de re-scanner le MÊME code en boucle
   // juste après le réarmement (le produit est encore dans le cadre).
   const recentRef = useRef<{ code: string; ts: number } | null>(null)
+  // Produit actuellement affiché en aperçu : ignoré tant que sa carte est ouverte
+  // (mais un AUTRE code-barres est scanné → scan continu, sans relancer).
+  const previewedRef = useRef<string | null>(null)
   const onInciReadyRef = useRef(onInciReady)
   useEffect(() => {
     onInciReadyRef.current = onInciReady
@@ -82,6 +85,7 @@ export const BarcodeScanner: FC<Props> = ({
     useCallback(() => {
       lockedRef.current = false
       recentRef.current = null
+      previewedRef.current = null
       setState({ kind: 'scanning' })
     }, []),
   )
@@ -125,6 +129,8 @@ export const BarcodeScanner: FC<Props> = ({
         category: null, score: null, scoreTone: null, scoreLabel: null,
         countOrange: 0, countRouge: 0, imageUrl: null,
       }
+      previewedRef.current = barcode
+      lockedRef.current = false // scan continu : réarmé pour un AUTRE code-barres
       setState({ kind: 'preview', barcode, inci, name: hit.productName ?? undefined, brand: hit.brand ?? undefined, preview })
     } catch {
       setState({ kind: 'unavailable', barcode })
@@ -136,6 +142,9 @@ export const BarcodeScanner: FC<Props> = ({
       if (lockedRef.current || disabled || !isActive) return
       const value = result.data?.trim() ?? ''
       if (!BARCODE_RE.test(value)) return // ignore QR/URL/IMEI, continue à scanner
+      // Scan continu : ignore le produit déjà affiché en aperçu (anti-spam),
+      // mais laisse passer un AUTRE code-barres.
+      if (previewedRef.current === value) return
       // Anti-doublon : ignore le même code re-détecté dans les 3 s (produit
       // encore dans le cadre juste après un scan).
       const now = Date.now()
@@ -152,6 +161,7 @@ export const BarcodeScanner: FC<Props> = ({
 
   const resume = useCallback(() => {
     lockedRef.current = false
+    previewedRef.current = null
     setState({ kind: 'scanning' })
   }, [])
 
@@ -189,7 +199,9 @@ export const BarcodeScanner: FC<Props> = ({
     )
   }
 
-  const showCamera = state.kind === 'scanning' || state.kind === 'looking-up'
+  // Caméra ON aussi pendant l'aperçu → scan CONTINU (comme INCI Beauty) :
+  // la fiche s'affiche par-dessus la caméra, un autre code est scanné direct.
+  const showCamera = state.kind === 'scanning' || state.kind === 'looking-up' || state.kind === 'preview'
 
   return (
     <View style={styles.root}>
@@ -201,7 +213,7 @@ export const BarcodeScanner: FC<Props> = ({
             barcodeScannerSettings={{
               barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'],
             }}
-            onBarcodeScanned={state.kind === 'scanning' ? handleScan : undefined}
+            onBarcodeScanned={handleScan}
           />
         ) : (
           <View style={[StyleSheet.absoluteFill, styles.cameraOff]} />
