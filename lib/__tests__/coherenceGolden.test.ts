@@ -164,3 +164,50 @@ describe('computeMetrics — agrégat réaliste', () => {
     expect(metrics.partielleCount).toBe(1)
   })
 })
+
+// ───────────────────────────────────────────────────────────────────────────
+// 7) PARITÉ v4 — dual-use Annexe III + parfum déclaré (cas qui DIVERGEAIENT
+//    entre edge/mobile et web avant la resynchronisation du 7 juil 2026).
+// ───────────────────────────────────────────────────────────────────────────
+describe('Parité v4 : « sans allergène parfumant » (dual-use + parfum déclaré)', () => {
+  const cat = findCategoryBySlug('absence_allergene_parfumant')!
+  const promise = { category_slug: cat.slug, label: 'Sans allergène parfumant', excerpt: 'sans allergènes' }
+
+  it('Benzyl Alcohol + PARFUM DÉCLARÉ → CONTREDITE (plus de nuance : la formule est parfumée)', () => {
+    const inci = [
+      item({ position: 1, slug: 'aqua', name: 'Aqua' }),
+      item({ position: 2, slug: 'parfum', name: 'Parfum', tags: ['parfum-synthese'] }),
+      item({ position: 3, slug: 'benzyl-alcohol', name: 'Benzyl Alcohol', tags: ['allergene-parfumant'] }),
+    ]
+    const p = resolveAbsencePromise(promise, cat, inci)
+    expect(p.verdict).toBe('contredite')
+    expect(p.score).toBe(0)
+  })
+
+  it('Benzyl BENZOATE seul (sans parfum déclaré) → PARTIELLE 50 (dual-use élargi à 3 slugs)', () => {
+    const inci = [
+      item({ position: 1, slug: 'aqua', name: 'Aqua' }),
+      item({ position: 2, slug: 'benzyl-benzoate', name: 'Benzyl Benzoate', tags: ['allergene-parfumant'] }),
+    ]
+    const p = resolveAbsencePromise(promise, cat, inci)
+    expect(p.verdict).toBe('partielle')
+    expect(p.score).toBe(50)
+    expect(p.contradictingActives?.[0].name).toBe('Benzyl Benzoate')
+  })
+
+  it('Benzyl Alcohol + Limonene (sans parfum déclaré) → CONTREDITE, les DEUX cités (Limonene = parfum déclaré, pas de nuance)', () => {
+    const inci = [
+      item({ position: 1, slug: 'aqua', name: 'Aqua' }),
+      item({ position: 2, slug: 'benzyl-alcohol', name: 'Benzyl Alcohol', tags: ['allergene-parfumant'] }),
+      item({ position: 3, slug: 'limonene', name: 'Limonene', tags: ['allergene-parfumant'] }),
+    ]
+    const p = resolveAbsencePromise(promise, cat, inci)
+    expect(p.verdict).toBe('contredite')
+    expect(p.contradictingActives?.map((c) => c.name)).toEqual(['Benzyl Alcohol', 'Limonene'])
+  })
+
+  it('Canari de parité : les keywords demelage contiennent l\'union des 3 copies', () => {
+    const demelage = findCategoryBySlug('demelage')!
+    expect(demelage.keywords).toEqual(expect.arrayContaining(['douceur des cheveux', 'souplesse cheveux', 'detangle', 'detangling']))
+  })
+})

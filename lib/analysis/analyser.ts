@@ -262,9 +262,29 @@ export async function runAnalysis(params: RunAnalysisParams): Promise<RunAnalysi
   if (barcode) body.productEan = barcode
   if (sourceUrl) body.sourceUrl = sourceUrl
 
-  const { data, error, response } = await supabase.functions.invoke('analyser', { body })
+  // Timeout dur : si l'Edge stalle, on coupe au lieu de laisser l'overlay
+  // tourner indéfiniment (parité avec le web qui abort à 10 s ; 20 s ici car
+  // le pipeline complet mobile peut être plus long à froid).
+  const abort = new AbortController()
+  const timeoutId = setTimeout(() => abort.abort(), 20_000)
+  let data, error, response
+  try {
+    ;({ data, error, response } = await supabase.functions.invoke('analyser', {
+      body,
+      signal: abort.signal,
+    }))
+  } catch (e) {
+    if (abort.signal.aborted) throw new NetworkError()
+    throw e
+  } finally {
+    clearTimeout(timeoutId)
+  }
 
   if (error) {
+    // Timeout local → même traitement qu'un échec réseau (bouton Réessayer).
+    if (abort.signal.aborted) {
+      throw new NetworkError()
+    }
     // Échec réseau (fetch) → NetworkError.
     if (error.name === 'FunctionsFetchError') {
       throw new NetworkError()

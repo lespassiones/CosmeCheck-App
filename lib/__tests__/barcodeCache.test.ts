@@ -15,6 +15,12 @@ type Kv = {
 }
 
 function freshModule() {
+  // Le module importe (transitivement) _shared/auth.ts qui lit Deno.env au
+  // chargement : on garantit un stub env AVANT le require, en préservant un
+  // éventuel Deno.openKv posé par le test (le stub n'a pas d'openKv → même
+  // chemin de dégradation "KV indisponible" qu'avant).
+  const g = globalThis as { Deno?: Record<string, unknown> }
+  g.Deno = { env: { get: () => undefined }, ...(g.Deno ?? {}) }
   let mod: typeof import('../../supabase/functions/product-by-barcode/lib/barcodeCache')
   jest.isolateModules(() => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports

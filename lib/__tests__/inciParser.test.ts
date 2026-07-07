@@ -101,27 +101,27 @@ describe('computeScore — parité web (valeurs golden)', () => {
   });
 });
 
-describe('scoreLabel — seuils web (≥17 / ≥13 / ≥9)', () => {
+describe('scoreLabel — seuils UNIFIÉS 4 juil 2026 (>=13 vert, convention unique mobile/web/DB)', () => {
   it('20 → Très bien / green', () => {
     expect(scoreLabel(20)).toEqual({ label: 'Très bien', tone: 'green' })
   });
   it('17 (borne) → green', () => {
     expect(scoreLabel(17).tone).toBe('green')
   });
-  it('16.999 → amber', () => {
-    expect(scoreLabel(16.999).tone).toBe('amber')
+  it('16.999 → green (Bien)', () => {
+    expect(scoreLabel(16.999).tone).toBe('green')
   });
-  it('13 (borne) → amber', () => {
-    expect(scoreLabel(13)).toEqual({ label: 'Bien', tone: 'amber' })
+  it('13 (borne) → green', () => {
+    expect(scoreLabel(13)).toEqual({ label: 'Bien', tone: 'green' })
   });
-  it('12.999 → orange', () => {
-    expect(scoreLabel(12.999).tone).toBe('orange')
+  it('12.999 → amber', () => {
+    expect(scoreLabel(12.999).tone).toBe('amber')
   });
-  it('9 (borne) → orange', () => {
-    expect(scoreLabel(9)).toEqual({ label: 'Moyen', tone: 'orange' })
+  it('9 (borne) → amber', () => {
+    expect(scoreLabel(9)).toEqual({ label: 'Moyen', tone: 'amber' })
   });
-  it('8.999 → rose', () => {
-    expect(scoreLabel(8.999).tone).toBe('rose')
+  it('8.999 → orange', () => {
+    expect(scoreLabel(8.999).tone).toBe('orange')
   });
   it('0 → Faible / rose', () => {
     expect(scoreLabel(0)).toEqual({ label: 'Faible', tone: 'rose' })

@@ -138,7 +138,8 @@ export const CLAIM_CATEGORIES: ClaimCategory[] = [
     slug: "demelage",
     label: "Démêlage",
     productTypes: ["cheveux"],
-    keywords: ["démêle", "démêlant", "demele", "demelant", "facile à coiffer", "detangling", "detangle"],
+    // PARITÉ STRICTE avec lib/coherence mobile + web (union des 3 listes).
+    keywords: ["démêle", "démêlant", "demele", "demelant", "facile à coiffer", "douceur des cheveux", "douceur cheveux", "souplesse des cheveux", "souplesse cheveux", "souple", "detangling", "detangle"],
     actives: [
       { slug: "behentrimonium-methosulfate", name: "Behentrimonium methosulfate", evidence: "documented" },
       { slug: "behenamidopropyl-dimethylamine", name: "Behenamidopropyl dimethylamine", evidence: "documented" },

@@ -646,7 +646,11 @@ RÈGLES STRICTES (anti-hallucination) :
 4. Sois conservateur. Mieux vaut sous-citer que sur-citer. Si tu n'es pas sûr, ne cite pas.
 5. Pas plus de 6 matches au total.
 6. Tu peux aussi lister jusqu'à 5 actifs documentés qui auraient typiquement été utilisés pour cette promesse mais qui ne sont PAS dans la liste (champ "missing"). Noms en français de préférence.
-7. PROMESSE DE PRÉSENCE ("Présence : X") : la promesse affirme simplement que l'actif X est dans le produit. Cherche X (ou son nom INCI équivalent, ex: "spiruline" → "Spirulina Maxima Extract", "vitamine B3" → "Niacinamide", "acide hyaluronique" → "Sodium Hyaluronate") dans la liste. S'il y est → 1 match "documented" sur cet ingrédient. S'il N'y est PAS → matches: [] (la présence annoncée n'est pas confirmée par l'INCI). Ne mets PAS X dans "missing".`;
+7. PROMESSE DE PRÉSENCE ("Présence : X") : la promesse affirme simplement que l'actif X est dans le produit. Avant de conclure à une absence, TRADUIS X vers son (ou ses) nom(s) INCI probable(s), PUIS cherche-le dans la liste. Trois traductions à tenter systématiquement :
+   a) Nom courant / vitamine → INCI : "spiruline" → "Spirulina Maxima/Platensis Extract", "vitamine B3" → "Niacinamide", "acide hyaluronique" → "Sodium Hyaluronate", "provitamine B5" → "Panthenol".
+   b) Nom BOTANIQUE français → binôme latin INCI : "huile d'abyssinie" → "Crambe Abyssinica Seed Oil", "beurre de karité" → "Butyrospermum Parkii Butter", "huile de ricin" → "Ricinus Communis Seed Oil", "huile de jojoba" → "Simmondsia Chinensis Seed Oil", "nigelle" → "Nigella Sativa Seed Oil". Règle générale : "huile/beurre/extrait de <plante>" = "<Genre Espèce> Oil/Butter/Extract" en latin.
+   c) Nom BREVETÉ / marque déposée → sa source INCI réelle. Un actif breveté est presque toujours un extrait végétal ou une molécule dont le nom INCI diffère du nom commercial. Ex : "Viniférine" (Caudalie) → dérivé de vigne, cherche "Vitis Vinifera ... Extract" OU "Palmitoyl Grapevine Shoot Extract" ; "Pro-Xylane" → "Hydroxypropyl Tetrahydropyrantriol". Si tu connais la source botanique/chimique de l'actif breveté, cherche CETTE source dans la liste.
+   S'il y est sous l'un quelconque de ces noms → 1 match "documented" sur cet ingrédient. S'il N'y est VRAIMENT PAS après avoir essayé les équivalents INCI → matches: [] (présence non confirmée). Ne mets JAMAIS X dans "missing".`;
 
   const user = `Promesse à vérifier : "${promiseLabel}"
 Phrase exacte de la description : "${promiseExcerpt}"

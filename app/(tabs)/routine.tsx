@@ -10,7 +10,6 @@
  *     tappable → détail des pires ingrédients) ;
  *   - exposition par catégorie d'ingrédients (TagExposureBar, top 8) ;
  *   - liste « Mes produits » (RoutineProductCard : swipe-to-delete + fréquence) ;
- *   - simulation (si removableCount>0) → RoutineSimulationModal ;
  *   - allergènes parfumants en doublon ;
  *   - suggestions IA (invoke('routine-suggest'), dégrade si indisponible).
  *
@@ -63,7 +62,6 @@ import { ScreenHeader } from '@/components/shared/ScreenHeader'
 import { TagExposureBar } from '@/components/routine/TagExposureBar'
 import { RoutineProductCard } from '@/components/routine/RoutineProductCard'
 import { AddProductModal } from '@/components/routine/AddProductModal'
-import { RoutineSimulationModal } from '@/components/routine/RoutineSimulationModal'
 import { SuggestionsDeck, type DeckSuggestion } from '@/components/routine/SuggestionsDeck'
 import { applyRestrictions } from '@/lib/analysis/analyser'
 import { applyColorCap } from '@/lib/analysis/scoreCap'
@@ -116,7 +114,6 @@ const RoutineScreen: FC = () => {
   const restrictionsCount = restrictions.families.length + restrictions.ingredients.length
 
   const [addOpen, setAddOpen] = useState(false)
-  const [simOpen, setSimOpen] = useState(false)
   const [penalizingOpen, setPenalizingOpen] = useState(false)
 
   // ── Suggestions intelligentes (deck) ──────────────────────────────────────
@@ -388,15 +385,6 @@ const RoutineScreen: FC = () => {
 
   const metrics = useMemo(() => computeRoutineMetrics(products), [products])
 
-  /** Map analysis_id → routine_item.id (pour les mutations de suppression). */
-  const itemIdByAnalysis = useMemo(() => {
-    const m = new Map<string, string>()
-    for (const it of items) {
-      if (it.analysis_id) m.set(it.analysis_id, it.id)
-    }
-    return m
-  }, [items])
-
   const exposureFg = exposureColor(metrics.exposureLabel)
   const tagsTop = metrics.tagExposure.slice(0, 8)
 
@@ -429,17 +417,6 @@ const RoutineScreen: FC = () => {
       ])
     },
     [removeFromRoutine],
-  )
-
-  const handleSimRemoval = useCallback(
-    (analysisId: string) => {
-      const itemId = itemIdByAnalysis.get(analysisId)
-      if (!itemId) return
-      void removeFromRoutine(itemId)
-        .then(() => setSimOpen(false))
-        .catch(() => Alert.alert('Erreur', 'La suppression a échoué.'))
-    },
-    [itemIdByAnalysis, removeFromRoutine],
   )
 
   const handleFrequency = useCallback(
@@ -692,39 +669,6 @@ const RoutineScreen: FC = () => {
               </View>
             </View>
 
-            {/* ── Simulation ── */}
-            {metrics.simulation.removableCount > 0 && (
-              <WhiteCard padding={spacing.lg} style={styles.sectionCard}>
-                <Text style={styles.sectionTitle}>Simulation</Text>
-                <Text style={styles.sectionHint}>
-                  {metrics.simulation.removableCount === 1
-                    ? 'Que se passe-t-il si je retire le produit le plus pénalisant ?'
-                    : 'Que se passe-t-il si je retire les 2 produits les plus pénalisants ?'}
-                </Text>
-                <View style={styles.simRow}>
-                  <View>
-                    <Text style={styles.simLabel}>Nouvelle exposition</Text>
-                    <View style={styles.scoreLine}>
-                      <Text style={styles.simScore}>
-                        {metrics.simulation.minus2.exposureScore.toFixed(1)}
-                      </Text>
-                      <Text style={styles.scoreUnit}>/20</Text>
-                      <Text style={styles.simDelta}>
-                        ↑{' '}
-                        {(
-                          metrics.simulation.minus2.exposureScore - metrics.exposureScore
-                        ).toFixed(1)}
-                      </Text>
-                    </View>
-                  </View>
-                  <Pressable style={styles.simBtn} onPress={() => setSimOpen(true)}>
-                    <Text style={styles.simBtnText}>Simuler</Text>
-                    <Ionicons name="chevron-forward" size={16} color="#FFFFFF" />
-                  </Pressable>
-                </View>
-              </WhiteCard>
-            )}
-
             {/* ── Allergènes en doublon ── */}
             {metrics.allergenOverlap.length > 0 && (
               <View style={[styles.sectionCard, styles.allergenCard]}>
@@ -775,14 +719,6 @@ const RoutineScreen: FC = () => {
         onOpenScanner={() => router.push(ROUTES.TABS.SCAN)}
         onSelectFromHistory={handleAddFromHistory}
         isInRoutine={isInRoutine}
-      />
-
-      <RoutineSimulationModal
-        visible={simOpen}
-        onClose={() => setSimOpen(false)}
-        metrics={metrics}
-        currentScore={metrics.exposureScore}
-        onConfirmRemoval={handleSimRemoval}
       />
 
       <PenalizingDetailModal
@@ -964,27 +900,6 @@ const styles = StyleSheet.create({
   mutedText: { fontFamily: fontFamilies.regular, fontSize: 13, color: colors.inkMuted },
   tagList: { marginTop: 2 },
   productList: { gap: spacing.base },
-
-  // Simulation
-  simRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  simLabel: { fontFamily: fontFamilies.regular, fontSize: 11, color: colors.inkMuted, marginBottom: 2 },
-  simScore: { fontFamily: fontFamilies.bold, fontSize: 20, color: colors.ink },
-  simDelta: { fontFamily: fontFamilies.semiBold, fontSize: 12, color: colors.success, marginLeft: 6 },
-  simBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.success,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 10,
-  },
-  simBtnText: { fontFamily: fontFamilies.semiBold, fontSize: 13, color: '#FFFFFF' },
 
   // Allergens
   allergenCard: {

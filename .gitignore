@@ -41,3 +41,11 @@ yarn-error.*
 
 # Google Play service account (eas submit) - SECRET, ne jamais committer
 play-service-account.json
+
+# Photos produits téléchargées par erreur à la racine (résolution codes-barres).
+# Elles vont dans Supabase Storage, jamais dans le repo. Le nom = un EAN
+# (commence par un chiffre) → on ne touche pas aux vrais assets (logoCC.png…).
+/[0-9]*.jpg
+/[0-9]*.jpeg
+/[0-9]*.png
+/[0-9]*.webp

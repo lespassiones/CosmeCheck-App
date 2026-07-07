@@ -59,6 +59,13 @@ type Body = {
   cacheable?: boolean;
 };
 
+// Version du moteur de cohérence. v4 = resynchronisation stricte des 3 copies
+// (dual-use Annexe III 3 slugs + formulaHasDeclaredFragrance + keywords
+// demelage unifiés) + cache des conclusions par signature de profil. Bumper
+// invalide les entrées coherence_cache antérieures (verdicts potentiellement
+// différents).
+const ALGO_VERSION = "v4";
+
 // ─── Idempotence (port de CosmetWiki/lib/idempotency.ts, Deno) ──────────────
 const IDEM_TTL_MS = 24 * 60 * 60 * 1000;
 function stableStringify(value: unknown): string {
@@ -150,9 +157,9 @@ Deno.serve(async (req: Request) => {
     return jsonResponse(cached, { headers: { "X-Idempotent-Replay": "1" } });
   }
 
-  // ── 3. Débit de 1 crédit (APRÈS le lookup idempotent) → 429 si épuisé ───
-  const charge = await g.consumeCredit("coherence");
-  if (!charge.ok) return charge.response;
+  // NOTE CRÉDIT : le débit n'a plus lieu ici. Il est déclenché plus bas,
+  // UNIQUEMENT quand un nouveau service est rendu à CE user. La ré-analyse
+  // du même produit par le même user = pure lecture (0 IA, 0 crédit).
 
   try {
     // Look up the parent analysis (RLS + explicit user_id belt-and-braces).
@@ -184,11 +191,33 @@ Deno.serve(async (req: Request) => {
       (analysisRow.name as string | null) ??
       null;
 
+    // ─── RÉ-ANALYSE = PURE LECTURE (même user, même produit, même promesse) ─
+    // Si CE user a déjà une analyse de cohérence pour cette analyse INCI avec
+    // la MÊME description → on renvoie l'existante telle quelle. 0 appel IA,
+    // 0 crédit, 1 SELECT. C'est le contrat "réanalyser = juste une lecture".
+    const { data: existingRows } = await sb
+      .schema("cosme_check")
+      .from("coherence_analyses")
+      .select("id, result_json")
+      .eq("user_id", user.id)
+      .eq("analysis_id", analysisId)
+      .eq("description", description)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const existing = existingRows?.[0] ?? null;
+    if (existing?.result_json) {
+      const replayBody = { id: existing.id, result: existing.result_json, cache: "user" };
+      return jsonResponse(replayBody, { headers: { "X-Coherence-Cache": "user" } });
+    }
+
     // ─── Cache cross-user (par formule INCI + promesse) ───────────────────
     // Steps 0-3 (détection type, extraction, exploration) ne dépendent QUE de
     // (formule, description) → cache cross-user dans coherence_cache. La
-    // conclusion (Step 5) est personnalisée → toujours recalculée. On NE cache
-    // PAS une promesse collée manuellement (cacheable=false).
+    // conclusion (Step 5) est personnalisée par profil → cachée PAR SIGNATURE
+    // de profil dans result_json.conclusions (map sig → texte). Un produit déjà
+    // analysé = 0 appel IA, même pour la conclusion si un profil identique est
+    // déjà passé. On NE cache PAS une promesse collée manuellement
+    // (cacheable=false).
     const inciHash = (await sha256Hex(
       parent.items
         .map((it) => (it.slug || it.name || ""))
@@ -203,6 +232,8 @@ Deno.serve(async (req: Request) => {
       promises: CoherencePromise[];
       unverifiable: Extraction["unverifiable"];
       outOfScope: Extraction["outOfScope"];
+      /** Conclusions déjà générées, par signature de personnalisation. */
+      conclusions?: Record<string, string>;
     };
 
     let promises: CoherencePromise[];
@@ -210,17 +241,34 @@ Deno.serve(async (req: Request) => {
     let outOfScope: Extraction["outOfScope"];
     let productType: ProductType;
 
-    const cacheRead = await sb
-      .schema("cosme_check")
-      .from("coherence_cache")
-      .select("result_json, product_type")
-      .eq("inci_hash", inciHash)
-      .eq("description_hash", descHash)
-      .eq("algo_version", "v3")
-      .maybeSingle();
+    // Profil + restrictions chargés EN PARALLÈLE du cache (au lieu d'après le
+    // pipeline) : nécessaires pour la signature de conclusion et la génération.
+    // ⚠️ coherence_cache DOIT être lu/écrit via le client SERVICE : le client
+    // user n'a pas les grants (l'upsert v3 échouait silencieusement depuis le
+    // début → table restée vide, 0 hit cross-user en prod).
+    const svc = serviceClient();
+    const [cacheRead, personal] = await Promise.all([
+      svc
+        .schema("cosme_check")
+        .from("coherence_cache")
+        .select("result_json, product_type")
+        .eq("inci_hash", inciHash)
+        .eq("description_hash", descHash)
+        .eq("algo_version", ALGO_VERSION)
+        .maybeSingle(),
+      loadProfileAndRestrictions(sb, user.id),
+    ]);
+    const { profileBlock, restrictionsBlock } = personal;
+    const personalSig = (await sha256Hex(
+      `${profileBlock ?? ""}|${restrictionsBlock ?? ""}`,
+    )).slice(0, 16);
+
     const cachedVal = (cacheRead.data as
       | { result_json: CacheVal; product_type: string | null }
       | null) ?? null;
+
+    let cacheState: "full" | "partial" | "miss" = "miss";
+    let cachedConclusion: string | null = null;
 
     if (cachedVal && Array.isArray(cachedVal.result_json?.promises)) {
       // HIT cross-user : on saute les LLM coûteux (steps 0-3).
@@ -228,7 +276,15 @@ Deno.serve(async (req: Request) => {
       unverifiable = cachedVal.result_json.unverifiable;
       outOfScope = cachedVal.result_json.outOfScope;
       productType = (cachedVal.product_type ?? "autre") as ProductType;
+      cachedConclusion = cachedVal.result_json.conclusions?.[personalSig] ?? null;
+      cacheState = cachedConclusion ? "full" : "partial";
+      // Cache cross-user HIT → PAS de débit (même règle que `analyser` sur
+      // cache EAN : on ne facture que le pipeline IA complet).
     } else {
+      // MISS → pipeline complet. Débit AVANT le travail IA.
+      const charge = await g.consumeCredit("coherence");
+      if (!charge.ok) return charge.response;
+
       // ─── Step 0: detect product type (silent LLM call). ─────────────────
       const typeHint = [
         analysisRow.product_type as string | null,
@@ -294,38 +350,50 @@ Deno.serve(async (req: Request) => {
       promises = [...cataloguePromises, ...openPromises];
       unverifiable = extraction.unverifiable;
       outOfScope = extraction.outOfScope;
-
-      // Écriture cache cross-user (sauf promesse collée).
-      if (cacheable) {
-        const val: CacheVal = { promises, unverifiable, outOfScope };
-        await sb
-          .schema("cosme_check")
-          .from("coherence_cache")
-          .upsert(
-            {
-              inci_hash: inciHash,
-              description_hash: descHash,
-              result_json: val,
-              product_type: productType,
-              algo_version: "v3",
-            },
-            { onConflict: "inci_hash,description_hash" },
-          );
-      }
     }
 
     // ─── Step 5: conclusion (LLM, only sees verdicts) + personnalisation ──
-    const { profileBlock, restrictionsBlock } = await loadProfileAndRestrictions(
-      sb,
-      user.id,
-    );
-    const conclusion = await generateConclusion(
-      promises,
-      productLabel,
-      user.id,
-      profileBlock,
-      restrictionsBlock,
-    );
+    // Servie depuis le cache si un profil identique est déjà passé (0 IA).
+    const conclusion = cachedConclusion ??
+      (await generateConclusion(
+        promises,
+        productLabel,
+        user.id,
+        profileBlock,
+        restrictionsBlock,
+      ));
+
+    // Écriture/mise à jour du cache cross-user (sauf promesse collée) : steps
+    // 0-3 + la conclusion de CE profil (map bornée aux 20 dernières signatures).
+    if (cacheable && cacheState !== "full") {
+      const prevConclusions = cachedVal?.result_json?.conclusions ?? {};
+      const conclusionEntries = [
+        ...Object.entries(prevConclusions).filter(([k]) => k !== personalSig),
+        [personalSig, conclusion] as const,
+      ].slice(-20);
+      const val: CacheVal = {
+        promises,
+        unverifiable,
+        outOfScope,
+        conclusions: Object.fromEntries(conclusionEntries),
+      };
+      const { error: cacheWriteErr } = await svc
+        .schema("cosme_check")
+        .from("coherence_cache")
+        .upsert(
+          {
+            inci_hash: inciHash,
+            description_hash: descHash,
+            result_json: val,
+            product_type: productType,
+            algo_version: ALGO_VERSION,
+          },
+          { onConflict: "inci_hash,description_hash" },
+        );
+      if (cacheWriteErr) {
+        console.error("coherence_cache upsert failed:", cacheWriteErr.message);
+      }
+    }
 
     // ─── Step 4: build the full structured result (engine, deterministic) ─
     const result = buildCoherenceResult({
@@ -358,9 +426,9 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const finalBody = { id: saved.id, result };
+    const finalBody = { id: saved.id, result, cache: cacheState };
     await idempotencyStore(idemKey, finalBody);
-    return jsonResponse(finalBody);
+    return jsonResponse(finalBody, { headers: { "X-Coherence-Cache": cacheState } });
   } catch (_err) {
     return jsonResponse(
       { error: "Erreur lors de l'analyse de cohérence." },

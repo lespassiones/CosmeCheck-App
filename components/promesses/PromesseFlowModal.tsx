@@ -305,10 +305,6 @@ export const PromesseFlowModal: FC<Props> = ({
     <View style={styles.centered}>
       <ActivityIndicator size="large" color={colors.accent} />
       <Text style={styles.loadingTitle}>Recherche du produit…</Text>
-      <Text style={styles.loadingHint}>
-        On cherche {productLabel ?? 'ce produit'} sur internet pour récupérer la
-        description marketing.
-      </Text>
       <ThinkingPhrases phrases={IDENTIFY_PHRASES} />
     </View>
   )
@@ -367,9 +363,6 @@ export const PromesseFlowModal: FC<Props> = ({
     <View style={styles.centered}>
       <ActivityIndicator size="large" color={colors.accent} />
       <Text style={styles.loadingTitle}>Récupération de la description…</Text>
-      <Text style={styles.loadingHint}>
-        On lit la page produit pour extraire les promesses marketing.
-      </Text>
       <ThinkingPhrases phrases={FETCH_PHRASES} />
     </View>
   )
@@ -378,9 +371,6 @@ export const PromesseFlowModal: FC<Props> = ({
     <View style={styles.centered}>
       <ActivityIndicator size="large" color={colors.accent} />
       <Text style={styles.loadingTitle}>Analyse de cohérence…</Text>
-      <Text style={styles.loadingHint}>
-        On compare chaque promesse à la composition INCI réelle du produit.
-      </Text>
       <ThinkingPhrases phrases={COHERENCE_PHRASES} />
     </View>
   )

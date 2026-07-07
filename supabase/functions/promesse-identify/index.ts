@@ -138,15 +138,20 @@ Deno.serve(async (req: Request) => {
   if (!charge.ok) return charge.response;
 
   const system = [
-    "Tu es un expert en identification de produits cosmétiques. Tu reçois une liste INCI et des indices d'identité (nom partiel, marque, type) - éventuellement vides.",
+    "Tu es un expert en identification de produits cosmétiques. Tu reçois une liste INCI (toujours présente) et des indices d'identité (nom, marque, type) qui peuvent être vides.",
     "",
-    "Ta mission : faire une recherche web pour identifier les produits cosmétiques commercialisés dont la formule correspond à cette liste INCI. Renvoie jusqu'à 3 candidats plausibles classés par confiance décroissante.",
+    "Ta mission : identifier le PRODUIT EXACT commercialisé qui correspond à ces informations, et renvoyer jusqu'à 3 candidats plausibles classés par confiance décroissante.",
+    "",
+    "MÉTHODE (les DEUX signaux comptent, aucun n'est optionnel quand il est présent) :",
+    "1. Si un nom et/ou une marque sont fournis, COMMENCE par localiser ce produit (et ses variantes proches de la même gamme) sur le web : c'est le point d'entrée le plus rapide et fiable pour un produit connu.",
+    "2. Utilise ensuite la LISTE INCI comme CRITÈRE DÉCISIF. Quand plusieurs produits portent un nom et une marque quasi identiques (variantes d'une même ligne, éditions, reformulations, senteurs), c'est la composition INCI publiée qui dit si c'est CE produit précis ou une variante voisine. Ne retiens un candidat que si son INCI connu est cohérent avec la liste fournie.",
+    "3. Si aucun nom ni marque n'est fourni, base-toi uniquement sur la liste INCI pour retrouver les produits dont la formule correspond.",
     "",
     "RÈGLES CRITIQUES :",
     "1. Chaque candidat DOIT avoir une URL source vérifiable (fiche produit officielle de la marque, page Sephora/Marionnaud/Nocibé/INCIDecoder/Beauty Lookup, page d'une enseigne reconnue). Refuse tout candidat sans URL crédible.",
     "2. N'INVENTE PAS de produit. Si tu ne trouves aucune correspondance crédible, renvoie `{\"notFound\": true, \"reason\": \"…\"}`.",
-    "3. Une liste INCI peut correspondre à plusieurs produits (mêmes formules dans plusieurs gammes/marques). C'est normal - propose les 2-3 plus probables si tu en trouves.",
-    "4. Confiance : 1.0 = formule identique + nom/marque qui matchent l'indice ; 0.7 = formule très proche ; 0.5 = formule plausible mais incertain ; <0.4 = ne le propose pas.",
+    "3. Un même nom/marque peut couvrir plusieurs variantes (senteurs, éditions, reformulations) que SEUL l'INCI départage ; à l'inverse une même formule INCI peut exister sous plusieurs marques. Propose les 2-3 plus probables.",
+    "4. Confiance : 1.0 = nom/marque ET composition INCI concordent ; 0.7 = nom/marque concordent et INCI très proche mais non confirmé mot pour mot ; 0.5 = un seul signal disponible (nom seul, ou INCI seul) ; <0.4 = ne le propose pas. Si le nom correspond mais que l'INCI diverge nettement, c'est probablement une AUTRE variante : baisse fortement la confiance ou exclus-le.",
     "5. Réponse en JSON STRICT, pas de markdown, pas de commentaire.",
     "",
     "Format de réponse :",
@@ -154,20 +159,27 @@ Deno.serve(async (req: Request) => {
     "Si rien trouvé : {\"notFound\": true, \"reason\": \"<brève raison>\"}",
   ].join("\n");
 
-  const hintsBlock = [
-    productLabel ? `- Nom (indice) : ${productLabel}` : null,
-    brand ? `- Marque (indice) : ${brand}` : null,
-    productType ? `- Type (indice) : ${productType}` : null,
+  const identityBlock = [
+    productLabel ? `- Nom : ${productLabel}` : null,
+    brand ? `- Marque : ${brand}` : null,
+    productType ? `- Type : ${productType}` : null,
   ]
     .filter(Boolean)
     .join("\n");
 
-  const userMsg = `Liste INCI :
+  const userMsg = `${
+    identityBlock
+      ? `Identité connue du produit (point de départ de la recherche) :\n${identityBlock}\n\n`
+      : ""
+  }Liste INCI${identityBlock ? " (critère décisif pour confirmer la variante exacte)" : " (seul indice disponible)"} :
 ${inci}
 
-${hintsBlock ? `Indices d'identité :\n${hintsBlock}\n` : "Aucun indice supplémentaire - base-toi uniquement sur la liste INCI."}
-
-Cherche sur le web et propose jusqu'à 3 candidats. Réponds en JSON strict, sans markdown.`;
+${
+    identityBlock
+      ? "Retrouve d'abord ce produit via son nom et sa marque, puis confirme avec la liste INCI qu'il s'agit bien de cette variante précise et non d'une variante voisine. Propose jusqu'à 3 candidats."
+      : "Aucun nom ni marque fourni : retrouve les produits dont la formule correspond à cette liste INCI. Propose jusqu'à 3 candidats."
+  }
+Réponds en JSON strict, sans markdown.`;
 
   try {
     const { text, citations } = await webSearchComplete(system, userMsg, {

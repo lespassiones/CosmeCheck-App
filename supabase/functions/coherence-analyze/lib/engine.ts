@@ -75,15 +75,51 @@ function isInTrace(item: AnalyseItem): boolean {
   );
 }
 
-// Allergènes parfumants BI-FONCTION : molécules listées comme allergène parfumant
-// réglementé MAIS très souvent employées comme conservateur/solvant (ex. Benzyl
-// Alcohol). Leur présence ne CONTREDIT pas franchement une promesse « sans
-// allergène » — le rôle réel dépend de la formulation → verdict « à nuancer ».
-const DUAL_USE_ALLERGEN_SLUGS = new Set<string>(["benzyl-alcohol"]);
+// Allergènes parfumants BI-FONCTION (Annexe III UE 1223/2009) : molécules
+// listées comme allergène parfumant réglementé MAIS très souvent employées à
+// une AUTRE fonction (conservateur/solvant/fixateur). PARITÉ STRICTE avec le
+// moteur web (lib/coherence/engine.ts côté CosmetWiki) :
+// - benzyl-alcohol   : conservateur / solvant (≈90 % des usages)
+// - benzyl-benzoate  : solvant, fixateur, plastifiant
+// - benzyl-salicylate: aussi absorbeur UV faible
+const DUAL_USE_ALLERGEN_SLUGS = new Set<string>([
+  "benzyl-alcohol",
+  "benzyl-benzoate",
+  "benzyl-salicylate",
+]);
 function isDualUseAllergen(it: AnalyseItem): boolean {
   if (it.slug && DUAL_USE_ALLERGEN_SLUGS.has(it.slug)) return true;
   const n = norm(it.name ?? it.input ?? "");
-  return n.includes("benzylalcohol");
+  return (
+    n.includes("benzylalcohol") ||
+    n.includes("benzylbenzoate") ||
+    n.includes("benzylsalicylate")
+  );
+}
+
+// Marqueurs INCI qui signalent explicitement une composition parfumante.
+const FRAGRANCE_MARKER_NAMES = new Set<string>([
+  "PARFUM",
+  "FRAGRANCE",
+  "AROMA",
+  "FLAVOR",
+]);
+
+// Détecte si la formule contient un parfum DÉCLARÉ : mot PARFUM/FRAGRANCE/
+// AROMA/FLAVOR explicite, tag parfum-synthese, ou allergène Annexe III « pur
+// parfum » (NON dual-use, pour éviter l'auto-confirmation circulaire : la
+// présence de Benzyl Alcohol seul ne prouve pas que la formule est parfumée).
+function formulaHasDeclaredFragrance(items: AnalyseItem[]): boolean {
+  for (const it of items) {
+    const upperName = (it.name ?? it.input ?? "").toUpperCase().trim();
+    if (FRAGRANCE_MARKER_NAMES.has(upperName)) return true;
+    const tags = it.tags ?? [];
+    if (tags.includes("parfum-synthese")) return true;
+    if (tags.includes("allergene-parfumant") && !isDualUseAllergen(it)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function deriveVerdict({
@@ -334,7 +370,40 @@ export function resolveAbsencePromise(
   }
 
   const tag = cat.forbiddenTag;
-  const offenders = items.filter((it) => (it.tags ?? []).includes(tag));
+  let offenders = items.filter((it) => (it.tags ?? []).includes(tag));
+
+  // Cas particulier « sans allergène parfumant » + formule SANS parfum déclaré
+  // (PARITÉ STRICTE avec le moteur web). Les substances dual-use (Benzyl
+  // Alcohol…) servent alors à leur autre fonction (conservateur/solvant) :
+  //   - si elles sont les SEULS fautifs → « partielle » (50, à nuancer),
+  //     l'ingrédient reste signalé dans contradictingActives ;
+  //   - s'il existe AUSSI un vrai allergène (Limonene, Linalool…) → on garde
+  //     « contredite » sur les vrais fautifs (les dual-use sont écartés).
+  // Formule AVEC parfum déclaré → pas de nuance : tout fautif contredit.
+  if (tag === "allergene-parfumant" && !formulaHasDeclaredFragrance(items)) {
+    const dualUse = offenders.filter((it) => isDualUseAllergen(it));
+    const real = offenders.filter((it) => !isDualUseAllergen(it));
+    if (real.length === 0 && dualUse.length > 0) {
+      const sortedDual = dualUse.slice().sort((a, b) => a.position - b.position);
+      return {
+        slug: cat.slug,
+        label: cat.label,
+        excerpt: proposal.excerpt,
+        verdict: "partielle",
+        expectedActives: [],
+        foundActives: [],
+        cosmeticActives: [],
+        missingActives: [],
+        contradictingActives: sortedDual.slice(0, 5).map((it) => ({
+          name: it.name ?? it.input,
+          slug: it.slug,
+          position: it.position,
+        })),
+        score: 50,
+      };
+    }
+    offenders = real;
+  }
 
   if (offenders.length === 0) {
     return {
@@ -351,30 +420,6 @@ export function resolveAbsencePromise(
   }
 
   const sorted = offenders.slice().sort((a, b) => a.position - b.position);
-  const contradicting = sorted.slice(0, 5).map((it) => ({
-    name: it.name ?? it.input,
-    slug: it.slug,
-    position: it.position,
-  }));
-
-  // « Sans allergène parfumant » dont les SEULS fautifs sont des molécules
-  // bi-fonction (Benzyl Alcohol…) → « à nuancer » (partielle), pas « contredite ».
-  // On SIGNALE quand même l'ingrédient (jamais caché), mais sans crier au mensonge.
-  if (tag === "allergene-parfumant" && sorted.every((it) => isDualUseAllergen(it))) {
-    return {
-      slug: cat.slug,
-      label: cat.label,
-      excerpt: proposal.excerpt,
-      verdict: "partielle",
-      expectedActives: [],
-      foundActives: [],
-      cosmeticActives: [],
-      missingActives: [],
-      contradictingActives: contradicting,
-      score: 50,
-    };
-  }
-
   return {
     slug: cat.slug,
     label: cat.label,
@@ -384,7 +429,11 @@ export function resolveAbsencePromise(
     foundActives: [],
     cosmeticActives: [],
     missingActives: [],
-    contradictingActives: contradicting,
+    contradictingActives: sorted.slice(0, 5).map((it) => ({
+      name: it.name ?? it.input,
+      slug: it.slug,
+      position: it.position,
+    })),
     score: 0,
   };
 }
