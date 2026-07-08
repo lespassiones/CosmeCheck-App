@@ -1,368 +1,128 @@
-# CosmeCheck Play Store Deployment Guide
+# CosmeCheck — Guide de déploiement Google Play Store
 
-**Date**: 29 juin 2026  
-**Status**: Pre-launch audit + checklist
+**Mis à jour** : 8 juillet 2026
+**État** : Blocages code résolus. Reste config console + secrets (côté toi).
 
----
-
-## 🔴 BLOCKERS (MUST FIX BEFORE PLAY STORE)
-
-### 1. Apple Sign-In MISSING (iOS only, but affects store review)
-**Why**: Apple Guideline 4.8 requires Apple Sign-In when Google Sign-In is present  
-**Impact**: iOS app will be **REJECTED** without this  
-**Fix**:
-```tsx
-// In lib/auth/apple.ts (CREATE)
-import * as AppleAuthentication from 'expo-apple-authentication';
-
-export async function signInWithApple() {
-  try {
-    const credential = await AppleAuthentication.signInAsync({
-      requestedScopes: [
-        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-        AppleAuthentication.AppleAuthenticationScope.EMAIL,
-      ],
-    });
-    return await supabase.auth.signInWithIdToken({
-      provider: 'apple',
-      token: credential.identityToken,
-    });
-  } catch (err) {
-    if (err.code === 'ERR_CANCELLED') return null;
-    throw err;
-  }
-}
-```
-**Effort**: 2h (implement + test)  
-**Priority**: 🔴 CRITICAL — do this FIRST
+> Ce guide ne concerne QUE la publication Android (Play Store). L'app web
+> `cosme-check.com` partage la base Supabase mais n'est pas impactée par ce build.
+> Apple Sign-In = bloqueur iOS uniquement, hors périmètre Play Store.
 
 ---
 
-### 2. Privacy Policy URL Required (Both platforms)
-**Why**: Play Store requires link to privacy policy on web  
-**Current**: None configured in app.json  
-**Fix**:
-```json
-{
-  "extra": {
-    "privacyUrl": "https://cosme-check.com/privacy"
-  }
-}
-```
-- Ensure `https://cosme-check.com/privacy` is publicly accessible
-- Add full legal text (not just "legal" folder in-app)
+## ✅ Résolu côté code (fait, testé)
+
+| Point | Détail | Preuve |
+|---|---|---|
+| **Signature release** | `android/app/build.gradle` : `signingConfigs.release` lit `android/keystore.properties` (gitignoré) ; fallback debug si absent. Keystore d'upload généré : `android/app/cosmecheck-upload.keystore`. | `gradlew signingReport` → variant `release` = config `release`, alias `cosmecheck-upload`. |
+| **minSdk 26** | Figé à `minSdkVersion 26` + `targetSdkVersion 35` dans `build.gradle` (le défaut Expo SDK 54 était **24**). `app.json android.minSdkVersion` seul ne s'appliquait PAS. | — |
+| **expo-build-properties** | Plugin ajouté à `app.json` (min26/compile35/target35) = source de vérité durable si `expo prebuild` est relancé un jour. | `expo config` OK. |
+| RevenueCat | SDK + boot + login + paywall + webhook `revenucat-webhook` (flip tier) : déjà câblés. | Code présent. |
+| Sentry runtime | `initSentry()` au boot, DSN EU en dur, désactivé en dev. | `lib/reporting/report.ts`. |
+| Permissions | CAMERA, VIBRATE, POST_NOTIFICATIONS uniquement (aucune dangereuse). | `app.json`. |
+| Icônes | adaptive-icon + splash + notification-icon présents. | `assets/images/`. |
+| patch-package | patch whatwg-fetch (crash "Response status 0") appliqué au postinstall. | — |
+
+### ⚠️ À savoir sur le dossier `android/`
+Le dossier `android/` est **gitignoré** (non versionné). Les edits gradle ci-dessus,
+le keystore et `keystore.properties` vivent **uniquement en local**. Conséquences :
+- **Sauvegarde le keystore** (`cosmecheck-upload.keystore`) + son mot de passe **hors du repo**
+  (gestionnaire de mots de passe / cloud privé). Sans lui, pas de re-signature possible
+  avec la même clé (récupérable via Play App Signing, mais nécessite de ré-enregistrer le SHA).
+- Si tu relances un jour `expo prebuild --clean`, le dossier `android/` est régénéré :
+  `expo-build-properties` réapplique min26/target35, mais **le bloc signing et le keystore
+  sont à re-déposer** (recopier `keystore.properties` + le `.keystore`). Le plus simple :
+  ne pas régénérer `android/`, c'est ton artefact local persistant (comme tes fixes Play précédents).
 
 ---
 
-### 3. Contact Email for Support
-**Why**: Play Store support requires contact email  
-**Current**: None  
-**Fix**: Add to app.json + `constants/legal.ts`
-```
-contact@cosme-check.com (already in CLAUDE.md)
-```
+## 🔴 Reste à faire — CÔTÉ TOI (secrets / dashboards, je ne peux pas)
+
+### 1. RevenueCat — clé publique Android + produits
+Sans la clé `goog_…`, le SDK ne s'initialise pas (garde anti-crash) → aucun achat en prod.
+1. RevenueCat Dashboard → Project **Cosme Check** → API Keys → copie la clé publique **Google Play** (`goog_…`).
+2. Ajoute-la dans `.env` (clés publiques, déjà committé) :
+   ```
+   EXPO_PUBLIC_REVENUCAT_ANDROID_KEY=goog_xxxxxxxxxxxxxxxx
+   ```
+3. Dashboard RC → Entitlements → vérifier qu'un entitlement **`premium`** existe (matche `user_profiles.tier`).
+4. Créer les produits d'abonnement dans **Play Console** (mensuel/annuel + essai 3j), les rattacher à l'Offering `current` et à l'entitlement `premium`.
+5. Dashboard RC → Webhooks → ajouter :
+   `https://rogesnduejmqpxolhbif.supabase.co/functions/v1/revenucat-webhook`
+   Events : `INITIAL_PURCHASE`, `RENEWAL`, `CANCELLATION`, `EXPIRATION`.
+
+### 2. SHA-256 du keystore d'upload → Google Cloud (OAuth Google)
+Sinon Google Sign-In casse dès que l'app est signée avec la clé release.
+- **SHA-256** (clé d'upload générée) :
+  `38:F5:BB:44:9A:C9:BD:D6:2F:A2:74:B3:4E:8B:43:78:BE:9D:F2:D4:12:8A:CE:39:0E:8E:44:36:1D:0E:38:CE`
+- **SHA-1** : `4C:E6:02:E4:DD:41:01:54:34:CB:CC:A5:5E:FD:CF:90:70:1D:27:D4`
+- À enregistrer dans **Google Cloud Console** → OAuth client Android (package `com.cosmecheck.app`).
+- ⚠️ Si tu actives **Play App Signing** (par défaut), Google **re-signe** l'app avec SA propre clé.
+  Récupère aussi le **SHA-256 de la clé d'app** dans Play Console → *Configuration → Intégrité de l'app*
+  et enregistre-le AUSSI dans Google Cloud (sinon OAuth casse sur les installs Play Store).
+
+### 3. Sentry — slugs pour l'upload des source maps
+Le runtime capture déjà (DSN OK). Sans les slugs, les stack traces prod sont illisibles (non-bloquant).
+- `app.json` plugin `@sentry/react-native/expo` : remplacer
+  `REMPLACER_PAR_TON_ORG_SLUG` et `REMPLACER_PAR_TON_PROJECT_SLUG` par tes vrais slugs
+  (Sentry → Settings → org slug ; projet → slug).
+- Fournir `SENTRY_AUTH_TOKEN` au build (variable d'env) pour l'upload.
+
+### 4. Play Console (config, pas de code)
+- **Privacy Policy** : confirmer que `https://cosme-check.com/privacy` est **publiquement accessible** (prérequis fiche store + Data Safety).
+- **Data Safety** : remplir le formulaire (données collectées : email/auth, photos scannées, aucune localisation).
+- **Content rating** : questionnaire → app éducative cosmétiques, non-médicale → 3+/7+.
+- **Catégorie** : Beauté ou Lifestyle (PAS Médical).
+- **play-service-account.json** : requis seulement si `eas submit`. Sinon upload manuel de l'AAB.
 
 ---
 
-## 🟠 PLAY STORE SPECIFIC ISSUES
+## 🏗️ Build de publication (ton workflow local)
 
-### 1. Content Rating Questionnaire
-- Go to: Google Play Console → Your app → Store presence → Content ratings
-- Fill out: Age-appropriate, medical content (cosmetics analysis)
-- **CosmeCheck is**: educational, not medical device
-- **Age rating likely**: 3+ or 7+ (low risk)
+> Rappel projet : **ne pas laisser l'agent auto-builder l'APK**. Étapes manuelles ci-dessous.
 
-### 2. App Category
-- **Set to**: Beauty or Lifestyle
-- **NOT**: Medical (compliance issue)
-
-### 3. Minimum API Level
-- Current: API 24 (Android 7.0)
-- **Change to**: API 26+ (Android 8.0)
-- **Why**: Play Store now requires min 26+ as of August 2026
-- **Fix** in app.json:
-```json
-{
-  "android": {
-    "minSdkVersion": 26
-  }
-}
-```
-
-### 4. Target API Level
-- Must be within **2 releases of latest** (currently Android 15)
-- **Set to**: 35 minimum
-- **Fix**:
-```json
-{
-  "android": {
-    "compileSdkVersion": 35,
-    "targetSdkVersion": 35
-  }
-}
-```
-
-### 5. SHA-256 Fingerprint for OAuth Redirect
-- Google OAuth redirect `cosmecheck://` needs SHA-256 signing cert registered
-- **Get cert fingerprint**:
 ```bash
-# After first build, extract from APK:
-keytool -printcert -jarfile app-release.apk | grep SHA256
+# AAB signé pour Play Store (recommandé) :
+cd android && ./gradlew bundleRelease
+# → android/app/build/outputs/bundle/release/app-release.aab
+
+# ou APK signé (test device) :
+cd android && ./gradlew assembleRelease
+# → android/app/build/outputs/apk/release/app-release.apk
 ```
-- Register in Google Cloud Console + Firebase
-
----
-
-## 🟡 REVENUCAT INTEGRATION (IN-APP PURCHASES)
-
-### Installation & Setup
-
-**1. Install SDK**:
+Vérifier la signature :
 ```bash
-npx expo install react-native-purchases
+keytool -printcert -jarfile app-release.aab | grep -A1 SHA256
+# doit matcher le SHA-256 ci-dessus (alias cosmecheck-upload)
 ```
 
-**2. Configure in app.json**:
-```json
-{
-  "plugins": [
-    "react-native-purchases/expo-plugin"
-  ]
-}
-```
-
-**3. Boot in `_layout.tsx`**:
-```tsx
-import Purchases from 'react-native-purchases';
-
-export default function RootLayout() {
-  useEffect(() => {
-    async function initRevenueCat() {
-      const apiKey = Purchases.isAndroid 
-        ? Platform.select({
-            android: 'goog_...',  // Play Store key
-          })
-        : 'appl_...';  // Apple key
-      await Purchases.configure({ 
-        apiKey,
-        shouldLogIn: false,
-      });
-      // After user login:
-      // await Purchases.logIn(userId);
-    }
-    initRevenueCat();
-  }, []);
-  // ...
-}
-```
-
-**4. Keys from RevenueCat Dashboard**:
-- Android: `goog_xxxxxxxxxxxxxxxx` (Google Play key)
-- iOS: `appl_xxxxxxxxxxxxxxxx` (Apple key)
-- Both in `.env.local` (not committed):
-```
-REVENUEAT_ANDROID_KEY=goog_...
-REVENUEAT_APPLE_KEY=appl_...
-```
-
-**5. Wire Paywall in `app/offre/index.tsx`**:
-```tsx
-import Purchases from 'react-native-purchases';
-
-export default function OffreScreen() {
-  const handlePurchase = async () => {
-    try {
-      const offerings = await Purchases.getOfferings();
-      const pkg = offerings.current?.availablePackages[0];
-      if (!pkg) return;
-      
-      const result = await Purchases.purchasePackage(pkg);
-      if (result.customerInfo.entitlements.active['premium']) {
-        // Update user tier to 'premium' in Supabase
-        await updateUserTier('premium');
-      }
-    } catch (err) {
-      if (err.code === 'PurchaseCancelledError') return;
-      console.error('Purchase failed:', err);
-    }
-  };
-  
-  return (
-    <Button onPress={handlePurchase} title="Unlock Premium" />
-  );
-}
-```
-
-**6. Create Edge Function Webhook for Receipt Validation**:
-```deno
-// supabase/functions/revenucat-webhook/index.ts
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-serve(async (req) => {
-  const payload = await req.json();
-  
-  if (payload.event.type === 'INITIAL_PURCHASE' || payload.event.type === 'RENEWAL') {
-    const { app_user_id, product_identifier } = payload.event;
-    
-    const db = createClient(
-      Deno.env.get('SUPABASE_URL'),
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    );
-    
-    // Update user tier
-    await db
-      .from('cosme_check.user_profiles')
-      .update({ tier: 'premium' })
-      .eq('id', app_user_id);
-  }
-  
-  if (payload.event.type === 'CANCELLATION') {
-    // Downgrade user back to free
-  }
-  
-  return new Response(JSON.stringify({ ok: true }), { status: 200 });
-});
-```
-
-**7. Deploy webhook**:
-```bash
-supabase functions deploy revenucat-webhook --project-ref rogesnduejmqpxolhbif
-```
-
-**8. Register webhook in RevenueCat Dashboard**:
-- Dashboard → Webhooks → Add webhook
-- URL: `https://rogesnduejmqpxolhbif.supabase.co/functions/v1/revenucat-webhook`
-- Events: `INITIAL_PURCHASE`, `RENEWAL`, `CANCELLATION`
+**Test achats sandbox** : Play Console → Testing → Internal testers → ajoute ton compte Google,
+installe via le lien de test, effectue un achat sandbox, vérifie `user_profiles.tier='premium'` en DB.
 
 ---
 
-## ⚠️ COMMON PITFALLS TO AVOID
+## 📋 Checklist finale
 
-### 1. **NOT updating user tier after purchase**
-- RevenueCat only validates entitlement, doesn't touch your DB
-- **Always** create webhook + update `user_profiles.tier` on purchase
-- Test: purchase in sandbox, verify `tier='premium'` in DB
+**Code (fait)**
+- [x] Signature release = keystore d'upload (plus debug)
+- [x] minSdk 26 / target 35 effectifs
+- [x] expo-build-properties (durabilité prebuild)
+- [x] RevenueCat SDK + webhook tier
+- [x] Sentry runtime + expo-updates OTA
+- [x] tsc app = 0 erreur, jest 698/698
 
-### 2. **Hardcoding API keys in app code**
-- **Use env vars** in `.env.local` (not committed)
-- Load via `Deno.env.get()` at boot, never inline strings
-
-### 3. **Forgetting credential linking**
-- After email signup, user isn't linked to RevenueCat's `app_user_id`
-- **Fix**: Call `Purchases.logIn(userId)` right after signup/login
-```tsx
-// In auth/session.ts after signUp/signIn
-await Purchases.logIn(user.id);
-```
-
-### 4. **Not testing in sandbox**
-- RevenueCat sandbox ≠ Play Store sandbox
-- Set test mode before first purchase:
-```tsx
-await Purchases.setLogLevel(Purchases.LOG_LEVELS.DEBUG);
-// For iOS: use sandbox tester account
-// For Android: Google Play Console → [APK] → Testing → Internal testers
-```
-
-### 5. **Forgetting to activate entitlements in RevenueCat**
-- Dashboard → Entitlements → Create `premium` entitlement
-- Link to **products** (not just Offerings)
-- Offering → Products → select `premium` product → link to `premium` entitlement
-
-### 6. **Building APK without signing**
-- Play Store requires **signed APK**
-```bash
-npx eas build -p android --release
-# OR manually:
-jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA256 \
-  -keystore my-release-key.jks app-release-unsigned.apk my-key-alias
-```
-
-### 7. **Not handling cancellation/downgrade**
-- User cancels subscription → webhook fires
-- You must downgrade `tier` back to `free`
-- Otherwise user keeps premium access indefinitely
-
-### 8. **Incorrect redirect URLs**
-- OAuth redirect must match **exactly**:
-  - Firebase Console → Authorized redirect URIs
-  - Google Cloud OAuth consent screen
-  - Supabase Dashboard → Authentication → Authorized redirect URLs
-- All three need: `cosmecheck://` + web URLs for browser callback
-
-### 9. **Missing version bump before store submission**
-- Play Store requires `versionCode` increment
-- Play Store/TestFlight require version uniqueness
-```json
-{
-  "android": { "versionCode": 2 },  // bumped from 1
-  "version": "0.2.0"
-}
-```
-
-### 10. **Not pre-warming production builds**
-- **Always** build APK locally + test on real device first
-- Play Store can take 24h to review: don't rush
-- Internal testing → Closed testing → Open testing → Production
+**Toi (avant submission)**
+- [ ] Clé `EXPO_PUBLIC_REVENUCAT_ANDROID_KEY=goog_…` dans `.env`
+- [ ] Produits Play + Offering + entitlement `premium` (RC)
+- [ ] Webhook RC enregistré
+- [ ] SHA-256 upload **+** SHA-256 Play App Signing → Google Cloud (OAuth)
+- [ ] Slugs Sentry + `SENTRY_AUTH_TOKEN`
+- [ ] Privacy URL publique confirmée + Data Safety rempli
+- [ ] Content rating + catégorie Beauté/Lifestyle
+- [ ] **Keystore + mot de passe sauvegardés hors repo**
+- [ ] AAB signé buildé + testé sur device réel
+- [ ] Achat sandbox testé (tier → premium en DB)
 
 ---
 
-## 📋 PRE-LAUNCH CHECKLIST
-
-- [ ] Apple Sign-In implemented + tested
-- [ ] Privacy policy URL public on cosme-check.com
-- [ ] Contact email set (contact@cosme-check.com)
-- [ ] App category set to Beauty/Lifestyle
-- [ ] Min API 26, Target API 35
-- [ ] RevenueCat keys configured (not in code)
-- [ ] Purchase webhook deployed + registered
-- [ ] User tier updates on purchase/cancellation
-- [ ] Entitlements named `premium` in RevenueCat
-- [ ] Sandbox testing completed (both Android + iOS)
-- [ ] Signed APK built locally
-- [ ] Version code bumped
-- [ ] SHA-256 cert fingerprint registered in Google Cloud
-- [ ] OAuth redirect URLs registered everywhere
-- [ ] Legal screens tested (CGU, Privacy, Mentions, About)
-- [ ] Camera + photo permissions requested correctly
-- [ ] All tests passing (Jest: 374+)
-- [ ] No console errors on main flows
-- [ ] Barcode scan tested end-to-end
-- [ ] Advisor chat tested with credits system
-- [ ] Premium paywall tested (mock purchase)
-- [ ] Onboarding flow tested (both paths: email + Google)
-- [ ] Database backups configured (Supabase → Backups tab)
-- [ ] Support email monitored (contact@cosme-check.com)
-
----
-
-## 🚀 DEPLOYMENT TIMELINE
-
-| Phase | Duration | Actions |
-|-------|----------|---------|
-| **1. Apple Sign-In** | 2h | Code + test |
-| **2. RevenueCat** | 4h | SDK + webhook + test |
-| **3. Testing** | 1-2d | Sandbox APK, real devices |
-| **4. Play Store** | 30m | Upload signed APK |
-| **5. Review** | 24-48h | Google review process |
-| **6. iOS (optional)** | 24h+ | TestFlight review, then App Store |
-
-**Total**: 2-3 days to production  
-**Risk**: Low (mostly setup)  
-**Rollback**: Can pause store listing during review
-
----
-
-## 📞 SUPPORT & MONITORING
-
-- Monitor `contact@cosme-check.com` for user reports
-- RevenueCat Dashboard → Analytics → Revenue, Churn, LTV
-- Supabase Dashboard → Database → Realtime → monitor `user_profiles` updates
-- Google Play Console → Crash → monitor crashes + ANRs
-- Set up Sentry or Crashlytics for crash reporting
-
----
-
-Generated: 2026-06-29  
-Status: Ready for implementation
+*Ce guide remplace la version du 29 juin, qui listait comme « à faire » des points
+déjà livrés (privacyUrl, RevenueCat, min/target SDK, versionCode).*

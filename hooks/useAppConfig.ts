@@ -116,12 +116,14 @@ export function useAppConfig(): UseAppConfigReturn {
     },
   })
 
-  // Polling 30 s pour capter les changements admin (maintenance, flags) sans
-  // que l'utilisateur ait à relancer l'app.
+  // Polling 5 min pour capter les changements admin (maintenance, flags). La config
+  // est GLOBALE (même valeur pour tous) et change très rarement : sonder toutes les
+  // 30 s multipliait inutilement le trafic de fond (monté pour chaque user via
+  // MaintenanceGate). 5 min est amplement suffisant.
   useEffect(() => {
     const interval = setInterval(() => {
       void refetch()
-    }, 30000)
+    }, 5 * 60 * 1000)
     return () => clearInterval(interval)
   }, [refetch])
 

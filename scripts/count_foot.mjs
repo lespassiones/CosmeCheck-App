@@ -1,6 +1,7 @@
-const BASE = "https://rogesnduejmqpxolhbif.supabase.co";
-const SVC =
-  "***REMOVED-SERVICE-ROLE-KEY***";
+import 'dotenv/config';
+const BASE = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const SVC = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!SVC) throw new Error('SUPABASE_SERVICE_ROLE_KEY manquant dans .env');
 async function q(form, terms) {
   const r = await fetch(`${BASE}/rest/v1/rpc/cosme_check_recommend_products`, {
     method: "POST",

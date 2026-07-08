@@ -20,6 +20,10 @@ expo-env.d.ts
 ios/
 android/
 
+# Cle de compte de service Google Play (secret — ne JAMAIS commiter)
+play-service-account.json
+cosme-check-*.json
+
 # Metro
 .metro-health-check*
 

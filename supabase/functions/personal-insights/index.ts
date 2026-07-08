@@ -146,6 +146,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     color_rating: it.colorRating,
     primary_function: it.primaryFunction,
     tags: it.tags,
+    position_idx: it.position - 1,
     restriction_reason: reasonByPosition.get(it.position) ?? null,
   }));
 

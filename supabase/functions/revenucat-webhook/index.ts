@@ -23,6 +23,29 @@ serve(async (req) => {
       return new Response('Method not allowed', { status: 405 })
     }
 
+    // Authentification : RevenueCat envoie la valeur du champ "Authorization
+    // header value" (configuré dans le dashboard RC) dans l'en-tête Authorization.
+    // On la compare au secret partagé REVENUECAT_WEBHOOK_SECRET. Sans ça, n'importe
+    // qui connaissant l'URL pourrait forger un INITIAL_PURCHASE et offrir un premium.
+    const expectedAuth = Deno.env.get('REVENUECAT_WEBHOOK_SECRET') || ''
+    if (!expectedAuth) {
+      console.error(
+        '[RevenueCat Webhook] REVENUECAT_WEBHOOK_SECRET non configuré — rejet (fail-closed)',
+      )
+      return new Response(
+        JSON.stringify({ error: 'server_misconfigured' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+    const gotAuth = req.headers.get('Authorization') || ''
+    if (gotAuth !== expectedAuth) {
+      console.warn('[RevenueCat Webhook] Authorization invalide — rejet 401')
+      return new Response(
+        JSON.stringify({ error: 'unauthorized' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+
     const payload: RevenueCatEvent = await req.json()
     const eventType = payload.event.type
     const userId = payload.event.app_user_id

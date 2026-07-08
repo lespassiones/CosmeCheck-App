@@ -50,14 +50,16 @@ export function useCredits(): UseCreditsReturn {
     },
   })
 
-  // Polling automatique toutes les 10s pour détecter les changements admin
-  // (contournement du fait que Supabase ne notifie pas les changements de credit_tiers)
+  // Polling toutes les 60s pour capter les changements admin (rares).
+  // Le débit de crédit est déjà reflété en temps réel côté feature (invalidation
+  // sur retour 429 / event), donc pas besoin de sonder agressivement : 60s évite
+  // ~6x de trafic de fond inutile sur cosme_check_get_credits à grande échelle.
   useEffect(() => {
     if (!isAuthenticated) return
 
     const interval = setInterval(() => {
       void refetch()
-    }, 10000) // 10 secondes
+    }, 60000) // 60 secondes
 
     return () => clearInterval(interval)
   }, [isAuthenticated, refetch])

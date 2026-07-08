@@ -123,9 +123,12 @@ const WelcomeScreen: FC = () => {
           {/* En-tête : titre + sous-titre */}
           <View style={styles.header}>
             <Text style={styles.title}>Bienvenue !</Text>
-            <Text style={styles.subtitle}>
-              Ici on décrypte tes cosmétiques pour t&apos;aider à choisir les
-              produits qui te correspondent.
+            <Text
+              style={styles.subtitle}
+              numberOfLines={2}
+              adjustsFontSizeToFit
+            >
+              On te dit si un cosmétique est adapté{'\n'}à toi et à tes objectifs.
             </Text>
           </View>
 
@@ -144,18 +147,6 @@ const WelcomeScreen: FC = () => {
           {/* CTA principaux */}
           <View style={styles.ctaGroup}>
             <Pressable
-              onPress={() => router.push(ROUTES.AUTH.SIGN_UP)}
-              style={({ pressed }) => [
-                styles.primaryBtn,
-                pressed && styles.primaryBtnPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Créer un compte"
-            >
-              <Text style={styles.primaryBtnText}>Créer un compte</Text>
-            </Pressable>
-
-            <Pressable
               onPress={() => router.push(ROUTES.AUTH.SIGN_IN)}
               style={({ pressed }) => [
                 styles.secondaryBtn,
@@ -165,6 +156,18 @@ const WelcomeScreen: FC = () => {
               accessibilityLabel="Connexion"
             >
               <Text style={styles.secondaryBtnText}>Connexion</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => router.push(ROUTES.AUTH.SIGN_UP)}
+              style={({ pressed }) => [
+                styles.primaryBtn,
+                pressed && styles.primaryBtnPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Créer un compte"
+            >
+              <Text style={styles.primaryBtnText}>Créer un compte</Text>
             </Pressable>
           </View>
 

@@ -1,9 +1,9 @@
 // Batterie v4 partie 2 : chemins "user-replay" et "cache cross-user full".
-const BASE = "https://rogesnduejmqpxolhbif.supabase.co";
-const ANON =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJvZ2VzbmR1ZWptcXB4b2xoYmlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQwNDIxNzUsImV4cCI6MjA4OTYxODE3NX0.CIjUhlSqqkx6YdSFON4JSDy-ggqrWXpOdvTKLT_1Hkw";
-const SVC =
-  "***REMOVED-SERVICE-ROLE-KEY***";
+import 'dotenv/config';
+const BASE = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const ANON = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const SVC = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!SVC) throw new Error('SUPABASE_SERVICE_ROLE_KEY manquant dans .env');
 
 const analysisId = process.argv[2];
 if (!analysisId) { console.log("usage: node battery2 <analysisId>"); process.exit(1); }

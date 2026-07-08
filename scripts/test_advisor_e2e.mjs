@@ -8,9 +8,11 @@
  * Usage: node scripts/test_advisor_e2e.mjs
  */
 
-const SUPABASE_URL  = 'https://rogesnduejmqpxolhbif.supabase.co';
-const ANON_KEY      = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJvZ2VzbmR1ZWptcXB4b2xoYmlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQwNDIxNzUsImV4cCI6MjA4OTYxODE3NX0.CIjUhlSqqkx6YdSFON4JSDy-ggqrWXpOdvTKLT_1Hkw';
-const SERVICE_KEY   = '***REMOVED-SERVICE-ROLE-KEY***';
+import 'dotenv/config';
+const SUPABASE_URL  = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const ANON_KEY      = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const SERVICE_KEY   = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!SERVICE_KEY) throw new Error('SUPABASE_SERVICE_ROLE_KEY manquant dans .env');
 
 // ── Console utils ──────────────────────────────────────────────────────────
 const G = '\x1b[32m', R = '\x1b[31m', Y = '\x1b[33m', C = '\x1b[36m',
