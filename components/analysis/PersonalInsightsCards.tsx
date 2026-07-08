@@ -11,7 +11,15 @@
  */
 
 import { type FC, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
+import {
+  ActivityIndicator,
+  Image,
+  type ImageSourcePropType,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { BlurView } from 'expo-blur'
 import { useRouter } from 'expo-router'
@@ -31,9 +39,7 @@ export type PersonalBlocks = { goals: Block; skin: Block; watch: Block }
 // `PERSONAL_PROMPT_VERSION` de supabase/functions/personal-insights/lib.ts.
 // Sert à détecter des blocs persistés PÉRIMÉS (générés sous un ancien prompt)
 // et à déclencher un rafraîchissement silencieux (gratuit, déjà payé).
-export const PERSONAL_BLOCKS_VERSION = 7
-
-type IoniconName = React.ComponentProps<typeof Ionicons>['name']
+export const PERSONAL_BLOCKS_VERSION = 10
 
 // Ton → couleurs pastel (halo + texte). Icône FIXE par bloc (clé).
 const TONE_VISUAL: Record<Tone, { bg: string; text: string }> = {
@@ -43,13 +49,13 @@ const TONE_VISUAL: Record<Tone, { bg: string; text: string }> = {
   neutre: { bg: colors.gray100, text: colors.inkMuted },
 }
 
-// Icônes DISTINCTES des pastilles de notation (cœur/feuille/œil/triangle/stop)
-// pour éviter toute confusion visuelle. Le drapeau (« pour toi ») est conservé ;
-// l'ampoule (« à quoi ça sert », bloc pédagogique) remplace la silhouette peau.
-const BLOCK_ORDER: { key: keyof PersonalBlocks; icon: IoniconName }[] = [
-  { key: 'goals', icon: 'flag-outline' },
-  { key: 'skin', icon: 'bulb-outline' },
-  { key: 'watch', icon: 'alert-circle-outline' },
+// Icônes illustrées line-art (assets), teintées par le ton du bloc (tintColor)
+// pour conserver le système de couleurs. Potion = objectifs, silhouette = peau,
+// silhouette + loupe = à surveiller.
+const BLOCK_ORDER: { key: keyof PersonalBlocks; icon: ImageSourcePropType }[] = [
+  { key: 'goals', icon: require('@/assets/icons/analyse/potion.png') },
+  { key: 'skin', icon: require('@/assets/icons/analyse/body.png') },
+  { key: 'watch', icon: require('@/assets/icons/analyse/bodyloop.png') },
 ]
 
 type State =
@@ -167,7 +173,11 @@ export const PersonalInsightsCards: FC<Props> = ({ analysisId, initialBlocks, in
                 <View style={styles.haloWrap}>
                   <View style={[styles.haloRing, { backgroundColor: colors.gray100 }]} />
                   <View style={[styles.haloInner, { backgroundColor: colors.gray100 }]}>
-                    <Ionicons name={b.icon} size={20} color={colors.inkLight} />
+                    <Image
+                      source={b.icon}
+                      style={[styles.blockIcon, { tintColor: colors.inkLight }]}
+                      resizeMode="contain"
+                    />
                   </View>
                 </View>
                 <View style={styles.body}>
@@ -224,7 +234,11 @@ export const PersonalInsightsCards: FC<Props> = ({ analysisId, initialBlocks, in
               <View style={styles.haloWrap}>
                 <View style={[styles.haloRing, { backgroundColor: v.bg }]} />
                 <View style={[styles.haloInner, { backgroundColor: v.bg }]}>
-                  <Ionicons name={icon} size={22} color={v.text} />
+                  <Image
+                    source={icon}
+                    style={[styles.blockIcon, { tintColor: v.text }]}
+                    resizeMode="contain"
+                  />
                 </View>
               </View>
               <View style={styles.body}>
@@ -260,6 +274,7 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
+  blockIcon: { width: 30, height: 30 },
   body: { flex: 1, minWidth: 0 },
   title: { fontFamily: fontFamilies.bold, fontSize: 16, color: colors.ink, letterSpacing: -0.2 },
   desc: { fontFamily: fontFamilies.regular, fontSize: 13, lineHeight: 19, color: colors.inkMuted, marginTop: 3 },

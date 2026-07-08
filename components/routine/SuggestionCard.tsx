@@ -28,6 +28,8 @@ interface Props {
   /** Justification IA personnalisée (« pour ta peau sensible… »). */
   reason?: string | null
   keeping: boolean
+  /** Comparaison en cours de préparation (crée l'analyse alt + débit) → spinner sur le lien. */
+  comparing: boolean
   /** Déjà ajouté en favori → bouton verrouillé (anti-doublon). */
   kept: boolean
   onKeep: () => void
@@ -45,6 +47,7 @@ export const SuggestionCard: FC<Props> = ({
   alternativeScore,
   reason,
   keeping,
+  comparing,
   kept,
   onKeep,
   onCompare,
@@ -126,9 +129,9 @@ export const SuggestionCard: FC<Props> = ({
 
       {/* Bouton garder en favori (verrouillé une fois ajouté → anti-doublon) */}
       <Pressable
-        style={[styles.keepBtn, kept && styles.keepBtnDone, keeping && styles.keepBtnDisabled]}
+        style={[styles.keepBtn, kept && styles.keepBtnDone, (keeping || comparing) && styles.keepBtnDisabled]}
         onPress={onKeep}
-        disabled={keeping || kept}
+        disabled={keeping || comparing || kept}
         accessibilityRole="button"
       >
         {keeping ? (
@@ -145,9 +148,18 @@ export const SuggestionCard: FC<Props> = ({
           </>
         )}
       </Pressable>
-      <Pressable onPress={onCompare} hitSlop={8} style={styles.linkWrap}>
-        <Ionicons name="git-compare-outline" size={13} color={colors.inkMuted} />
-        <Text style={styles.link}>Comparer les deux produits</Text>
+      <Pressable
+        onPress={onCompare}
+        hitSlop={8}
+        style={[styles.linkWrap, (comparing || keeping) && styles.keepBtnDisabled]}
+        disabled={comparing || keeping}
+      >
+        {comparing ? (
+          <ActivityIndicator size="small" color={colors.inkMuted} />
+        ) : (
+          <Ionicons name="git-compare-outline" size={13} color={colors.inkMuted} />
+        )}
+        <Text style={styles.link}>{comparing ? 'Préparation…' : 'Comparer les deux produits'}</Text>
       </Pressable>
     </View>
   )

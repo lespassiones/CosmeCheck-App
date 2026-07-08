@@ -23,10 +23,11 @@ import {
   View,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { Image } from 'expo-image'
 import { router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { CompareInsights } from '@/components/compare/CompareInsights'
+import { CompareInsights, type CompareInsightsStatus } from '@/components/compare/CompareInsights'
 import { ExposureBar, ExposureCountsRow } from '@/components/compare/ExposureBar'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { GlassCard } from '@/components/design/GlassCard'
@@ -35,6 +36,7 @@ import { ROUTES } from '@/constants/routes'
 import { radius, spacing } from '@/constants/spacing'
 import { fontFamilies, typography } from '@/constants/typography'
 import { db } from '@/lib/supabase/client'
+import { resolveAndCacheProductImage } from '@/lib/storage/productImageCache'
 import { useAuth } from '@/hooks/useAuth'
 import { useRoutine } from '@/hooks/useRoutine'
 import { parseAnalyseResponse, type AnalyseResponse } from '@/lib/analysis/types'
@@ -104,6 +106,8 @@ type AnalysisLite = {
   name: string | null
   product_label: string | null
   score: number | null
+  brand: string | null
+  ean: string | null
   result_json: unknown
 }
 
@@ -112,6 +116,15 @@ const CompareScreen: FC = () => {
   const { user } = useAuth()
   const { items: routineItems } = useRoutine()
   const [state, setState] = useState<LoadState>({ status: 'loading' })
+  // URLs image produit (keyées par id d'analyse), résolues via EAN (source de
+  // vérité) après le chargement. Non bloquant : le hero s'affiche sans image.
+  const [images, setImages] = useState<Record<string, string>>({})
+  // Statut + produit conseillé remontés par CompareInsights (badge + bouton).
+  const [insights, setInsights] = useState<{ status: CompareInsightsStatus; winner?: 'A' | 'B' }>({
+    status: 'loading',
+  })
+  // Comparaison simplifiée : par défaut seul « Comment choisir » est visible.
+  const [showFull, setShowFull] = useState(false)
 
   const ids = useMemo(
     () =>
@@ -124,6 +137,9 @@ const CompareScreen: FC = () => {
 
   const load = useCallback(async () => {
     setState({ status: 'loading' })
+    setImages({})
+    setShowFull(false)
+    setInsights({ status: 'loading' })
 
     if (ids.length !== 2) {
       setState({ status: 'error', message: 'Sélectionne exactement deux analyses à comparer.' })
@@ -135,7 +151,7 @@ const CompareScreen: FC = () => {
         Promise.resolve(
           db()
             .from('analyses')
-            .select('id, name, product_label, score, result_json')
+            .select('id, name, product_label, score, brand, ean, result_json')
             .in('id', ids),
         ),
         12000,
@@ -172,6 +188,19 @@ const CompareScreen: FC = () => {
 
       const [a, b] = sides as [CompareSide, CompareSide]
       setState({ status: 'ready', a, b })
+
+      // Résolution image (EAN = source de vérité), non bloquante.
+      void Promise.all(
+        ordered.map(async (r) => {
+          const url = await resolveAndCacheProductImage(
+            r.id,
+            r.ean,
+            r.brand,
+            r.product_label ?? r.name,
+          )
+          if (url) setImages((prev) => ({ ...prev, [r.id]: url }))
+        }),
+      )
     } catch (e) {
       setState({
         status: 'error',
@@ -202,6 +231,20 @@ const CompareScreen: FC = () => {
       sameComposition: diff.uniqueToA.length + diff.uniqueToB.length === 0,
     }
   }, [state, routineSlugs])
+
+  // Produit conseillé (badge vert) : reco IA « comment choisir » quand
+  // disponible, sinon repli sur le meilleur score (le badge reste affiché même
+  // si l'IA est indisponible). Aucun badge si scores égaux/absents sans IA.
+  const winnerId = useMemo<string | null>(() => {
+    if (state.status !== 'ready') return null
+    const { a, b } = state
+    if (insights.winner === 'A') return a.id
+    if (insights.winner === 'B') return b.id
+    const sa = a.score ?? -1
+    const sb = b.score ?? -1
+    if (sa === sb) return null
+    return sa > sb ? a.id : b.id
+  }, [state, insights.winner])
 
   useEffect(() => {
     void load()
@@ -258,41 +301,65 @@ const CompareScreen: FC = () => {
         >
           <Text style={styles.h1}>Comparer 2 produits</Text>
 
-          {/* Hero — barres d'exposition empilées (une carte par produit). */}
+          {/* Hero — une carte par produit : infos à gauche, image à droite,
+              badge vert sur le produit conseillé. */}
           <View style={styles.heroStack}>
-            {[state.a, state.b].map((side) => (
-              <GlassCard key={side.id} style={styles.heroCard} padding={spacing.base}>
-                <Text style={styles.heroName} numberOfLines={2}>
-                  {side.name}
-                </Text>
-                <View style={styles.heroBar}>
-                  <ExposureBar
-                    counts={{
-                      vert: side.result.counts.vert,
-                      jaune: side.result.counts.jaune,
-                      orange: side.result.counts.orange,
-                      rouge: side.result.counts.rouge,
-                    }}
-                  />
-                </View>
-                <View style={styles.heroFooter}>
-                  <Text style={styles.heroMatched}>
-                    {side.result.counts.matched} ingrédients reconnus
-                  </Text>
-                </View>
-                <ExposureCountsRow
-                  counts={{
-                    vert: side.result.counts.vert,
-                    jaune: side.result.counts.jaune,
-                    orange: side.result.counts.orange,
-                    rouge: side.result.counts.rouge,
-                  }}
-                />
-              </GlassCard>
-            ))}
+            {[state.a, state.b].map((side) => {
+              const isWinner = winnerId === side.id
+              const img = images[side.id]
+              return (
+                <GlassCard key={side.id} style={styles.heroCard} padding={spacing.base}>
+                  {isWinner && (
+                    <View style={styles.winnerBadge}>
+                      <Ionicons name="checkmark" size={16} color={colors.surface} />
+                    </View>
+                  )}
+                  <View style={styles.heroRow}>
+                    <View style={styles.heroMain}>
+                      <Text style={styles.heroName} numberOfLines={2}>
+                        {side.name}
+                      </Text>
+                      <View style={styles.heroBar}>
+                        <ExposureBar
+                          counts={{
+                            vert: side.result.counts.vert,
+                            jaune: side.result.counts.jaune,
+                            orange: side.result.counts.orange,
+                            rouge: side.result.counts.rouge,
+                          }}
+                        />
+                      </View>
+                      <View style={styles.heroFooter}>
+                        <Text style={styles.heroMatched}>
+                          {side.result.counts.matched} ingrédients reconnus
+                        </Text>
+                      </View>
+                      <ExposureCountsRow
+                        counts={{
+                          vert: side.result.counts.vert,
+                          jaune: side.result.counts.jaune,
+                          orange: side.result.counts.orange,
+                          rouge: side.result.counts.rouge,
+                        }}
+                      />
+                    </View>
+                    {img ? (
+                      <Image
+                        source={{ uri: img }}
+                        style={styles.heroImage}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        transition={150}
+                        accessibilityIgnoresInvertColors
+                      />
+                    ) : null}
+                  </View>
+                </GlassCard>
+              )
+            })}
           </View>
 
-          {/* Portraits + commun + comment choisir (IA, soft-fail). */}
+          {/* « Comment choisir » (toujours) + portraits/commun (repliés). */}
           <CompareInsights
             aId={state.a.id}
             bId={state.b.id}
@@ -300,39 +367,73 @@ const CompareScreen: FC = () => {
             nameB={state.b.name}
             shortNameA={shortenProductName(state.a.name)}
             shortNameB={shortenProductName(state.b.name)}
+            showFull={showFull}
+            onResult={setInsights}
           />
 
-          {/* À surveiller — une carte par produit, groupé par fonction. */}
-          {derived && (derived.flaggedA.length > 0 || derived.flaggedB.length > 0) && (
-            <View style={styles.attentionStack}>
-              {derived.flaggedA.length > 0 && (
-                <AttentionCard name={state.a.name} groups={groupByFunction(derived.flaggedA)} />
-              )}
-              {derived.flaggedB.length > 0 && (
-                <AttentionCard name={state.b.name} groups={groupByFunction(derived.flaggedB)} />
-              )}
-            </View>
+          {/* Bouton « Voir l'analyse complète » (uniquement si l'IA a répondu). */}
+          {insights.status === 'ready' && !showFull && (
+            <Pressable
+              onPress={() => setShowFull(true)}
+              style={({ pressed }) => [styles.expandBtn, pressed && styles.expandBtnPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Voir l'analyse complète"
+            >
+              <Text style={styles.expandBtnText}>Voir l'analyse complète</Text>
+              <Ionicons name="chevron-down" size={18} color={colors.surface} />
+            </Pressable>
           )}
 
-          {/* Bon à savoir */}
-          {derived && derived.bonASavoir.length > 0 && (
-            <GlassCard style={styles.block} padding={spacing.lg}>
-              <Text style={styles.blockLabel}>BON À SAVOIR</Text>
-              <View style={styles.bonList}>
-                {derived.bonASavoir.map((t, i) => (
-                  <View key={i} style={styles.bonRow}>
-                    <View style={styles.bonDot} />
-                    <Text style={styles.bonText}>{renderBold(t)}</Text>
+          {/* Détail : révélé par le bouton, OU affiché directement si l'IA est
+              indisponible (le reste de la page garde sa valeur). */}
+          {(showFull || insights.status === 'error') && (
+            <>
+              {/* À surveiller — une carte par produit, groupé par fonction. */}
+              {derived && (derived.flaggedA.length > 0 || derived.flaggedB.length > 0) && (
+                <View style={styles.attentionStack}>
+                  {derived.flaggedA.length > 0 && (
+                    <AttentionCard name={state.a.name} groups={groupByFunction(derived.flaggedA)} />
+                  )}
+                  {derived.flaggedB.length > 0 && (
+                    <AttentionCard name={state.b.name} groups={groupByFunction(derived.flaggedB)} />
+                  )}
+                </View>
+              )}
+
+              {/* Bon à savoir */}
+              {derived && derived.bonASavoir.length > 0 && (
+                <GlassCard style={styles.block} padding={spacing.lg}>
+                  <Text style={styles.blockLabel}>BON À SAVOIR</Text>
+                  <View style={styles.bonList}>
+                    {derived.bonASavoir.map((t, i) => (
+                      <View key={i} style={styles.bonRow}>
+                        <View style={styles.bonDot} />
+                        <Text style={styles.bonText}>{renderBold(t)}</Text>
+                      </View>
+                    ))}
                   </View>
-                ))}
-              </View>
-            </GlassCard>
+                </GlassCard>
+              )}
+
+              {derived?.sameComposition && (
+                <Text style={styles.sameComp}>
+                  Les deux compositions ne diffèrent pas sur les ingrédients pénalisants.
+                </Text>
+              )}
+            </>
           )}
 
-          {derived?.sameComposition && (
-            <Text style={styles.sameComp}>
-              Les deux compositions ne diffèrent pas sur les ingrédients pénalisants.
-            </Text>
+          {/* Replier */}
+          {insights.status === 'ready' && showFull && (
+            <Pressable
+              onPress={() => setShowFull(false)}
+              style={({ pressed }) => [styles.collapseBtn, pressed && styles.expandBtnPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Réduire l'analyse"
+            >
+              <Text style={styles.collapseBtnText}>Voir moins</Text>
+              <Ionicons name="chevron-up" size={18} color={colors.inkMuted} />
+            </Pressable>
           )}
         </ScrollView>
       )}
@@ -458,7 +559,46 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginBottom: spacing.lg,
   },
-  heroCard: {},
+  heroCard: {
+    position: 'relative',
+  },
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: spacing.base,
+  },
+  heroMain: {
+    flex: 1,
+    minWidth: 0,
+  },
+  heroImage: {
+    width: 68,
+    // Hauteur pilotée par la carte : l'image s'étire sur toute la hauteur du
+    // contenu (plus haute) sans élargir la zone ni agrandir la carte.
+    alignSelf: 'stretch',
+    minHeight: 68,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+  },
+  winnerBadge: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    zIndex: 2,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.rating.vert.DEFAULT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.surface,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
   heroName: {
     fontFamily: fontFamilies.semiBold,
     fontSize: 15,
@@ -519,6 +659,37 @@ const styles = StyleSheet.create({
   },
   attentionDim: {
     color: colors.roseDeep,
+  },
+  expandBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.rating.vert.DEFAULT,
+    borderRadius: radius.full,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.base,
+  },
+  expandBtnPressed: {
+    opacity: 0.85,
+  },
+  expandBtnText: {
+    ...typography.button,
+    color: colors.surface,
+  },
+  collapseBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: 12,
+    marginBottom: spacing.base,
+  },
+  collapseBtnText: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 14,
+    color: colors.inkMuted,
   },
   block: {
     marginBottom: spacing.base,

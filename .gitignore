@@ -49,3 +49,11 @@ play-service-account.json
 /[0-9]*.jpeg
 /[0-9]*.png
 /[0-9]*.webp
+
+# Clés de compte de service Firebase/Google (SECRET, ne jamais committer)
+*-firebase-adminsdk-*.json
+service-account*.json
+google-service-account*.json
+fcm-*.json
+# Clé APNs iOS (SECRET)
+*.p8

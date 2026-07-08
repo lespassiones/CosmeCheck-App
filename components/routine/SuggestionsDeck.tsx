@@ -58,6 +58,7 @@ interface Props {
   visible: boolean
   suggestions: DeckSuggestion[]
   keepingKey: string | null
+  comparingKey: string | null
   keptKeys: Set<string>
   onClose: () => void
   onKeep: (s: DeckSuggestion) => void
@@ -82,6 +83,7 @@ export const SuggestionsDeck: FC<Props> = ({
   visible,
   suggestions,
   keepingKey,
+  comparingKey,
   keptKeys,
   onClose,
   onKeep,
@@ -166,6 +168,7 @@ export const SuggestionsDeck: FC<Props> = ({
       alternativeScore={s.alternativeScore}
       reason={s.reason}
       keeping={keepingKey === s.key}
+      comparing={comparingKey === s.key}
       kept={keptKeys.has(s.key)}
       onKeep={() => onKeep(s)}
       onCompare={() => onCompare(s)}

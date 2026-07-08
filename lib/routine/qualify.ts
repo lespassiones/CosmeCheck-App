@@ -7,11 +7,13 @@
  * Un produit de la routine reçoit une suggestion si :
  *   1. il contient au moins un ingrédient ORANGE ou ROUGE → toujours (obligatoire) ;
  *   2. sinon, s'il contient un ingrédient RESTREINT par l'utilisateur → toujours ;
- *   3. sinon (uniquement vert/jaune) → seulement si le nombre de JAUNE > nombre de VERT.
- *
- * Autrement dit : vert ≥ jaune, aucun orange/rouge, aucune restriction → déjà bon,
- * pas de suggestion.
+ *   3. sinon (uniquement vert/jaune) → seulement si le JAUNE dépasse le vert
+ *      (jaune > vert). À parité ou si le vert domine, le produit est déjà bon
+ *      → pas de suggestion.
  */
+
+/** Facteur de domination : le jaune doit simplement DÉPASSER le vert (jaune > vert). */
+export const YELLOW_DOMINANCE_FACTOR = 1.0
 
 export type SuggestCounts = {
   vert: number
@@ -34,8 +36,8 @@ export function qualifiesForSuggestion(
   if (orange > 0 || rouge > 0) return true
   // 2. Ingrédient restreint → toujours (même si le produit est vert).
   if ((restrictedCount ?? 0) > 0) return true
-  // 3. Uniquement vert/jaune : suggestion seulement si le jaune domine.
-  return jaune > vert
+  // 3. Uniquement vert/jaune : suggestion seulement si le jaune dépasse le vert.
+  return jaune > vert * YELLOW_DOMINANCE_FACTOR
 }
 
 /**

@@ -22,9 +22,22 @@ import {
 import {
   PRODUCT_TYPE_LABELS,
   type CoherencePromise,
+  type CoherenceVerdict,
   type OutOfScopePromise,
   type ProductType,
 } from "./types.ts";
+
+const PRODUCT_TYPES = [
+  "cheveux",
+  "peau_visage",
+  "peau_corps",
+  "levres",
+  "parfum",
+  "dents",
+  "ongles",
+  "maquillage",
+  "autre",
+] as const;
 import type { LlmPromiseProposal, OpenLlmMatch } from "./engine.ts";
 
 // -----------------------------------------------------------------------------
@@ -172,6 +185,11 @@ Si une phrase ne contient aucun de (a), (b), (c) → pas une promesse, passe.
 7. EFFETS DISTINCTS — N'INFÈRE PAS un effet à partir d'un autre :
    "douceur" ≠ "démêlage" : ce sont deux effets distincts. Si le texte dit "douceur" sans mentionner "démêlage", extrais "Douceur capillaire" (autre), PAS "Démêlage". De même : "brillance" ≠ "fortification", "légèreté" ≠ "sans silicone".
    Règle générale : n'extrais QUE ce que le texte dit EXPLICITEMENT ou implique DIRECTEMENT (ex: "fixe les boucles" → "Fixation des boucles"). Ne construis pas de promesse par déduction à plusieurs étapes.
+
+8. MODE D'EMPLOI / CONSIGNES D'USAGE ≠ PROMESSE :
+   Les instructions qui disent QUAND, COMMENT ou COMBIEN DE FOIS utiliser le produit ne sont PAS des promesses et ne se vérifient PAS dans la formule. NE LES METS NI dans \`promises\` NI dans \`out_of_scope\` — ignore-les (au besoin \`unverifiable\` reason "autre").
+   Exemples à IGNORER : "appliquer avant le coucher", "masser jusqu'à pénétration", "utiliser matin et soir", "laisser poser 5 minutes", "rincer abondamment", "à appliquer sur peau propre et sèche", "renouveler l'application si besoin", "éviter le contour des yeux".
+   ATTENTION à ne PAS confondre avec un EFFET, qui LUI reste une promesse : "peau plus douce après 7 jours d'utilisation" (effet douceur), "améliore la sensation cutanée pendant l'utilisation" (effet confort). La différence : un mode d'emploi COMMENCE par un verbe d'action adressé à l'utilisateur (applique, masse, rince, laisse poser…) ; un effet DÉCRIT un résultat sur la peau/les cheveux.
 
 ═══ EXEMPLE 1 (cheveux, claim pertinent) ═══
 
@@ -919,5 +937,231 @@ export async function generateConclusion(
     return text ?? fallbackConclusion(promises);
   } catch {
     return fallbackConclusion(promises);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 3) Analyse combinée — UNE seule passe : le LLM reçoit la description + l'INCI
+//    réel et décide lui-même quelles promesses sont vérifiables par des
+//    ingrédients, leur verdict, et QUELS ingrédients réels les soutiennent.
+//    Remplace détection type + extraction + exploration + moteur déterministe.
+// -----------------------------------------------------------------------------
+
+export type CoherenceLlmPromise = {
+  label: string;
+  excerpt: string;
+  verdict: CoherenceVerdict;
+  score: number;
+  foundSlugs: string[];
+  missing: string[];
+  /** Promesse d'absence ("sans X") : un verdict tenu SANS ingrédient cité est
+   *  normal (on prouve une absence). La garde anti-hallucination l'épargne. */
+  isAbsence: boolean;
+};
+
+export type CoherenceAnalysis = {
+  productType: ProductType;
+  promises: CoherenceLlmPromise[];
+  unverifiable: { excerpt: string; reason: string }[];
+};
+
+const COHERENCE_SCHEMA = {
+  name: "coherence_analysis",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      product_type: { type: "string", enum: [...PRODUCT_TYPES] },
+      promises: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            label: { type: "string" },
+            excerpt: { type: "string" },
+            verdict: {
+              type: "string",
+              enum: ["tenue", "partielle", "non_demontree", "contredite"],
+            },
+            score: { type: "number" },
+            found_slugs: { type: "array", items: { type: "string" } },
+            missing: { type: "array", items: { type: "string" } },
+            is_absence: { type: "boolean" },
+          },
+          required: ["label", "excerpt", "verdict", "score", "found_slugs", "missing", "is_absence"],
+        },
+      },
+      unverifiable: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            excerpt: { type: "string" },
+            reason: { type: "string", enum: [...UNVERIFIABLE_REASONS] },
+          },
+          required: ["excerpt", "reason"],
+        },
+      },
+    },
+    required: ["product_type", "promises", "unverifiable"],
+  },
+} as const;
+
+const COHERENCE_SYSTEM = `Tu es chimiste cosmétique. On te donne la DESCRIPTION marketing d'un produit et sa liste INCI réelle (slug, nom, fonction). Tu extrais les PROMESSES du texte VÉRIFIABLES par la composition et tu dis si la formule les soutient.
+
+RÈGLES
+1. Ne garde QUE les promesses qu'un ingrédient peut confirmer ou infirmer (un effet sur la zone d'application, ou la présence/absence d'un ingrédient). Écarte tout le reste dans "unverifiable" (reason: sensoriel/composition/certification/marketing_general) : saveur, odeur, fraîcheur, sensation, TEXTURE ("fondante", "légère"), VITESSE DE PÉNÉTRATION ("pénètre vite", "non gras"), FACILITÉ D'USAGE ("facile à appliquer", "sans rinçage"), PUBLIC/PÉRIMÈTRE sans actif précis ("adapté aux bébés/nourrissons", "soin corps & mains", "convient à tous types de peau"), TOLÉRANCE ("non comédogène", "hypoallergénique", "testé dermatologiquement"), "expérience", marketing vague ("efficace", "innovant", "longue durée" seul), certifications, % naturel.
+2. Déduis la CATÉGORIE du produit (product_type) et raisonne pour CETTE catégorie. N'attends que des ingrédients qui ont un sens pour ce type. Ex : un dentifrice → fluor/anti-caries, désensibilisants (nitrate de potassium, arginine, fluorure stanneux), xylitol, abrasifs ; JAMAIS des actifs de soin de la peau (aloe, calendula, panthénol) pour une allégation dentaire.
+3. Pour chaque promesse gardée, cite dans found_slugs les slugs — UNIQUEMENT des slugs présents dans la liste fournie — des ingrédients qui la soutiennent réellement. Interdit d'inventer un slug.
+   verdict :
+   - "tenue" : au moins un ingrédient pertinent (et pas seulement en toute fin de liste) soutient la promesse.
+   - "partielle" : soutien faible (un seul actif secondaire, ou en trace).
+   - "non_demontree" : RÉSERVÉ à une promesse d'EFFET qui DEVRAIT correspondre à un type d'actif connu mais qu'aucun ingrédient ne soutient → found_slugs vide, mets 1 à 3 actifs attendus dans "missing". Si la promesse ne se rattache à AUCUN type d'ingrédient (texture, pénétration, facilité d'usage, public visé) → ce n'est PAS non_demontree, mets-la en "unverifiable". Pas de "manque" farfelu pour justifier un non_demontree.
+   - "contredite" : promesse "sans X" alors que X est présent dans la liste.
+3bis. ACTIF NOMMÉ (breveté, botanique, vitamine) : AVANT de conclure à l'absence, traduis-le en INCI et cherche-le dans la liste. Ex : vigne/raisin → "Vitis Vinifera" ou "Grapevine" (PALMITOYL GRAPEVINE SHOOT EXTRACT = Viniférine) ; vitamine B3 → Niacinamide ; vitamine C → Ascorbyl/Ascorbic ; acide hyaluronique → Sodium Hyaluronate ; provitamine B5 → Panthenol ; "huile/beurre de X" → "<Genre espèce> Oil/Butter" en latin (karité → Butyrospermum Parkii). S'il est présent sous l'un de ces noms → "tenue" en citant le slug réel, PAS non_demontree.
+4. "Sans X" (promesse d'absence d'un INGRÉDIENT précis : "sans sulfate", "sans parfum", "0 % silicone") : mets is_absence=true, found_slugs=[]. Ne l'extrais QUE si "sans"/"0 %"/"sans ajout de" est LITTÉRALEMENT écrit. Une absence n'est JAMAIS "non_demontree" : "tenue" (X absent de la liste) ou "contredite" (X présent). N'invente jamais un "sans X".
+   ⚠️ NE SONT PAS des promesses d'absence ni vérifiables (is_absence=false → mets-les en "unverifiable") : "non comédogène", "non photosensibilisant", "non gras", "non irritant", "testé dermatologiquement", "recommandé pour adultes/enfants/toute la famille". Ce sont des tolérances/publics, pas des ingrédients.
+   (Toutes les autres promesses : is_absence=false.)
+5. N'invente jamais une promesse : n'extrais que ce qui est réellement écrit.
+6. score 0-100 = couverture par la formule (tenue ~70-100, partielle ~30-55, non_demontree = 0).
+7. excerpt = fragment VERBATIM du texte (max 80 caractères).
+${NO_LONG_DASHES_RULE}
+Retourne UNIQUEMENT le JSON.`;
+
+function itemsBlock(items: FormulaItemForLlm[]): string {
+  return items
+    .slice(0, 80)
+    .map((it) => `- ${it.slug} — ${it.name}${it.primaryFunction ? ` — ${it.primaryFunction}` : ""}`)
+    .join("\n");
+}
+
+function safeParseCoherence(raw: string, knownSlugs: Set<string>): CoherenceAnalysis | null {
+  try {
+    const obj = JSON.parse(raw) as Record<string, unknown>;
+    if (!obj || typeof obj !== "object") return null;
+    const pt = obj.product_type;
+    const productType: ProductType =
+      typeof pt === "string" && (PRODUCT_TYPES as readonly string[]).includes(pt)
+        ? (pt as ProductType)
+        : "autre";
+    const rawPromises = Array.isArray(obj.promises) ? obj.promises : [];
+    const rawUnver = Array.isArray(obj.unverifiable) ? obj.unverifiable : [];
+    const verdicts = ["tenue", "partielle", "non_demontree", "contredite"];
+    return {
+      productType,
+      promises: rawPromises
+        .map((p) => p as Record<string, unknown>)
+        .filter(
+          (p) =>
+            typeof p.label === "string" &&
+            typeof p.excerpt === "string" &&
+            typeof p.verdict === "string" &&
+            verdicts.includes(p.verdict as string),
+        )
+        .map((p) => {
+          const found = (Array.isArray(p.found_slugs) ? p.found_slugs : [])
+            .filter((s): s is string => typeof s === "string")
+            .filter((s) => knownSlugs.has(s));
+          const score = typeof p.score === "number" ? Math.max(0, Math.min(100, p.score)) : 0;
+          return {
+            label: String(p.label).slice(0, 120),
+            excerpt: String(p.excerpt).slice(0, 200),
+            verdict: p.verdict as CoherenceVerdict,
+            score,
+            foundSlugs: found,
+            missing: (Array.isArray(p.missing) ? p.missing : [])
+              .filter((s): s is string => typeof s === "string")
+              .map((s) => s.slice(0, 80))
+              .slice(0, 3),
+            isAbsence: p.is_absence === true,
+          };
+        }),
+      unverifiable: rawUnver
+        .map((u) => u as Record<string, unknown>)
+        .filter((u) => typeof u.excerpt === "string" && typeof u.reason === "string")
+        .map((u) => ({
+          excerpt: String(u.excerpt).slice(0, 200),
+          reason: UNVERIFIABLE_REASONS.includes(u.reason as (typeof UNVERIFIABLE_REASONS)[number])
+            ? (u.reason as string)
+            : "autre",
+        })),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function mistralAnalyze(
+  description: string,
+  items: FormulaItemForLlm[],
+  knownSlugs: Set<string>,
+): Promise<CoherenceAnalysis | null> {
+  if (!hasMistral()) return null;
+  const user = `DESCRIPTION :\n"""\n${description.trim().slice(0, 6000)}\n"""\n\nINGRÉDIENTS (slug — nom — fonction) :\n${itemsBlock(items)}\n\nRetourne le JSON.`;
+  try {
+    const raw = await mistralChat({
+      temperature: 0.1,
+      maxTokens: 2000,
+      responseFormat: { type: "json_object" },
+      messages: [
+        { role: "system", content: COHERENCE_SYSTEM },
+        {
+          role: "user",
+          content: `${user}\n\nFormat : { "product_type": "...", "promises": [{"label","excerpt","verdict","score","found_slugs":[],"missing":[],"is_absence":false}], "unverifiable": [{"excerpt","reason"}] }`,
+        },
+      ],
+    });
+    return raw ? safeParseCoherence(raw, knownSlugs) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Analyse en une passe : description + INCI → promesses vérifiées. */
+export async function analyzeCoherence(
+  description: string,
+  items: FormulaItemForLlm[],
+  userId?: string | null,
+): Promise<CoherenceAnalysis> {
+  const empty: CoherenceAnalysis = { productType: "autre", promises: [], unverifiable: [] };
+  if (!hasOpenAI() && !hasMistral()) return empty;
+  const knownSlugs = new Set(items.map((it) => it.slug));
+  const user = `DESCRIPTION :\n"""\n${description.trim().slice(0, 6000)}\n"""\n\nINGRÉDIENTS (slug — nom — fonction) :\n${itemsBlock(items)}\n\nRetourne le JSON.`;
+
+  try {
+    const result = await callWithFallback<CoherenceAnalysis | null>({
+      feature: "coherence",
+      userId: userId ?? null,
+      timeoutMs: 30_000,
+      primary: async () => {
+        if (!hasOpenAI()) throw new Error("openai disabled");
+        const resp = await openai().chat.completions.create({
+          model: AI_MODEL,
+          temperature: 0.1,
+          max_tokens: 2000,
+          messages: [
+            { role: "system", content: COHERENCE_SYSTEM },
+            { role: "user", content: user },
+          ],
+          response_format: { type: "json_schema", json_schema: COHERENCE_SCHEMA },
+        });
+        const raw = resp.choices?.[0]?.message?.content ?? null;
+        return {
+          value: raw ? safeParseCoherence(raw, knownSlugs) : null,
+          tokensIn: resp.usage?.prompt_tokens,
+          tokensOut: resp.usage?.completion_tokens,
+        };
+      },
+      fallback: async () => ({
+        value: await mistralAnalyze(description, items, knownSlugs),
+        provider: "mistral",
+      }),
+    });
+    return result ?? empty;
+  } catch {
+    return empty;
   }
 }

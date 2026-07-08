@@ -65,6 +65,7 @@ interface DetailRow {
 const PromesseDetailScreen: FC = () => {
   const { id } = useLocalSearchParams<{ id: string }>()
   const [state, setState] = useState<LoadState>({ status: 'loading' })
+  const [showMore, setShowMore] = useState(false)
 
   const load = useCallback(async () => {
     if (!id) {
@@ -178,20 +179,49 @@ const PromesseDetailScreen: FC = () => {
               state.result.promises.some((p) => p.inferred) ? (
                 <InferredPromisesCard key="inferred" promises={state.result.promises} />
               ) : null,
-              state.result.positionSnapshot.thresholdPos !== null &&
-              state.result.positionSnapshot.totalPositions > 0 ? (
-                <IngredientsPositionChart key="position" snapshot={state.result.positionSnapshot} />
-              ) : null,
-              state.result.promises.length > 0 || state.result.unverifiable.length > 0 ? (
-                <DescriptionKeywordsCard
-                  key="keywords"
-                  promises={state.result.promises}
-                  unverifiable={state.result.unverifiable}
-                />
-              ) : null,
-              <MarketingIndexCard key="marketing" metrics={state.result.metrics} />,
             ].filter(Boolean)}
           </Reveal>
+
+          {!showMore ? (
+            <Pressable
+              onPress={() => setShowMore(true)}
+              style={({ pressed }) => [styles.showMoreBtn, pressed && styles.btnPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Voir plus d'analyse"
+            >
+              <Text style={styles.showMoreText}>Voir plus d&apos;analyse</Text>
+              <Ionicons name="chevron-down" size={18} color={colors.accent} />
+            </Pressable>
+          ) : (
+            <>
+              <Reveal stagger={70} duration={400} style={styles.cards}>
+                {[
+                  state.result.positionSnapshot.thresholdPos !== null &&
+                  state.result.positionSnapshot.totalPositions > 0 ? (
+                    <IngredientsPositionChart key="position" snapshot={state.result.positionSnapshot} />
+                  ) : null,
+                  state.result.promises.length > 0 || state.result.unverifiable.length > 0 ? (
+                    <DescriptionKeywordsCard
+                      key="keywords"
+                      promises={state.result.promises}
+                      unverifiable={state.result.unverifiable}
+                    />
+                  ) : null,
+                  <MarketingIndexCard key="marketing" metrics={state.result.metrics} />,
+                ].filter(Boolean)}
+              </Reveal>
+
+              <Pressable
+                onPress={() => setShowMore(false)}
+                style={({ pressed }) => [styles.showMoreBtn, pressed && styles.btnPressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Voir moins"
+              >
+                <Text style={styles.showMoreText}>Voir moins</Text>
+                <Ionicons name="chevron-up" size={18} color={colors.accent} />
+              </Pressable>
+            </>
+          )}
         </ScrollView>
       )}
     </SafeAreaView>
@@ -246,4 +276,17 @@ const styles = StyleSheet.create({
   },
   homeText: { ...typography.button, color: colors.ink },
   btnPressed: { opacity: 0.85 },
+  showMoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.full,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+  },
+  showMoreText: { ...typography.button, color: colors.accent },
 })

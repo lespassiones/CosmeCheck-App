@@ -117,9 +117,11 @@ export function routineSuggestKey(
   return stableHash(parts)
 }
 
-/** Clé pour `compare-insights` (ordre A→B significatif). */
+/** Clé pour `compare-insights` (ordre A→B significatif). Le préfixe de version
+ *  invalide le cache local quand le prompt serveur change (ici v9 : règle de
+ *  pertinence du profil) → régénération avec le texte corrigé. */
 export function compareInsightsKey(aId: string, bId: string): string {
-  return `${aId}__${bId}`
+  return `v9__${aId}__${bId}`
 }
 
 /**
@@ -132,6 +134,7 @@ export const AI_CACHE_NAMESPACES = [
   'ingredient-exposure',
   'compare-insights',
   'routine-suggest',
+  'routine-conflicts',
 ] as const
 
 export type AiCacheNamespace = (typeof AI_CACHE_NAMESPACES)[number]
@@ -145,6 +148,7 @@ const TTL_BY_NAMESPACE: Record<AiCacheNamespace, number> = {
   'ingredient-exposure': 60 * 60 * 1000,
   'compare-insights': 30 * 24 * 60 * 60 * 1000,
   'routine-suggest': 24 * 60 * 60 * 1000,
+  'routine-conflicts': 7 * 24 * 60 * 60 * 1000,
 }
 
 /**
@@ -178,3 +182,5 @@ export const TTL_INGREDIENT_EXPOSURE_MS = 60 * 60 * 1000 // 1 heure
 export const TTL_COMPARE_INSIGHTS_MS = 30 * 24 * 60 * 60 * 1000 // 30 jours
 /** Suggestions IA de routine : laisse repartir après une journée. */
 export const TTL_ROUTINE_SUGGEST_MS = 24 * 60 * 60 * 1000 // 24 heures
+/** Analyse approfondie IA des conflits de routine : stable pour une routine donnée. */
+export const TTL_ROUTINE_CONFLICTS_MS = 7 * 24 * 60 * 60 * 1000 // 7 jours

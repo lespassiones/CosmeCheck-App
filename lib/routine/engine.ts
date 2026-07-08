@@ -128,6 +128,49 @@ function penaltyPerUse(score: number | null): number {
   return Math.max(0, 20 - score);
 }
 
+/** Un allergène parfumant UE présent dans 2+ produits, avec les ids concernés. */
+export type AllergenOverlapEntry = {
+  inciName: string;
+  label: string;
+  productIds: string[];
+};
+
+/**
+ * Détection des allergènes parfumants UE présents dans AU MOINS 2 produits.
+ * Extraite (juillet 2026) de computeRoutineMetrics pour être RÉUTILISÉE par le
+ * moteur de conflits de routine (règle allergen-duplication) : une seule source
+ * de vérité, computeRoutineMetrics en dérive `productCount = productIds.length`.
+ */
+export function computeAllergenOverlap(
+  products: { id: string; result: { items: AnalyseItem[] } }[],
+): AllergenOverlapEntry[] {
+  const allergenCount = new Map<string, { label: string; products: Set<string> }>();
+  for (const p of products) {
+    for (const it of p.result.items) {
+      const candidates = [it.name, it.input].filter((v): v is string => Boolean(v));
+      for (const c of candidates) {
+        if (isEuFragranceAllergen(c)) {
+          const upper = c.toUpperCase();
+          const meta = EU_FRAGRANCE_ALLERGENS.find((a) => a.inciName === upper)!;
+          if (!allergenCount.has(upper)) {
+            allergenCount.set(upper, { label: meta.label, products: new Set() });
+          }
+          allergenCount.get(upper)!.products.add(p.id);
+          break;
+        }
+      }
+    }
+  }
+  return Array.from(allergenCount.entries())
+    .filter(([, v]) => v.products.size >= 2)
+    .map(([inciName, v]) => ({
+      inciName,
+      label: v.label,
+      productIds: Array.from(v.products),
+    }))
+    .sort((a, b) => b.productIds.length - a.productIds.length);
+}
+
 export function computeRoutineMetrics(products: RoutineProduct[]): RoutineMetrics {
   if (products.length === 0) {
     return {
@@ -247,27 +290,15 @@ export function computeRoutineMetrics(products: RoutineProduct[]): RoutineMetric
     .map((i) => ({ ...i, weightedExposure: Number(i.weightedExposure.toFixed(2)) }));
 
   // EU fragrance allergens overlap - present in 2+ products.
-  const allergenCount = new Map<string, { label: string; products: Set<string> }>();
-  for (const p of products) {
-    for (const it of p.result.items) {
-      const candidates = [it.name, it.input].filter((v): v is string => Boolean(v));
-      for (const c of candidates) {
-        if (isEuFragranceAllergen(c)) {
-          const upper = c.toUpperCase();
-          const meta = EU_FRAGRANCE_ALLERGENS.find((a) => a.inciName === upper)!;
-          if (!allergenCount.has(upper)) {
-            allergenCount.set(upper, { label: meta.label, products: new Set() });
-          }
-          allergenCount.get(upper)!.products.add(p.id);
-          break;
-        }
-      }
-    }
-  }
-  const allergenOverlap = Array.from(allergenCount.entries())
-    .filter(([, v]) => v.products.size >= 2)
-    .map(([inciName, v]) => ({ inciName, label: v.label, productCount: v.products.size }))
-    .sort((a, b) => b.productCount - a.productCount);
+  // Dérivé de la source UNIQUE computeAllergenOverlap (réutilisée par le moteur
+  // de conflits de routine, règle allergen-duplication) : ici on mappe
+  // productCount = productIds.length. Zéro changement de sortie (même filtre
+  // 2+ produits, même tri par nombre de produits décroissant).
+  const allergenOverlap = computeAllergenOverlap(products).map((e) => ({
+    inciName: e.inciName,
+    label: e.label,
+    productCount: e.productIds.length,
+  }));
 
   // Simulation : suggest removing ONLY products that are actually
   // penalizing. A product is "removable" when at least one of these is true:

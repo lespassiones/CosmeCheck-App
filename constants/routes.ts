@@ -6,6 +6,7 @@
 export const ROUTES = {
   // ── Auth ────────────────────────────────────────────────────────
   AUTH: {
+    WELCOME: '/(auth)/welcome',
     SIGN_IN: '/(auth)/sign-in',
     SIGN_UP: '/(auth)/sign-up',
     FORGOT_PASSWORD: '/(auth)/forgot-password',
@@ -36,6 +37,21 @@ export const ROUTES = {
     PROMESSES: '/(tabs)/promesses',
   },
 
+  // ── Routine (pages détail hors tab) ──────────────────────────────
+  ROUTINE: {
+    EXPOSITION: '/routine/exposition',
+    PRODUITS: '/routine/produits',
+    QUOTIDIEN: '/routine/quotidien',
+    ITEM: (id: string) => `/routine/item/${id}` as const,
+  },
+
+  // ── Ma peau (score de peau, bilan hebdo, scan visage) ─────────────
+  PEAU: {
+    INDEX: '/peau',
+    BILAN: '/peau/bilan',
+    SCAN: '/peau/scan',
+  },
+
   // ── Analyse ─────────────────────────────────────────────────────
   ANALYSE: {
     DETAIL: (id: string) => `/analyse/${id}` as const,
@@ -48,6 +64,7 @@ export const ROUTES = {
 
   // ── Promesses ───────────────────────────────────────────────────
   PROMESSES: {
+    CHOISIR: '/promesses/choisir',
     NOUVELLE: '/promesses/nouvelle',
     DETAIL: (id: string) => `/promesses/${id}` as const,
   },

@@ -8,7 +8,7 @@
  */
 
 export type AuthRouteTarget =
-  | 'signin'
+  | 'welcome'
   | 'preonboarding'
   | 'onboarding'
   | 'paywall'
@@ -58,7 +58,7 @@ export function resolveAuthRoute(input: AuthRouteInput): AuthRouteTarget {
     // On laisse l'auth et le pré-onboarding s'afficher librement (anti-boucle).
     if (inAuthGroup || inPreOnboarding) return null
     if (preOnbDone === null) return null // flag encore en lecture
-    return preOnbDone ? 'signin' : 'preonboarding'
+    return preOnbDone ? 'welcome' : 'preonboarding'
   }
 
   // 3. Authentifié : le profil décide l'onboarding → on attend son chargement.

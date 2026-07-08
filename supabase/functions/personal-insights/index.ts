@@ -45,6 +45,7 @@ type StoredResultJson = {
   items?: StoredItem[];
   counts?: { vert?: number; jaune?: number; orange?: number; rouge?: number };
   scoreLabel?: string;
+  scoreTone?: string | null;
   category?: string | null;
   catalogCategory?: string | null;
   productType?: string | null;
@@ -158,6 +159,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     },
     score: Number(row.score ?? 0),
     scoreLabel: resultJson.scoreLabel ?? "",
+    scoreTone: resultJson.scoreTone ?? null,
     productLabel: row.product_label ?? null,
     category: resultJson.productType ?? resultJson.catalogCategory ?? resultJson.category ?? null,
     userId: user.id,

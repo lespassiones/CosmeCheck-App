@@ -104,6 +104,7 @@ describe('clearExpiredAiCache', () => {
       'ingredient-exposure',
       'compare-insights',
       'routine-suggest',
+      'routine-conflicts',
     ])
   })
 

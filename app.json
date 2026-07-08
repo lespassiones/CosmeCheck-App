@@ -28,6 +28,7 @@
     },
     "android": {
       "package": "com.cosmecheck.app",
+      "googleServicesFile": "./google-services.json",
       "versionCode": 2,
       "minSdkVersion": 26,
       "targetSdkVersion": 35,
@@ -38,7 +39,8 @@
       },
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.VIBRATE"
+        "android.permission.VIBRATE",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -70,6 +72,13 @@
           "url": "https://de.sentry.io/",
           "organization": "REMPLACER_PAR_TON_ORG_SLUG",
           "project": "REMPLACER_PAR_TON_PROJECT_SLUG"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#E11D48"
         }
       ]
     ],

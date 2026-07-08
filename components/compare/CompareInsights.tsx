@@ -33,7 +33,13 @@ type Insights = {
   portraitB: string
   common: string
   howToChoose: string
+  /** Produit conseillé (badge vert). Absent des caches < v8 → fallback score. */
+  winner?: 'A' | 'B'
 }
+
+/** Statut remonté au parent : pilote le badge (winner) + l'affichage du bouton
+ *  « Voir l'analyse complète » et des blocs déterministes. */
+export type CompareInsightsStatus = 'loading' | 'ready' | 'error'
 
 const TONE_A = { bg: 'rgba(219,234,254,0.8)', text: '#1E40AF' } // bleu
 const TONE_B = { bg: 'rgba(250,232,255,0.8)', text: '#86198F' } // fuchsia
@@ -45,12 +51,35 @@ interface Props {
   nameB: string
   shortNameA: string
   shortNameB: string
+  /** Quand false, seul « Comment choisir ? » est affiché (portraits + commun
+   *  masqués, révélés par le bouton « Voir l'analyse complète » du parent). */
+  showFull?: boolean
+  /** Remonte statut + produit conseillé au parent (badge + bouton). */
+  onResult?: (r: { status: CompareInsightsStatus; winner?: 'A' | 'B' }) => void
 }
 
-export const CompareInsights: FC<Props> = ({ aId, bId, nameA, nameB, shortNameA, shortNameB }) => {
+export const CompareInsights: FC<Props> = ({
+  aId,
+  bId,
+  nameA,
+  nameB,
+  shortNameA,
+  shortNameB,
+  showFull = false,
+  onResult,
+}) => {
   const [data, setData] = useState<Insights | null>(null)
   const [error, setError] = useState(false)
   const mounted = useRef(true)
+
+  // Remonte le statut au parent (badge winner + visibilité bouton/blocs).
+  useEffect(() => {
+    const status: CompareInsightsStatus = error ? 'error' : data ? 'ready' : 'loading'
+    onResult?.({ status, winner: data?.winner })
+    // onResult est stable (setState du parent) ; on ne le met pas en dépendance
+    // pour éviter une boucle si l'appelant recrée la fonction à chaque render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, error])
 
   useEffect(() => {
     mounted.current = true
@@ -138,26 +167,30 @@ export const CompareInsights: FC<Props> = ({ aId, bId, nameA, nameB, shortNameA,
 
   return (
     <View>
-      {/* Portraits — une carte par produit, pas de badge gagnant. */}
-      <Text style={styles.sectionTitle}>Portrait des deux produits</Text>
-      <View style={styles.portraitGrid}>
-        <Portrait shortName={shortNameA} text={cleaned.portraitA} tone="A" otherShortName={shortNameB} />
-        <Portrait shortName={shortNameB} text={cleaned.portraitB} tone="B" otherShortName={shortNameA} />
-      </View>
-
-      {/* Ce qu'ils ont en commun */}
-      <GlassCard style={styles.block} padding={spacing.lg}>
-        <Text style={styles.blockLabel}>CE QU'ILS ONT EN COMMUN</Text>
-        <Text style={styles.body}>{renderWithHighlights(cleaned.common, shortNameA, shortNameB)}</Text>
-      </GlassCard>
-
-      {/* Comment choisir */}
+      {/* Comment choisir — le verdict d'abord, toujours visible. */}
       <GlassCard style={styles.block} padding={spacing.lg} opacity={0.8}>
         <Text style={[styles.blockLabel, { color: '#0369A1' }]}>COMMENT CHOISIR ?</Text>
         <Text style={styles.body}>
           {renderWithHighlights(cleaned.howToChoose, shortNameA, shortNameB)}
         </Text>
       </GlassCard>
+
+      {/* Détail (portraits + points communs) — révélé via « Voir l'analyse
+          complète » du parent. */}
+      {showFull && (
+        <>
+          <Text style={styles.sectionTitle}>Portrait des deux produits</Text>
+          <View style={styles.portraitGrid}>
+            <Portrait shortName={shortNameA} text={cleaned.portraitA} tone="A" otherShortName={shortNameB} />
+            <Portrait shortName={shortNameB} text={cleaned.portraitB} tone="B" otherShortName={shortNameA} />
+          </View>
+
+          <GlassCard style={styles.block} padding={spacing.lg}>
+            <Text style={styles.blockLabel}>CE QU'ILS ONT EN COMMUN</Text>
+            <Text style={styles.body}>{renderWithHighlights(cleaned.common, shortNameA, shortNameB)}</Text>
+          </GlassCard>
+        </>
+      )}
     </View>
   )
 }

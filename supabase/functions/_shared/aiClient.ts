@@ -46,7 +46,10 @@ export type AIFeature =
   | "product_search"
   | "explain"
   | "parse_inci"
-  | "compare";
+  | "compare"
+  | "routine_conflicts"
+  | "routine_organize"
+  | "face_scan";
 
 export type AIProvider = "openai" | "mistral" | "tesseract" | "cache";
 

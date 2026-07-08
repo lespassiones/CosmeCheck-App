@@ -45,11 +45,17 @@ export type CompareInsights = {
   portraitB: string;
   common: string;
   howToChoose: string;
+  /** Produit le plus adapté d'après « comment choisir » (badge vert). Optionnel :
+   *  les entrées cache antérieures à v8 n'en ont pas → le client retombe sur le
+   *  score. */
+  winner?: "A" | "B";
 };
 
-// v7 : détection DÉTERMINISTE des restrictions injectée (fini l'IA qui affirmait
-// à tort « aucun ingrédient interdit »). v6 : portraits en langage courant.
-const PROMPT_VERSION = 7;
+// v9 : RÈGLE DE PERTINENCE du profil — l'IA n'applique le type de peau / les
+// préoccupations cutanées QUE si le produit s'applique sur la peau du visage/
+// corps (fini « peau grasse » pour un dentifrice). v8 : ajout du champ `winner`
+// (produit conseillé → badge vert). v7 : détection DÉTERMINISTE des restrictions.
+const PROMPT_VERSION = 9;
 
 type ProfileOpts = {
   profileBlock?: string | null;
@@ -213,6 +219,14 @@ function buildPrompt(
     "(ex : 'peut irriter', 'peut boucher les pores', 'peut provoquer des rougeurs'). " +
     "Tu n'écris JAMAIS \"X est mieux que Y\" ou \"X est meilleur\". " +
     "Tu utilises TOUJOURS les vrais noms des produits, JAMAIS \"produit A\" / \"produit B\". " +
+    "RÈGLE DE PERTINENCE (capitale) : déduis d'abord le TYPE de produit d'après son nom et ses ingrédients. " +
+    "N'utilise le type de peau et les préoccupations cutanées (peau grasse, sèche, sensible, acné, points noirs…) " +
+    "QUE pour un produit qui s'applique sur la peau du visage ou du corps (soin, crème, nettoyant visage, sérum, maquillage…). " +
+    "Pour un produit qui ne s'applique PAS sur la peau du visage/corps (dentifrice, bain de bouche, produit capillaire, déodorant, etc.), " +
+    "IGNORE totalement le type de peau et l'acné : raisonne UNIQUEMENT sur les critères propres à ce produit " +
+    "(ex : dentifrice → fluor, sensibilité dentaire, blancheur, caractère abrasif ; shampoing → type de cheveux, cuir chevelu). " +
+    "Une allergie/restriction de l'utilisateur ne compte QUE si un ingrédient réellement concerné est présent dans le produit. " +
+    "Ne force jamais un critère de profil qui n'a aucun rapport avec le produit comparé. " +
     NO_LONG_DASHES_RULE + " " +
     "Pas de marketing, pas d'emoji, pas de conseil médical. " +
     "Tu retournes UNIQUEMENT un objet JSON valide, sans markdown, sans texte autour.";
@@ -224,8 +238,8 @@ function buildPrompt(
     `Décris ce que fait concrètement ce produit (son rôle : protège, nettoie, hydrate…) ` +
     `puis cite son principal point d'attention en langage courant avec 'peut + conséquence'. ` +
     (profileSection
-      ? `Si le produit contient un ingrédient problématique pour le profil fourni, dis-le explicitement.`
-      : `Reste général : 'peut réagir sur les peaux sensibles', etc.`);
+      ? `Si le produit contient un ingrédient réellement problématique pour le profil fourni ET pertinent pour ce type de produit, dis-le explicitement ; sinon n'évoque pas le profil.`
+      : `Reste général ; ne mentionne le type de peau que si le produit s'applique sur la peau.`);
 
   const commonInstruction =
     `1 à 2 phrases. Mentionne UN point positif ET UN point négatif que les deux produits partagent. ` +
@@ -233,9 +247,13 @@ function buildPrompt(
     `pas de noms INCI. Tu peux écrire "les deux" ou citer les noms.`;
 
   const howToChooseInstruction = profileSection
-    ? `1 à 2 phrases personnalisées${firstName ? ` pour ${firstName}` : ""} qui expliquent quel produit correspond mieux à son profil et pourquoi, en citant un élément concret du profil (type de peau, préoccupation). ` +
+    ? `1 à 2 phrases${firstName ? ` pour ${firstName}` : ""} qui expliquent quel produit lui correspond le mieux et pourquoi. ` +
+      `APPLIQUE LA RÈGLE DE PERTINENCE : n'invoque le type de peau / les préoccupations cutanées (peau grasse, acné…) QUE si le produit s'applique sur la peau du visage/corps ; ` +
+      `sinon (dentifrice, bain de bouche, capillaire…) choisis sur des critères propres à ce produit et n'évoque NI le type de peau NI l'acné. ` +
+      `Ne cite une allergie/restriction que si un ingrédient concerné est réellement présent. ` +
       `Utilise 'peut + conséquence'. JAMAIS 'meilleur', 'recommandé', 'à éviter'. Toujours les vrais noms.`
-    : `1 à 2 phrases qui expliquent à qui s'adresse chacun des deux produits (type d'usage, type de peau). ` +
+    : `1 à 2 phrases qui expliquent à qui s'adresse chacun des deux produits (type d'usage). ` +
+      `N'évoque le type de peau que si le produit s'applique sur la peau. ` +
       `Ex : 'Si tu transpires beaucoup, ${a.name} bloque plus efficacement.' JAMAIS 'meilleur'. Toujours les vrais noms.`;
 
   const user = `Voici les données de deux produits à comparer. Rédige 4 champs courts.
@@ -248,21 +266,22 @@ NOMS À UTILISER DANS LE TEXTE (verbatim) :
 - Produit 1 : "${a.name}"
 - Produit 2 : "${b.name}"
 ${firstName ? `\nPRÉNOM DE L'UTILISATEUR : ${firstName}\n` : ""}${profileSection ? `\n${profileSection}\n` : ""}${restrictionTruth ? `\n${restrictionTruth}\n` : ""}
-JSON avec exactement ces 4 clés :
+JSON avec exactement ces 5 clés :
 
 {
   "portraitA": "${portraitInstruction(a.name)}",
   "portraitB": "${portraitInstruction(b.name)}",
   "common": "${commonInstruction}",
-  "howToChoose": "${howToChooseInstruction}"
+  "howToChoose": "${howToChooseInstruction}",
+  "winner": "UNIQUEMENT la lettre A ou B (rien d'autre) : le produit qui correspond globalement le mieux à cet utilisateur d'après ton 'howToChoose'. Tu DOIS choisir A ou B, jamais vide, jamais 'égalité'. A = ${a.name}. B = ${b.name}. Ce champ est une donnée machine, pas une phrase, et n'apparaîtra jamais tel quel à l'utilisateur."
 }
 
 CONTRAINTES ABSOLUES
 - JSON valide uniquement, rien d'autre.
-- 1 à 2 phrases max par champ, jamais de liste à puces.
+- 1 à 2 phrases max par champ texte, jamais de liste à puces.
 - Zéro nom INCI en majuscules dans portraitA et portraitB.
-- Zéro 'à tester', 'à utiliser avec précaution', 'recommandé', 'déconseillé'.
-- Zéro 'produit A' / 'produit B' / 'A' / 'B' comme étiquette.
+- Zéro 'à tester', 'à utiliser avec précaution', 'recommandé', 'déconseillé' dans les champs texte.
+- Zéro 'produit A' / 'produit B' / 'A' / 'B' comme étiquette dans les champs texte (le champ 'winner' est la SEULE exception, il vaut exactement "A" ou "B").
 - Ne cite pas les notes /20, ne mentionne pas 'score' ou 'note'.
 - Restrictions : n'affirme JAMAIS « aucun ingrédient interdit dans votre liste » (ni équivalent) si la liste 'RESTRICTIONS RÉELLEMENT PRÉSENTES' montre des restrictions pour un produit ; reflète fidèlement cette liste.`;
 
@@ -288,6 +307,7 @@ function tryParse(raw: string): CompareInsights | null {
         portraitB: stripLongDashes(obj.portraitB),
         common: stripLongDashes(obj.common),
         howToChoose: stripLongDashes(obj.howToChoose),
+        winner: obj.winner === "A" || obj.winner === "B" ? obj.winner : undefined,
       };
     }
   } catch {

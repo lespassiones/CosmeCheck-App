@@ -67,8 +67,13 @@ function normalizeMode(raw: string | undefined | null): Mode {
 
 const ScanScreen: FC = () => {
   const router = useRouter()
-  const params = useLocalSearchParams<{ mode?: string }>()
+  const params = useLocalSearchParams<{ mode?: string; returnTo?: string }>()
   const mode = useMemo(() => normalizeMode(params.mode), [params.mode])
+  // Page d'origine à laquelle "Fermer" doit ramener (ex. /promesses/choisir).
+  // Sans ça, fermer une recherche ouverte depuis une autre page retombe sur
+  // l'accueil car naviguer vers un onglet dédoublonne le navigateur d'onglets
+  // et retire l'écran d'origine de la pile.
+  const returnTo = typeof params.returnTo === 'string' && params.returnTo ? params.returnTo : null
 
   const { user } = useAuth()
   const { restrictions } = useProfile()
@@ -172,11 +177,18 @@ const ScanScreen: FC = () => {
   }, [runAnalysis, router])
 
   const close = useCallback(() => {
-    // Si l'utilisateur peut revenir en arrière dans le stack, on revient ;
+    // Si un écran d'origine explicite est fourni (ex. ouvert depuis
+    // /promesses/choisir), on y retourne — `navigate` dépile jusqu'à lui s'il
+    // existe encore, sinon le ré-empile proprement.
+    if (returnTo) {
+      router.navigate(returnTo as Parameters<typeof router.navigate>[0])
+      return
+    }
+    // Sinon : si on peut revenir en arrière dans le stack, on revient ;
     // sinon on retombe sur l'accueil (FAB scan ouvre une nouvelle page).
     if (router.canGoBack()) router.back()
     else router.replace(ROUTES.TABS.HOME)
-  }, [router])
+  }, [router, returnTo])
 
   // Crédits épuisés → modale globale gère l'upsell, on masque la bannière.
   const isCreditError = error?.toLowerCase().includes('crédit') ?? false

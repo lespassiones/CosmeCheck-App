@@ -52,6 +52,9 @@ export function shouldPersistQueryKey(queryKey: unknown): boolean {
     'routine-suggest',
     'catalog-search',
     'appConfig',
+    // URLs signées de photos de visage : expirent (1h) ; ne jamais persister
+    // sur disque, sinon vignettes cassées au cold start.
+    'skinPhotoUrl',
   ])
   return !BLACKLIST.has(k)
 }

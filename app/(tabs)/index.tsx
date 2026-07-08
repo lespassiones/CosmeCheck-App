@@ -43,6 +43,9 @@ import { Reveal } from '@/components/design/Reveal'
 import { ScreenHeader } from '@/components/shared/ScreenHeader'
 import { TipCarousel } from '@/components/home/TipCarousel'
 import { DailyPicksCard } from '@/components/home/DailyPicksCard'
+import { WeeklyPicksCard } from '@/components/home/WeeklyPicksCard'
+import { SkinScoreCard } from '@/components/peau/SkinScoreCard'
+import { useAppConfig } from '@/hooks/useAppConfig'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
 
@@ -136,6 +139,7 @@ const DashboardScreen: FC = () => {
   const queryClient = useQueryClient()
   const { user } = useAuth()
   const { firstName } = useProfile()
+  const { config } = useAppConfig()
   const userId = user?.id ?? null
 
   const [refreshing, setRefreshing] = useState(false)
@@ -275,7 +279,7 @@ const DashboardScreen: FC = () => {
             <DashboardTile
               theme="green"
               title={'Promesses\nvs Formule'}
-              onPress={() => router.push(ROUTES.PROMESSES.NOUVELLE)}
+              onPress={() => router.push(ROUTES.PROMESSES.CHOISIR)}
             >
               <Image
                 source={PROMESSE_ILLUSTRATION}
@@ -284,6 +288,20 @@ const DashboardScreen: FC = () => {
               />
             </DashboardTile>
           </View>
+
+          {/* Score de peau (sous les 4 blocs) */}
+          {config.flag_skin_score && (
+            <View style={styles.skinScoreWrap}>
+              <SkinScoreCard />
+            </View>
+          )}
+
+          {/* Pépites de la semaine (produits sélectionnés pour le profil) */}
+          {config.flag_weekly_picks && (
+            <View style={styles.weeklyPicksWrap}>
+              <WeeklyPicksCard />
+            </View>
+          )}
 
           {/* Quizz & idées reçues du jour */}
           <View style={styles.dailyPicksWrap}>
@@ -313,6 +331,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   dailyPicksWrap: {
+    marginTop: spacing.base,
+  },
+  skinScoreWrap: {
+    marginTop: spacing.base,
+  },
+  weeklyPicksWrap: {
     marginTop: spacing.base,
   },
   subtitleStrong: {

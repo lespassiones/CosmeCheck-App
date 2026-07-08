@@ -33,28 +33,26 @@ import { spacing, radius } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 import { db } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
-import {
-  parseAnalyseResponse,
-  toneToColorRating,
-  getColorRatingFromScore,
-  type ColorRating,
-} from '@/lib/analysis/types'
-import { ColorBadge } from '@/components/design/ColorBadge'
+import { parseAnalyseResponse } from '@/lib/analysis/types'
+import { RoutineMiniDonut } from '@/components/routine/RoutineMiniDonut'
+import type { BlobCounts } from '@/components/design/IngredientBlob'
 import { SearchBar } from '@/components/shared/SearchBar'
+import type { RoutineItemKind } from '@/lib/supabase/types'
 
 interface AnalysisRow {
   id: string
   name: string | null
   product_label: string | null
+  category: string | null
   score: number | null
   result_json: unknown
   created_at: string
 }
 
-function ratingFor(row: AnalysisRow): ColorRating {
-  // Couleur dérivée UNIQUEMENT du score (source unique) → même pastille partout.
-  const parsed = parseAnalyseResponse(row.result_json)
-  return getColorRatingFromScore(parsed?.score ?? row.score ?? 0)
+function countsFor(row: AnalysisRow): BlobCounts | null {
+  // Proportions d'ingrédients par couleur (donut) — jamais de note chiffrée.
+  const c = parseAnalyseResponse(row.result_json)?.counts
+  return c ? { vert: c.vert, jaune: c.jaune, orange: c.orange, rouge: c.rouge } : null
 }
 
 function titleFor(row: AnalysisRow): string {
@@ -65,10 +63,12 @@ interface Props {
   visible: boolean
   onClose: () => void
   onOpenScanner: () => void
-  /** Appelée avec l'id d'analyse choisi dans l'historique. */
-  onSelectFromHistory: (analysisId: string) => void
+  /** Appelée avec l'id d'analyse choisi + le bucket retenu (soin/quotidien). */
+  onSelectFromHistory: (analysisId: string, kind: RoutineItemKind) => void
   /** True si l'analyse est déjà dans la routine (pour exclure les doublons). */
   isInRoutine: (analysisId: string) => boolean
+  /** Bucket par défaut selon la page qui ouvre la modale. */
+  presetKind?: RoutineItemKind
 }
 
 export const AddProductModal = memo(function AddProductModal({
@@ -77,6 +77,7 @@ export const AddProductModal = memo(function AddProductModal({
   onOpenScanner,
   onSelectFromHistory,
   isInRoutine,
+  presetKind = 'routine',
 }: Props) {
   const insets = useSafeAreaInsets()
   const { user } = useAuth()
@@ -84,6 +85,7 @@ export const AddProductModal = memo(function AddProductModal({
   const [mode, setMode] = useState<'choice' | 'history'>('choice')
   const [search, setSearch] = useState('')
   const [addingId, setAddingId] = useState<string | null>(null)
+  const [bucket, setBucket] = useState<RoutineItemKind>(presetKind)
 
   const { data: rows = [], isLoading } = useQuery<AnalysisRow[]>({
     queryKey: ['routine-eligible-analyses', userId],
@@ -93,7 +95,7 @@ export const AddProductModal = memo(function AddProductModal({
       if (!userId) return []
       const { data, error } = await db()
         .from('analyses')
-        .select('id,name,product_label,score,result_json,created_at')
+        .select('id,name,product_label,category,score,result_json,created_at')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(50)
@@ -113,12 +115,13 @@ export const AddProductModal = memo(function AddProductModal({
     setMode('choice')
     setSearch('')
     setAddingId(null)
+    setBucket(presetKind)
     onClose()
   }
 
   const handleSelect = (id: string) => {
     setAddingId(id)
-    onSelectFromHistory(id)
+    onSelectFromHistory(id, bucket)
     // La mère ferme la modale après la mutation ; on remet l'état au cas où.
     setTimeout(() => setAddingId(null), 1200)
   }
@@ -134,7 +137,7 @@ export const AddProductModal = memo(function AddProductModal({
           {titleFor(item)}
         </Text>
       </View>
-      <ColorBadge rating={ratingFor(item)} variant="full" score={item.score ?? undefined} size="sm" />
+      <RoutineMiniDonut counts={countsFor(item)} size={30} />
       {addingId === item.id ? (
         <ActivityIndicator size="small" color={colors.rose} />
       ) : (
@@ -205,6 +208,45 @@ export const AddProductModal = memo(function AddProductModal({
             </View>
           ) : (
             <View style={styles.historyWrap}>
+              <View style={styles.bucketWrap}>
+                <Text style={styles.bucketLabel}>Ajouter dans</Text>
+                <View style={styles.bucketToggle}>
+                  <Pressable
+                    style={[styles.bucketOption, bucket === 'routine' && styles.bucketOptionActive]}
+                    onPress={() => setBucket('routine')}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: bucket === 'routine' }}
+                  >
+                    <Ionicons
+                      name="sparkles-outline"
+                      size={14}
+                      color={bucket === 'routine' ? '#FFFFFF' : colors.inkMuted}
+                    />
+                    <Text
+                      style={[styles.bucketText, bucket === 'routine' && styles.bucketTextActive]}
+                    >
+                      Ma routine soin
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.bucketOption, bucket === 'staple' && styles.bucketOptionActive]}
+                    onPress={() => setBucket('staple')}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: bucket === 'staple' }}
+                  >
+                    <Ionicons
+                      name="cart-outline"
+                      size={14}
+                      color={bucket === 'staple' ? '#FFFFFF' : colors.inkMuted}
+                    />
+                    <Text
+                      style={[styles.bucketText, bucket === 'staple' && styles.bucketTextActive]}
+                    >
+                      Produits du quotidien
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
               <View style={styles.searchWrap}>
                 <SearchBar
                   value={search}
@@ -301,6 +343,33 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   historyWrap: { paddingTop: spacing.md, minHeight: 280 },
+  bucketWrap: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: 6 },
+  bucketLabel: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 11,
+    color: colors.inkLight,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  bucketToggle: {
+    flexDirection: 'row',
+    backgroundColor: colors.gray50,
+    borderRadius: radius.full,
+    padding: 3,
+    gap: 3,
+  },
+  bucketOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 8,
+    borderRadius: radius.full,
+  },
+  bucketOptionActive: { backgroundColor: colors.rose },
+  bucketText: { fontFamily: fontFamilies.semiBold, fontSize: 12, color: colors.inkMuted },
+  bucketTextActive: { color: '#FFFFFF' },
   searchWrap: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   histList: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
   histItem: {

@@ -17,17 +17,13 @@ import {
   Text,
   View,
 } from 'react-native'
-import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
-import { CatalogPastille } from '@/components/shared/CatalogPastille'
+import { ProductMiniCard } from '@/components/shared/ProductMiniCard'
 import type { AlternativeProduct } from '@/lib/analysis/alternativesFilter'
-import { applyColorCap, scoreLabelFromScore } from '@/lib/analysis/scoreCap'
-
-const CARD_W = 150
 
 interface Props {
   products: AlternativeProduct[]
@@ -41,59 +37,6 @@ interface Props {
   title?: string
   /** Texte affiché quand la liste est vide (état isEmpty). */
   emptyText?: string
-}
-
-const AltCard: FC<{
-  product: AlternativeProduct
-  disabled: boolean
-  onPress: () => void
-}> = ({ product, disabled, onPress }) => {
-  // Plancher couleur : la note affichée = celle qu'on verra au clic (cohérence).
-  const displayScore =
-    product.score != null
-      ? applyColorCap(product.score, product.countOrange, product.countRouge)
-      : null
-  const displayLabel =
-    displayScore != null ? scoreLabelFromScore(displayScore) : product.scoreLabel
-  return (
-  <Pressable
-    onPress={onPress}
-    disabled={disabled}
-    style={({ pressed }) => [styles.card, pressed && !disabled && styles.cardPressed]}
-    accessibilityRole="button"
-    accessibilityLabel={`${product.name ?? 'Produit'}${product.brand ? `, ${product.brand}` : ''}`}
-  >
-    <View style={styles.imageWrap}>
-      {product.imageUrl ? (
-        <Image
-          source={{ uri: product.imageUrl }}
-          style={styles.image}
-          contentFit="contain"
-          cachePolicy="memory-disk"
-          transition={120}
-        />
-      ) : (
-        <Ionicons name="image-outline" size={28} color={colors.inkLight} />
-      )}
-    </View>
-    <Text style={styles.name} numberOfLines={2}>
-      {product.name ?? 'Produit'}
-    </Text>
-    {product.brand ? (
-      <Text style={styles.brand} numberOfLines={1}>
-        {product.brand}
-      </Text>
-    ) : null}
-    <View style={styles.scoreRow}>
-      <CatalogPastille score={displayScore} size={18} />
-      {displayLabel ? (
-        <Text style={styles.scoreLabel} numberOfLines={1}>
-          {displayLabel}
-        </Text>
-      ) : null}
-    </View>
-  </Pressable>
-  )
 }
 
 export const AlternativesCarousel: FC<Props> = ({
@@ -130,7 +73,7 @@ export const AlternativesCarousel: FC<Props> = ({
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
-            <AltCard product={item} disabled={analyzing} onPress={() => onSelect(item)} />
+            <ProductMiniCard product={item} disabled={analyzing} onPress={() => onSelect(item)} />
           )}
           ListFooterComponent={
             showSeeAll && products.length > 0 ? (
@@ -187,28 +130,5 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   listContent: { gap: spacing.md, paddingHorizontal: spacing.xs, paddingVertical: spacing.xs },
-  card: {
-    width: CARD_W,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.sm,
-    gap: 4,
-  },
   cardPressed: { opacity: 0.7 },
-  imageWrap: {
-    height: 110,
-    borderRadius: radius.md,
-    backgroundColor: colors.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    marginBottom: 4,
-  },
-  image: { width: '100%', height: '100%' },
-  name: { ...typography.smallSemiBold, color: colors.ink },
-  brand: { ...typography.xs, color: colors.inkMuted },
-  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
-  scoreLabel: { ...typography.xs, color: colors.inkMuted, flexShrink: 1 },
 })

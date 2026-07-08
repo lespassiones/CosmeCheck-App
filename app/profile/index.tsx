@@ -29,6 +29,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { supabase } from '@/lib/supabase/client'
 import { SkinProfileCard } from '@/components/profile/SkinProfileCard'
 import { BeautyProfileForm } from '@/components/profile/BeautyProfileForm'
+import { NotificationSettings } from '@/components/profile/NotificationSettings'
 
 type IoniconName = keyof typeof Ionicons.glyphMap
 
@@ -211,6 +212,8 @@ const ProfileScreen: FC = () => {
               </View>
 
               <SkinProfileCard skin={skin} onEditPress={() => setEditing(true)} />
+
+              <NotificationSettings />
 
               <NeuCard padding={0} interactive={false} style={styles.linksCard}>
                 {links.map((link, i) => (

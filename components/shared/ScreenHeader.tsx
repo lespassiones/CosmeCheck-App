@@ -13,11 +13,12 @@
  */
 
 import type { FC, ReactNode } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { colors } from '@/constants/colors'
-import { spacing } from '@/constants/spacing'
+import { spacing, radius } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
 import { CreditsPill } from '@/components/shared/CreditsPill'
 
@@ -25,9 +26,12 @@ interface Props {
   title: string
   /** Ornement à droite du titre (ex. emoji, icône feuille). */
   titleAdornment?: ReactNode
+  /** Si fourni, affiche un chevron retour à gauche du titre (ex. onglet ouvert
+   *  depuis une autre page qui doit pouvoir y revenir). */
+  onBack?: () => void
 }
 
-export const ScreenHeader: FC<Props> = ({ title, titleAdornment }) => {
+export const ScreenHeader: FC<Props> = ({ title, titleAdornment, onBack }) => {
   const insets = useSafeAreaInsets()
   return (
     <View
@@ -38,6 +42,17 @@ export const ScreenHeader: FC<Props> = ({ title, titleAdornment }) => {
     >
       <View style={styles.row}>
         <View style={styles.titleRow}>
+          {onBack ? (
+            <Pressable
+              onPress={onBack}
+              hitSlop={12}
+              style={styles.backBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Retour"
+            >
+              <Ionicons name="chevron-back" size={22} color={colors.ink} />
+            </Pressable>
+          ) : null}
           <Text style={styles.title} numberOfLines={1}>
             {title}
           </Text>
@@ -73,6 +88,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     minWidth: 0,
+  },
+  backBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: -6,
   },
   title: {
     ...typography.h3,

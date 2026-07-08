@@ -53,7 +53,7 @@ export const PreOnboardingCarousel: FC = () => {
   const finish = useCallback(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
     void markPreOnboardingDone()
-    router.replace(ROUTES.AUTH.SIGN_UP)
+    router.replace(ROUTES.AUTH.WELCOME)
   }, [router])
 
   const goNext = useCallback(() => {

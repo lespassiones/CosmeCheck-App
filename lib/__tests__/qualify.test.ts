@@ -37,7 +37,7 @@ describe('qualifiesForSuggestion — règle de sélection', () => {
   })
 
   // ── 3. Vert/jaune uniquement : jaune > vert ? ─────────────────────────────
-  it('jaune > vert → true', () => {
+  it('jaune domine (5 vs 2) → true', () => {
     expect(qualifiesForSuggestion(C(2, 5, 0, 0))).toBe(true)
   })
   it('jaune seul (vert 0) → true', () => {
@@ -55,8 +55,14 @@ describe('qualifiesForSuggestion — règle de sélection', () => {
   it('tout à zéro → false', () => {
     expect(qualifiesForSuggestion(C(0, 0, 0, 0))).toBe(false)
   })
-  it('jaune = vert + 1 → true', () => {
+  it('jaune juste au-dessus du vert (6 vs 5) → true (jaune > vert)', () => {
     expect(qualifiesForSuggestion(C(5, 6, 0, 0))).toBe(true)
+  })
+  it('jaune > vert (4 vs 6) → true', () => {
+    expect(qualifiesForSuggestion(C(4, 6, 0, 0))).toBe(true)
+  })
+  it('jaune > vert (4 vs 7) → true', () => {
+    expect(qualifiesForSuggestion(C(4, 7, 0, 0))).toBe(true)
   })
 
   // ── Robustesse (champs manquants / restrictedCount défaut) ────────────────

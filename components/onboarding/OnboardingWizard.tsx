@@ -13,7 +13,9 @@
  * parti ! »), « Passer » discret (le questionnaire reste entièrement optionnel).
  *
  * Persistance INCHANGÉE : auto-save débouncé ~600ms via saveSkin, flush au
- * finish, completeOnboarding optimiste+synchrone puis router.replace(HOME).
+ * finish, completeOnboarding optimiste+synchrone. La navigation post-onboarding
+ * est déléguée à l'AuthGuard racine (paywall/home) — pas de router.replace ici,
+ * sinon l'accueil clignote 1 frame avant la redirection du guard.
  */
 
 import {
@@ -33,7 +35,6 @@ import {
   Text,
   View,
 } from 'react-native'
-import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import Animated, {
@@ -67,7 +68,6 @@ import {
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
-import { ROUTES } from '@/constants/routes'
 import {
   FreeTextStep,
   MultiSelectStep,
@@ -331,7 +331,6 @@ interface Props {
 }
 
 export const OnboardingWizard: FC<Props> = ({ onStepChange }) => {
-  const router = useRouter()
   const { skin, firstName, saveSkin, completeOnboarding } = useProfile()
 
   const [index, setIndex] = useState(0)
@@ -416,9 +415,14 @@ export const OnboardingWizard: FC<Props> = ({ onStepChange }) => {
     }
     const pending = pendingRef.current
     pendingRef.current = null
+    // `completeOnboarding` pose `onboardingShown=true` dans le cache de façon
+    // OPTIMISTE + SYNCHRONE (avant tout await). L'AuthGuard racine détecte ce
+    // changement et route DIRECTEMENT vers le paywall (ou home si déjà vu). On
+    // ne navigue PAS manuellement ici : un `router.replace(HOME)` faisait
+    // clignoter l'accueil ~1 frame avant la redirection du guard vers le paywall.
+    // Le spinner (`finishing`) reste affiché le temps de la bascule du guard.
     void completeOnboarding(pending ?? undefined).catch(() => {})
-    router.replace(ROUTES.TABS.HOME)
-  }, [finishing, completeOnboarding, router])
+  }, [finishing, completeOnboarding])
 
   const step = STEPS[index]
   const tone = TONES[step.tone]

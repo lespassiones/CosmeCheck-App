@@ -83,7 +83,7 @@ describe('routineSuggestKey', () => {
 
 describe('compareInsightsKey', () => {
   it('encode A→B (ordre significatif)', () => {
-    expect(compareInsightsKey('a', 'b')).toBe('a__b')
+    expect(compareInsightsKey('a', 'b')).toBe('v9__a__b')
     expect(compareInsightsKey('a', 'b')).not.toBe(compareInsightsKey('b', 'a'))
   })
 })

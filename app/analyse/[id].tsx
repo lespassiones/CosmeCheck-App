@@ -55,6 +55,9 @@ import { leafLabelFromCategorySlug } from '@/constants/categories'
 import type { AnalysisRow } from '@/lib/supabase/types'
 import { useProfile } from '@/hooks/useProfile'
 import { useRoutine } from '@/hooks/useRoutine'
+import { classifyProductKind } from '@/lib/routine/productKind'
+import { RoutineBucketSheet } from '@/components/routine/RoutineBucketSheet'
+import type { RoutineItemKind } from '@/lib/supabase/types'
 import { useAppConfig } from '@/hooks/useAppConfig'
 
 /** Base du lien de partage web (page publique /a/[id] sur le twin web). */
@@ -261,18 +264,40 @@ const AnalyseDetailScreen: FC = () => {
   )
 
   const alreadyInRoutine = id ? isInRoutine(id) : false
+  const [bucketSheetOpen, setBucketSheetOpen] = useState(false)
 
-  const handleAddRoutine = useCallback(async () => {
+  // Bucket suggéré (le nom prime) : pré-signale « quotidien » pour un déo,
+  // dentifrice, gel douche… sans imposer le choix.
+  const suggestedBucket = useMemo<RoutineItemKind>(
+    () =>
+      state.status === 'ready'
+        ? classifyProductKind(state.productLabel, state.categoryPrecise)
+        : 'routine',
+    [state],
+  )
+
+  // Tap sur « Ajouter à ma routine » : on demande d'abord le bucket (les deux
+  // ne suivent pas la même logique), au lieu d'ajouter en silence.
+  const handleAddRoutine = useCallback(() => {
     if (!id || alreadyInRoutine || routinePending) return
-    setRoutinePending(true)
-    try {
-      await addToRoutine(id, 'daily')
-    } catch {
-      Alert.alert('Erreur', "Impossible d'ajouter ce produit à ta routine.")
-    } finally {
-      setRoutinePending(false)
-    }
-  }, [id, alreadyInRoutine, routinePending, addToRoutine])
+    setBucketSheetOpen(true)
+  }, [id, alreadyInRoutine, routinePending])
+
+  const handleChooseBucket = useCallback(
+    async (kind: RoutineItemKind) => {
+      setBucketSheetOpen(false)
+      if (!id) return
+      setRoutinePending(true)
+      try {
+        await addToRoutine(id, 'daily', kind)
+      } catch {
+        Alert.alert('Erreur', "Impossible d'ajouter ce produit à ta routine.")
+      } finally {
+        setRoutinePending(false)
+      }
+    },
+    [id, addToRoutine],
+  )
 
   const [promesseModalOpen, setPromesseModalOpen] = useState(false)
 
@@ -501,6 +526,13 @@ const AnalyseDetailScreen: FC = () => {
           analysisId={id ?? null}
         />
       ) : null}
+
+      <RoutineBucketSheet
+        visible={bucketSheetOpen}
+        onClose={() => setBucketSheetOpen(false)}
+        onChoose={handleChooseBucket}
+        suggested={suggestedBucket}
+      />
     </SafeAreaView>
   )
 }

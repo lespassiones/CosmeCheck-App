@@ -216,7 +216,7 @@ const PromessesScreen: FC = () => {
           Compare les promesses marketing d&apos;un produit avec sa formule réelle. On te dit ce qui est
           tenu et ce qui relève du marketing.
         </Text>
-        <Pressable style={styles.emptyCta} onPress={() => router.push(ROUTES.PROMESSES.NOUVELLE)}>
+        <Pressable style={styles.emptyCta} onPress={() => router.push(ROUTES.PROMESSES.CHOISIR)}>
           <Ionicons name="add" size={18} color="#FFFFFF" />
           <Text style={styles.emptyCtaText}>Lancer ma première analyse</Text>
         </Pressable>
@@ -231,16 +231,21 @@ const PromessesScreen: FC = () => {
       <SafeAreaView style={styles.safe} edges={[]}>
         <View style={styles.subHeader}>
           <Text style={styles.subtitle}>Promesses du produit vs formule réelle</Text>
-          <Pressable
-            style={styles.addBtn}
-            onPress={() => router.push(ROUTES.PROMESSES.NOUVELLE)}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Nouvelle analyse"
-          >
-            <Ionicons name="add" size={16} color="#FFFFFF" />
-            <Text style={styles.addBtnText}>Nouvelle analyse</Text>
-          </Pressable>
+          {/* Le bouton du haut n'apparaît qu'une fois au moins une analyse faite :
+              sur un compte neuf, seul le CTA « Lancer ma première analyse » de
+              l'état vide s'affiche (plus de doublon). */}
+          {rows.length > 0 ? (
+            <Pressable
+              style={styles.addBtn}
+              onPress={() => router.push(ROUTES.PROMESSES.CHOISIR)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Nouvelle analyse"
+            >
+              <Ionicons name="add" size={16} color="#FFFFFF" />
+              <Text style={styles.addBtnText}>Nouvelle analyse</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         <FlatList

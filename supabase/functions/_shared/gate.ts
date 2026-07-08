@@ -40,12 +40,13 @@ export type GateOk = {
   supabase: SupabaseClient;
   credits: CreditsState;
   /**
-   * Débite 1 crédit APRÈS avoir passé les early-exit (typiquement après un
-   * lookup d'idempotence). Renvoie l'état des crédits mis à jour, ou une
-   * réponse 429 prête à retourner.
+   * Débite `count` crédit(s) (défaut 1) APRÈS avoir passé les early-exit
+   * (typiquement après un lookup d'idempotence / un hit cache). Renvoie l'état
+   * des crédits mis à jour, ou une réponse 429 prête à retourner.
    */
   consumeCredit: (
     feature: string,
+    count?: number,
   ) => Promise<{ ok: true; credits: CreditsState } | { ok: false; response: Response }>;
 };
 
@@ -114,9 +115,11 @@ export async function gate(req: Request, opts: GateOptions): Promise<GateOk | Ga
 
   const chargeCredit = async (
     feature: string,
+    count = 1,
   ): Promise<{ ok: true; credits: CreditsState } | { ok: false; response: Response }> => {
     const { data: creditData } = await supabase.rpc("cosme_check_consume_credit", {
       p_feature: feature,
+      p_count: count,
     });
     const consume = (creditData ?? { ok: false, error: "no_response" }) as ConsumeResult;
     if (!consume.ok) {

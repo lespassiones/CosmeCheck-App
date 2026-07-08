@@ -36,8 +36,8 @@ describe('non authentifié', () => {
     expect(resolveAuthRoute({ ...base, preOnbDone: false })).toBe('preonboarding')
   })
 
-  it('déjà vu le carrousel -> écran de connexion', () => {
-    expect(resolveAuthRoute({ ...base, preOnbDone: true })).toBe('signin')
+  it('déjà vu le carrousel -> écran de bienvenue', () => {
+    expect(resolveAuthRoute({ ...base, preOnbDone: true })).toBe('welcome')
   })
 
   it('déjà sur (auth) -> on laisse (anti-boucle)', () => {

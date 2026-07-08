@@ -1,6 +1,9 @@
 /**
- * SignInScreen — écran de connexion.
- * Logo + titre + Google + séparateur + SignInForm + lien vers l'inscription.
+ * SignInScreen — écran de connexion (email + mot de passe uniquement).
+ *
+ * Le bouton Google vit désormais uniquement sur l'écran de bienvenue
+ * (/(auth)/welcome) pour ne pas le dupliquer. Ici : flèche retour, logo,
+ * formulaire, et lien vers l'inscription.
  */
 
 import { type FC } from 'react'
@@ -15,6 +18,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 
 import { colors } from '@/constants/colors'
 import { spacing } from '@/constants/spacing'
@@ -23,7 +27,6 @@ import { ROUTES } from '@/constants/routes'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { LogoMark } from '@/components/shared/Logo'
 import { SignInForm } from '@/components/auth/SignInForm'
-import { GoogleAuthButton } from '@/components/auth/GoogleAuthButton'
 
 const SignInScreen: FC = () => {
   return (
@@ -39,20 +42,29 @@ const SignInScreen: FC = () => {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.logoWrap}>
-              <LogoMark size={18} />
+            <View style={styles.topBar}>
+              <Pressable
+                hitSlop={10}
+                onPress={() =>
+                  router.canGoBack()
+                    ? router.back()
+                    : router.replace(ROUTES.AUTH.WELCOME)
+                }
+                accessibilityLabel="Retour"
+                style={styles.backBtn}
+              >
+                <Ionicons name="chevron-back" size={22} color={colors.ink} />
+              </Pressable>
+              <View style={styles.topLogo} pointerEvents="none">
+                <LogoMark size={18} />
+              </View>
             </View>
 
             <View style={styles.header}>
-              <Text style={styles.subtitle}>Connecte-toi pour continuer ton suivi beauté.</Text>
-            </View>
-
-            <GoogleAuthButton />
-
-            <View style={styles.separator}>
-              <View style={styles.line} />
-              <Text style={styles.separatorText}>ou</Text>
-              <View style={styles.line} />
+              <Text style={styles.title}>Connexion</Text>
+              <Text style={styles.subtitle}>
+                Connecte-toi pour continuer ton suivi beauté.
+              </Text>
             </View>
 
             <SignInForm />
@@ -77,13 +89,25 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
+    paddingTop: spacing.sm,
     paddingBottom: spacing['2xl'],
-    gap: spacing.xl,
+    gap: spacing.lg,
   },
-  logoWrap: {
+  topBar: {
+    height: 32,
+    justifyContent: 'center',
+    marginTop: spacing.sm,
+  },
+  backBtn: {
+    position: 'absolute',
+    left: 0,
+    width: 32,
+    height: 32,
     alignItems: 'center',
-    marginTop: spacing.base,
+    justifyContent: 'center',
+  },
+  topLogo: {
+    alignItems: 'center',
   },
   header: {
     gap: spacing.sm,
@@ -95,20 +119,6 @@ const styles = StyleSheet.create({
   subtitle: {
     ...typography.body,
     color: colors.inkMuted,
-  },
-  separator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  line: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  separatorText: {
-    ...typography.small,
-    color: colors.inkLight,
   },
   footer: {
     flexDirection: 'row',

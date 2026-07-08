@@ -7,8 +7,9 @@
  *   et le flag onboarding vivent DANS `preferences` (jsonb) — voir
  *   `lib/skin/profile.ts` (clé `skin`, et `onboardingShown` à la racine).
  *   Les restrictions vivent aussi dans `preferences.restrictions`.
- * - `routine_items` : juste (id, user_id, analysis_id, frequency, added_at).
- *   Le nom/score/couleur viennent de l'analyse jointe (`analyses`).
+ * - `routine_items` : (id, user_id, analysis_id, frequency, added_at,
+ *   time_of_day, position). Le nom/score/couleur viennent de l'analyse jointe
+ *   (`analyses`). time_of_day/position = organisation matin/soir (juil 2026).
  * - `analyses.result_json` : l'AnalyseResponse complet (jsonb).
  * - Les crédits sont par (user_id, day) dans `user_credits`, lus via la RPC
  *   `cosme_check_get_credits`.
@@ -24,6 +25,14 @@ export type Json =
 
 export type Tier = 'free' | 'premium'
 export type RoutineFrequency = 'daily' | 'weekly' | 'monthly'
+/**
+ * Créneau d'application d'un produit de routine (axe ORGANISATIONNEL matin/soir,
+ * juillet 2026). N'influe PAS sur le modèle d'exposition (pondération fréquence).
+ * 'both' = le produit apparaît dans les deux sections.
+ */
+export type RoutineTimeOfDay = 'morning' | 'evening' | 'both'
+/** Bucket produit : 'routine' (soin visage matin/soir) | 'staple' (quotidien). */
+export type RoutineItemKind = 'routine' | 'staple'
 export type FeedbackKind = 'feedback' | 'contact'
 export type RenewalPeriod = 'one_time' | 'daily' | 'weekly' | 'monthly' | 'yearly'
 
@@ -46,7 +55,19 @@ export interface Database {
         Returns: Json
       }
       cosme_check_consume_credit: {
-        Args: { p_feature: string }
+        Args: { p_feature: string; p_count?: number }
+        Returns: Json
+      }
+      cosme_check_reorder_routine: {
+        Args: { p_items: Json }
+        Returns: Json
+      }
+      cosme_check_register_push_token: {
+        Args: { p_token: string; p_platform?: string }
+        Returns: Json
+      }
+      cosme_check_weekly_picks_candidates: {
+        Args: { p_needs: string[]; p_per_need?: number }
         Returns: Json
       }
       cosme_check_get_feedback_status: {
@@ -131,15 +152,24 @@ export interface Database {
           analysis_id: string
           frequency: RoutineFrequency
           added_at: string
+          time_of_day: RoutineTimeOfDay
+          position: number
+          kind: RoutineItemKind
         }
         Insert: {
           id?: string
           user_id: string
           analysis_id: string
           frequency?: RoutineFrequency
+          time_of_day?: RoutineTimeOfDay
+          position?: number
+          kind?: RoutineItemKind
         }
         Update: {
           frequency?: RoutineFrequency
+          time_of_day?: RoutineTimeOfDay
+          position?: number
+          kind?: RoutineItemKind
         }
       }
       coherence_analyses: {

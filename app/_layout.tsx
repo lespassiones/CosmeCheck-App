@@ -47,9 +47,11 @@ import { clearExpiredAiCache } from '@/lib/storage/aiCache'
 import { getPreOnboardingCache, isPreOnboardingDone } from '@/lib/storage/preOnboarding'
 import { queryClient } from '@/lib/storage/queryClient'
 import { AppErrorBoundary } from '@/components/shared/AppErrorBoundary'
+import { AnimatedSplash } from '@/components/shared/AnimatedSplash'
 import { ToastHost } from '@/components/shared/Toast'
 import { OfflineBanner } from '@/components/shared/OfflineBanner'
 import { initSentry } from '@/lib/reporting/report'
+import { NotificationsInit } from '@/components/notifications/NotificationsInit'
 
 // Garde le splash natif visible jusqu'à ce qu'on soit prêts à afficher l'app.
 void SplashScreen.preventAutoHideAsync()
@@ -111,8 +113,8 @@ function AuthGuard() {
       group: segments[0],
     })
     switch (target) {
-      case 'signin':
-        router.replace(ROUTES.AUTH.SIGN_IN)
+      case 'welcome':
+        router.replace(ROUTES.AUTH.WELCOME)
         break
       case 'preonboarding':
         router.replace(ROUTES.PREONBOARDING.INDEX)
@@ -145,27 +147,6 @@ function AuthGuard() {
     segments,
     router,
   ])
-
-  return null
-}
-
-/**
- * Cache le splash quand l'auth est résolue ET, pour un utilisateur connecté,
- * quand son profil est chargé. Ainsi la décision de routage de l'AuthGuard
- * (onboarding vs dashboard) est prise DERRIÈRE le splash → aucun flash d'écran
- * intermédiaire au démarrage à froid (le profil n'étant plus persisté disque).
- */
-function SplashController() {
-  const { isLoading: authLoading, isAuthenticated } = useAuth()
-  const { isLoading: profileLoading } = useProfile()
-
-  const ready = !authLoading && (!isAuthenticated || !profileLoading)
-
-  useEffect(() => {
-    if (ready) {
-      void SplashScreen.hideAsync()
-    }
-  }, [ready])
 
   return null
 }
@@ -221,8 +202,16 @@ function RootNavigator() {
       <Stack.Screen name="advisor/index" options={{ animation: 'fade' }} />
       <Stack.Screen name="advisor/recommendations" />
       <Stack.Screen name="compare/index" />
+      <Stack.Screen name="routine/exposition" />
+      <Stack.Screen name="routine/produits" />
+      <Stack.Screen name="routine/quotidien" />
+      <Stack.Screen name="routine/item/[id]" />
+      <Stack.Screen name="peau/index" />
+      <Stack.Screen name="peau/bilan" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="peau/scan" options={{ animation: 'fade' }} />
       <Stack.Screen name="analyse/[id]" />
       <Stack.Screen name="alternatives/[ean]" />
+      <Stack.Screen name="promesses/choisir" />
       <Stack.Screen name="promesses/nouvelle" options={{ presentation: 'modal' }} />
       <Stack.Screen name="promesses/[id]" />
       <Stack.Screen name="profile/index" />
@@ -246,6 +235,11 @@ export default function RootLayout() {
     'Inter-Bold': Inter_700Bold,
   })
 
+  // Overlay de lancement animé (points rebondissants + wordmark machine à écrire)
+  // affiché tant que `splashDone` est faux. Il masque le splash natif à son
+  // montage et se fond dès que l'auth est résolue (voir AnimatedSplash).
+  const [splashDone, setSplashDone] = useState(false)
+
   // Tant que les polices ne sont pas prêtes (et qu'aucune erreur n'a coupé le
   // chargement), on ne rend rien → le splash natif reste affiché.
   if (!fontsLoaded && !fontError) {
@@ -265,9 +259,9 @@ export default function RootLayout() {
           }}
         >
           <StatusBar style="dark" />
-          <SplashController />
           <CacheJanitor />
           <RevenueCatInit />
+          <NotificationsInit />
           <AuthGuard />
           <AppErrorBoundary>
             <RootNavigator />
@@ -276,6 +270,7 @@ export default function RootLayout() {
           <MaintenanceGate />
           <ToastHost />
           <OfflineBanner />
+          {!splashDone ? <AnimatedSplash onFinish={() => setSplashDone(true)} /> : null}
         </PersistQueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

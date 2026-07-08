@@ -1,12 +1,12 @@
 /**
- * SignUpScreen — inscription : Google OAuth ou email/mot de passe.
+ * SignUpScreen — inscription (nom + email + mot de passe).
  *
- * Le formulaire email est caché par défaut derrière un bouton "Continuer avec
- * email" (même style que le bouton Google). Un tap le déplie, un second le
- * replie. Le chevron indique l'état ouvert/fermé.
+ * Le bouton Google vit désormais uniquement sur l'écran de bienvenue
+ * (/(auth)/welcome). Ici on affiche directement le formulaire complet, sans
+ * toggle ni doublon Google.
  */
 
-import { type FC, useState } from 'react'
+import { type FC } from 'react'
 import {
   KeyboardAvoidingView,
   Platform,
@@ -21,17 +21,15 @@ import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 
 import { colors } from '@/constants/colors'
-import { spacing, radius } from '@/constants/spacing'
+import { spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { LogoMark } from '@/components/shared/Logo'
 import { SignUpForm } from '@/components/auth/SignUpForm'
-import { GoogleAuthButton } from '@/components/auth/GoogleAuthButton'
 import { useAppConfig } from '@/hooks/useAppConfig'
 
 const SignUpScreen: FC = () => {
-  const [emailOpen, setEmailOpen] = useState(false)
   const { config: appConfig } = useAppConfig()
 
   return (
@@ -50,16 +48,19 @@ const SignUpScreen: FC = () => {
             <View style={styles.topBar}>
               <Pressable
                 hitSlop={10}
-                onPress={() => router.replace(ROUTES.AUTH.SIGN_IN)}
+                onPress={() =>
+                  router.canGoBack()
+                    ? router.back()
+                    : router.replace(ROUTES.AUTH.WELCOME)
+                }
                 accessibilityLabel="Retour"
                 style={styles.backBtn}
               >
                 <Ionicons name="chevron-back" size={22} color={colors.ink} />
               </Pressable>
-            </View>
-
-            <View style={styles.logoWrap}>
-              <LogoMark size={18} />
+              <View style={styles.topLogo} pointerEvents="none">
+                <LogoMark size={18} />
+              </View>
             </View>
 
             <View style={styles.header}>
@@ -77,39 +78,7 @@ const SignUpScreen: FC = () => {
                 ou connecte-toi si tu as déjà un compte.
               </Text>
             ) : (
-              <>
-                {/* Bouton Google */}
-                <GoogleAuthButton />
-
-                {/* Séparateur */}
-                <View style={styles.separator}>
-                  <View style={styles.line} />
-                  <Text style={styles.separatorText}>ou</Text>
-                  <View style={styles.line} />
-                </View>
-
-                {/* Bouton email — déplie le formulaire */}
-                <Pressable
-                  onPress={() => setEmailOpen((o) => !o)}
-                  style={({ pressed }) => [
-                    styles.emailBtn,
-                    pressed && styles.emailBtnPressed,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Continuer avec email et mot de passe"
-                  accessibilityState={{ expanded: emailOpen }}
-                >
-                  <Ionicons name="mail-outline" size={18} color={colors.ink} />
-                  <Text style={styles.emailBtnLabel}>Continuer avec email</Text>
-                </Pressable>
-
-                {/* Formulaire déroulé */}
-                {emailOpen && (
-                  <View style={styles.formWrap}>
-                    <SignUpForm />
-                  </View>
-                )}
-              </>
+              <SignUpForm />
             )}
 
             <View style={styles.footer}>
@@ -132,24 +101,25 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
+    paddingTop: spacing.sm,
     paddingBottom: spacing['2xl'],
-    gap: spacing.xl,
+    gap: spacing.lg,
   },
   topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    height: 32,
+    justifyContent: 'center',
     marginTop: spacing.sm,
   },
   backBtn: {
+    position: 'absolute',
+    left: 0,
     width: 32,
     height: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoWrap: {
+  topLogo: {
     alignItems: 'center',
-    marginTop: spacing.base,
   },
   header: {
     gap: spacing.sm,
@@ -163,47 +133,6 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.inkMuted,
     textAlign: 'center',
-  },
-  separator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginVertical: -spacing.sm,
-  },
-  line: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  separatorText: {
-    ...typography.small,
-    color: colors.inkLight,
-  },
-  emailBtn: {
-    height: 52,
-    borderRadius: radius.full,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  emailBtnPressed: {
-    backgroundColor: colors.gray50,
-  },
-  emailBtnLabel: {
-    ...typography.button,
-    color: colors.ink,
-  },
-  formWrap: {
-    gap: spacing.base,
   },
   closedText: {
     ...typography.body,

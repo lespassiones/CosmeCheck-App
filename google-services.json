@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "994208997121",
+    "project_id": "cosmecheck-f2e86",
+    "storage_bucket": "cosmecheck-f2e86.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:994208997121:android:aecc361b9973e261c60500",
+        "android_client_info": {
+          "package_name": "com.cosmecheck.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDIj9kpGkrUkh6-A79s0NL1pevzDirBAfo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

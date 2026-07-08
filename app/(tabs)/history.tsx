@@ -23,7 +23,7 @@ import {
   View,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { router } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -58,6 +58,7 @@ interface AnalysisRow {
   name: string | null
   product_label: string | null
   brand: string | null
+  ean: string | null
   product_type: string | null
   input_text: string | null
   score: number | null
@@ -142,6 +143,8 @@ function buildItem(row: AnalysisRow, latestCoherenceId: string | null): HistoryI
     dateLabel,
     latestCoherenceId,
     favori: row.favori ?? false,
+    ean: row.ean?.trim() || null,
+    imageUrl: null,
     searchTokens: Array.from(tokenSet),
     brand: decodeHtml(row.brand?.trim()) || null,
     productLabel: decodeHtml(row.product_label?.trim() || row.name?.trim()) || null,
@@ -155,6 +158,10 @@ const HistoryScreen: FC = () => {
   const userId = user?.id ?? null
   const insets = useSafeAreaInsets()
   const queryClient = useQueryClient()
+  // Écran d'origine à retrouver si l'onglet a été ouvert depuis une autre page
+  // (ex. /promesses/choisir). Affiche alors un chevron retour dans l'en-tête.
+  const { returnTo: returnToParam } = useLocalSearchParams<{ returnTo?: string }>()
+  const returnTo = typeof returnToParam === 'string' && returnToParam ? returnToParam : null
 
   const [search, setSearch] = useState('')
   const [favorisOnly, setFavorisOnly] = useState(false)
@@ -181,7 +188,7 @@ const HistoryScreen: FC = () => {
       const [analysesRes, coherencesRes] = await Promise.all([
         db()
           .from('analyses')
-          .select('id,name,product_label,brand,product_type,input_text,score,result_json,category,favori,created_at')
+          .select('id,name,product_label,brand,ean,product_type,input_text,score,result_json,category,favori,created_at')
           .eq('user_id', userId)
           .order('created_at', { ascending: false })
           .limit(50),
@@ -208,7 +215,29 @@ const HistoryScreen: FC = () => {
         }
       }
 
-      return rows.map((r) => buildItem(r, latestByAnalysis.get(r.id) ?? null))
+      const built = rows.map((r) => buildItem(r, latestByAnalysis.get(r.id) ?? null))
+
+      // Résolution image EN LOT (EAN = source de vérité) : une seule requête
+      // catalog (public read) pour tous les EAN de la page, au lieu d'un appel
+      // RPC par carte → fiable et les images sont prêtes au rendu.
+      const eans = Array.from(
+        new Set(built.map((it) => it.ean).filter((e): e is string => Boolean(e))),
+      )
+      if (eans.length > 0) {
+        const { data: catRows } = await db()
+          .from('catalog')
+          .select('ean, image_url')
+          .in('ean', eans)
+        const imageByEan = new Map<string, string>()
+        for (const c of (catRows as { ean: string; image_url: string | null }[] | null) ?? []) {
+          if (c.image_url) imageByEan.set(c.ean, c.image_url)
+        }
+        for (const it of built) {
+          if (it.ean && imageByEan.has(it.ean)) it.imageUrl = imageByEan.get(it.ean) ?? null
+        }
+      }
+
+      return built
     },
   })
 
@@ -376,7 +405,7 @@ const HistoryScreen: FC = () => {
         <Ionicons name="time-outline" size={44} color={colors.inkLight} />
         <Text style={styles.emptyTitle}>Aucune analyse pour l’instant</Text>
         <Text style={styles.emptyText}>
-          Tes produits analysés apparaîtront ici. Commence par décoder une composition.
+          Vérifie si un produit te correspond vraiment. Tes analyses apparaîtront ici.
         </Text>
       </View>
     )
@@ -454,7 +483,14 @@ const HistoryScreen: FC = () => {
   return (
     <View style={styles.root}>
       <BackgroundGlow variant="minimal" />
-      <ScreenHeader title="Historique" />
+      <ScreenHeader
+        title="Historique"
+        onBack={
+          returnTo
+            ? () => router.navigate(returnTo as Parameters<typeof router.navigate>[0])
+            : undefined
+        }
+      />
       <SafeAreaView style={styles.safe} edges={[]}>
         <FlatList
           data={selectMode ? items : filtered}

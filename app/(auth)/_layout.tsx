@@ -1,25 +1,18 @@
 /**
  * AuthGroupLayout — Stack des écrans du groupe (auth).
  *
- * Protection inverse : si l'utilisateur est déjà connecté, on le renvoie vers
- * les tabs (le guard racine affinera ensuite vers l'onboarding si nécessaire).
- * Pendant la vérification initiale de session, on n'affiche rien de bloquant —
- * le Stack se monte normalement.
+ * Protection inverse : la redirection d'un utilisateur déjà connecté est
+ * déléguée à l'AuthGuard racine (app/_layout.tsx), qui connaît l'état du profil
+ * et route DIRECTEMENT vers onboarding / paywall / home selon le cas. On NE
+ * redirige PAS vers les tabs ici : ce détour faisait clignoter l'accueil ~1
+ * frame avant que le guard n'affine vers l'onboarding (flash au signup).
+ * Pendant la vérification initiale de session, le Stack se monte normalement.
  */
 
 import { type FC } from 'react'
-import { Redirect, Stack } from 'expo-router'
-
-import { useAuth } from '@/hooks/useAuth'
-import { ROUTES } from '@/constants/routes'
+import { Stack } from 'expo-router'
 
 const AuthLayout: FC = () => {
-  const { isAuthenticated, isLoading } = useAuth()
-
-  if (!isLoading && isAuthenticated) {
-    return <Redirect href={ROUTES.TABS.HOME} />
-  }
-
   return (
     <Stack
       screenOptions={{
@@ -28,6 +21,7 @@ const AuthLayout: FC = () => {
         contentStyle: { backgroundColor: 'transparent' },
       }}
     >
+      <Stack.Screen name="welcome" />
       <Stack.Screen name="sign-in" />
       <Stack.Screen name="sign-up" />
       <Stack.Screen name="forgot-password" />

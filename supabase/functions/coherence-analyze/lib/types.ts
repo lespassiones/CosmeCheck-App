@@ -100,6 +100,9 @@ export type OutOfScopePromise = {
 
 export type CoherenceResult = {
   computedAt: string;
+  /** Version du moteur qui a produit ce résultat. Sert à ne PAS re-servir un
+   *  résultat calculé par une version antérieure (anti-cache-empoisonné). */
+  algoVersion?: string;
   description: string;
   promises: CoherencePromise[];
   unverifiable: UnverifiableClaim[];

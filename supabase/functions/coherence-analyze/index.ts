@@ -27,25 +27,18 @@ import { gate } from "../_shared/gate.ts";
 import { serviceClient } from "../_shared/auth.ts";
 import { sha256Hex } from "../_shared/aiClient.ts";
 import {
-  detectProductType,
-  exploreOpenPromise,
-  extractPromisesFromDescription,
+  analyzeCoherence,
   generateConclusion,
   type FormulaItemForLlm,
 } from "./lib/ai.ts";
-import {
-  buildCoherenceResult,
-  dedupProposals,
-  reclassifyOpenProposals,
-  resolveAbsencePromise,
-  resolveOpenPromise,
-} from "./lib/engine.ts";
-import { findCategoryBySlug, isAbsenceCategory } from "./lib/claims.ts";
+import { buildCoherenceResult } from "./lib/engine.ts";
 import { loadProfileAndRestrictions } from "./lib/profile.ts";
 import type {
   AnalyseResponse,
   CoherencePromise,
+  OutOfScopePromise,
   ProductType,
+  UnverifiableClaim,
 } from "./lib/types.ts";
 
 type Body = {
@@ -61,10 +54,16 @@ type Body = {
 
 // Version du moteur de cohérence. v4 = resynchronisation stricte des 3 copies
 // (dual-use Annexe III 3 slugs + formulaHasDeclaredFragrance + keywords
-// demelage unifiés) + cache des conclusions par signature de profil. Bumper
-// invalide les entrées coherence_cache antérieures (verdicts potentiellement
-// différents).
-const ALGO_VERSION = "v4";
+// demelage unifiés) + cache des conclusions par signature de profil.
+// v5 = garde déterministe des MODES D'EMPLOI (usageInstructionGuard) : une
+// consigne d'usage ("appliquer avant le coucher") n'est plus comptée comme une
+// promesse "non démontrée" + règle prompt correspondante. Bumper invalide les
+// entrées coherence_cache antérieures (verdicts potentiellement différents).
+// v6 = analyse en UNE passe LLM (description + INCI → promesses vérifiées, le
+// LLM cite les vrais ingrédients et écarte les claims non vérifiables). Remplace
+// détection type + extraction + exploration + moteur déterministe d'actifs
+// attendus (qui produisait de faux « non démontré » avec des actifs hors-sujet).
+const ALGO_VERSION = "v10";
 
 // ─── Idempotence (port de CosmetWiki/lib/idempotency.ts, Deno) ──────────────
 const IDEM_TTL_MS = 24 * 60 * 60 * 1000;
@@ -205,7 +204,13 @@ Deno.serve(async (req: Request) => {
       .order("created_at", { ascending: false })
       .limit(1);
     const existing = existingRows?.[0] ?? null;
-    if (existing?.result_json) {
+    const existingVer =
+      (existing?.result_json as { algoVersion?: string } | null)?.algoVersion ?? null;
+    // Lecture-pure UNIQUEMENT si le résultat a été calculé par la version
+    // courante. Un résultat d'une version antérieure (ou non versionné) N'EST
+    // PAS re-servi : on régénère sous v-courante (servi gratis depuis le cache
+    // cross-user si dispo). Évite le cache empoisonné par l'ancien moteur.
+    if (existing?.result_json && existingVer === ALGO_VERSION) {
       const replayBody = { id: existing.id, result: existing.result_json, cache: "user" };
       return jsonResponse(replayBody, { headers: { "X-Coherence-Cache": "user" } });
     }
@@ -227,18 +232,17 @@ Deno.serve(async (req: Request) => {
     )).slice(0, 40);
     const descHash = (await sha256Hex(description.toLowerCase())).slice(0, 40);
 
-    type Extraction = Awaited<ReturnType<typeof extractPromisesFromDescription>>;
     type CacheVal = {
       promises: CoherencePromise[];
-      unverifiable: Extraction["unverifiable"];
-      outOfScope: Extraction["outOfScope"];
+      unverifiable: UnverifiableClaim[];
+      outOfScope: OutOfScopePromise[];
       /** Conclusions déjà générées, par signature de personnalisation. */
       conclusions?: Record<string, string>;
     };
 
     let promises: CoherencePromise[];
-    let unverifiable: Extraction["unverifiable"];
-    let outOfScope: Extraction["outOfScope"];
+    let unverifiable: UnverifiableClaim[];
+    let outOfScope: OutOfScopePromise[];
     let productType: ProductType;
 
     // Profil + restrictions chargés EN PARALLÈLE du cache (au lieu d'après le
@@ -281,50 +285,10 @@ Deno.serve(async (req: Request) => {
       // Cache cross-user HIT → PAS de débit (même règle que `analyser` sur
       // cache EAN : on ne facture que le pipeline IA complet).
     } else {
-      // MISS → pipeline complet. Débit AVANT le travail IA.
+      // MISS → analyse IA en UNE passe. Débit AVANT le travail IA.
       const charge = await g.consumeCredit("coherence");
       if (!charge.ok) return charge.response;
 
-      // ─── Step 0: detect product type (silent LLM call). ─────────────────
-      const typeHint = [
-        analysisRow.product_type as string | null,
-        productLabel,
-        analysisRow.brand as string | null,
-      ]
-        .filter((s): s is string => Boolean(s && s.trim()))
-        .join(" - ");
-      productType = await detectProductType(description, typeHint || null, user.id);
-
-      // ─── Step 1: extract promises (LLM, JSON schema) ────────────────────
-      const extraction = await extractPromisesFromDescription(
-        description,
-        productType,
-        user.id,
-      );
-      const reclassifiedProposals = reclassifyOpenProposals(
-        extraction.proposals,
-        productType,
-      );
-      const dedupedProposals = dedupProposals(reclassifiedProposals);
-
-      // ─── Step 2: absence (déterministe, par tag) vs effet (LLM + validation) ──
-      // TOUTE promesse d'effet passe désormais par le chemin LLM qui valide chaque
-      // ingrédient cité contre la formule réelle (anti-hallucination). Plus de liste
-      // blanche d'actifs figée : elle ratait les actifs botaniques/ayurvédiques et
-      // produisait des « non démontré » à tort. Seules les promesses « sans X »
-      // restent déterministes (vérification par tag dans la formule).
-      const cataloguePromises: CoherencePromise[] = [];
-      const openProposals: typeof extraction.proposals = [];
-      for (const p of dedupedProposals) {
-        const cat = findCategoryBySlug(p.category_slug);
-        if (cat && isAbsenceCategory(cat)) {
-          cataloguePromises.push(resolveAbsencePromise(p, cat, parent.items));
-        } else {
-          openProposals.push(p);
-        }
-      }
-
-      // ─── Step 3: open promises - explore the formula via LLM in parallel ─
       const itemsForLlm: FormulaItemForLlm[] = parent.items
         .filter((it): it is typeof it & { slug: string; name: string } =>
           Boolean(it.slug) && Boolean(it.name),
@@ -335,21 +299,77 @@ Deno.serve(async (req: Request) => {
           primaryFunction: it.primaryFunction,
         }));
 
-      const openPromises: CoherencePromise[] = await Promise.all(
-        openProposals.map(async (p) => {
-          const exploration = await exploreOpenPromise(
-            p.label,
-            p.excerpt,
-            itemsForLlm,
-            user.id,
-          );
-          return resolveOpenPromise(p, parent.items, exploration.matches, exploration.missing);
-        }),
-      );
+      const analysis = await analyzeCoherence(description, itemsForLlm, user.id);
+      productType = analysis.productType;
 
-      promises = [...cataloguePromises, ...openPromises];
-      unverifiable = extraction.unverifiable;
-      outOfScope = extraction.outOfScope;
+      // Le LLM ne cite que des slugs de la formule réelle : on les rattache aux
+      // items (position/inTrace) pour l'affichage et le positionSnapshot.
+      const bySlug = new Map(parent.items.map((it) => [it.slug, it] as const));
+      // Filet déterministe : phrases de TOLÉRANCE / PUBLIC / USAGE qui ne se
+      // vérifient pas par un ingrédient. Quel que soit le verdict du LLM, on les
+      // reclasse en « unverifiable » (jamais un vert « tenu » ni un rouge trompeur).
+      const NOISE =
+        /(non\s+com[eé]dog|non\s+photosensibilis|non\s+gras|non\s+irritant|hypoallerg|test[eé].{0,18}dermatolog|recommand[eé]\s+pour|d[eé]conseill|facile\s+[aà]\s+appliquer|convient\s+[aà]\s+tous|sans\s+enfants|enfants?\s+de\s+\d|\d\s*ans\s+et\s+moins|toute\s+la\s+famille)/i;
+      const noiseUnver: UnverifiableClaim[] = [];
+      const built: CoherencePromise[] = [];
+      for (const p of analysis.promises) {
+        if (NOISE.test(`${p.label} ${p.excerpt}`)) {
+          noiseUnver.push({ excerpt: p.excerpt.slice(0, 200), reason: "composition" });
+          continue;
+        }
+        const foundActives = p.foundSlugs.flatMap((slug) => {
+          const it = bySlug.get(slug);
+          if (!it) return [];
+          return [{
+            name: it.name ?? slug,
+            slug,
+            position: it.position,
+            inTrace: (it.thresholdContext ?? "").startsWith("after"),
+          }];
+        });
+
+        let verdict = p.verdict;
+        let score = p.score;
+        let missing = p.missing;
+        if (p.isAbsence) {
+          // Une absence n'est jamais « non démontré » : tenue (X absent) ou
+          // contredite (X présent, décidé par le LLM). On efface le « manque ».
+          if (verdict !== "contredite") {
+            verdict = "tenue";
+            if (!score) score = 100;
+          }
+          missing = [];
+        } else if (
+          // Anti-hallucination : un verdict positif d'EFFET sans AUCUN ingrédient
+          // réel cité retombe en « non démontré ».
+          (verdict === "tenue" || verdict === "partielle") &&
+          foundActives.length === 0
+        ) {
+          verdict = "non_demontree";
+          score = 0;
+        }
+        const slug =
+          p.label
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+            .slice(0, 40) || "autre";
+        built.push({
+          slug,
+          label: p.label,
+          excerpt: p.excerpt,
+          verdict,
+          expectedActives: [],
+          foundActives,
+          cosmeticActives: [],
+          missingActives: missing,
+          score,
+        });
+      }
+      promises = built;
+      unverifiable = [...analysis.unverifiable, ...noiseUnver];
+      outOfScope = [];
     }
 
     // ─── Step 5: conclusion (LLM, only sees verdicts) + personnalisation ──
@@ -405,6 +425,7 @@ Deno.serve(async (req: Request) => {
       parent,
       conclusion,
     });
+    result.algoVersion = ALGO_VERSION; // tampon anti-poison (lecture-pure versionnée)
 
     // ─── Persist ──────────────────────────────────────────────────────────
     const { data: saved, error: saveErr } = await sb

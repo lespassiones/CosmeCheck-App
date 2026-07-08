@@ -32,7 +32,7 @@ export type Tone = "vert" | "ambre" | "rouge" | "neutre";
 export type Block = { title: string; description: string; tone: Tone };
 export type PersonalBlocks = { goals: Block; skin: Block; watch: Block };
 
-export const PERSONAL_PROMPT_VERSION = 7;
+export const PERSONAL_PROMPT_VERSION = 10;
 
 export type PersonalInput = {
   enriched: {
@@ -46,6 +46,9 @@ export type PersonalInput = {
   counts: Record<string, number>;
   score: number;
   scoreLabel: string;
+  /** Ton de la note globale ("green" | "orange" | "red") — sert à empêcher un
+   *  goals « moyenne » sur un produit pourtant bien noté. */
+  scoreTone?: string | null;
   productLabel: string | null;
   /** Type/catégorie du produit (ex : "dentifrice", "crème visage") — pour la
    *  pertinence : ne pas forcer un raisonnement « peau » sur un produit non-peau. */
@@ -76,6 +79,10 @@ export async function profileSignature(profileBlock: string | null, restrictions
 
 function buildPrompt(input: PersonalInput): { system: string; user: string } {
   const greens = input.enriched.filter((r) => r.color_rating === "Vert" && r.name && r.primary_function);
+  // Les JAUNES portent une pénalité LÉGÈRE mais sont SOUVENT les actifs clés
+  // (ex : acide salicylique). Ils étaient absents du prompt → l'IA ne pouvait
+  // pas les citer ni les relier au profil. On les expose désormais.
+  const yellows = input.enriched.filter((r) => r.color_rating === "Jaune" && r.name);
   const oranges = input.enriched.filter((r) => r.color_rating === "Orange");
   const reds = input.enriched.filter((r) => r.color_rating === "Rouge");
   const hasProfile = Boolean(input.profileBlock);
@@ -101,9 +108,14 @@ function buildPrompt(input: PersonalInput): { system: string; user: string } {
     "- goals = LE BLOC « POUR TOI » : est-ce que ce produit correspond à TA situation (tes objectifs, tes préoccupations, ta peau) ? C'est le SEUL bloc personnalisé.",
     "- skin = LE BLOC « À QUOI ÇA SERT » : bloc PÉDAGOGIQUE qui S'ADRESSE À TOI (tutoiement) mais parle du PRODUIT et de son usage réel, SANS prétendre connaître ton profil (voir sa section dédiée plus bas).",
     "",
-    "MODE A - PERTINENT : personnalise UNIQUEMENT le bloc goals sur les éléments réellement concernés (le bloc skin, lui, reste TOUJOURS objectif).",
-    "- goals : répond-il à un objectif/une préoccupation du profil ? Cite l'actif ou le fait précis. AFFIRME (« Répond à ton objectif hydratation » / « Ne cible pas tes imperfections »).",
-    "- N'invente AUCUN lien sur un objectif/une zone que le profil ne mentionne pas.",
+    "MODE A - PERTINENT : personnalise le bloc goals (le bloc skin, lui, reste TOUJOURS objectif).",
+    "- goals = TON BLOC VEDETTE : personnalisé, VALORISANT et ENGAGEANT. Relie un ACTIF RÉEL de la formule à CE QUE LA PERSONNE VEUT (son objectif, sa préoccupation, son type de peau) et dis-lui clairement que le produit lui correspond. Cite l'actif par son nom grand public.",
+    "- PRIORITÉ : si un actif présent À DOSE RÉELLE (pas en fin de liste, pas tagué « conservateur ») adresse DIRECTEMENT une préoccupation/un objectif déclaré (ex : niacinamide -> teint terne/pores ; acide hyaluronique -> hydratation ; rétinol -> rides), METS CET ACTIF-LÀ EN AVANT, même si l'ingrédient vedette marketing (ex : « chanvre », « superfood ») met autre chose en avant. La préoccupation de la personne prime sur le storytelling, MAIS l'honnêteté prime sur tout : ne relie un actif à un besoin que s'il est vraiment là pour ça.",
+    "- MODÈLE À SUIVRE (ton, structure, chaleur) : « Ce sérum cible tes boutons et tes imperfections grâce à l'acide salicylique, adapté à ta peau grasse. » -> [actif] + [objectif/préoccupation EXACT du profil] + [type de peau si pertinent], le tout en te tutoyant.",
+    "- Nomme l'objectif/la préoccupation EXACTS tels qu'ils sont dans le profil (si le profil parle d'acné/boutons, dis « tes boutons » ; s'il parle d'hydratation, dis « ton objectif hydratation »). Si un objectif n'est PAS servi, tu peux le dire aussi (« ne cible pas tes rides »), mais PRIVILÉGIE ce que le produit APPORTE.",
+    "- N'invente AUCUN lien : un actif ne se relie à un objectif que si le lien est RÉEL et connu (ex : acide salicylique -> imperfections/boutons/peau grasse ; acide hyaluronique -> hydratation ; niacinamide -> teint/pores).",
+    "- N'ATTRIBUE À LA PERSONNE QUE les caractéristiques EXACTES de son profil (type de peau visage/corps, préoccupations, objectifs DÉCLARÉS). INTERDIT d'inventer un attribut non déclaré : ne dis pas « peau sensible », « peau sèche », « peau mature » si ce n'est pas écrit. Recopie les termes du profil, ne les enrichis pas.",
+    "- Ne survends PAS un ingrédient présent à dose de conservateur/trace comme s'il était l'actif principal : si un actif connu (ex : acide salicylique) est en FIN de liste INCI ou tagué « conservateur », NE le présente PAS comme un traitement (« cible tes boutons ») ; privilégie le/les vrai(s) actif(s) vedette(s) de la formule.",
     "",
     "MODE B - NON PERTINENT (aucun lien, ou profil vide) : dans le bloc goals, tu TUTOIES la personne MAIS tu ne PRÉTENDS PAS connaître son profil. INTERDIT de prétendre qu'un objectif/une peau la concerne (« répond à ton objectif », « adapté à ta peau grasse », « cible tes imperfections » alors que RIEN n'est déclaré = FAUX). Tu juges le PRODUIT EN LUI-MÊME, mais tu peux t'adresser à elle :",
     "- goals → QUALITÉ DE LA FORMULE, RIEN d'autre : juge la formule sur ses ingrédients réels (actifs notables, douceur, simplicité, défauts). Titre 100% centré PRODUIT, ex : « Bonne formule lavante », « Formule correcte », « Formule très basique ». Ne mentionne JAMAIS un objectif/une préoccupation/la peau qui ne serait pas déclaré. tone vert si bonne, ambre si moyenne, rouge si pauvre.",
@@ -127,10 +139,12 @@ function buildPrompt(input: PersonalInput): { system: string; user: string } {
     "- 3 oranges et plus, OU au moins 1 rouge : tone ROUGE.",
     "- EN MODE A : même si le produit cible ton objectif, le tone de goals NE PEUT PAS être vert s'il y a des oranges/rouges. Dis le double constat, ex : « Cible l'hydratation mais formule pénalisée par un conservateur à risque » (tone rouge).",
     "- Ne dis JAMAIS « correcte/bonne » ni « rien à surveiller » pour une formule contenant des oranges/rouges.",
+    "- INVERSEMENT (impératif) : si la NOTE GLOBALE est BONNE (verte) ET qu'il n'y a NI orange NI rouge, n'écris JAMAIS « formule moyenne / correcte sans plus / basique / décevante » dans goals. C'est une BONNE formule : valorise-la (tone vert). Un simple ingrédient JAUNE (pénalité légère) ne rend PAS une formule « moyenne ».",
     "",
     "RÈGLES GLOBALES :",
+    "- TON VALORISANT (impératif goals) : quand le produit correspond vraiment à la personne, sois POSITIF, chaleureux et ENGAGEANT ; mets en avant ce qu'il lui APPORTE. La valorisation s'appuie TOUJOURS sur un actif/fait RÉEL (jamais de flatterie vide, jamais de superlatif interdit).",
     "- TUTOIEMENT VIVANT (les 3 DESCRIPTIONS, impératif) : chaque description S'ADRESSE à la personne en la tutoyant (impératif « utilise-la », « retiens », « compte sur », « garde à l'esprit », « sers-t'en », ou « tu »). BANNIS le ton fiche produit qui ne parle à personne (« Contient… », « Formule qui… », « Adaptée pour… » sans sujet) : reformule en t'adressant à elle. Le TITRE peut rester un label court ; la DESCRIPTION, elle, TE parle. Attention : tutoyer n'autorise PAS à inventer un attribut du profil (voir MODE B / bloc skin).",
-    "- LANGAGE GRAND PUBLIC (impératif, TOUS les blocs) : n'écris JAMAIS de nom INCI/scientifique. INTERDITS (exemples) : « Glyceryl Oleate », « PCA », « Cetearyl Alcohol », « Behentrimonium », « Phenoxyethanol », « Methylparaben », « Methylisothiazolinone », « Sodium Laureth Sulfate », « Panthenol », « Tocopherol », « Dimethicone ». À la place, CATÉGORIES simples : « émollients », « agents adoucissants », « conservateur » (et « (parabène) » si c'en est un), « parfum », « agents lavants », « alcool », « huiles végétales », « agent réparateur ». RÉÉCRIS systématiquement : un parabène → « un conservateur (parabène) » ; un sulfate (…Sulfate) → « un agent lavant sulfaté » ; panthénol → « agent apaisant » ; tocophérol → « vitamine E » ; diméthicone → « silicone ». Tu peux nommer un ingrédient SEULEMENT s'il est connu du grand public (Aloe Vera, beurre de karité, huile d'argan, glycérine, acide hyaluronique, niacinamide). Décris les fonctions en mots simples (adoucit, hydrate, nettoie, conserve, parfume).",
+    "- LANGAGE GRAND PUBLIC (impératif, TOUS les blocs) : n'écris JAMAIS de nom INCI/scientifique. INTERDITS (exemples) : « Glyceryl Oleate », « PCA », « Cetearyl Alcohol », « Behentrimonium », « Phenoxyethanol », « Methylparaben », « Methylisothiazolinone », « Sodium Laureth Sulfate », « Panthenol », « Tocopherol », « Dimethicone ». À la place, CATÉGORIES simples : « émollients », « agents adoucissants », « conservateur » (et « (parabène) » si c'en est un), « parfum », « agents lavants », « alcool », « huiles végétales », « agent réparateur ». RÉÉCRIS systématiquement : un parabène → « un conservateur (parabène) » ; un sulfate (…Sulfate) → « un agent lavant sulfaté » ; panthénol → « agent apaisant » ; tocophérol → « vitamine E » ; diméthicone → « silicone ». Tu peux nommer un ingrédient SEULEMENT s'il est connu du grand public (Aloe Vera, beurre de karité, huile d'argan, glycérine, acide hyaluronique, niacinamide, acide salicylique, rétinol, vitamine C, vitamine E, caféine, zinc, acide glycolique). Décris les fonctions en mots simples (adoucit, hydrate, nettoie, conserve, parfume).",
     "- AFFIRMATIF : tu donnes le verdict, tu ne renvoies JAMAIS la décision à l'utilisateur. INTERDIT : « à tester », « teste », « à voir », « vois par toi-même », « peut-être », « il se pourrait », « il faudrait essayer ».",
     "- PAS DE SURVENTE : INTERDIT les mots « idéal », « idéale », « parfait », « parfaite », « incontournable », « le meilleur », « la meilleure », et toute flatterie vague. Dis plutôt « adapté », « correct », « bon pour ». Chaque phrase s'appuie sur un ingrédient/fait réel.",
     "- Pas d'emoji, pas de jargon médical, pas de promesse de soin (« soigne/traite/guérit/répare » interdits → « hydrate/adoucit/nettoie/protège »). AUCUN tiret cadratin (—) ni demi-cadratin (–) : virgule ou deux-points.",
@@ -145,7 +159,7 @@ function buildPrompt(input: PersonalInput): { system: string; user: string } {
   const user = [
     `Produit : ${input.productLabel ?? "(liste collée, sans nom)"}`,
     `Type de produit : ${input.category ?? "non précisé"} (sers-t'en pour juger la PERTINENCE peau).`,
-    `Note globale : ${input.score.toFixed(1)}/20 (${input.scoreLabel}).`,
+    `Note globale : ${input.score.toFixed(1)}/20 (${input.scoreLabel})${input.scoreTone ? `, ton ${input.scoreTone === "green" ? "VERT (bonne formule)" : input.scoreTone === "orange" ? "ORANGE (moyenne)" : input.scoreTone === "red" ? "ROUGE (faible)" : input.scoreTone}` : ""}.`,
     `Comptes : Vert=${input.counts.Vert ?? 0}, Jaune=${input.counts.Jaune ?? 0}, Orange=${input.counts.Orange ?? 0}, Rouge=${input.counts.Rouge ?? 0}.`,
     `À SIGNALER OBLIGATOIREMENT dans le bloc watch (en CATÉGORIES grand public, jamais de nom scientifique) : ${toSignal.length ? toSignal.join(", ") : "RIEN (0 orange, 0 rouge, 0 restriction) → watch vert « Rien à surveiller »"}`,
     "Les noms d'ingrédients ci-dessous sont en INCI : NE LES RECOPIE JAMAIS, traduis-les en catégorie grand public.",
@@ -154,6 +168,9 @@ function buildPrompt(input: PersonalInput): { system: string; user: string } {
     "",
     "Actifs VERTS notables (rôle) :",
     greens.length ? greens.slice(0, 10).map(fmt).join("\n") : "(aucun avec fonction connue)",
+    "",
+    "Actifs JAUNES (pénalité LÉGÈRE, mais souvent des ACTIFS CLÉS - CITE-les dans goals s'ils touchent le profil) :",
+    yellows.length ? yellows.slice(0, 8).map(fmt).join("\n") : "(aucun)",
     "",
     "ORANGES :",
     oranges.length ? oranges.slice(0, 8).map(fmt).join("\n") : "(aucun)",
@@ -218,9 +235,15 @@ function coerceBlock(raw: unknown, fallbackTitle: string): Block | null {
  */
 function enforceInvariants(
   blocks: PersonalBlocks,
-  ctx: { orange: number; red: number; restrictionHit: boolean; signalCats: string[] },
+  ctx: {
+    orange: number;
+    red: number;
+    restrictionHit: boolean;
+    signalCats: string[];
+    scoreTone?: string | null;
+  },
 ): PersonalBlocks {
-  const { orange, red, restrictionHit, signalCats } = ctx;
+  const { orange, red, restrictionHit, signalCats, scoreTone } = ctx;
   const concerns = red > 0 || orange > 0 || restrictionHit;
 
   blocks.watch.tone = red > 0 || restrictionHit ? "rouge" : orange > 0 ? "ambre" : "vert";
@@ -238,6 +261,12 @@ function enforceInvariants(
 
   if (red > 0 || orange >= 3) blocks.goals.tone = "rouge";
   else if (orange > 0 && blocks.goals.tone === "vert") blocks.goals.tone = "ambre";
+  // Ancrage note globale : produit BIEN noté (vert) sans orange ni rouge -> goals
+  // ne peut pas rester gris/ambre (contredirait la pastille verte). Un jaune seul
+  // ne dégrade pas. Le prompt garantit déjà un TEXTE positif dans ce cas.
+  else if (scoreTone === "green" && orange === 0 && red === 0 && blocks.goals.tone !== "vert") {
+    blocks.goals.tone = "vert";
+  }
 
   // description watch jamais vide
   if (!blocks.watch.description || !blocks.watch.description.trim()) {
@@ -323,6 +352,7 @@ export async function generatePersonalBlocks(input: PersonalInput): Promise<Pers
     const enforced = enforceInvariants(blocks, {
       orange: input.counts.Orange ?? 0,
       red: input.counts.Rouge ?? 0,
+      scoreTone: input.scoreTone ?? null,
       restrictionHit: input.restrictionMatches.length > 0,
       signalCats: [
         ...new Set(input.restrictionMatches.map((m) => m.label).filter(Boolean)),
