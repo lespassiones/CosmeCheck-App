@@ -35,7 +35,6 @@ export interface AppConfig {
    */
   flag_routine_reorganize: boolean
   flag_conflicts: boolean
-  flag_skin_score: boolean
   flag_weekly_picks: boolean
   /** Notifications (pilotables depuis l'admin). */
   notif_reminders_enabled: boolean
@@ -54,7 +53,6 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   flag_public_share: true,
   flag_routine_reorganize: false,
   flag_conflicts: false,
-  flag_skin_score: false,
   flag_weekly_picks: false,
   notif_reminders_enabled: true,
   notif_bilan_weekday: 7,
@@ -81,7 +79,6 @@ function coerce(raw: unknown): AppConfig {
     flag_public_share: bool('flag_public_share'),
     flag_routine_reorganize: bool('flag_routine_reorganize'),
     flag_conflicts: bool('flag_conflicts'),
-    flag_skin_score: bool('flag_skin_score'),
     flag_weekly_picks: bool('flag_weekly_picks'),
     notif_reminders_enabled: bool('notif_reminders_enabled'),
     notif_bilan_weekday: int('notif_bilan_weekday', 1, 7),

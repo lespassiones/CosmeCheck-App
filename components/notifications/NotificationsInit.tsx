@@ -11,8 +11,8 @@
  *   4. écoute NEW_HIGH_CONFLICTS_EVENT et présente une alerte pour le premier
  *      nouveau conflit high.
  *
- * JAMAIS de prompt de permission ici : l'opt-in se fait via la carte
- * post-premier-bilan (EnableNotificationsCard) ou les réglages du profil.
+ * JAMAIS de prompt de permission ici : l'opt-in se fait via les réglages du
+ * profil (section Notifications).
  */
 
 import { useEffect } from 'react'

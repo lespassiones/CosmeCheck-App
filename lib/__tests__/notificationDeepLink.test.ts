@@ -14,10 +14,6 @@ import {
 } from '@/lib/notifications/deepLink'
 
 describe('routeForNotificationData : routes autorisées', () => {
-  it('accepte /peau (écran bilan)', () => {
-    expect(routeForNotificationData({ url: '/peau' })).toBe('/peau')
-  })
-
   it('accepte /(tabs)/routine (alerte conflit)', () => {
     expect(routeForNotificationData({ url: '/(tabs)/routine' })).toBe('/(tabs)/routine')
   })
@@ -40,6 +36,8 @@ describe('routeForNotificationData : refus strict', () => {
 
   it('refuse une route interne hors allowlist', () => {
     expect(routeForNotificationData({ url: '/offre' })).toBeNull()
+    // /peau retiré : la feature « score de peau » a été supprimée de l'app.
+    expect(routeForNotificationData({ url: '/peau' })).toBeNull()
   })
 
   it('refuse les variantes maquillées (préfixe, query, traversal, casse)', () => {

@@ -9,7 +9,6 @@
  *   1. Exposition cumulée      -> app/routine/exposition.tsx
  *   2. Ma routine soin         -> app/routine/produits.tsx (kind = 'routine')
  *   3. Produits du quotidien   -> app/routine/quotidien.tsx (kind = 'staple')
- *   4. Score de peau           -> app/peau/index.tsx (si flag_skin_score)
  */
 
 import { type FC, useMemo } from 'react'
@@ -34,7 +33,6 @@ import { type BlobCounts } from '@/components/design/IngredientBlob'
 import { ScreenHeader } from '@/components/shared/ScreenHeader'
 import { ExposureSummaryCard } from '@/components/routine/ExposureSummaryCard'
 import { RoutineProductsCard } from '@/components/routine/RoutineProductsCard'
-import { SkinScoreCard } from '@/components/peau/SkinScoreCard'
 
 function titleFor(item: RoutineItem): string {
   return decodeHtml(item.analysis?.product_label?.trim() || item.analysis?.name?.trim()) || 'Produit'
@@ -140,12 +138,6 @@ const RoutineScreen: FC = () => {
                   matin ni soir.
                 </Text>
               </View>
-
-              {appConfig.flag_skin_score && (
-                <View style={styles.card}>
-                  <SkinScoreCard />
-                </View>
-              )}
             </Reveal>
           </ScrollView>
         )}

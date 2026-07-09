@@ -206,9 +206,6 @@ function RootNavigator() {
       <Stack.Screen name="routine/produits" />
       <Stack.Screen name="routine/quotidien" />
       <Stack.Screen name="routine/item/[id]" />
-      <Stack.Screen name="peau/index" />
-      <Stack.Screen name="peau/bilan" options={{ presentation: 'modal' }} />
-      <Stack.Screen name="peau/scan" options={{ animation: 'fade' }} />
       <Stack.Screen name="analyse/[id]" />
       <Stack.Screen name="alternatives/[ean]" />
       <Stack.Screen name="promesses/choisir" />

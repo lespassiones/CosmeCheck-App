@@ -1,15 +1,15 @@
 /**
  * NotificationSettings — section "Notifications" du profil.
  *
- * Toggle maître + deux lignes descriptives (rappel de bilan hebdo, suivi produit
- * J+14 en phase 2). Gère les états dégradés :
+ * Toggle maître + ligne "Suivi produit" (J+14, phase 2). Gère les états
+ * dégradés :
  *   - module natif absent (OTA pré-rebuild) -> bandeau "Disponible apres la
  *     prochaine mise a jour de l'application", contrôles inertes ;
  *   - permission refusée alors que le toggle est ON -> lien vers les réglages
  *     système (Linking.openSettings).
  *
  * Le toggle écrit dans preferences.notifications (merge non destructif) et
- * (dé)programme le rappel hebdo via le scheduler.
+ * enregistre le token push (alertes de routine).
  */
 
 import { type FC, useCallback, useEffect, useState } from 'react'
@@ -120,11 +120,6 @@ export const NotificationSettings: FC = () => {
       </View>
 
       <View style={styles.divider} />
-
-      <View style={[styles.row, rowsDisabled && styles.rowDisabled]}>
-        <Text style={styles.rowLabel}>Rappels de bilan</Text>
-        <Text style={styles.rowValue}>Hebdomadaire</Text>
-      </View>
 
       <View style={[styles.row, rowsDisabled && styles.rowDisabled]}>
         <View style={styles.rowLabelWrap}>

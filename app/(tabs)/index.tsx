@@ -44,7 +44,6 @@ import { ScreenHeader } from '@/components/shared/ScreenHeader'
 import { TipCarousel } from '@/components/home/TipCarousel'
 import { DailyPicksCard } from '@/components/home/DailyPicksCard'
 import { WeeklyPicksCard } from '@/components/home/WeeklyPicksCard'
-import { SkinScoreCard } from '@/components/peau/SkinScoreCard'
 import { useAppConfig } from '@/hooks/useAppConfig'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
@@ -289,13 +288,6 @@ const DashboardScreen: FC = () => {
             </DashboardTile>
           </View>
 
-          {/* Score de peau (sous les 4 blocs) */}
-          {config.flag_skin_score && (
-            <View style={styles.skinScoreWrap}>
-              <SkinScoreCard />
-            </View>
-          )}
-
           {/* Pépites de la semaine (produits sélectionnés pour le profil) */}
           {config.flag_weekly_picks && (
             <View style={styles.weeklyPicksWrap}>
@@ -331,9 +323,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   dailyPicksWrap: {
-    marginTop: spacing.base,
-  },
-  skinScoreWrap: {
     marginTop: spacing.base,
   },
   weeklyPicksWrap: {

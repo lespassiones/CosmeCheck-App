@@ -14,7 +14,7 @@
  */
 
 /** Routes internes autorisées au tap d'une notification. Correspondance exacte. */
-export const NOTIFICATION_ROUTE_ALLOWLIST = ['/peau', '/(tabs)/routine', '/(tabs)'] as const
+export const NOTIFICATION_ROUTE_ALLOWLIST = ['/(tabs)/routine', '/(tabs)'] as const
 
 /**
  * Route de navigation pour un payload de notification, ou null si le payload

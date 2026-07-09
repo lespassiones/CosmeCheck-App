@@ -1,8 +1,0 @@
-{
-  "imports": {
-    "std/": "https://deno.land/std@0.224.0/",
-    "@supabase/supabase-js": "npm:@supabase/supabase-js@2"
-  },
-  "lint": { "rules": { "tags": ["recommended"] } },
-  "compilerOptions": { "lib": ["deno.window", "deno.ns", "dom"], "strict": true }
-}

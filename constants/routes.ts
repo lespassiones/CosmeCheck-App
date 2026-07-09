@@ -45,13 +45,6 @@ export const ROUTES = {
     ITEM: (id: string) => `/routine/item/${id}` as const,
   },
 
-  // ── Ma peau (score de peau, bilan hebdo, scan visage) ─────────────
-  PEAU: {
-    INDEX: '/peau',
-    BILAN: '/peau/bilan',
-    SCAN: '/peau/scan',
-  },
-
   // ── Analyse ─────────────────────────────────────────────────────
   ANALYSE: {
     DETAIL: (id: string) => `/analyse/${id}` as const,
