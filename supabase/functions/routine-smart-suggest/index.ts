@@ -85,11 +85,15 @@ type SuggestionOut = {
   locked: boolean;
 };
 
-const EXACT_LIMIT = 30;
+const EXACT_LIMIT = 50; // candidats catalogue récupérés (par note) avant filtre « propre »
 const SHORTLIST = 6; // candidats soumis à l'IA par produit
 const GREEN_MIN = 13; // zone verte (« Bien »)
-const MIN_IMPROVEMENT = 0.5;
 const MAX_ITEMS = 40;
+
+// Version du MOTEUR : incluse dans profile_sig → un changement de logique
+// invalide TOUT le cache existant (régénération à la prochaine ouverture, comme
+// le bump de clé localStorage côté web). Bumper à chaque évolution de la règle.
+const ENGINE_VERSION = "e3";
 
 // ─── Règle de sélection (À GARDER EN PHASE avec mobile lib/routine/qualify.ts) ─
 // Le jaune doit simplement DÉPASSER le vert (jaune > vert) pour un produit sans
@@ -234,7 +238,7 @@ function profileSig(skin: SkinProfile, r: UserRestrictions): string {
     h ^= canonical.charCodeAt(i);
     h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
   }
-  return `v1-${h.toString(16)}-${canonical.length.toString(16)}`;
+  return `${ENGINE_VERSION}-${h.toString(16)}-${canonical.length.toString(16)}`;
 }
 
 // ─── Alternatives (catégorie exacte) ────────────────────────────────────────
@@ -291,24 +295,51 @@ async function classifyByName(sb: SB, name: string): Promise<string | null> {
   return null;
 }
 
+function mapCatalogAlt(rows: unknown): CatalogAlt[] {
+  if (!Array.isArray(rows)) return [];
+  return (rows as Record<string, unknown>[]).map((row) => ({
+    ean: String(row.ean ?? ""),
+    brand: (row.brand as string | null) ?? null,
+    name: (row.name as string | null) ?? null,
+    category: (row.category as string | null) ?? null,
+    image_url: (row.image_url as string | null) ?? null,
+    score: (row.score as number) ?? 0,
+    ingredients_text: (row.ingredients_text as string | null) ?? null,
+    count_orange: (row.count_orange as number) ?? 0,
+    count_rouge: (row.count_rouge as number) ?? 0,
+  }));
+}
+
+/** Feuille exacte (ex. `hygiene-du-corps/deodorant/anti-transpirant`). */
 async function fetchAlternatives(sb: SB, category: string): Promise<CatalogAlt[]> {
   try {
     const { data, error } = await sb.rpc("cosme_check_alternatives_by_category_exact", {
       p_category: category, p_limit: EXACT_LIMIT, p_offset: 0,
     });
-    if (error || !Array.isArray(data)) return [];
-    return (data as Record<string, unknown>[]).map((row) => ({
-      ean: String(row.ean ?? ""),
-      brand: (row.brand as string | null) ?? null,
-      name: (row.name as string | null) ?? null,
-      category: (row.category as string | null) ?? null,
-      image_url: (row.image_url as string | null) ?? null,
-      score: (row.score as number) ?? 0,
-      ingredients_text: (row.ingredients_text as string | null) ?? null,
-      count_orange: (row.count_orange as number) ?? 0,
-      count_rouge: (row.count_rouge as number) ?? 0,
-    }));
+    if (error) return [];
+    return mapCatalogAlt(data);
   } catch { return []; }
+}
+
+/** Catégorie PARENTE = toutes les feuilles sœurs sous le même parent, ex. préfixe
+ *  `hygiene-du-corps/deodorant/%`. Sert de repli quand la feuille exacte est
+ *  affamée (peu/pas de produits propres) alors que les sœurs en regorgent
+ *  (cf. « thin-category-facet-starvation »). */
+async function fetchAlternativesByPrefix(sb: SB, prefix: string): Promise<CatalogAlt[]> {
+  try {
+    const { data, error } = await sb.rpc("cosme_check_alternatives_by_category_prefix", {
+      p_prefix: prefix, p_limit: EXACT_LIMIT, p_offset: 0,
+    });
+    if (error) return [];
+    return mapCatalogAlt(data);
+  } catch { return []; }
+}
+
+/** Préfixe parent d'un chemin de catégorie : `a/b/c` → `a/b/%` (null si pas de parent). */
+function parentPrefix(category: string): string | null {
+  const parts = category.split("/").filter(Boolean);
+  if (parts.length < 2) return null;
+  return `${parts.slice(0, -1).join("/")}/%`;
 }
 
 function altHitsRestriction(alt: CatalogAlt, r: UserRestrictions): boolean {
@@ -321,14 +352,40 @@ function altHitsRestriction(alt: CatalogAlt, r: UserRestrictions): boolean {
   });
 }
 
-/** Shortlist : restriction-clean + zone verte (≥13) + strictement meilleur, triée par note desc. */
-function shortlist(productCapped: number, alts: CatalogAlt[], r: UserRestrictions, ownEan: string | null): CatalogAlt[] {
-  const threshold = productCapped + MIN_IMPROVEMENT;
+/**
+ * Shortlist déterministe = 1re « réanalyse » de la recette via les compteurs
+ * couleur AUTORITATIFS (product_score_cap : count_orange/count_rouge) + scan des
+ * ingrédients explicitement bannis. On ne garde QUE des alternatives réellement
+ * PROPRES :
+ *   - 0 rouge ET 0 orange (jamais un produit pénalisant, comme le produit actuel) ;
+ *   - note ≥ 13 (zone verte « Bien ») ;
+ *   - aucun ingrédient nommé restreint par l'utilisateur ;
+ *   - EAN ≠ produit lui-même.
+ *
+ * On NE compare PLUS sur la note brute du produit. Raison : le color cap est
+ * neutralisé (lib/analysis/scoreCap.ts) → un produit SALE peut garder une note
+ * brute élevée (ex. déo Dove 3 rouge/3 orange mais note 19,2). L'ancien seuil
+ * « note_alt > note_produit + 0,5 » privait alors TOUT produit orange/rouge de
+ * suggestion (bug « ces produits sont déjà propres »). La propreté (0 orange /
+ * 0 rouge) est le vrai critère « mieux ».
+ *
+ * Exception : quand le produit qualifie UNIQUEMENT par dominance jaune (0 orange,
+ * 0 rouge, aucune restriction), on exige une note strictement meilleure pour
+ * éviter un remplacement latéral sans gain.
+ *
+ * Trié par note desc, top SHORTLIST — soumis ensuite à la réanalyse IA.
+ */
+function shortlist(item: ReqItem, alts: CatalogAlt[], r: UserRestrictions): CatalogAlt[] {
+  const pureYellow =
+    (item.counts.orange ?? 0) === 0 &&
+    (item.counts.rouge ?? 0) === 0 &&
+    (item.restrictedCount ?? 0) === 0;
   return alts
-    .filter((a) => a.ean && a.ean !== ownEan)
+    .filter((a) => a.ean && a.ean !== item.ean)
+    .filter((a) => (a.count_rouge ?? 0) === 0 && (a.count_orange ?? 0) === 0)
+    .filter((a) => a.score >= GREEN_MIN)
+    .filter((a) => !pureYellow || a.score > item.cappedScore)
     .filter((a) => !altHitsRestriction(a, r))
-    .filter((a) => (a.count_rouge ?? 0) === 0) // jamais un produit contenant du rouge
-    .filter((a) => a.score >= GREEN_MIN && a.score > threshold)
     .sort((x, y) => y.score - x.score)
     .slice(0, SHORTLIST);
 }
@@ -340,13 +397,22 @@ async function resolveCategory(item: ReqItem, catByEan: Map<string, string>, sb:
   return classifyByName(sb, item.name);
 }
 
-// ─── Classement IA batché (choisit LA meilleure par produit + « pourquoi ») ──
+// ─── Réanalyse IA : type d'usage + restrictions + profil (2 passes max) ───────
+// Pour CHAQUE produit qualifié, on soumet à l'IA ses candidats DÉJÀ PROPRES (0
+// orange / 0 rouge + note ≥ 13, filtrés côté serveur) AVEC leur RECETTE (INCI).
+// L'IA « réanalyse » chaque recette et renvoie jusqu'à DEUX meilleurs candidats
+// (best-first) qui sont À LA FOIS : (1) le MÊME type/usage/zone que le produit
+// actuel, (2) dont la recette RESPECTE les restrictions (familles + ingrédients
+// nommés), (3) adaptés au profil. [] si aucun n'est valide. L'appelant tente
+// ensuite l'indice 1 (pass 1) puis l'indice 2 (pass 2) avec un garde
+// déterministe — d'où « 2 passes maximum ».
 
-type RankTask = { idx: number; product: string; category: string; candidates: CatalogAlt[] };
-type RankResult = { best_index: number; reason: string };
+type EvalCand = { n: number; label: string; inci: string };
+type EvalTask = { idx: number; product: string; candidates: EvalCand[] };
+type EvalResult = { best_indices: number[]; reason: string };
 
-const RANK_SCHEMA = {
-  name: "rank_alternatives",
+const EVAL_SCHEMA = {
+  name: "evaluate_alternatives",
   strict: true,
   schema: {
     type: "object",
@@ -357,8 +423,11 @@ const RANK_SCHEMA = {
         items: {
           type: "object",
           additionalProperties: false,
-          properties: { best_index: { type: "integer" }, reason: { type: "string" } },
-          required: ["best_index", "reason"],
+          properties: {
+            best_indices: { type: "array", items: { type: "integer" } },
+            reason: { type: "string" },
+          },
+          required: ["best_indices", "reason"],
         },
       },
     },
@@ -366,134 +435,37 @@ const RANK_SCHEMA = {
   },
 } as const;
 
-function buildRankPrompt(tasks: RankTask[], profileText: string): { system: string; user: string } {
+function buildEvalPrompt(
+  tasks: EvalTask[],
+  profileText: string,
+  restrictionText: string,
+): { system: string; user: string } {
   const system =
-    "Tu es un expert cosmétique. Pour CHAQUE produit, on te donne sa catégorie et une liste numérotée d'ALTERNATIVES candidates (déjà plus propres et respectant les restrictions de l'utilisateur). "
-    + "Choisis LA meilleure alternative pour CET utilisateur. "
-    + "IMPORTANT : ne retiens du profil QUE ce qui est pertinent pour la catégorie du produit (ex : pour un shampoing, ignore les préoccupations du visage/pieds ; pour une crème visage, ignore l'état des cheveux). "
-    + "Toutes les candidates sont DÉJÀ de la bonne catégorie, plus propres et respectent les restrictions : il y a donc presque toujours un bon choix. Choisis la plus adaptée au profil ; si le profil n'apporte rien de pertinent pour CETTE catégorie, prends simplement la MIEUX NOTÉE. "
-    + "Ne renvoie best_index = 0 QUE si les candidates sont manifestement d'un TYPE de produit différent du produit (cas rare). Ne renvoie JAMAIS 0 juste parce que le profil ne correspond pas à la catégorie. "
-    + "best_index est l'indice 1-based de la meilleure candidate (ou 0 dans le cas rare ci-dessus). "
-    + "reason = une phrase courte en tutoiement expliquant pourquoi CE produit te correspond (mentionne l'élément de profil pertinent, ex : « pour ta peau sensible… »). Pas de superlatifs marketing. "
+    "Tu es un expert cosmétique rigoureux. Pour CHAQUE produit de la routine de l'utilisateur, on te donne son nom et une liste numérotée d'ALTERNATIVES candidates (déjà plus propres : sans ingrédient orange/rouge, bien notées). Chaque candidate a sa RECETTE (INCI). "
+    + "RÉANALYSE la recette de chaque candidate et sélectionne jusqu'à DEUX meilleures candidates (best-first) qui remplissent TOUTES ces conditions : "
+    + "(1) MÊME ZONE d'application (visage / corps / cheveux / bouche-dents / aisselles) ET MÊME usage (laver-rincer ; hydrater-laisser poser ; déodorer ; démaquiller...). La TEXTURE/forme peut différer tant que la zone ET l'usage sont identiques. "
+    + "COMPATIBLES (exemples) : pour HYDRATER le corps, lait ↔ crème ↔ baume ↔ beurre corporel ; pour LAVER le corps, gel douche ↔ crème lavante ↔ savon liquide corps ↔ huile de douche ↔ body wash ↔ pain surgras ; pour les AISSELLES, déodorant ↔ anti-transpirant ↔ déo stick/bille/spray/crème (proposer un déodorant SANS sels d'aluminium à la place d'un anti-transpirant à l'aluminium est un TRÈS BON remplacement) ; deux nettoyants VISAGE (gel/mousse/huile/gelée) ; deux dentifrices ; deux shampooings. "
+    + "INCOMPATIBLES (zone OU usage différent) : gel douche (laver le corps) ≠ shampooing (laver les cheveux) ; laver ≠ hydrater ; soin VISAGE ≠ soin CORPS ; dentifrice ≠ déodorant ; démaquillant/nettoyant ≠ crème de jour ; soin cheveux ≠ soin peau. "
+    + "(2) la recette RESPECTE les restrictions : elle NE doit contenir AUCUN ingrédient d'une famille bannie NI aucun ingrédient nommé banni. Reconnais les familles dans l'INCI : sulfate = ...SULFATE (sodium lauryl/laureth/coco sulfate...) ; silicone = DIMETHICONE, ...SILOXANE, ...SILANOL, ...-CONE/-CONOL ; paraben = ...PARABEN ; ethoxyle (éthoxylé) = PEG-..., ...-ETH-... (LAURETH, STEARETH, CETEARETH...), POLYSORBATE ; propoxyle = PPG-.... "
+    + "(3) raisonnablement adaptée au profil (type de peau, préoccupations, objectifs) — ne retiens du profil que ce qui est pertinent pour CE type de produit. "
+    + "Si AUCUNE candidate ne remplit tout → best_indices = []. En cas de DOUTE sur la ZONE, l'USAGE ou une RESTRICTION → EXCLURE la candidate. Mais NE rejette PAS une candidate seulement parce que sa TEXTURE/forme diffère (lait vs baume, gel vs crème lavante, savon liquide vs gel douche) si la zone et l'usage sont identiques. "
+    + "best_indices = indices 1-based (max 2, best-first). reason = une phrase courte en tutoiement (≤ 18 mots) expliquant pourquoi CE TYPE de produit te convient, SANS nommer aucune marque ni produit (ex : « Plus doux pour ton corps très sec, et sans les ingrédients que tu évites »). Pas de marketing. "
     + "Réponds en JSON strict : un élément par produit, MÊME ordre, MÊME nombre.";
-  const blocks = tasks.map((t, i) => {
-    const cands = t.candidates
-      .map((c, k) => `   ${k + 1}. ${[c.brand, c.name].filter(Boolean).join(" ") || c.ean} (note ${c.score.toFixed(1)}/20)`)
-      .join("\n");
-    return `Produit ${i + 1} : "${t.product}" (catégorie : ${t.category})\n  Alternatives :\n${cands}`;
-  }).join("\n\n");
-  const user = `Profil de l'utilisateur : ${profileText}\n\n${blocks}\n\nRetourne { "results": [{ "best_index", "reason" }] } (un par produit, même ordre).`;
-  return { system, user };
-}
-
-function parseRank(raw: string | null, n: number): RankResult[] | null {
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as { results?: unknown };
-    const arr = Array.isArray(parsed.results) ? parsed.results : null;
-    if (!arr || arr.length !== n) return null;
-    return arr.map((r) => {
-      const o = (r ?? {}) as Record<string, unknown>;
-      const bi = typeof o.best_index === "number" ? Math.trunc(o.best_index) : 1;
-      return { best_index: bi, reason: typeof o.reason === "string" ? o.reason.slice(0, 220) : "" };
-    });
-  } catch { return null; }
-}
-
-async function rankAll(tasks: RankTask[], profileText: string, userId: string): Promise<RankResult[]> {
-  // Défaut déterministe : meilleure note (index 1), pas de raison.
-  const deterministic = (): RankResult[] => tasks.map(() => ({ best_index: 1, reason: "" }));
-  if (tasks.length === 0) return [];
-  if (!hasOpenAI() && !hasMistral()) return deterministic();
-  const { system, user } = buildRankPrompt(tasks, profileText);
-  try {
-    const res = await callWithFallback<RankResult[] | null>({
-      feature: "categorize",
-      userId,
-      timeoutMs: 22_000,
-      primary: async () => {
-        if (!hasOpenAI()) throw new Error("openai disabled");
-        const resp = await openai().chat.completions.create({
-          model: AI_MODEL,
-          temperature: 0,
-          max_tokens: 120 * tasks.length + 200,
-          messages: [{ role: "system", content: system }, { role: "user", content: user }],
-          response_format: { type: "json_schema", json_schema: RANK_SCHEMA },
-        });
-        return {
-          value: parseRank(resp.choices?.[0]?.message?.content ?? null, tasks.length),
-          tokensIn: resp.usage?.prompt_tokens,
-          tokensOut: resp.usage?.completion_tokens,
-        };
-      },
-      fallback: async () => {
-        if (!hasMistral()) return { value: null, provider: "mistral" as const };
-        const raw = await mistralChat({
-          temperature: 0,
-          maxTokens: 120 * tasks.length + 200,
-          responseFormat: { type: "json_object" },
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: `${user}\n\nFormat strict: { "results": [{"best_index": int, "reason": "..."}] }` },
-          ],
-        });
-        return { value: parseRank(raw, tasks.length), provider: "mistral" as const };
-      },
-    });
-    return res ?? deterministic();
-  } catch {
-    return deterministic();
-  }
-}
-
-// ─── Deuxième tour : vérification « même type / même besoin » ─────────────────
-// Contrôle indépendant : l'alternative CHOISIE répond-elle au MÊME besoin d'usage
-// que le produit actuel ? On se base sur les NOMS (pas la catégorie catalogue, qui
-// peut être fausse — ex. un gel douche tagué « shampooing »). Objectif : ne JAMAIS
-// proposer un produit d'un type manifestement différent. En cas de doute → rejet.
-
-type VerifyPair = { product: string; alternative: string };
-
-const VERIFY_SCHEMA = {
-  name: "verify_same_use",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      results: {
-        type: "array",
-        items: {
-          type: "object",
-          additionalProperties: false,
-          properties: { compatible: { type: "boolean" } },
-          required: ["compatible"],
-        },
-      },
-    },
-    required: ["results"],
-  },
-} as const;
-
-function buildVerifyPrompt(pairs: VerifyPair[]): { system: string; user: string } {
-  const system =
-    "Tu es un vérificateur qualité rigoureux d'un comparateur cosmétique. On te donne des paires "
-    + "(PRODUIT ACTUEL de l'utilisateur → ALTERNATIVE proposée). Pour CHAQUE paire, dis si l'alternative "
-    + "est le MÊME TYPE de produit répondant au MÊME besoin d'usage et à la MÊME zone d'application que le produit actuel. "
-    + "Règle STRICTE. Sont INCOMPATIBLES (compatible=false) : gel douche ≠ shampooing ; shampooing ≠ après-shampooing ; "
-    + "crème/soin visage ≠ lait/crème corps ; sérum ≠ nettoyant ; dentifrice ≠ déodorant ; démaquillant ≠ crème de jour ; "
-    + "soin cheveux ≠ soin peau. Sont COMPATIBLES (compatible=true) même si la forme diffère un peu : deux shampooings ; "
-    + "deux gels douche ; gel vs mousse nettoyante VISAGE ; deux crèmes hydratantes VISAGE ; deux déodorants ; deux laits corps. "
-    + "En cas de DOUTE réel sur le type ou la zone → compatible=false (on préfère ne rien proposer plutôt qu'un produit inadapté). "
-    + "Réponds en JSON strict : un élément par paire, MÊME ordre, MÊME nombre.";
-  const blocks = pairs
-    .map((p, i) => `Paire ${i + 1} :\n  Produit actuel : "${p.product}"\n  Alternative proposée : "${p.alternative}"`)
+  const blocks = tasks
+    .map((t, i) => {
+      const cands = t.candidates
+        .map((c) => `   ${c.n}. ${c.label}\n      INCI: ${c.inci || "(inconnu)"}`)
+        .join("\n");
+      return `Produit ${i + 1} : "${t.product}"\n  Candidates :\n${cands}`;
+    })
     .join("\n\n");
-  const user = `${blocks}\n\nRetourne { "results": [{ "compatible": true|false }] } (un par paire, même ordre).`;
+  const user =
+    `Profil : ${profileText}\nRestrictions : ${restrictionText}\n\n${blocks}\n\n`
+    + `Retourne { "results": [{ "best_indices": [..], "reason": "" }] } (un par produit, même ordre).`;
   return { system, user };
 }
 
-function parseVerify(raw: string | null, n: number): boolean[] | null {
+function parseEval(raw: string | null, n: number): EvalResult[] | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as { results?: unknown };
@@ -501,7 +473,13 @@ function parseVerify(raw: string | null, n: number): boolean[] | null {
     if (!arr || arr.length !== n) return null;
     return arr.map((r) => {
       const o = (r ?? {}) as Record<string, unknown>;
-      return o.compatible === true; // tout ce qui n'est pas explicitement true → rejet prudent
+      const bi = Array.isArray(o.best_indices)
+        ? (o.best_indices as unknown[])
+            .map((x) => (typeof x === "number" ? Math.trunc(x) : NaN))
+            .filter((x) => Number.isFinite(x) && x >= 1)
+            .slice(0, 2)
+        : [];
+      return { best_indices: bi, reason: typeof o.reason === "string" ? o.reason.slice(0, 220) : "" };
     });
   } catch {
     return null;
@@ -509,31 +487,36 @@ function parseVerify(raw: string | null, n: number): boolean[] | null {
 }
 
 /**
- * Renvoie un tableau aligné sur `pairs` : true = compatible (on propose),
- * false = incompatible (on rejette). `null` = vérification IMPOSSIBLE (IA
- * indisponible) → l'appelant décide de s'abstenir sans mémoriser le rejet.
+ * Un EvalResult par tâche, OU `null` si l'IA est indisponible / échoue.
+ * `null` → l'appelant S'ABSTIENT sans mémoriser de rejet (réessai au prochain
+ * tour) : sans réanalyse IA on ne peut garantir NI le type NI les restrictions,
+ * donc on ne devine jamais.
  */
-async function verifyCompatibility(pairs: VerifyPair[], userId: string): Promise<boolean[] | null> {
-  if (pairs.length === 0) return [];
-  // Pas d'IA → on ne peut pas garantir la compatibilité : signale « impossible ».
+async function evaluateAll(
+  tasks: EvalTask[],
+  profileText: string,
+  restrictionText: string,
+  userId: string,
+): Promise<EvalResult[] | null> {
+  if (tasks.length === 0) return [];
   if (!hasOpenAI() && !hasMistral()) return null;
-  const { system, user } = buildVerifyPrompt(pairs);
+  const { system, user } = buildEvalPrompt(tasks, profileText, restrictionText);
   try {
-    return await callWithFallback<boolean[] | null>({
+    return await callWithFallback<EvalResult[] | null>({
       feature: "categorize",
       userId,
-      timeoutMs: 20_000,
+      timeoutMs: 30_000,
       primary: async () => {
         if (!hasOpenAI()) throw new Error("openai disabled");
         const resp = await openai().chat.completions.create({
           model: AI_MODEL,
           temperature: 0,
-          max_tokens: 20 * pairs.length + 120,
+          max_tokens: 160 * tasks.length + 300,
           messages: [{ role: "system", content: system }, { role: "user", content: user }],
-          response_format: { type: "json_schema", json_schema: VERIFY_SCHEMA },
+          response_format: { type: "json_schema", json_schema: EVAL_SCHEMA },
         });
         return {
-          value: parseVerify(resp.choices?.[0]?.message?.content ?? null, pairs.length),
+          value: parseEval(resp.choices?.[0]?.message?.content ?? null, tasks.length),
           tokensIn: resp.usage?.prompt_tokens,
           tokensOut: resp.usage?.completion_tokens,
         };
@@ -542,19 +525,28 @@ async function verifyCompatibility(pairs: VerifyPair[], userId: string): Promise
         if (!hasMistral()) return { value: null, provider: "mistral" as const };
         const raw = await mistralChat({
           temperature: 0,
-          maxTokens: 20 * pairs.length + 120,
+          maxTokens: 160 * tasks.length + 300,
           responseFormat: { type: "json_object" },
           messages: [
             { role: "system", content: system },
-            { role: "user", content: `${user}\n\nFormat strict: { "results": [{"compatible": true|false}] }` },
+            { role: "user", content: `${user}\n\nFormat strict: { "results": [{"best_indices": [int], "reason": "..."}] }` },
           ],
         });
-        return { value: parseVerify(raw, pairs.length), provider: "mistral" as const };
+        return { value: parseEval(raw, tasks.length), provider: "mistral" as const };
       },
     });
   } catch {
     return null;
   }
+}
+
+/** Résumé des restrictions (familles + ingrédients + allergies) pour le prompt IA. */
+function restrictionSummary(r: UserRestrictions, skin: SkinProfile): string {
+  const parts: string[] = [];
+  if (r.families.length) parts.push(`Familles bannies : ${r.families.join(", ")}`);
+  if (r.ingredients.length) parts.push(`Ingrédients bannis : ${r.ingredients.map((i) => i.name).join(", ")}`);
+  if (skin.allergiesFreeform) parts.push(`Allergies / à éviter : ${skin.allergiesFreeform}`);
+  return parts.length ? parts.join(" ; ") : "Aucune restriction.";
 }
 
 // ─── Handler ────────────────────────────────────────────────────────────────
@@ -644,12 +636,26 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const prepared = await Promise.all(
     toGenerate.map(async (item) => {
       let category = await resolveCategory(item, catByEan, svc);
-      let cands = category ? shortlist(item.cappedScore, await fetchAlternatives(svc, category), restrictions, item.ean) : [];
+      let cands = category ? shortlist(item, await fetchAlternatives(svc, category), restrictions) : [];
+      // Repli 1 — ÉLARGIR AUX SŒURS : la feuille exacte peut être affamée (ex. déo
+      // « anti-transpirant » : ~91 produits, presque tous à l'aluminium) alors que
+      // les feuilles sœurs (« deodorant-stick/bille/spray... ») contiennent des
+      // milliers d'alternatives propres. On cherche alors dans la catégorie PARENTE.
+      if (cands.length === 0 && category) {
+        const prefix = parentPrefix(category);
+        if (prefix) {
+          cands = shortlist(item, await fetchAlternativesByPrefix(svc, prefix), restrictions);
+        }
+      }
+      // Repli 2 — re-route par nom (taxonomie catalogue) si toujours rien.
       if (cands.length === 0) {
-        // Re-route par nom (taxonomie catalogue fiable) si la catégorie ne donne rien.
         const byName = await classifyByName(svc, item.name);
         if (byName && byName !== category) {
-          const reCands = shortlist(item.cappedScore, await fetchAlternatives(svc, byName), restrictions, item.ean);
+          let reCands = shortlist(item, await fetchAlternatives(svc, byName), restrictions);
+          if (reCands.length === 0) {
+            const p = parentPrefix(byName);
+            if (p) reCands = shortlist(item, await fetchAlternativesByPrefix(svc, p), restrictions);
+          }
           if (reCands.length > 0) { category = byName; cands = reCands; }
         }
       }
@@ -657,84 +663,71 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }),
   );
 
-  // Classement IA batché sur les produits ayant au moins un candidat.
-  const rankTasks: RankTask[] = [];
-  const rankMap: number[] = []; // rankTasks[i] → index dans prepared
+  // Réanalyse IA (type d'usage + restrictions + profil) sur les produits ayant
+  // au moins un candidat propre. Un seul appel batché → jusqu'à 2 meilleurs
+  // candidats par produit (best-first).
+  const restrictionText = restrictionSummary(restrictions, skin);
+  const evalTasks: EvalTask[] = [];
   prepared.forEach((p, i) => {
-    if (p.cands.length > 0 && p.category) {
-      rankMap.push(i);
-      rankTasks.push({ idx: i, product: p.item.name, category: p.category, candidates: p.cands });
+    if (p.cands.length > 0) {
+      evalTasks.push({
+        idx: i,
+        product: p.item.name,
+        candidates: p.cands.map((c, k) => ({
+          n: k + 1,
+          label: [c.brand, c.name].filter(Boolean).join(" ") || c.ean,
+          inci: (c.ingredients_text ?? "").slice(0, 300),
+        })),
+      });
     }
   });
-  const ranks = await rankAll(rankTasks, profileText, user.id);
+  const evals = await evaluateAll(evalTasks, profileText, restrictionText, user.id);
 
-  // Choix final par produit à générer.
-  const chosen = new Map<string, { alternative: AltOut | null; reason: string | null; category: string | null }>();
+  // Choix final par produit à générer. `abstained` = IA indisponible → on ne
+  // cache rien (réessai au prochain tour, sans mémoriser de rejet).
+  type Chosen = { alternative: AltOut | null; reason: string | null; category: string | null; abstained: boolean };
+  const chosen = new Map<string, Chosen>();
   prepared.forEach((p) => {
-    chosen.set(p.item.analysisId, { alternative: null, reason: null, category: p.category });
+    chosen.set(p.item.analysisId, { alternative: null, reason: null, category: p.category, abstained: false });
   });
-  rankTasks.forEach((t, k) => {
-    const verdict = ranks[k] ?? { best_index: 1, reason: "" };
-    const p = prepared[t.idx];
-    // best_index = 0 → l'IA signale que les candidats sont d'un TYPE manifestement
-    // différent du produit (garde-fou). On RESPECTE ce signal : aucune alternative
-    // (plutôt qu'une reco inadaptée). Sinon, best_index hors borne → repli mieux notée.
-    const idx = verdict.best_index;
-    if (idx === 0) {
-      chosen.set(p.item.analysisId, { alternative: null, reason: null, category: p.category });
-      return;
-    }
-    const safeIdx = idx >= 1 && idx <= p.cands.length ? idx : 1;
-    const a = p.cands[safeIdx - 1];
-    const lt = scoreLabelTone(a.score);
-    chosen.set(p.item.analysisId, {
-      alternative: {
-        ean: a.ean, brand: a.brand, name: a.name, image_url: a.image_url, score: a.score,
-        score_label: lt.label, score_tone: lt.tone, ingredients_text: a.ingredients_text,
-      },
-      reason: verdict.reason || null,
-      category: p.category,
+
+  // Garde déterministe (2e couche de « réanalyse », backstop de l'IA) : la recette
+  // est-elle réellement propre (0 orange / 0 rouge) et sans ingrédient nommé banni ?
+  const passesClean = (c: CatalogAlt): boolean =>
+    (c.count_rouge ?? 0) === 0 && (c.count_orange ?? 0) === 0 && !altHitsRestriction(c, restrictions);
+
+  if (evals === null) {
+    // IA indisponible → s'abstenir pour tous les produits à générer (pas de cache).
+    prepared.forEach((p) => {
+      if (p.cands.length > 0) chosen.get(p.item.analysisId)!.abstained = true;
     });
-  });
-
-  // ── DEUXIÈME TOUR : vérification « même type / même besoin » ────────────────
-  // On vérifie TOUTE alternative sur le point d'être affichée (fraîche OU déjà en
-  // cache), pour garantir que chaque carte proposée répond au même besoin que le
-  // produit actuel (protège des catégories catalogue erronées : ex. gel douche
-  // tagué shampooing). Un seul appel IA batché, uniquement s'il y a des cartes.
-  const altBrandName = (a: AltOut): string =>
-    [a.brand, a.name].filter(Boolean).join(" ") || a.ean;
-  const verifyIds: string[] = [];
-  const verifyPairs: VerifyPair[] = [];
-  for (const q of qualifying) {
-    const cachedAlt = cache.get(q.analysisId)?.alternative ?? null;
-    const freshAlt = chosen.get(q.analysisId)?.alternative ?? null;
-    const alt = cachedAlt ?? freshAlt;
-    if (alt) {
-      verifyIds.push(q.analysisId);
-      verifyPairs.push({ product: q.name, alternative: altBrandName(alt) });
-    }
-  }
-  const verdicts = await verifyCompatibility(verifyPairs, user.id);
-  // analysisId → true (ok) | false (incompatible) | undefined (non vérifiable).
-  const verdictOf = new Map<string, boolean | undefined>();
-  verifyIds.forEach((id, i) => verdictOf.set(id, verdicts ? verdicts[i] : undefined));
-
-  // Rejet des alternatives EN CACHE jugées incompatibles → on efface la ligne de
-  // cache (ne re-débite pas ; ne réapparaît plus). Les « non vérifiables » (IA
-  // indispo) restent telles quelles (déjà validées à la génération).
-  for (const id of verifyIds) {
-    if (cache.has(id) && verdictOf.get(id) === false) {
-      cache.set(id, { alternative: null, reason: null });
-      try {
-        await svc.schema("cosme_check").from("routine_suggestions")
-          .update({ alternative: null, reason: null })
-          .eq("user_id", user.id).eq("analysis_id", id).eq("profile_sig", sig);
-      } catch { /* ignore */ }
-    }
+  } else {
+    evalTasks.forEach((t, k) => {
+      const r = evals[k] ?? { best_indices: [], reason: "" };
+      const p = prepared[t.idx];
+      // 2 passes MAX : on tente l'indice 1 (pass 1) puis l'indice 2 (pass 2)
+      // renvoyés par l'IA (best-first), chacun revalidé par le garde déterministe.
+      let picked: CatalogAlt | null = null;
+      for (const oneBased of (r.best_indices ?? []).slice(0, 2)) {
+        const c = p.cands[oneBased - 1];
+        if (c && passesClean(c)) { picked = c; break; }
+      }
+      if (picked) {
+        const lt = scoreLabelTone(picked.score);
+        chosen.set(p.item.analysisId, {
+          alternative: {
+            ean: picked.ean, brand: picked.brand, name: picked.name, image_url: picked.image_url,
+            score: picked.score, score_label: lt.label, score_tone: lt.tone, ingredients_text: picked.ingredients_text,
+          },
+          reason: r.reason || null,
+          category: p.category,
+          abstained: false,
+        });
+      }
+    });
   }
 
-  // Débit crédit PAR produit généré avec alternative VÉRIFIÉE, + persistance cache.
+  // Débit crédit PAR produit généré avec alternative, + persistance cache.
   // On lit le solde une fois ; au-delà, les produits restants sont `locked`.
   let remaining = g.credits.remaining;
   try {
@@ -747,31 +740,25 @@ Deno.serve(async (req: Request): Promise<Response> => {
   let generatedCount = 0;
   for (const item of toGenerate) {
     const c = chosen.get(item.analysisId)!;
-    const verdict = c.alternative ? verdictOf.get(item.analysisId) : undefined;
-    const deliver = c.alternative != null && verdict === true;         // vérifié compatible
-    const unverified = c.alternative != null && verdict === undefined;  // IA indispo → s'abstenir sans cacher
-    // (alternative != null && verdict === false) = incompatible → non délivré, cache null.
-
-    if (deliver) {
+    if (c.abstained) continue; // IA indispo → ne pas cacher, réessayer au prochain tour
+    if (c.alternative) {
       if (remaining <= 0) { lockedIds.add(item.analysisId); continue; }
       const charge = await g.consumeCredit("routine_suggest");
       if (!charge.ok) { lockedIds.add(item.analysisId); remaining = 0; continue; }
       remaining = charge.credits.remaining;
       generatedCount++;
     }
-    // Persiste l'alternative VÉRIFIÉE, OU null (mémorise « rien à proposer »/rejet
-    // pour ne pas re-générer/re-débiter). On NE persiste PAS : produit verrouillé
-    // (crédits) NI produit non vérifiable (retry au prochain tour, l'IA réessaiera).
-    if (!lockedIds.has(item.analysisId) && !unverified) {
+    // Persiste l'alternative choisie OU null (mémorise « aucune alternative propre
+    // trouvée » → pas de re-génération/re-débit). Un produit verrouillé (crédits
+    // épuisés) n'est PAS caché (réessai possible plus tard).
+    if (!lockedIds.has(item.analysisId)) {
       await svc.schema("cosme_check").from("routine_suggestions").upsert({
         user_id: user.id, analysis_id: item.analysisId, profile_sig: sig,
-        alternative: deliver ? c.alternative : null,
-        reason: deliver ? c.reason : null,
+        alternative: c.alternative,
+        reason: c.alternative ? c.reason : null,
         product_name: item.name, category: c.category,
       }, { onConflict: "user_id,analysis_id,profile_sig" });
     }
-    // Reflète le verdict pour la réponse (rejet/abstention → aucune carte).
-    if (!deliver) chosen.set(item.analysisId, { alternative: null, reason: null, category: c.category });
   }
 
   // Réponse : une entrée par produit qualifié (cache + nouveaux), ordre sévérité.

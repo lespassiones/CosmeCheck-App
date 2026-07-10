@@ -34,6 +34,7 @@ import { useAlternativesDeck } from '@/hooks/useAlternativesDeck'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { AddProductModal } from '@/components/routine/AddProductModal'
 import { SuggestionsDeck } from '@/components/routine/SuggestionsDeck'
+import { SuggestionsLoadingOverlay } from '@/components/routine/SuggestionsLoadingOverlay'
 import {
   RoutineSectionList,
   type RoutineSectionListHandle,
@@ -231,6 +232,9 @@ const ProduitsScreen: FC = () => {
         onReorganize={handleReorganize}
         onAlternatives={deck.openSuggestions}
       />
+
+      <SuggestionsLoadingOverlay visible={deck.deckLoading && !deck.deckOpen} />
+      <SuggestionsLoadingOverlay visible={reorganizing} message="Réorganisation de ta routine…" />
 
       <SuggestionsDeck
         visible={deck.deckOpen}

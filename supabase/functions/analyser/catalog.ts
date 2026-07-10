@@ -28,6 +28,33 @@ export async function getCatalogScore(
   }
 }
 
+/**
+ * Lit la ligne catalogue (SOURCE DE VÉRITÉ) pour un EAN : score propriétaire +
+ * slug de catégorie curé. Renvoie null si l'EAN n'est pas au catalogue (produit
+ * hors catalogue). Sert à SERVIR un produit connu (jamais recalculer ni
+ * re-catégoriser). `category` est null si la ligne existe mais n'a pas de
+ * catégorie (produit catalogué non classé).
+ */
+export async function getCatalogInfo(
+  ean: string,
+): Promise<{ score: number | null; category: string | null } | null> {
+  try {
+    const { data } = await serviceClient()
+      .schema("cosme_check")
+      .from("catalog")
+      .select("score, category")
+      .eq("ean", ean)
+      .maybeSingle();
+    if (!data) return null;
+    const row = data as { score: number | null; category: string | null };
+    const cat =
+      typeof row.category === "string" && row.category.trim() ? row.category : null;
+    return { score: typeof row.score === "number" ? row.score : null, category: cat };
+  } catch {
+    return null;
+  }
+}
+
 export async function upsertProductAnalysis(params: {
   ean: string;
   resultJson: unknown;

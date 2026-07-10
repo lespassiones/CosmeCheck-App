@@ -152,9 +152,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // profil optionnel
   }
 
-  // Débit 1 crédit (action explicite).
+  // Débit 1 crédit (action explicite). Crédits épuisés → 200 { locked:true }
+  // (PAS un 429 brut) pour que le client affiche « Crédits épuisés → /offre »
+  // au lieu du message d'erreur générique « Réorganisation indisponible ».
   const charge = await g.consumeCredit("routine_organize", 1);
-  if (!charge.ok) return charge.response;
+  if (!charge.ok) return jsonResponse({ ok: false, locked: true });
 
   const { system, user } = buildPrompt(safe, skin);
   const known = new Set(safe.map((p) => p.itemId));

@@ -30,6 +30,7 @@ import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { AddProductModal } from '@/components/routine/AddProductModal'
 import { RoutineProductCard, ROUTINE_CARD_GAP } from '@/components/routine/RoutineProductCard'
 import { SuggestionsDeck } from '@/components/routine/SuggestionsDeck'
+import { SuggestionsLoadingOverlay } from '@/components/routine/SuggestionsLoadingOverlay'
 
 function titleFor(item: RoutineItem): string {
   return decodeHtml(item.analysis?.product_label?.trim() || item.analysis?.name?.trim()) || 'Produit'
@@ -173,6 +174,8 @@ const QuotidienScreen: FC = () => {
         isInRoutine={isInRoutine}
         presetKind="staple"
       />
+
+      <SuggestionsLoadingOverlay visible={deck.deckLoading && !deck.deckOpen} />
 
       <SuggestionsDeck
         visible={deck.deckOpen}

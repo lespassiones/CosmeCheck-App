@@ -111,14 +111,17 @@ const styles = StyleSheet.create({
   },
   header: {
     gap: spacing.sm,
+    alignItems: 'center',
   },
   title: {
     ...typography.h1,
     color: colors.ink,
+    textAlign: 'center',
   },
   subtitle: {
     ...typography.body,
     color: colors.inkMuted,
+    textAlign: 'center',
   },
   footer: {
     flexDirection: 'row',

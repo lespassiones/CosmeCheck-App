@@ -1,9 +1,9 @@
 /**
- * RestrictionWarning — bandeau d'alerte « ingrédients dans vos restrictions »,
+ * RestrictionWarning — bandeau d'alerte « ingrédients dans tes restrictions »,
  * port mobile du web (CosmetWiki components/analyse/RestrictionWarning.tsx).
  *
  * Rendu uniquement si `restrictedIngredients` n'est pas vide. Affiche un titre
- * (« N ingrédient(s) dans vos restrictions »), des chips (un par ingrédient,
+ * (« N ingrédient(s) dans tes restrictions »), des chips (un par ingrédient,
  * tappables → fiche ingrédient), puis un lien « Gérer mes restrictions ».
  *
  * Carte « glass rose » (fond roseSoft, ring rose) — équivalent du
@@ -44,8 +44,8 @@ const RestrictionWarningBase: FC<Props> = ({
         <Ionicons name="shield-half" size={16} color={colors.rating.rouge.text} />
         <Text style={styles.title}>
           {count === 1
-            ? '1 ingrédient dans vos restrictions'
-            : `${count} ingrédients dans vos restrictions`}
+            ? '1 ingrédient dans tes restrictions'
+            : `${count} ingrédients dans tes restrictions`}
         </Text>
       </View>
 

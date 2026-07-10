@@ -168,10 +168,21 @@ export function useAlternativesDeck(items: RoutineItem[]): UseAlternativesDeckRe
 
       if (withAlt.length === 0) {
         if (anyLocked) {
+          // Des produits méritaient une suggestion mais les crédits sont épuisés.
           showToast('Crédits épuisés pour aujourd’hui.', 'info')
           router.push(ROUTES.OFFRE.INDEX)
+        } else if (suggestions.length === 0) {
+          // AUCUN produit ne qualifie (pas d'orange/rouge, pas de restriction, vert ≥ jaune)
+          // → la routine est réellement propre.
+          showToast('Rien à optimiser ✨ tes produits sont déjà propres.', 'success')
         } else {
-          showToast('Rien à optimiser ici ✨ ces produits sont déjà propres.', 'success')
+          // Des produits qualifient (orange/rouge/restriction/jaune dominant) MAIS aucune
+          // alternative plus propre et compatible n'a été trouvée (souvent à cause de tes
+          // restrictions). NE PAS dire « déjà propres » : ce serait faux.
+          showToast(
+            'Aucune alternative plus propre trouvée pour l’instant (compte tenu de ton profil et de tes restrictions).',
+            'info',
+          )
         }
         return
       }

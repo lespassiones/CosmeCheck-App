@@ -127,7 +127,7 @@ export const RoutineSection = memo(function RoutineSection({
       <View style={styles.header}>
         <Ionicons
           name={isMorning ? 'sunny' : 'moon'}
-          size={15}
+          size={18}
           color={isMorning ? '#F59E0B' : '#6366F1'}
         />
         <Text style={styles.headerTitle}>{isMorning ? 'MATIN' : 'SOIR'}</Text>
@@ -294,14 +294,14 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontFamily: fontFamilies.bold,
-    fontSize: 12,
-    letterSpacing: 1.2,
-    color: colors.inkMuted,
+    fontSize: 16,
+    letterSpacing: 1,
+    color: colors.ink,
   },
   headerCount: {
     fontFamily: fontFamilies.semiBold,
-    fontSize: 11,
-    color: colors.inkLight,
+    fontSize: 13,
+    color: colors.inkMuted,
   },
   list: {
     gap: ROUTINE_CARD_GAP,

@@ -40,7 +40,7 @@ interface Props {
   restrictedCount?: number
   /** Noms des familles restreintes présentes dans ce produit (ex: ["Parabens", "Sulfates"]) — pour la modal. */
   restrictedFamilies?: string[]
-  /** Navigue vers /profile/restrictions (lien « Gérer vos restrictions »). */
+  /** Navigue vers /profile/restrictions (lien « Gérer tes restrictions »). */
   onManageRestrictions?: () => void
   /** Callback au tap sur la ligne restrictions — ouvre la modal des familles. */
   onShowRestrictedFamilies?: () => void
@@ -147,8 +147,8 @@ function VerdictCard({
   // c'est l'info que l'utilisateur attend (parité avec le web).
   const hasRestriction = restrictedCount > 0
   const restrictionText = hasRestriction
-    ? `Contient ${restrictedCount} de vos restrictions`
-    : 'Ne contient aucune de vos restrictions'
+    ? `Contient ${restrictedCount} de tes restrictions`
+    : 'Ne contient aucune de tes restrictions'
 
   return (
     <WhiteCard padding={spacing.base} style={styles.cardRow}>

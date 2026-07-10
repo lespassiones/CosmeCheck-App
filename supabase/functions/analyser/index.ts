@@ -21,9 +21,7 @@
 import { handleOptions, jsonResponse } from "../_shared/cors.ts";
 import { gate } from "../_shared/gate.ts";
 import { serviceClient } from "../_shared/auth.ts";
-import { getCatalogScore } from "./catalog.ts";
-import { lookupEanByName } from "../_shared/eanLookup.ts";
-import { identifyEanAndCategory } from "../_shared/eanWebSearch.ts";
+import { getCatalogInfo } from "./catalog.ts";
 import { dedupeKey } from "../_shared/dedupeKey.ts";
 import { sha256Hex } from "../_shared/aiClient.ts";
 import { type ColorRating, pastilleTone, type ScoreTone, scoreLabel, synthScore } from "./score.ts";
@@ -112,22 +110,9 @@ const ABSENCE_REPORTED = new Set([
 const NEUTRAL_WHEN_ABSENT = new Set(["huile-essentielle"]);
 ABSENCE_REPORTED.add("huile-essentielle");
 
-// Catégorisation live : mappe la catégorie LLM (enum) vers un slug RÉEL de la
-// taxonomie (parmi les catégories/sous-catégories existantes). Sert à classer
-// les produits trouvés sur internet pour qu'ils apparaissent dans les listes
-// (alternatives, sous-catégorie affichée). null = on ne devine pas (évite le faux).
-const CATEGORY_ENUM_TO_SLUG: Record<string, string | null> = {
-  creme_visage:      "soin-du-corps-et-visage/creme-hydratante/creme-visage",
-  creme_corps:       "soin-du-corps-et-visage/creme-hydratante/hydratant-corps",
-  nettoyant_visage:  "soin-du-corps-et-visage/creme-hydratante/creme-visage",
-  shampooing:        "coiffure/shampooing/shampooing-classique",
-  apres_shampooing:  "coiffure/soin-capillaire/apres-shampooing",
-  solaire:           "produit-solaire/creme-solaire",
-  maquillage:        "maquillage/fond-de-teint-et-poudre/fond-de-teint",
-  parfum:            "parfum/parfum-pour-femme/eau-de-parfum-pour-femme",
-  deodorant:         null,
-  autre:             null,
-};
+// (CATEGORY_ENUM_TO_SLUG retiré : plus aucun mapping enum→slug au runtime. Le slug
+//  de catégorie vient du catalogue (source de vérité) ; un produit hors catalogue
+//  part en file de curation, jamais écrit au catalogue.)
 
 const WATER_NAMES = new Set(["aqua", "water", "eau"]);
 const TOP_LIST_WINDOW = 5;
@@ -323,7 +308,14 @@ Deno.serve(async (req: Request) => {
 
         // SCORE = source de vérité catalogue CosmeCheck si dispo. On ne sert
         // JAMAIS le score calculé en cache pour un produit présent au catalogue.
-        const catScore = await getCatalogScore(productEan);
+        const catInfo = await getCatalogInfo(productEan);
+        const catScore = catInfo?.score ?? null;
+        // Catégorie catalogue = source de vérité (comme le score) : on l'impose au
+        // résultat caché pour ne jamais resservir une catégorie dérivée obsolète.
+        if (catInfo?.category) {
+          cachedResult.category = catInfo.category;
+          cachedResult.catalogCategory = catInfo.category;
+        }
         if (catScore != null) {
           const { label, tone } = scoreLabel(catScore);
           cachedResult.score = catScore;
@@ -388,12 +380,19 @@ Deno.serve(async (req: Request) => {
   } else {
     const aiParsed = await parseInciWithAI(rawText, user.id);
     text = aiParsed && aiParsed.ingredients.length > 0 ? aiParsed.ingredients.join(", ") : rawText;
-    const validation = await validateInciInput(text, user.id);
-    if (!validation.valid) {
-      return jsonResponse(
-        { error: validation.reason ?? "Ceci ne ressemble pas à une liste INCI." },
-        { status: 400 },
-      );
+    // La garde « est-ce vraiment une liste INCI ? » protège la saisie MANUELLE
+    // libre (éviter d'analyser du texte quelconque). Un produit CONNU du catalogue
+    // / code-barres (productEan présent) a une composition LÉGITIME même très
+    // courte (ex. patch anti-boutons « NIACINAMIDE, ZINC ») → on ne le rejette
+    // JAMAIS pour cause de longueur/format : on analyse ce qu'on a.
+    if (!productEan) {
+      const validation = await validateInciInput(text, user.id);
+      if (!validation.valid) {
+        return jsonResponse(
+          { error: validation.reason ?? "Ceci ne ressemble pas à une liste INCI." },
+          { status: 400 },
+        );
+      }
     }
   }
 
@@ -559,13 +558,15 @@ Deno.serve(async (req: Request) => {
   let score = synthScore(pastille) ?? 0;
   let { label: scoreLabelText, tone: scoreTone } = scoreLabel(score);
 
-  // SOURCE DE VÉRITÉ : si l'EAN est au catalogue, on sert le score précalculé
-  // (catalog.score = NOTRE pastille synthétisée en bulk) → pastille identique
-  // partout (recherche, catalogue, analyse). On n'écrase pas catalog.score.
-  const catalogScore = productEan ? await getCatalogScore(productEan) : null;
-  const isCatalogProduct = catalogScore != null;
-  if (isCatalogProduct) {
-    score = catalogScore as number;
+  // SOURCE DE VÉRITÉ : le catalogue. Si l'EAN est catalogué, on LIT son score
+  // propriétaire ET sa catégorie curée → pastille + catégorie identiques partout
+  // (recherche, catalogue, analyse). On ne recalcule pas, on ne re-catégorise pas
+  // et on n'écrit jamais dans le catalogue au runtime.
+  const catalogInfo = productEan ? await getCatalogInfo(productEan) : null;
+  const catalogScore = catalogInfo?.score ?? null;
+  const catalogCategorySlug = catalogInfo?.category ?? null;
+  if (catalogScore != null) {
+    score = catalogScore;
     const lab = scoreLabel(score);
     scoreLabelText = lab.label;
     scoreTone = lab.tone;
@@ -603,23 +604,26 @@ Deno.serve(async (req: Request) => {
 
   const byPosition = [...enriched].sort((a, b) => a.position_idx - b.position_idx);
 
-  // Catégorisation LLM (parallèle, dégrade en "autre").
+  // Catégorisation : UNIQUEMENT pour un produit hors catalogue (ou catalogué sans
+  // catégorie). Un produit déjà catalogué garde SA catégorie (source de vérité) :
+  // on ne relance PAS le classifieur LLM. Cf. consigne « scan = lecture seule ».
+  const needsCategory = !catalogCategorySlug;
   const categoryTop5Names = byPosition
     .slice(0, 5)
     .map((r) => r.effective_name ?? r.input_raw)
     .filter((n): n is string => Boolean(n));
-  const categoryPromise: Promise<ProductCategory> = categoryTop5Names.length > 0
-    ? categorizeProduct(categoryTop5Names, user.id).catch(() => "autre" as ProductCategory)
-    : Promise.resolve("autre" as ProductCategory);
-
-  // Catégorie PRÉCISE (chemin famille/sous/feuille) — basée sur le NOM + marque
-  // (le nom prime). Non bloquante : patch en arrière-plan après l'insert.
-  const precisePromise: Promise<string | null> = classifyPreciseCategory(
-    body.productLabel ?? null,
-    body.brand ?? null,
-    categoryTop5Names,
-    user.id,
-  ).catch(() => null);
+  const categoryPromise: Promise<ProductCategory> =
+    needsCategory && categoryTop5Names.length > 0
+      ? categorizeProduct(categoryTop5Names, user.id).catch(() => "autre" as ProductCategory)
+      : Promise.resolve("autre" as ProductCategory);
+  const precisePromise: Promise<string | null> = needsCategory
+    ? classifyPreciseCategory(
+        body.productLabel ?? null,
+        body.brand ?? null,
+        categoryTop5Names,
+        user.id,
+      ).catch(() => null)
+    : Promise.resolve(null);
 
   // 1. Formule à base d'eau.
   const first = byPosition[0];
@@ -815,13 +819,17 @@ Deno.serve(async (req: Request) => {
     };
   });
 
-  // Catégorie : course 1.5 s LLM → fallback keyword sur productType.
-  const llmCategory: ProductCategory | null = await Promise.race([
-    categoryPromise.then((c) => (c && c !== "autre" ? c : null)),
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
-  ]);
-  const resolvedCategory: ProductCategory | null =
-    llmCategory ?? normalizeProductTypeToCategory(body.productType) ?? null;
+  // Catégorie servie : le SLUG catalogue (source de vérité) s'il existe. Sinon
+  // (produit hors catalogue) catégorie PROVISOIRE déduite (course 1.5 s LLM →
+  // fallback keyword sur productType) — affichée à l'écran, jamais écrite au catalogue.
+  const llmCategory: ProductCategory | null = catalogCategorySlug
+    ? null
+    : await Promise.race([
+        categoryPromise.then((c) => (c && c !== "autre" ? c : null)),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
+      ]);
+  const resolvedCategory: string | null =
+    catalogCategorySlug ?? llmCategory ?? normalizeProductTypeToCategory(body.productType) ?? null;
 
   const responsePayload = {
     counts: {
@@ -882,29 +890,32 @@ Deno.serve(async (req: Request) => {
           );
         if (!routineErr) addedToRoutine = true;
       }
-      // Patch catégorie en arrière-plan si le LLM répond après la course 1.5 s.
-      const categorizeId = insertedId;
-      void categoryPromise
-        .then(async (cat) => {
-          if (!cat || cat === resolvedCategory) return;
-          await sbAuth
-            .schema("cosme_check")
-            .from("analyses")
-            .update({ category: cat })
-            .eq("id", categorizeId);
-        })
-        .catch(() => undefined);
-      // Patch catégorie PRÉCISE (famille/sous/feuille) en arrière-plan.
-      void precisePromise
-        .then(async (slug) => {
-          if (!slug) return;
-          await sbAuth
-            .schema("cosme_check")
-            .from("analyses")
-            .update({ category_precise: slug })
-            .eq("id", categorizeId);
-        })
-        .catch(() => undefined);
+      // Patch catégorie en arrière-plan UNIQUEMENT hors catalogue (le LLM peut
+      // répondre après la course 1.5 s). Un produit catalogué garde sa catégorie
+      // catalogue : aucun patch LLM, aucun écrasement.
+      if (needsCategory) {
+        const categorizeId = insertedId;
+        void categoryPromise
+          .then(async (cat) => {
+            if (!cat || cat === resolvedCategory) return;
+            await sbAuth
+              .schema("cosme_check")
+              .from("analyses")
+              .update({ category: cat })
+              .eq("id", categorizeId);
+          })
+          .catch(() => undefined);
+        void precisePromise
+          .then(async (slug) => {
+            if (!slug) return;
+            await sbAuth
+              .schema("cosme_check")
+              .from("analyses")
+              .update({ category_precise: slug })
+              .eq("id", categorizeId);
+          })
+          .catch(() => undefined);
+      }
     }
   } catch { /* l'échec d'historique ne bloque jamais la réponse */ }
 
@@ -922,25 +933,9 @@ Deno.serve(async (req: Request) => {
       });
     })();
 
-    void (async () => {
-      const { upsertCatalogProduct } = await import("./catalog.ts");
-      // Produit DÉJÀ au catalogue (score propriétaire CosmeCheck) - on NE touche PAS au score
-      // (score/label/tone = null = on garde l'existant). Produit nouveau/internet
-      // - on écrit notre score calculé pour l'amorcer.
-      await upsertCatalogProduct({
-        ean: productEan,
-        brand: body.brand ?? null,
-        name: body.productLabel ?? null,
-        ingredientsText: body.text ?? null,
-        // Catégorie de la taxonomie (remplie seulement si absente, via COALESCE
-        // côté RPC) → le produit internet est classé comme les autres.
-        category: CATEGORY_ENUM_TO_SLUG[resolvedCategory ?? "autre"] ?? null,
-        score: isCatalogProduct ? null : Number(score.toFixed(4)),
-        scoreLabel: isCatalogProduct ? null : scoreLabelText,
-        scoreTone: isCatalogProduct ? null : scoreTone,
-        countTotal: itemsResponse.length,
-      });
-    })();
+    // Écriture catalogue SUPPRIMÉE : le scan est en LECTURE SEULE. Le catalogue
+    // (catégorie + score propriétaire) est la source de vérité, jamais alimenté
+    // ni écrasé au runtime. Un produit hors catalogue part en curation (ci-dessous).
   }
 
   // Action 2 : produit issu d'un OCR (pas d'EAN) mais marque + libellé connus →
@@ -965,69 +960,29 @@ Deno.serve(async (req: Request) => {
     })();
   }
 
-  // Résolution d'EAN fire-and-forget (brand+nom connus mais EAN inconnu = produit
-  // hors catalogue, typiquement trouvé sur internet). Pipeline :
-  //   1. Open Beauty Facts (gratuit). 2. Fallback recherche web GPT (checksum
-  //   validé). Trouvé → upsert catalogue (rejoint les 400k). 3. Échec des deux →
-  //   file `web_products` pour résolution manuelle côté admin.
+  // Produit HORS CATALOGUE (pas d'EAN scanné, marque + nom connus) → file de
+  // curation `web_products` UNIQUEMENT. On ne résout plus d'EAN via Open Beauty
+  // Facts et on n'écrit JAMAIS dans le catalogue au runtime (c'était la source de
+  // la pollution : doublons EAN OBF avec catégorie LLM + score recalculé).
+  // L'analyse affichée reste PROVISOIRE ; c'est la curation admin qui fera entrer
+  // le produit au catalogue avec sa vraie catégorie + son score propriétaire.
   if (!productEan && body.brand && body.productLabel) {
     const eanBrand = body.brand;
     const eanLabel = body.productLabel;
     const eanInci = body.text ?? null;
-    const coarseCatSlug = CATEGORY_ENUM_TO_SLUG[resolvedCategory ?? "autre"] ?? null;
-    const computedScore = Number(score.toFixed(4));
-    const catalogCount = itemsResponse.length;
+    const provisionalCat = resolvedCategory;
     void (async () => {
-      let foundEan: string | null = null;
-      let foundInci: string | null = null;
-      let sourceUrl: string | null = null;
-      let preciseCat: string | null = null;
-
-      const obf = await lookupEanByName(eanBrand, eanLabel);
-      if (obf) {
-        foundEan = obf.ean;
-        foundInci = obf.ingredientsText;
-      } else {
-        // UN SEUL appel GPT : code-barre + catégorie précise en même temps.
-        const id = await identifyEanAndCategory(eanBrand, eanLabel);
-        foundEan = id.ean;
-        sourceUrl = id.sourceUrl;
-        preciseCat = id.category;
-      }
-      // Catégorie précise GPT si dispo, sinon la catégorie grossière de l'analyse.
-      const catSlug = preciseCat ?? coarseCatSlug;
-
       try {
-        if (foundEan) {
-          // Produit internet identifié → ajout au catalogue avec NOTRE score
-          // calculé (évalué sur la liste d'ingrédients) + catégorie précise.
-          await serviceClient().rpc("cosme_check_upsert_catalog_product", {
-            p_ean: foundEan,
-            p_brand: eanBrand,
-            p_name: eanLabel,
-            p_ingredients_text: foundInci ?? eanInci,
-            p_source_url: sourceUrl,
-            p_category: catSlug,
-            p_score: computedScore,
-            p_score_label: scoreLabelText,
-            p_score_tone: scoreTone,
-            p_count_total: catalogCount,
-            p_image_url: null,
-          });
-        } else {
-          // Aucun EAN trouvé → on archive le produit (avec sa catégorie précise)
-          // pour traitement admin / saisie manuelle.
-          await serviceClient().rpc("cosme_check_log_web_product", {
-            p_dedupe_key: dedupeKey(eanBrand, eanLabel),
-            p_brand: eanBrand,
-            p_name: eanLabel,
-            p_category: catSlug,
-            p_ingredients_text: eanInci,
-            p_description: null,
-            p_image_url: null,
-            p_source_url: null,
-          });
-        }
+        await serviceClient().rpc("cosme_check_log_web_product", {
+          p_dedupe_key: dedupeKey(eanBrand, eanLabel),
+          p_brand: eanBrand,
+          p_name: eanLabel,
+          p_category: provisionalCat,
+          p_ingredients_text: eanInci,
+          p_description: null,
+          p_image_url: null,
+          p_source_url: null,
+        });
       } catch { /* silent */ }
     })();
   }

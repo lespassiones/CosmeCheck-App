@@ -188,7 +188,7 @@ export const AnalysisResultPanel: FC<Props> = ({
   }, [restrictionMatches, families])
 
   // Compte = familles uniques + ingrédients restreints uniques présents.
-  // Même formule que le web → "Contient N de vos restrictions" identique.
+  // Même formule que le web → "Contient N de tes restrictions" identique.
   const restrictedCount = useMemo(() => {
     const fam = new Set(
       restrictionMatches.filter((m) => m.kind === 'family').map((m) => m.slug),
