@@ -237,8 +237,30 @@ const OffreScreen: FC = () => {
               Chaque produit, chaque conseil, chaque alternative : pensés pour toi, ta peau et ton profil.
             </Text>
 
-            {/* Plans côte à côte — juste après l'accroche. */}
-            <View style={styles.plansRow}>
+            {/* Bénéfices — tous personnalisés « pour toi » — juste après l'accroche. */}
+            <WhiteCard padding={spacing.lg}>
+              <BenefitRow>
+                Analyse de chaque produit <Text style={styles.benefitBold}>personnalisée</Text> à ton profil
+              </BenefitRow>
+              <BenefitRow>
+                <Text style={styles.benefitBold}>Alternatives</Text> plus propres choisies pour toi
+              </BenefitRow>
+              <BenefitRow>
+                Suggestions et <Text style={styles.benefitBold}>conseils adaptés</Text> à ta peau
+              </BenefitRow>
+              <BenefitRow>
+                Analyse des <Text style={styles.benefitBold}>promesses produit</Text> selon ton profil
+              </BenefitRow>
+              <BenefitRow>
+                Amélioration de ta routine, <Text style={styles.benefitBold}>sur-mesure</Text>
+              </BenefitRow>
+              <BenefitRow last>
+                <Text style={styles.benefitBold}>100 crédits/mois</Text> pour trouver les produits faits pour toi
+              </BenefitRow>
+            </WhiteCard>
+
+            {/* Plans côte à côte — en bas, juste avant la réassurance. */}
+            <View style={[styles.plansRow, styles.plansRowBelow]}>
               <Pressable
                 onPress={() => setSelected('yearly')}
                 style={[styles.planCol, selected === 'yearly' && styles.planColActive]}
@@ -272,28 +294,6 @@ const OffreScreen: FC = () => {
                 />
               </Pressable>
             </View>
-
-            {/* Bénéfices — tous personnalisés « pour toi ». */}
-            <WhiteCard padding={spacing.lg}>
-              <BenefitRow>
-                Analyse de chaque produit <Text style={styles.benefitBold}>personnalisée</Text> à ton profil
-              </BenefitRow>
-              <BenefitRow>
-                <Text style={styles.benefitBold}>Alternatives</Text> plus propres choisies pour toi
-              </BenefitRow>
-              <BenefitRow>
-                Suggestions et <Text style={styles.benefitBold}>conseils adaptés</Text> à ta peau
-              </BenefitRow>
-              <BenefitRow>
-                Analyse des <Text style={styles.benefitBold}>promesses produit</Text> selon ton profil
-              </BenefitRow>
-              <BenefitRow>
-                Amélioration de ta routine, <Text style={styles.benefitBold}>sur-mesure</Text>
-              </BenefitRow>
-              <BenefitRow last>
-                <Text style={styles.benefitBold}>100 crédits/mois</Text> pour trouver les produits faits pour toi
-              </BenefitRow>
-            </WhiteCard>
 
             {/* Réassurance */}
             <View style={styles.reassure}>
@@ -516,6 +516,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.md,
     marginBottom: spacing.lg,
+  },
+  plansRowBelow: {
+    marginTop: spacing.lg,
   },
   planCol: {
     flex: 1,
