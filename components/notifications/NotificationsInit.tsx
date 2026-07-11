@@ -4,12 +4,10 @@
  * Responsabilités (toutes sous la garde `isNotificationsAvailable()`, jamais
  * bloquantes, aucun délai au cold start) :
  *   1. au montage : configure le handler + crée les canaux ;
- *   2. réconciliation idempotente du rappel hebdo dès que profil + permission
- *      sont connus (reprogramme si activé, annule si désactivé) ;
+ *   2. enregistre le token push (notifications distantes) dès que profil +
+ *      permission sont connus, et purge d'éventuels rappels locaux hérités ;
  *   3. deep link au tap d'une notification (à froid via getLastNotification
- *      ResponseAsync, à chaud via le listener) ;
- *   4. écoute NEW_HIGH_CONFLICTS_EVENT et présente une alerte pour le premier
- *      nouveau conflit high.
+ *      ResponseAsync, à chaud via le listener).
  *
  * JAMAIS de prompt de permission ici : l'opt-in se fait via les réglages du
  * profil (section Notifications).
@@ -85,11 +83,10 @@ export function NotificationsInit(): null {
     }
   }, [])
 
-  // 2. Rappel de bilan hebdo = notification DISTANTE (cron serveur + Expo Push).
-  //    Ici on se contente d'enregistrer le token push de l'appareil quand les
-  //    notifs sont activées + la permission accordée ; le cron
-  //    (Edge send-weekly-bilan) pousse même app fermée. On annule tout ancien
-  //    rappel LOCAL programmé par l'ancienne version (évite le double).
+  // 2. Notifications DISTANTES (cron serveur + Expo Push) : on enregistre le
+  //    token push de l'appareil quand les notifs sont activées + permission
+  //    accordée, pour que le serveur (edge push-dispatch) puisse pousser même
+  //    app fermée. On purge tout ancien rappel LOCAL hérité (bilan/suivi).
   useEffect(() => {
     if (!isNotificationsAvailable()) return
     if (isLoading) return

@@ -1,8 +1,10 @@
 /**
  * NotificationSettings — section "Notifications" du profil.
  *
- * Toggle maître + ligne "Suivi produit" (J+14, phase 2). Gère les états
- * dégradés :
+ * Toggle maître unique. (La ligne "Suivi produit" J+14 a été retirée : la
+ * fonctionnalité n'a jamais été construite, un toggle mort fait désordre ;
+ * à réintroduire via un scénario du planner serveur le jour venu.)
+ * Gère les états dégradés :
  *   - module natif absent (OTA pré-rebuild) -> bandeau "Disponible apres la
  *     prochaine mise a jour de l'application", contrôles inertes ;
  *   - permission refusée alors que le toggle est ON -> lien vers les réglages
@@ -86,24 +88,6 @@ export const NotificationSettings: FC = () => {
     [busy, available, prefs, updateProfile],
   )
 
-  const handleSuiviToggle = useCallback(
-    async (next: boolean) => {
-      if (busy || !available || !prefs.enabled) return
-      setBusy(true)
-      try {
-        // Phase 2 : la préférence est stockée, aucune programmation (stub).
-        await updateProfile({ notifications: { ...prefs, suiviProduit: next } })
-      } catch {
-        // best-effort
-      } finally {
-        setBusy(false)
-      }
-    },
-    [busy, available, prefs, updateProfile],
-  )
-
-  const rowsDisabled = !prefs.enabled || !available
-
   return (
     <NeuCard>
       <Text style={styles.sectionTitle}>Notifications</Text>
@@ -114,22 +98,6 @@ export const NotificationSettings: FC = () => {
           value={prefs.enabled && available}
           onValueChange={handleMasterToggle}
           disabled={busy || !available}
-          trackColor={{ true: colors.rose, false: colors.gray300 }}
-          thumbColor="#FFFFFF"
-        />
-      </View>
-
-      <View style={styles.divider} />
-
-      <View style={[styles.row, rowsDisabled && styles.rowDisabled]}>
-        <View style={styles.rowLabelWrap}>
-          <Text style={styles.rowLabel}>Suivi produit</Text>
-          <Text style={styles.rowSub}>Tous les 14 jours</Text>
-        </View>
-        <Switch
-          value={prefs.suiviProduit && prefs.enabled && available}
-          onValueChange={handleSuiviToggle}
-          disabled={rowsDisabled || busy}
           trackColor={{ true: colors.rose, false: colors.gray300 }}
           thumbColor="#FFFFFF"
         />
@@ -169,30 +137,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: spacing.sm,
   },
-  rowDisabled: {
-    opacity: 0.45,
-  },
-  rowLabelWrap: {
-    flex: 1,
-  },
   rowLabel: {
     ...typography.bodyMedium,
     color: colors.ink,
-  },
-  rowSub: {
-    ...typography.xs,
-    color: colors.inkMuted,
-    marginTop: 2,
-  },
-  rowValue: {
-    ...typography.small,
-    color: colors.inkMuted,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.neu.shadowDark,
-    opacity: 0.5,
-    marginVertical: spacing.xs,
   },
   banner: {
     marginTop: spacing.sm,

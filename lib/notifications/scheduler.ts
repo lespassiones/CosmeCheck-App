@@ -11,19 +11,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import { getNotificationsModule } from '@/lib/notifications/native'
-import { CHANNELS } from '@/lib/notifications/channels'
-import { computeNextBilanTrigger, isoWeekdayToExpo } from '@/lib/notifications/planner'
-import type { NotificationPrefs } from '@/lib/notifications/prefs'
-import { isoWeekKey } from '@/lib/skin/week'
 
 /** Statut de permission simplifié (indépendant de la forme du module natif). */
 export type PermissionStatus = 'granted' | 'denied' | 'undetermined' | 'unavailable'
 
-/** Identifier fixe du rappel de bilan (un seul programmé à la fois). */
-const BILAN_IDENTIFIER = CHANNELS.bilan
-
-/** Clés AsyncStorage. */
-const LAST_BILAN_WEEK_KEY = 'cw:notif:lastBilanWeek'
+/** Clé AsyncStorage de dédup des alertes conflit. */
 const CONFLICT_KEY_PREFIX = 'cw:notif:conflict:'
 
 /**
@@ -83,62 +75,9 @@ function normalizeStatus(res: unknown): PermissionStatus {
 }
 
 /**
- * Programme le rappel hebdo de bilan (identifier fixe, canal bilan). Annule
- * d'abord l'existant, puis programme selon `computeNextBilanTrigger` :
- * trigger hebdo répétitif INEXACT, ou one-shot si le bilan a déjà été fait
- * cette semaine ISO. Retourne false si indisponible ou en cas d'échec.
- */
-export async function scheduleWeeklyBilan(
-  weekday: number,
-  hour: number,
-  lastBilanWeek: string | null,
-): Promise<boolean> {
-  const Notifications = getNotificationsModule()
-  if (!Notifications) return false
-  try {
-    await cancelIdentifier(Notifications, BILAN_IDENTIFIER)
-
-    const plan = computeNextBilanTrigger(new Date(), weekday, hour, lastBilanWeek)
-    const content = {
-      title: 'Bilan peau de la semaine',
-      body: "C'est l'heure de ton bilan peau de la semaine (45 secondes).",
-      data: { url: '/peau' },
-    }
-
-    const types = Notifications.SchedulableTriggerInputTypes ?? {}
-    let trigger: Record<string, unknown>
-    if (plan.kind === 'weekly') {
-      // Trigger hebdo INEXACT (weekday convention expo : 1 = dimanche).
-      trigger = {
-        type: types.WEEKLY ?? 'weekly',
-        weekday: isoWeekdayToExpo(plan.weekday),
-        hour: plan.hour,
-        minute: plan.minute,
-        channelId: CHANNELS.bilan,
-      }
-    } else {
-      trigger = {
-        type: types.TIME_INTERVAL ?? 'timeInterval',
-        seconds: plan.seconds,
-        repeats: false,
-        channelId: CHANNELS.bilan,
-      }
-    }
-
-    await Notifications.scheduleNotificationAsync({
-      identifier: BILAN_IDENTIFIER,
-      content,
-      trigger,
-    })
-    return true
-  } catch {
-    return false
-  }
-}
-
-/**
  * Annule toutes les notifications programmées dont l'identifier commence par le
- * préfixe donné (ex. 'bilan-hebdo', 'suivi-'). No-op si module absent.
+ * préfixe donné (ex. 'bilan-hebdo', 'suivi-'). No-op si module absent. Sert à
+ * purger d'éventuels rappels locaux hérités d'anciennes versions.
  */
 export async function cancelByChannel(channelPrefix: string): Promise<void> {
   const Notifications = getNotificationsModule()
@@ -154,38 +93,6 @@ export async function cancelByChannel(channelPrefix: string): Promise<void> {
     }
   } catch {
     // best-effort
-  }
-}
-
-/** Annule une notification programmée par identifier exact (interne). */
-async function cancelIdentifier(Notifications: any, id: string): Promise<void> {
-  try {
-    await Notifications.cancelScheduledNotificationAsync(id)
-  } catch {
-    // pas de notification existante : ignoré.
-  }
-}
-
-/**
- * À appeler à la COMPLETION d'un bilan : mémorise la semaine ISO courante
- * (AsyncStorage) puis reprogramme (one-shot semaine suivante).
- */
-export async function rescheduleAfterBilan(prefs: NotificationPrefs): Promise<void> {
-  const week = isoWeekKey()
-  try {
-    await AsyncStorage.setItem(LAST_BILAN_WEEK_KEY, week)
-  } catch {
-    // best-effort
-  }
-  await scheduleWeeklyBilan(prefs.bilanWeekday, prefs.bilanHour, week)
-}
-
-/** Semaine ISO du dernier bilan enregistré, ou null. */
-export async function readLastBilanWeek(): Promise<string | null> {
-  try {
-    return await AsyncStorage.getItem(LAST_BILAN_WEEK_KEY)
-  } catch {
-    return null
   }
 }
 
@@ -230,16 +137,6 @@ export async function scheduleConflictAlert(
     // le marqueur n'a pas pu être posé : au pire une alerte en double.
   }
   return true
-}
-
-/**
- * Stub phase 2 (canal créé, aucune programmation). Signature figée pour J+14.
- */
-export async function scheduleSuiviProduit(
-  _productName: string,
-  _analysisId: string,
-): Promise<boolean> {
-  return false
 }
 
 /** Hash court et stable (djb2) d'une clé de dédup, pour un nom de clé compact. */

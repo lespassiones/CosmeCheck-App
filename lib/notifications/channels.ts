@@ -15,9 +15,7 @@ import { getNotificationsModule } from '@/lib/notifications/native'
 
 /** Identifiants de canaux (référencés par le scheduler). */
 export const CHANNELS = {
-  bilan: 'bilan-hebdo',
   conflits: 'conflits',
-  suiviProduit: 'suivi-produit',
 } as const
 
 export type ChannelId = (typeof CHANNELS)[keyof typeof CHANNELS]
@@ -32,20 +30,10 @@ export async function ensureChannels(): Promise<void> {
   if (!Notifications) return
   try {
     const importance = Notifications.AndroidImportance ?? {}
-    await Notifications.setNotificationChannelAsync(CHANNELS.bilan, {
-      name: 'Rappels de bilan peau',
-      description: 'Un rappel par semaine pour faire ton bilan peau.',
-      importance: importance.DEFAULT ?? 3,
-    })
     await Notifications.setNotificationChannelAsync(CHANNELS.conflits, {
       name: 'Alertes routine',
       description: 'Previens-moi si des produits de ma routine se genent.',
       importance: importance.HIGH ?? 4,
-    })
-    await Notifications.setNotificationChannelAsync(CHANNELS.suiviProduit, {
-      name: 'Suivi de tes produits',
-      description: "Point d'etape sur un produit apres 14 jours d'utilisation.",
-      importance: importance.DEFAULT ?? 3,
     })
   } catch {
     // best-effort : un échec de création de canal ne doit jamais crasher l'app.
