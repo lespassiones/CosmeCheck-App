@@ -27,7 +27,7 @@ cosme-check-*.json
 # Metro
 .metro-health-check*
 
-# Env (local overrides — .env is committed since it only holds public keys)
+# Env : .env contient de VRAIS secrets (service_role, OpenAI, RevenueCat sk_) et ne doit JAMAIS etre commit
 .env
 .env*.local
 
