@@ -23,6 +23,7 @@ import { parseAnalyseResponse as parseAnalyseResponseSafe } from './types'
 import type { AnalyseItem, AnalyseResponse } from './types'
 import type { UserRestrictions, AnalysisRow } from '../supabase/types'
 import { bumpScanCount } from '../notifications/optInStorage'
+import { phCapture } from '../analytics/posthog'
 
 // ─── Types publics ──────────────────────────────────────────────────────────
 
@@ -339,6 +340,7 @@ export async function runAnalysis(params: RunAnalysisParams): Promise<RunAnalysi
 
   // Compteur de scans réussis (re-demande d'opt-in notifications au 2e scan).
   void bumpScanCount()
+  phCapture('scan_completed', { source: params.source })
 
   return { analysisId, response: enriched }
 }

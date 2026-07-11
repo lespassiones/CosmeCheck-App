@@ -12,6 +12,7 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import type { Session, Subscription, User } from '@supabase/supabase-js'
+import { phIdentify, phReset } from '@/lib/analytics/posthog'
 
 import { supabase } from '@/lib/supabase/client'
 import { clearUserScopedCaches } from '@/lib/storage/clearUserScopedCaches'
@@ -75,6 +76,9 @@ function initAuth(): void {
   // Abonnement temps réel : SIGNED_IN / SIGNED_OUT / TOKEN_REFRESHED /
   // USER_UPDATED / PASSWORD_RECOVERY.
   const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+    // Analytics : relie (ou delie) le profil PostHog a l'utilisateur Supabase.
+    if (session?.user) phIdentify(session.user.id, { email: session.user.email })
+    else phReset()
     setSession(session)
     useAuthStore.setState({ isLoading: false })
   })

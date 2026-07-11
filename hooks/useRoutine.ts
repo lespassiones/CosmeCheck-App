@@ -19,6 +19,7 @@
 
 import { useCallback, useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { phCapture } from '@/lib/analytics/posthog'
 
 import { showToast } from '@/components/shared/Toast'
 
@@ -172,6 +173,7 @@ export function useRoutine(): UseRoutineReturn {
           kind,
         })
       if (error) throw error
+      phCapture('routine_item_added')
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey })

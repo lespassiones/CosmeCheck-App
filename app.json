@@ -90,7 +90,8 @@
           "icon": "./assets/images/notification-icon.png",
           "color": "#E11D48"
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true

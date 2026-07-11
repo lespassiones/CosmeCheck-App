@@ -4,6 +4,25 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
 
+// PostHog (projet « Cosme Check », EU). Token PUBLIC d'ingestion (write-only),
+// pas un secret. Événement produit : premium_started, platform mobile.
+const POSTHOG_KEY = 'phc_nVe87LGmXqMGcsovsqoL9mWocA9sDP9U4KVsUhGk9fqz'
+const POSTHOG_HOST = 'https://eu.i.posthog.com'
+
+function phCapture(event: string, distinctId: string, properties: Record<string, unknown> = {}): void {
+  void fetch(`${POSTHOG_HOST}/capture/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      api_key: POSTHOG_KEY,
+      event,
+      distinct_id: distinctId,
+      properties: { platform: 'mobile', ...properties },
+      timestamp: new Date().toISOString(),
+    }),
+  }).catch(() => {/* best-effort */})
+}
+
 interface RevenueCatEvent {
   event: {
     type: string
@@ -72,6 +91,14 @@ serve(async (req) => {
       }
 
       console.log(`[RevenueCat Webhook] User ${userId} upgraded to premium with ${data?.daily_limit} credits/day`)
+
+      // Analytics : uniquement le DÉBUT d'abonnement (pas les renouvellements).
+      if (eventType === 'INITIAL_PURCHASE') {
+        phCapture('premium_started', userId, {
+          provider: 'revenuecat',
+          product: payload.event.product_identifier ?? null,
+        })
+      }
     }
 
     // Handle cancellation/expiration (downgrade to free)

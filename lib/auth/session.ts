@@ -11,6 +11,7 @@
 
 import { makeRedirectUri } from 'expo-auth-session'
 import type { AuthError, Session, User } from '@supabase/supabase-js'
+import { phCapture } from '@/lib/analytics/posthog'
 
 import { supabase } from '@/lib/supabase/client'
 import { APP_SCHEME, DEEP_LINKS } from '@/constants/routes'
@@ -157,6 +158,7 @@ export async function signUp(
       },
     })
     if (error) return { ok: false, error: mapAuthError(error) }
+    phCapture('signup')
     return { ok: true }
   } catch (err) {
     return { ok: false, error: mapAuthError(err as Error) }

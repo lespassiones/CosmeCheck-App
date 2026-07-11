@@ -15,6 +15,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
+import { phCapture } from '@/lib/analytics/posthog'
 
 import { db } from '@/lib/supabase/client'
 import type { UserProfileRow, UserRestrictions } from '@/lib/supabase/types'
@@ -198,6 +199,7 @@ export function useProfile(): UseProfileReturn {
       )
       // Persistance réseau (une seule écriture, pas de course concurrente).
       await mutation.mutateAsync(next)
+      phCapture('onboarding_completed')
     },
     [userId, queryClient, queryKey, profile?.preferences, mutation],
   )
