@@ -1,0 +1,93 @@
+# Supabase config — versionne la posture verify_jwt par Edge Function.
+#
+# But : rendre AUDITABLE le flag verify_jwt (avant, il n'existait que côté
+# plateforme, fixé à la main au déploiement, non traçable). Ce fichier est
+# désormais la source de vérité.
+#
+# Rappel : verify_jwt=true → la PLATEFORME rejette tout Authorization Bearer
+# sans signature valide du projet AVANT d'exécuter le code de la fonction.
+# verify_jwt=false → la fonction s'auto-authentifie dans son code (gate(),
+# secret partagé, ou getOptionalUser pour les endpoints publics).
+#
+# ⚠️ Le défaut CLI de verify_jwt est `true`. Chaque fonction est donc listée
+# EXPLICITEMENT pour refléter l'état réellement déployé et éviter qu'un
+# `supabase functions deploy` ne bascule silencieusement une fonction gated.
+
+project_id = "rogesnduejmqpxolhbif"
+
+# ── Fonctions "gated" (auth Bearer + rate-limit + crédits dans le code) ──────
+# Déployées verify_jwt=false : gate() valide le Bearer via auth.getUser().
+[functions.analyser]
+verify_jwt = false
+[functions.ocr-scan]
+verify_jwt = false
+[functions.product-by-barcode]
+verify_jwt = false
+[functions.product-search]
+verify_jwt = false
+[functions.product-suggest]
+verify_jwt = false
+[functions.promesse-identify]
+verify_jwt = false
+[functions.promesse-fetch-description]
+verify_jwt = false
+[functions.routine-organize-ai]
+verify_jwt = false
+[functions.advisor-agent]
+verify_jwt = false
+[functions.validate-suggestions]
+verify_jwt = false
+[functions.delete-account]
+verify_jwt = false
+
+# ── Fonctions gated déployées verify_jwt=true (double couche, appelées avec un JWT user valide) ──
+[functions.coherence-analyze]
+verify_jwt = true
+[functions.compare-insights]
+verify_jwt = true
+[functions.advisor-chat]
+verify_jwt = true
+[functions.routine-suggest]
+verify_jwt = true
+[functions.personal-insights]
+verify_jwt = true
+[functions.routine-smart-suggest]
+verify_jwt = true
+[functions.routine-conflicts-ai]
+verify_jwt = true
+
+# ── Endpoints publics documentés (getOptionalUser / santé) ───────────────────
+[functions.health]
+verify_jwt = false
+[functions.ingredient-explain]
+verify_jwt = false
+[functions.ingredient-exposure]
+verify_jwt = false
+[functions.synthesis]
+verify_jwt = false
+
+# ── Endpoints publics à SSRF guard (pas d'auth, rate-limit seul) ─────────────
+[functions.deep-fetch]
+verify_jwt = false
+[functions.ecommerce-scrape]
+verify_jwt = false
+
+# ── Webhooks / cron : auth par secret partagé fail-closed dans le code ───────
+[functions.revenucat-webhook]
+verify_jwt = false
+[functions.push-dispatch]
+verify_jwt = false
+[functions.brevo-sync]
+verify_jwt = false
+[functions.admin-health-alert]
+verify_jwt = false
+
+# ── Fonctions ADMIN : durcissement sécurité (juil 2026) ──────────────────────
+# verify_jwt=true (était false) : la plateforme rejette tout Bearer non signé,
+# en plus du contrôle d'égalité exacte au service_role dans _shared/adminAuth.ts.
+# Les appelants (app admin via supabaseAdmin, scripts) envoient le service_role
+# key = un JWT valide → passent la couche plateforme sans changement.
+[functions.admin-resolve-barcode]
+verify_jwt = true
+[functions.admin-score-upsert]
+verify_jwt = true

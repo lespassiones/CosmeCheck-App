@@ -16,33 +16,11 @@
  */
 import { handleOptions, jsonResponse } from "../_shared/cors.ts";
 import { serviceClient } from "../_shared/auth.ts";
+import { isAdminCaller } from "../_shared/adminAuth.ts";
 import { AI_MODEL_SEARCH, hasOpenAI, logAI, openai } from "../_shared/aiClient.ts";
 import { parseInciList } from "../analyser/parse.ts";
 import { pastilleTone, scoreLabel, type ColorRating, synthScore } from "../analyser/score.ts";
 import { slugifyCategoryPath } from "../_shared/eanWebSearch.ts";
-
-const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-const PROJECT_REF = "rogesnduejmqpxolhbif";
-
-/**
- * Admin only : on accepte soit l'égalité exacte avec la clé service-role
- * injectée, soit un JWT de rôle `service_role` du bon projet (le format de la
- * clé injectée peut différer de celle utilisée par l'admin).
- */
-function isAdminCaller(authHeader: string): boolean {
-  if (SERVICE_KEY && authHeader === `Bearer ${SERVICE_KEY}`) return true;
-  const m = authHeader.match(/^Bearer\s+(.+)$/);
-  if (!m) return false;
-  const parts = m[1].split(".");
-  if (parts.length !== 3) return false;
-  try {
-    const json = atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"));
-    const payload = JSON.parse(json) as { role?: string; ref?: string };
-    return payload.role === "service_role" && payload.ref === PROJECT_REF;
-  } catch {
-    return false;
-  }
-}
 
 const CANONICAL_FAMILIES = [
   "Bien-être", "Coiffure", "Hygiène dentaire", "Hygiène du corps",

@@ -15,29 +15,10 @@
  */
 import { handleOptions, jsonResponse } from "../_shared/cors.ts";
 import { serviceClient } from "../_shared/auth.ts";
+import { isAdminCaller } from "../_shared/adminAuth.ts";
 import { parseInciList } from "../analyser/parse.ts";
 import { pastilleTone, scoreLabel, synthScore, type ColorRating } from "../analyser/score.ts";
 import { slugifyCategoryPath } from "../_shared/eanWebSearch.ts";
-
-const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-const PROJECT_REF = "rogesnduejmqpxolhbif";
-
-function isAdminCaller(authHeader: string): boolean {
-  if (SERVICE_KEY && authHeader === `Bearer ${SERVICE_KEY}`) return true;
-  const m = authHeader.match(/^Bearer\s+(.+)$/);
-  if (!m) return false;
-  const parts = m[1].split(".");
-  if (parts.length !== 3) return false;
-  try {
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))) as {
-      role?: string;
-      ref?: string;
-    };
-    return payload.role === "service_role" && payload.ref === PROJECT_REF;
-  } catch {
-    return false;
-  }
-}
 
 Deno.serve(async (req) => {
   const pre = handleOptions(req);
