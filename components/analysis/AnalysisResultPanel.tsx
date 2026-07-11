@@ -56,6 +56,19 @@ import { ObservationsCard } from './ObservationsCard'
 import { PenaltySummaryStrip } from './PenaltySummaryStrip'
 import { ProductRow } from './ProductRow'
 import { PersonalInsightsCards, type PersonalBlocks } from './PersonalInsightsCards'
+import { ReviewPromptCard } from '@/components/review/ReviewPromptCard'
+import { loadReviewState, saveReviewState } from '@/lib/review/storage'
+import { markDone, markShown, shouldAskReview } from '@/lib/review/prompt'
+import { NotifPromptCard } from '@/components/notifications/NotifPromptCard'
+import {
+  markNotifPromptGranted,
+  markNotifPromptSkipped,
+  shouldReaskNotifications,
+} from '@/lib/notifications/optInPrompt'
+import { loadNotifPromptState, readScanCount, saveNotifPromptState } from '@/lib/notifications/optInStorage'
+import { readNotificationPrefs } from '@/lib/notifications/prefs'
+import { requestPermission } from '@/lib/notifications/scheduler'
+import { registerPushToken } from '@/lib/notifications/pushToken'
 import { AlternativesCarousel } from './AlternativesCarousel'
 import { ProductToolsSection } from './ProductToolsSection'
 import { supabase } from '@/lib/supabase/client'
@@ -123,12 +136,80 @@ export const AnalysisResultPanel: FC<Props> = ({
   category,
 }) => {
   const router = useRouter()
-  const { restrictions } = useProfile()
+  const { restrictions, profile, updateProfile } = useProfile()
   const [detailsExpanded, setDetailsExpanded] = useState(false)
   const [filter, setFilter] = useState<TabKey>('all')
+  const [showReview, setShowReview] = useState(false)
+  const [showNotifPrompt, setShowNotifPrompt] = useState(false)
+  const reviewCheckedRef = useRef(false)
   const [listModalOpen, setListModalOpen] = useState(false)
   const [familiesModalOpen, setFamiliesModalOpen] = useState(false)
   const modalScrollRef = useRef<ScrollView>(null)
+
+  // ── Cartes de sollicitation au pic d'engagement ────────────────────────────
+  // Déclenchées quand les 3 blocs IA viennent d'apparaître (scan réussi).
+  // ARBITRAGE : jamais deux cartes en même temps. La re-demande notifications
+  // (2e scan, onboarding passé) est prioritaire sur l'avis store : la permission
+  // vaut plus tôt, et l'avis se re-propose de lui-même à J+1.
+  const handleBlocksReady = useCallback(() => {
+    if (reviewCheckedRef.current) return
+    reviewCheckedRef.current = true
+    void (async () => {
+      // 1. Re-demande notifications (dernière sollicitation, consommée à l'affichage).
+      const prefs = readNotificationPrefs(
+        (profile?.preferences as Record<string, unknown> | null | undefined)
+          ?.notifications as Record<string, unknown> | null | undefined,
+      )
+      const notifState = await loadNotifPromptState()
+      const scans = await readScanCount()
+      if (shouldReaskNotifications(notifState, scans, prefs.enabled)) {
+        await saveNotifPromptState(markNotifPromptSkipped(notifState))
+        setShowNotifPrompt(true)
+        return
+      }
+      // 2. Sinon : avis store (fréquence gérée par lib/review/prompt.ts).
+      const now = Date.now()
+      const st = await loadReviewState()
+      if (!shouldAskReview(st, now)) return
+      await saveReviewState(markShown(st, now))
+      setShowReview(true)
+    })()
+  }, [profile?.preferences])
+
+  const handleNotifAccept = useCallback(() => {
+    setShowNotifPrompt(false)
+    void (async () => {
+      try {
+        const granted = await requestPermission()
+        const prefs = readNotificationPrefs(
+          (profile?.preferences as Record<string, unknown> | null | undefined)
+            ?.notifications as Record<string, unknown> | null | undefined,
+        )
+        await updateProfile({ notifications: { ...prefs, enabled: true, promptSeen: true } })
+        if (granted) await registerPushToken()
+        await saveNotifPromptState(markNotifPromptGranted(await loadNotifPromptState()))
+      } catch {
+        // best-effort
+      }
+    })()
+  }, [profile?.preferences, updateProfile])
+
+  const handleNotifDismiss = useCallback(() => {
+    // La sollicitation a déjà été consommée à l'affichage : on ferme simplement.
+    setShowNotifPrompt(false)
+  }, [])
+
+  const handleReviewAccept = useCallback(() => {
+    setShowReview(false)
+    void (async () => {
+      const st = await loadReviewState()
+      await saveReviewState(markDone(st))
+    })()
+  }, [])
+
+  const handleReviewDismiss = useCallback(() => {
+    setShowReview(false)
+  }, [])
 
   // ── Alternatives (recommandations same-category, filtrées restrictions/profil) ──
   // On passe l'EAN stocké en priorité : la résolution par marque+nom échoue pour
@@ -352,7 +433,20 @@ export const AnalysisResultPanel: FC<Props> = ({
 
       {/* 3 blocs IA personnalisés (objectifs / peau / à surveiller) — lazy,
           1 crédit à la génération, verrouillés→/offre si 0 crédit. */}
-      <PersonalInsightsCards analysisId={analysisId} initialBlocks={personalBlocks} initialBlocksKey={personalBlocksKey} />
+      <PersonalInsightsCards
+        analysisId={analysisId}
+        initialBlocks={personalBlocks}
+        initialBlocksKey={personalBlocksKey}
+        onBlocksReady={handleBlocksReady}
+      />
+
+      {/* Cartes de sollicitation (exclusives, cf. handleBlocksReady) : re-demande
+          notifications (prioritaire) OU avis store. */}
+      {showNotifPrompt ? (
+        <NotifPromptCard onAccept={handleNotifAccept} onDismiss={handleNotifDismiss} />
+      ) : showReview ? (
+        <ReviewPromptCard onAccept={handleReviewAccept} onDismiss={handleReviewDismiss} />
+      ) : null}
 
       <View style={styles.toggleWrap}>
         <EssentielToggleButton

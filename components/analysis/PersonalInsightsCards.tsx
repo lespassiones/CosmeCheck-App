@@ -70,14 +70,35 @@ interface Props {
   initialBlocks?: PersonalBlocks | null
   /** Clé persistée (`v{N}:prof:res`) — sert à détecter une version périmée. */
   initialBlocksKey?: string | null
+  /**
+   * Appelé UNE seule fois quand les 3 blocs sont réellement affichés (status
+   * `ready`), quel que soit le chemin (instantané ou lazy). Sert de point
+   * d'accroche au pic d'engagement (ex. proposer un avis store).
+   */
+  onBlocksReady?: () => void
 }
 
-export const PersonalInsightsCards: FC<Props> = ({ analysisId, initialBlocks, initialBlocksKey }) => {
+export const PersonalInsightsCards: FC<Props> = ({
+  analysisId,
+  initialBlocks,
+  initialBlocksKey,
+  onBlocksReady,
+}) => {
   const router = useRouter()
   const [state, setState] = useState<State>(
     initialBlocks ? { status: 'ready', blocks: initialBlocks } : { status: 'loading' },
   )
   const fetchedRef = useRef(false)
+  const readyFiredRef = useRef(false)
+
+  // Notifie le parent une seule fois quand les blocs deviennent visibles
+  // (couvre le chemin instantané ET le chemin lazy via l'état `ready`).
+  useEffect(() => {
+    if (state.status === 'ready' && !readyFiredRef.current) {
+      readyFiredRef.current = true
+      onBlocksReady?.()
+    }
+  }, [state.status, onBlocksReady])
 
   // Blocs persistés mais générés sous un ANCIEN prompt → on les rafraîchit en
   // tâche de fond (gratuit côté Edge car déjà payés), sans flouter l'affichage.

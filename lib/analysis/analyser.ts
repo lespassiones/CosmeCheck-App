@@ -22,6 +22,7 @@ import { supabase, db } from '../supabase/client'
 import { parseAnalyseResponse as parseAnalyseResponseSafe } from './types'
 import type { AnalyseItem, AnalyseResponse } from './types'
 import type { UserRestrictions, AnalysisRow } from '../supabase/types'
+import { bumpScanCount } from '../notifications/optInStorage'
 
 // ─── Types publics ──────────────────────────────────────────────────────────
 
@@ -335,6 +336,9 @@ export async function runAnalysis(params: RunAnalysisParams): Promise<RunAnalysi
     ...withRestrictions,
     addedToRoutine,
   }
+
+  // Compteur de scans réussis (re-demande d'opt-in notifications au 2e scan).
+  void bumpScanCount()
 
   return { analysisId, response: enriched }
 }

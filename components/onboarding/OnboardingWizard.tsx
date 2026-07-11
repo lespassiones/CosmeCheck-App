@@ -1,11 +1,13 @@
 /**
  * OnboardingWizard - questionnaire profil en MICRO-ÉTAPES (refonte façon Flowfy).
  *
- * Au lieu de 3 grosses étapes denses, on enchaîne 11 micro-écrans (une question
- * par écran), regroupés en 3 blocs pastel :
+ * Au lieu de 3 grosses étapes denses, on enchaîne 12 micro-écrans (une question
+ * par écran), regroupés en 4 blocs pastel :
  *   - Bloc « Ta peau » (violet)        : visage, corps, état des cheveux
  *   - Bloc « Tes préoccupations » (rose): peau, cheveux, autre
  *   - Bloc « Tes objectifs » (vert)    : visage, corps, cheveux, routine, autre
+ *   - Bloc « Notifications » (rose)    : opt-in explicite (case + bouton final
+ *     bloqué tant que non cochée ; le dialogue système n'apparaît qu'après)
  *
  * Chrome : barre de progression globale animée + pastilles numérotées de
  * sous-étape (1·2·3 du bloc courant), titre court SANS paragraphe explicatif,
@@ -75,6 +77,18 @@ import {
   TONES,
   type ToneKey,
 } from '@/components/onboarding/OnboardingControls'
+import { NotificationOptInStep } from '@/components/onboarding/NotificationOptInStep'
+import { readNotificationPrefs } from '@/lib/notifications/prefs'
+import { requestPermission } from '@/lib/notifications/scheduler'
+import { registerPushToken } from '@/lib/notifications/pushToken'
+import {
+  markNotifPromptGranted,
+  markNotifPromptSkipped,
+} from '@/lib/notifications/optInPrompt'
+import {
+  loadNotifPromptState,
+  saveNotifPromptState,
+} from '@/lib/notifications/optInStorage'
 
 const SAVE_DEBOUNCE_MS = 600
 
@@ -82,7 +96,7 @@ type ChangeFn = (patch: Partial<SkinProfile>) => void
 
 interface StepDef {
   id: string
-  bloc: 1 | 2 | 3
+  bloc: 1 | 2 | 3 | 4
   blocLabel: string
   tone: ToneKey
   title: string
@@ -321,6 +335,19 @@ const STEPS: StepDef[] = [
       />
     ),
   },
+
+  // ── Bloc 4 : Notifications (rose) ─────────────────────────────────────
+  // Rendu spécial dans le corps du wizard (état checkbox local, pas dans
+  // SkinProfile). Le bouton final reste bloqué tant que la case n'est pas
+  // cochée ; « Passer » (haut droite) saute sans activer.
+  {
+    id: 'notifications',
+    bloc: 4,
+    blocLabel: 'Notifications',
+    tone: 'rose',
+    title: 'Ta peau a des choses à te dire',
+    render: () => null,
+  },
 ]
 
 const TOTAL = STEPS.length
@@ -331,12 +358,21 @@ interface Props {
 }
 
 export const OnboardingWizard: FC<Props> = ({ onStepChange }) => {
-  const { skin, firstName, saveSkin, completeOnboarding } = useProfile()
+  const {
+    skin,
+    firstName,
+    saveSkin,
+    completeOnboarding,
+    profile: userProfile,
+    updateProfile,
+  } = useProfile()
 
   const [index, setIndex] = useState(0)
   const [dir, setDir] = useState<1 | -1>(1)
   const [profile, setProfile] = useState<SkinProfile>(skin)
   const [finishing, setFinishing] = useState(false)
+  // Étape notifications : case NON cochée par défaut (opt-in explicite).
+  const [notifOptIn, setNotifOptIn] = useState(false)
 
   const scrollRef = useRef<ScrollView>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -403,26 +439,55 @@ export const OnboardingWizard: FC<Props> = ({ onStepChange }) => {
     setIndex((i) => (i < TOTAL - 1 ? i + 1 : i))
   }, [])
 
-  const finish = useCallback(() => {
-    if (finishing) return
-    setFinishing(true)
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
-      () => {},
-    )
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-    const pending = pendingRef.current
-    pendingRef.current = null
-    // `completeOnboarding` pose `onboardingShown=true` dans le cache de façon
-    // OPTIMISTE + SYNCHRONE (avant tout await). L'AuthGuard racine détecte ce
-    // changement et route DIRECTEMENT vers le paywall (ou home si déjà vu). On
-    // ne navigue PAS manuellement ici : un `router.replace(HOME)` faisait
-    // clignoter l'accueil ~1 frame avant la redirection du guard vers le paywall.
-    // Le spinner (`finishing`) reste affiché le temps de la bascule du guard.
-    void completeOnboarding(pending ?? undefined).catch(() => {})
-  }, [finishing, completeOnboarding])
+  const finish = useCallback(
+    (withNotifications: boolean) => {
+      if (finishing) return
+      setFinishing(true)
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+        () => {},
+      )
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+      const pending = pendingRef.current
+      pendingRef.current = null
+      // « Passer » sur l'étape notifications = une sollicitation consommée
+      // (re-demande possible au 2e scan). Passer AVANT cette étape = jamais vue,
+      // le compteur ne bouge pas.
+      const onNotifStep = STEPS[index]?.id === 'notifications'
+
+      void (async () => {
+        try {
+          if (withNotifications) {
+            // Le dialogue système n'est déclenché qu'ICI, après le oui explicite.
+            const granted = await requestPermission()
+            const prefs = readNotificationPrefs(
+              (userProfile?.preferences as Record<string, unknown> | null | undefined)
+                ?.notifications as Record<string, unknown> | null | undefined,
+            )
+            await updateProfile({
+              notifications: { ...prefs, enabled: true, promptSeen: true },
+            })
+            if (granted) await registerPushToken()
+            await saveNotifPromptState(markNotifPromptGranted(await loadNotifPromptState()))
+          } else if (onNotifStep) {
+            await saveNotifPromptState(markNotifPromptSkipped(await loadNotifPromptState()))
+          }
+        } catch {
+          // best-effort : l'opt-in ne doit jamais bloquer la fin d'onboarding.
+        }
+        // `completeOnboarding` pose `onboardingShown=true` dans le cache de façon
+        // OPTIMISTE + SYNCHRONE (avant tout await). L'AuthGuard racine détecte ce
+        // changement et route DIRECTEMENT vers le paywall (ou home si déjà vu). On
+        // ne navigue PAS manuellement ici : un `router.replace(HOME)` faisait
+        // clignoter l'accueil ~1 frame avant la redirection du guard vers le paywall.
+        // Le spinner (`finishing`) reste affiché le temps de la bascule du guard.
+        void completeOnboarding(pending ?? undefined).catch(() => {})
+      })()
+    },
+    [finishing, completeOnboarding, index, userProfile, updateProfile],
+  )
 
   const step = STEPS[index]
   const tone = TONES[step.tone]
@@ -459,7 +524,7 @@ export const OnboardingWizard: FC<Props> = ({ onStepChange }) => {
           <View style={styles.iconBtn} />
         )}
         <Pressable
-          onPress={finish}
+          onPress={() => finish(false)}
           disabled={finishing}
           hitSlop={10}
           style={({ pressed }) => pressed && { opacity: 0.5 }}
@@ -525,31 +590,42 @@ export const OnboardingWizard: FC<Props> = ({ onStepChange }) => {
         <Animated.View key={step.id} entering={enterAnim.duration(280)}>
           <Text style={styles.title}>{step.title}</Text>
           <View style={styles.stepBody}>
-            {step.render(profile, handleChange, goNext)}
+            {step.id === 'notifications' ? (
+              <NotificationOptInStep checked={notifOptIn} onToggle={setNotifOptIn} />
+            ) : (
+              step.render(profile, handleChange, goNext)
+            )}
           </View>
         </Animated.View>
       </ScrollView>
 
       {/* ── Navigation bas ────────────────────────────────────────────── */}
+      {/* Étape notifications : le bouton final reste bloqué tant que la case
+          n'est pas cochée (opt-in explicite ; « Passer » vit en haut à droite). */}
       <View style={styles.nav}>
-        <Pressable
-          onPress={isLast ? finish : goNext}
-          disabled={finishing}
-          style={({ pressed }) => [
-            styles.btnPrimary,
-            { backgroundColor: tone.solid },
-            pressed && { opacity: 0.85 },
-            finishing && { opacity: 0.7 },
-          ]}
-        >
-          {finishing ? (
-            <ActivityIndicator color={colors.surface} />
-          ) : (
-            <Text style={styles.btnPrimaryText}>
-              {isLast ? "C'est parti !" : 'Suivant'}
-            </Text>
-          )}
-        </Pressable>
+        {(() => {
+          const notifGate = step.id === 'notifications' && !notifOptIn
+          return (
+            <Pressable
+              onPress={isLast ? () => finish(step.id === 'notifications' && notifOptIn) : goNext}
+              disabled={finishing || notifGate}
+              style={({ pressed }) => [
+                styles.btnPrimary,
+                { backgroundColor: tone.solid },
+                pressed && { opacity: 0.85 },
+                (finishing || notifGate) && { opacity: 0.45 },
+              ]}
+            >
+              {finishing ? (
+                <ActivityIndicator color={colors.surface} />
+              ) : (
+                <Text style={styles.btnPrimaryText}>
+                  {isLast ? "C'est parti !" : 'Suivant'}
+                </Text>
+              )}
+            </Pressable>
+          )
+        })()}
       </View>
     </View>
   )
