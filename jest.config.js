@@ -21,6 +21,9 @@ module.exports = {
   testMatch: ['**/__tests__/**/*.test.ts'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
+    // Imports Deno-style avec extension .ts explicite (edge functions) → strip
+    // pour que le résolveur Node de Jest les trouve.
+    '^(\\.{1,2}/.*)\\.ts$': '$1',
   },
   transform: {
     '^.+\\.ts$': [

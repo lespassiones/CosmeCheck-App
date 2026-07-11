@@ -5,8 +5,11 @@
  * Pipeline (ordre IDENTIQUE au web) :
  *   1. Auth Bearer + rate-limit IP (gate, costCredits:0 — pas de débit ici).
  *   2. Idempotence (hash {user, route, body}) → réponse cachée si rejouée.
- *   3. Cache EAN `product_analyses` → court-circuit SANS débit de crédit.
- *   4. Débit de 1 crédit (consumeCredit) APRÈS les court-circuits.
+ *   3. Cache EAN `product_analyses` → court-circuit.
+ *   4. AUCUN débit de crédit : le scan/analyse est GRATUIT par décision produit
+ *      (seul le rate-limit IP protège l'abus). La monétisation se fait en aval
+ *      (3 blocs IA / synthèse personnalisée = 1 crédit, lazy). Ne PAS ajouter
+ *      de consumeCredit ici sans changer aussi le paywall côté app.
  *   5. Fast-path déterministe `isCleanInciInput` : parse local + match DB +
  *      score, SANS aucun appel LLM. Sinon cascade IA (parse/validate/split),
  *      qui dégrade gracieusement si les clés IA manquent.

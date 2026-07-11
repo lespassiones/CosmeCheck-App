@@ -3,9 +3,16 @@
  * fournie par l'utilisateur (ecommerce-scrape, deep-fetch…).
  *
  * Refuse : schémas non-http(s), identifiants dans l'URL, hôtes internes
- * (localhost, metadata cloud, *.local/*.internal), IPv4 privées/loopback/
- * link-local (RFC1918 + 127/8 + 169.254/16 + 0/8 + 224/4 + 172.16-31/12),
+ * (localhost, metadata cloud, *.local/*.internal), hôtes mono-label (sans point
+ * → IP entière type http://2130706433, hex http://0x7f000001, intranet),
+ * IPv4 mal formées (octal 0177.x, formes courtes 127.1), IPv4 privées/loopback/
+ * link-local (RFC1918 + 127/8 + 169.254/16 + 0/8 + 224/4 + 172.16-31/12 + CGNAT),
  * et IPv6 loopback/ULA/link-local.
+ *
+ * ⚠️ Ne résout PAS le DNS : une cible de type "domaine public → IP privée"
+ * (DNS rebinding) n'est pas détectée ici. Atténué en aval par : timeout court,
+ * filtre content-type, réponse jamais renvoyée en HTML brut (INCI extrait par
+ * LLM). Le suivi des redirections re-valide CHAQUE saut (voir safeFetch.ts).
  *
  * Module PUR (URL + regex, aucune API Deno) → testable en Jest.
  */
@@ -39,6 +46,19 @@ function isBlocked100(host: string): boolean {
   if (parts.length < 2) return false;
   const second = Number(parts[1]);
   return Number.isInteger(second) && second >= 64 && second <= 127;
+}
+
+/**
+ * Dotted-quad IPv4 STRICT : exactement 4 octets décimaux 0-255, sans zéro de
+ * tête (un zéro de tête = interprétation octale possible côté résolveur, ex.
+ * 0177.0.0.1 = 127.0.0.1). Sert à refuser les encodages exotiques d'IP.
+ */
+function isStrictDottedQuad(host: string): boolean {
+  const parts = host.split(".");
+  if (parts.length !== 4) return false;
+  return parts.every(
+    (p) => /^\d{1,3}$/.test(p) && !(p.length > 1 && p[0] === "0") && Number(p) <= 255,
+  );
 }
 
 function isLikelyPrivateIPv6(host: string): boolean {
@@ -85,13 +105,27 @@ export function validateUserUrl(input: string): UrlValidationResult {
     if (isLikelyPrivateIPv6(host)) {
       return { ok: false, reason: "Adresse IP privée refusée." };
     }
-  } else if (/^[\d.]+$/.test(host)) {
-    if (
-      BLOCKED_IPV4_PREFIXES.some((p) => host.startsWith(p)) ||
-      isBlocked172(host) ||
-      isBlocked100(host)
-    ) {
-      return { ok: false, reason: "Adresse IP privée refusée." };
+  } else {
+    // Pas d'IPv6. Un hôte public légitime a TOUJOURS un point (FQDN avec TLD,
+    // ou IPv4 en dotted-quad). On refuse donc tout hôte mono-label : cela
+    // bloque d'un coup les hôtes internes (intranet, server1), l'IP entière
+    // (http://2130706433 = 127.0.0.1) et l'hex (http://0x7f000001).
+    if (!host.includes(".")) {
+      return { ok: false, reason: "Hôte sans domaine (IP numérique / mono-label) refusé." };
+    }
+    if (/^[\d.]+$/.test(host)) {
+      // Ressemble à une IPv4 littérale : exiger un dotted-quad strict, sinon
+      // refuser (bloque l'octal 0177.0.0.1, les formes courtes 127.1, etc.).
+      if (!isStrictDottedQuad(host)) {
+        return { ok: false, reason: "Adresse IP mal formée refusée." };
+      }
+      if (
+        BLOCKED_IPV4_PREFIXES.some((p) => host.startsWith(p)) ||
+        isBlocked172(host) ||
+        isBlocked100(host)
+      ) {
+        return { ok: false, reason: "Adresse IP privée refusée." };
+      }
     }
   }
 

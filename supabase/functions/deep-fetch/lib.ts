@@ -5,6 +5,7 @@
  * les cibles internes : loopback, RFC1918, link-local, .local, etc.).
  */
 import { hasMistral, hasOpenAI, mistralChat, openai } from "../_shared/aiClient.ts";
+import { safeFetch } from "../_shared/safeFetch.ts";
 
 // ── SSRF guard (mutualisé dans _shared/ssrfGuard.ts) ────────────────────────
 export { isSafePublicUrl } from "../_shared/ssrfGuard.ts";
@@ -25,10 +26,11 @@ const BROWSER_HEADERS: HeadersInit = {
 
 export async function fetchPageHtml(url: string, timeoutMs = 8_000): Promise<string | null> {
   try {
-    const r = await fetch(url, {
+    // safeFetch re-valide CHAQUE redirection contre le garde SSRF (une URL
+    // publique peut sinon rediriger vers une IP interne).
+    const r = await safeFetch(url, {
       headers: BROWSER_HEADERS,
       signal: AbortSignal.timeout(timeoutMs),
-      redirect: "follow",
     });
     if (!r.ok) return null;
     const ct = r.headers.get("content-type") ?? "";

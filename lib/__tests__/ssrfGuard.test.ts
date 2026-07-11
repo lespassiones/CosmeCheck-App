@@ -38,6 +38,13 @@ describe('validateUserUrl — refuse les cibles dangereuses (SSRF)', () => {
     ['IPv6 loopback', 'http://[::1]'],
     ['IPv6 ULA fd', 'http://[fd00::1]'],
     ['URL invalide', 'pas une url'],
+    // Encodages exotiques d'IP / hôtes mono-label (durcissement juil 2026)
+    ['IP entière (127.0.0.1)', 'http://2130706433/'],
+    ['IP hex', 'http://0x7f000001/'],
+    ['IPv4 octale 0177', 'http://0177.0.0.1/'],
+    ['IPv4 forme courte 127.1', 'http://127.1/'],
+    ['hôte mono-label (intranet)', 'http://intranet/'],
+    ['octet > 255', 'http://999.1.1.1/'],
   ])('refuse %s', (_label, u) => {
     expect(validateUserUrl(u).ok).toBe(false)
   })

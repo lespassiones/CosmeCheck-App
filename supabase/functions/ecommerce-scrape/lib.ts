@@ -16,6 +16,7 @@
  */
 import { hasMistral, hasOpenAI, mistralChat, openai } from "../_shared/aiClient.ts";
 import { serviceClient } from "../_shared/auth.ts";
+import { safeFetch, SsrfBlockedError } from "../_shared/safeFetch.ts";
 
 // ─── SSRF guard (mutualisé dans _shared/ssrfGuard.ts) ───────────────────────
 import { validateUserUrl, type UrlValidationResult } from "../_shared/ssrfGuard.ts";
@@ -72,12 +73,16 @@ async function fetchHtmlWithDiagnostics(
 ): Promise<FetchOutcome> {
   let r: Response;
   try {
-    r = await fetch(url, {
+    // safeFetch re-valide CHAQUE redirection contre le garde SSRF (une URL
+    // publique peut sinon rediriger vers une IP interne).
+    r = await safeFetch(url, {
       headers: BROWSER_HEADERS,
       signal: AbortSignal.timeout(timeoutMs),
-      redirect: "follow",
     });
   } catch (e) {
+    if (e instanceof SsrfBlockedError) {
+      return { kind: "fetch_failed", reason: "ssrf_blocked_redirect" };
+    }
     return { kind: "fetch_failed", reason: e instanceof Error ? e.message : String(e) };
   }
   const server = (r.headers.get("server") ?? "").toLowerCase();
