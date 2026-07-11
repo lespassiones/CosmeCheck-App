@@ -30,6 +30,7 @@ import { supabase } from '@/lib/supabase/client'
 import { SkinProfileCard } from '@/components/profile/SkinProfileCard'
 import { BeautyProfileForm } from '@/components/profile/BeautyProfileForm'
 import { NotificationSettings } from '@/components/profile/NotificationSettings'
+import { ReportSheet } from '@/components/profile/ReportSheet'
 
 type IoniconName = keyof typeof Ionicons.glyphMap
 
@@ -50,6 +51,7 @@ const ProfileScreen: FC = () => {
   const [confirmSignOut, setConfirmSignOut] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
 
   const email = user?.email ?? null
   const initial = (firstName?.[0] ?? email?.[0] ?? '?').toUpperCase()
@@ -66,6 +68,11 @@ const ProfileScreen: FC = () => {
         icon: 'diamond-outline',
         label: 'Passer Premium',
         onPress: () => router.push(ROUTES.OFFRE.INDEX),
+      },
+      {
+        icon: 'flag-outline',
+        label: 'Signaler un problème',
+        onPress: () => setReportOpen(true),
       },
     ],
     [],
@@ -320,6 +327,12 @@ const ProfileScreen: FC = () => {
         destructive
         onConfirm={() => void handleDeleteAccount()}
         onCancel={() => setConfirmDelete(false)}
+      />
+
+      <ReportSheet
+        visible={reportOpen}
+        onClose={() => setReportOpen(false)}
+        firstName={firstName}
       />
     </View>
   )

@@ -28,7 +28,14 @@ function getClient(): PostHogClient | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
     const { PostHog } = require('posthog-react-native')
-    cached = new PostHog(POSTHOG_KEY, { host: POSTHOG_HOST })
+    // Mesure d'audience ANONYME (exemptée de consentement CNIL) : pas de session
+    // replay, pas de capture automatique des interactions. On ne relie l'ID
+    // technique Supabase QUE comme distinct_id (aucun email/nom transmis, cf.
+    // phIdentify + useAuth). Aucune donnée nominative ne part vers PostHog.
+    cached = new PostHog(POSTHOG_KEY, {
+      host: POSTHOG_HOST,
+      enableSessionReplay: false,
+    })
     cached.register({ platform: 'mobile' })
   } catch {
     cached = null

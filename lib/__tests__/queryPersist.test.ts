@@ -38,6 +38,12 @@ describe('shouldPersistQueryKey', () => {
     expect(shouldPersistQueryKey(['catalog-search', 'garnier', 0])).toBe(false)
   })
 
+  it('exclut les caches transients alternatives / eanAnalysis / productByEan', () => {
+    expect(shouldPersistQueryKey(['alternatives', '3600541234567', 0])).toBe(false)
+    expect(shouldPersistQueryKey(['eanAnalysis', '3600541234567'])).toBe(false)
+    expect(shouldPersistQueryKey(['productByEan', '3600541234567'])).toBe(false)
+  })
+
   it('exclut la config app (flags + maintenance, toujours frais)', () => {
     expect(shouldPersistQueryKey(['appConfig'])).toBe(false)
   })

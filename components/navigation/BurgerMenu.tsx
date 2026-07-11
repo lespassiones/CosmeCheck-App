@@ -50,6 +50,7 @@ import { easings } from '@/constants/motion'
 import { radius } from '@/constants/spacing'
 import { ROUTES } from '@/constants/routes'
 import { useAuth } from '@/hooks/useAuth'
+import { useProfile } from '@/hooks/useProfile'
 import { CreditsPill } from '@/components/shared/CreditsPill'
 
 type IconCmp = FC<{ size?: number; color?: string }>
@@ -80,6 +81,8 @@ export const BurgerMenu: FC = () => {
   const router = useRouter()
   const pathname = usePathname() ?? '/'
   const { signOut } = useAuth()
+  const { profile } = useProfile()
+  const isPremium = profile?.tier === 'premium'
 
   const [open, setOpen] = useState(false)
   // `mounted` garde la Modal montée le temps de l'animation de fermeture.
@@ -244,7 +247,8 @@ export const BurgerMenu: FC = () => {
                   <CreditsPill />
                 </View>
 
-                {!pathname.startsWith('/offre') && (
+                {/* Upsell Premium — masqué pour les membres déjà Premium. */}
+                {!isPremium && !pathname.startsWith('/offre') && (
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Passez Premium"

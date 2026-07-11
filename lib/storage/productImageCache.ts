@@ -13,7 +13,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
-import { supabase } from '../supabase/client'
+import { fetchProductByEan } from '@/lib/catalog/productByEan'
 
 const KEY = 'cosmecheck:product_image_cache'
 const TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 jours
@@ -79,12 +79,6 @@ export async function getProductImage(analysisId: string): Promise<string | null
   return entry.url
 }
 
-interface CatalogImageRow {
-  image_url: string | null
-  brand?: string | null
-  name?: string | null
-}
-
 /**
  * Résout l'URL image d'une analyse :
  *   1. Cache local rapide (instantané pour analyses historiques)
@@ -110,16 +104,12 @@ export async function resolveAndCacheProductImage(
   // matchait des variantes différentes selon la plateforme).
   if (ean) {
     try {
-      const { data, error } = await supabase.rpc(
-        'cosme_check_get_product_by_ean' as never,
-        { p_ean: ean } as never,
-      )
-      if (!error) {
-        const row = ((data as CatalogImageRow[] | null) ?? [])[0]
-        if (row?.image_url) {
-          await cacheProductImage(analysisId, row.image_url)
-          return row.image_url
-        }
+      // Lookup dédupliqué avec resolveCatalogIdentity (même EAN au même moment
+      // sur l'écran analyse) : 1 seul appel RPC partagé via React Query.
+      const row = await fetchProductByEan(ean)
+      if (row?.image_url) {
+        await cacheProductImage(analysisId, row.image_url)
+        return row.image_url
       }
     } catch {
       // Lookup EAN échoué (réseau) → on retombe sur la dernière image EAN cachée.

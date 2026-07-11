@@ -11,11 +11,11 @@
  * (tout activé, maintenance OFF) → un incident transitoire ne doit jamais
  * couper une feature ni afficher un faux écran de maintenance.
  *
- * Polling 30 s (comme useCredits) pour propager rapidement un changement admin
- * sans rebuild ni redéploiement.
+ * Polling 5 min pour propager un changement admin (maintenance, flags) sans
+ * rebuild ni redéploiement.
  */
 
-import { useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { supabase } from '@/lib/supabase/client'
@@ -106,23 +106,18 @@ export function useAppConfig(): UseAppConfigReturn {
     queryKey: ['appConfig'],
     staleTime: 30 * 1000,
     gcTime: 5 * 60 * 1000,
+    // Polling 5 min pour capter les changements admin (maintenance, flags). La
+    // config est GLOBALE et change très rarement. `refetchInterval` est géré PAR
+    // QUERY par React Query (pas par instance) : le hook étant monté sur
+    // plusieurs écrans en même temps (MaintenanceGate + onglets), un setInterval
+    // par instance multipliait le trafic de fond.
+    refetchInterval: 5 * 60 * 1000,
     queryFn: async () => {
       const { data: row, error } = await supabase.rpc('cosme_check_get_app_config')
       if (error) throw error
       return coerce(row)
     },
   })
-
-  // Polling 5 min pour capter les changements admin (maintenance, flags). La config
-  // est GLOBALE (même valeur pour tous) et change très rarement : sonder toutes les
-  // 30 s multipliait inutilement le trafic de fond (monté pour chaque user via
-  // MaintenanceGate). 5 min est amplement suffisant.
-  useEffect(() => {
-    const interval = setInterval(() => {
-      void refetch()
-    }, 5 * 60 * 1000)
-    return () => clearInterval(interval)
-  }, [refetch])
 
   const config = useMemo(() => data ?? DEFAULT_APP_CONFIG, [data])
 

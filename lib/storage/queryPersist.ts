@@ -30,6 +30,12 @@ function rootKey(queryKey: unknown): string | null {
  *                          — réponses IA cachées séparément avec leur TTL.
  *  - 'catalog-search'      — résultats de recherche, transients (staleTime 60s).
  *                          Aucun intérêt à les garder 7 jours sur disque.
+ *  - 'alternatives', 'eanAnalysis', 'productByEan'
+ *                          — pages de produits candidats et JSON d'analyses
+ *                          complets, transients (staleTime 5-30 min). Persistés,
+ *                          ils s'accumulent 7 jours et gonflent le blob
+ *                          JSON.parse au cold start pour rien (même raison que
+ *                          'catalog-search').
  *  - 'appConfig'           — feature flags + mode maintenance ; doit toujours
  *                          repartir frais (ne jamais servir un flag/maintenance
  *                          périmé au cold start).
@@ -51,6 +57,9 @@ export function shouldPersistQueryKey(queryKey: unknown): boolean {
     'compare-insights',
     'routine-suggest',
     'catalog-search',
+    'alternatives',
+    'eanAnalysis',
+    'productByEan',
     'appConfig',
     // URLs signées de photos de visage : expirent (1h) ; ne jamais persister
     // sur disque, sinon vignettes cassées au cold start.
@@ -70,7 +79,9 @@ export function shouldDehydrateQuery(query: Query): boolean {
  * Bumper de version : modifier cette chaîne invalide TOUTE la cache persistée
  * (ex. quand un type change). Évite des erreurs de désérialisation en prod.
  */
-export const QUERY_PERSIST_BUSTER = 'cosmecheck-rq-v1'
+// v2 : purge les blobs persistés avant l'ajout de 'alternatives'/'eanAnalysis'
+// à la blacklist (ils pouvaient peser lourd au JSON.parse du cold start).
+export const QUERY_PERSIST_BUSTER = 'cosmecheck-rq-v2'
 
 /** Clé AsyncStorage utilisée par le persister. */
 export const QUERY_PERSIST_KEY = 'cosmecheck:react-query-cache'

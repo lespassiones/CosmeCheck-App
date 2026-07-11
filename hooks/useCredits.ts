@@ -10,7 +10,7 @@
  * Interface consommée par CreditsPill et les écrans qui affichent le solde.
  */
 
-import { useCallback, useMemo, useEffect } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { supabase } from '@/lib/supabase/client'
@@ -43,26 +43,19 @@ export function useCredits(): UseCreditsReturn {
     enabled: isAuthenticated,
     staleTime: 30 * 1000, // 30 s — réduit pour détecter plus vite les changements admin
     gcTime: 5 * 60 * 1000, // 5 min
+    // Polling 60s pour capter les changements admin (rares). Le débit de crédit
+    // est déjà reflété en temps réel côté feature (invalidation sur retour 429 /
+    // event), donc pas besoin de sonder agressivement. `refetchInterval` est géré
+    // PAR QUERY par React Query (pas par instance de hook) : CreditsPill étant
+    // monté sur chaque onglet, un setInterval par instance multipliait le trafic
+    // de fond par 3-4x sur cosme_check_get_credits.
+    refetchInterval: 60 * 1000,
     queryFn: async () => {
       const { data, error } = await supabase.rpc('cosme_check_get_credits')
       if (error) throw error
       return (data as unknown as Credits) ?? null
     },
   })
-
-  // Polling toutes les 60s pour capter les changements admin (rares).
-  // Le débit de crédit est déjà reflété en temps réel côté feature (invalidation
-  // sur retour 429 / event), donc pas besoin de sonder agressivement : 60s évite
-  // ~6x de trafic de fond inutile sur cosme_check_get_credits à grande échelle.
-  useEffect(() => {
-    if (!isAuthenticated) return
-
-    const interval = setInterval(() => {
-      void refetch()
-    }, 60000) // 60 secondes
-
-    return () => clearInterval(interval)
-  }, [isAuthenticated, refetch])
 
   const refresh = useCallback(() => {
     void refetch()

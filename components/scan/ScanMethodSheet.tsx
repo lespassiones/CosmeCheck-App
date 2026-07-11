@@ -1,12 +1,12 @@
 /**
  * ScanMethodSheet — bottom-sheet de sélection de la méthode d'analyse.
  *
- * Apparaît quand on tape sur le FAB « Décode » (BottomTabBar). 5 méthodes
- * disponibles, organisées en grille asymétrique (twin du web) :
- *   - Colonne gauche (2 grandes cartes, icône empilée) : Code-barres,
- *     Photo de la composition.
- *   - Colonne droite (3 cartes compactes horizontales) : Coller la composition,
- *     Coller le lien (badge NEW), Rechercher un produit.
+ * Apparaît quand on tape sur le FAB « Décode » (BottomTabBar), organisée en
+ * grille asymétrique (twin du web) :
+ *   - Colonne gauche (grande carte) : Code-barres.
+ *   - Colonne droite (cartes compactes) : Coller la composition, Rechercher un
+ *     produit.
+ * (Le scan par photo/OCR a été retiré ; le lien e-commerce est désactivé.)
  *
  * Les hauteurs sont FIXES pour que les deux colonnes restent visuellement
  * alignées et tiennent dans la sheet :
@@ -39,7 +39,7 @@ import { colors } from '@/constants/colors'
 import { spacing, radius } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 
-export type ScanMethod = 'barcode' | 'manual' | 'photo' | 'link' | 'search'
+export type ScanMethod = 'barcode' | 'manual' | 'link' | 'search'
 
 type IoniconName = keyof typeof Ionicons.glyphMap
 
@@ -53,7 +53,7 @@ const NAVY = '#1E3A8A'
 const BORDER = '#E5E7EB'
 
 // Dimensions fixes pour aligner les deux colonnes (cf. doc en tête de fichier).
-// Photo OCR et Lien désactivés → gauche = 1 carte, droite = 2 cartes.
+// Photo OCR retirée, Lien désactivé → gauche = 1 carte, droite = 2 cartes.
 // BIG_H = 2 × SMALL_H + GAP pour conserver l'alignement vertical.
 const SMALL_H = 70
 const GAP = 10
@@ -142,16 +142,6 @@ export const ScanMethodSheet: FC<Props> = ({ visible, onClose, onSelect }) => {
                 onPress={() => handleSelect('barcode')}
                 grow
               />
-              {/* Photo de la composition — temporairement désactivée
-              {false && (
-                <BigOption
-                  icon="camera-outline"
-                  title="Photo de la composition"
-                  subtitle="OCR de l'étiquette"
-                  onPress={() => handleSelect('photo')}
-                />
-              )}
-              */}
             </View>
 
             {/* Colonne droite : 2 cartes (lien désactivé) */}

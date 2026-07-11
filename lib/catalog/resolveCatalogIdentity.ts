@@ -11,6 +11,7 @@
  * → les alternatives par exact-match fonctionnent pour les produits hors catalogue.
  */
 import { supabase } from '@/lib/supabase/client'
+import { fetchProductByEan } from '@/lib/catalog/productByEan'
 
 interface SearchRow {
   ean: string | null
@@ -36,20 +37,16 @@ export async function resolveCatalogIdentity(
 ): Promise<CatalogIdentity | null> {
   // EAN EXACT d'abord (PK catalogue) = déterministe et fiable. La recherche
   // texte brand+name échoue sur beaucoup de noms (tokens volume "20ml", etc.).
+  // Lookup dédupliqué (fetchProductByEan) : l'écran analyse résout image ET
+  // identité en parallèle sur le même EAN → 1 seul appel RPC au lieu de 2-4.
   if (ean && ean.trim().length > 0) {
     try {
-      const { data, error } = await supabase.rpc(
-        'cosme_check_get_product_by_ean' as never,
-        { p_ean: ean.trim() } as never,
-      )
-      if (!error) {
-        const row = ((data as { ean: string | null; score: number | null; category: string | null }[] | null) ?? [])[0]
-        if (row) {
-          return {
-            ean: row.ean ?? ean.trim(),
-            score: typeof row.score === 'number' ? row.score : null,
-            category: row.category ?? null,
-          }
+      const row = await fetchProductByEan(ean)
+      if (row) {
+        return {
+          ean: row.ean ?? ean.trim(),
+          score: typeof row.score === 'number' ? row.score : null,
+          category: row.category ?? null,
         }
       }
     } catch {

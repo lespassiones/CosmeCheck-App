@@ -33,7 +33,8 @@ export default function PrivacyScreen() {
             "Profil beauté : type de peau, préoccupations, allergies déclarées, restrictions d'ingrédients (saisis volontairement par toi).",
             "Activité dans l'app : analyses effectuées, produits ajoutés à la routine, comparaisons, conversations avec l'assistant Beauty Advisor.",
             "Données techniques : identifiant utilisateur, horodatage des actions, compteurs de quota quotidien, logs d'erreurs anonymes.",
-            "Lorsque tu scannes un produit : le code-barres ou la photo de la liste INCI. La photo est traitée pour extraire le texte puis n'est PAS conservée sur nos serveurs.",
+            "Lorsque tu scannes un produit : le code-barres du produit.",
+            "Si tu proposes une photo pour signaler ou illustrer un produit : cette photo est conservée sur nos serveurs afin d'être vérifiée par notre équipe de modération.",
           ],
         },
         {
@@ -60,22 +61,31 @@ export default function PrivacyScreen() {
             "Analyses et routine : conservées tant que ton compte est actif.",
             "Logs techniques : 30 jours maximum.",
             "Logs de modération d'erreurs : 14 jours maximum.",
-            "Photos OCR : non conservées (traitement à la volée).",
+            "Photos proposées pour un produit (signalement / illustration) : conservées le temps de leur modération, puis supprimées si elles sont rejetées.",
           ],
         },
         {
           title: '6. Destinataires et sous-traitants',
-          paragraphs: ["Tes données sont hébergées et traitées par les sous-traitants suivants :"],
+          paragraphs: [
+            "Tes données sont hébergées et traitées par les sous-traitants suivants, chacun agissant sur nos instructions et sans réutilisation à leurs propres fins :",
+          ],
           bullets: [
-            "Supabase (base de données et authentification) — serveurs Amazon Web Services en Irlande (région eu-west-1). Conformité RGPD assurée par les Clauses Contractuelles Types.",
-            "OpenAI / Mistral AI (modèles de langage utilisés par l'assistant Beauty Advisor et les fonctionnalités d'aide rédactionnelle) — invoqués sans stockage des messages côté modèle ; transferts encadrés par les conditions de service de ces fournisseurs.",
-            "Apple App Store / Google Play (gestion des abonnements Premium).",
+            "Supabase (base de données et authentification) — serveurs Amazon Web Services en Irlande (région eu-west-1, UE). Conformité RGPD assurée par les Clauses Contractuelles Types.",
+            "OpenAI (modèles d'IA générative utilisés par l'assistant Beauty Advisor et par la personnalisation des analyses, synthèses et comparaisons) — États-Unis, transferts encadrés par les Clauses Contractuelles Types ; données API non utilisées pour l'entraînement, conservées 30 jours maximum côté fournisseur.",
+            "Mistral AI (modèles d'IA, en complément / secours d'OpenAI) — société française, hébergement principalement dans l'Union européenne.",
+            "PostHog (mesure d'audience anonyme, pour comprendre l'usage global de l'app) — serveurs situés dans l'Union européenne ; aucune donnée nominative ni enregistrement d'écran.",
+            "Sentry (détection des plantages et erreurs techniques) — serveurs situés dans l'Union européenne (Allemagne).",
+            "RevenueCat (gestion technique des abonnements) — identifiant technique d'abonnement, sans profil beauté ni contenu d'analyse.",
+            "Expo (Expo Push, envoi des notifications) — uniquement si tu as activé les notifications ; un jeton technique d'appareil est transmis.",
+            "Brevo (envoi des emails de service et, si tu y as consenti, de la newsletter) — hébergement dans l'Union européenne ; reçoit ton email et ton prénom.",
+            "Apple App Store / Google Play (gestion et facturation des abonnements Premium).",
           ],
         },
         {
-          title: '7. Transferts hors UE',
+          title: '7. Transferts hors UE et traitement par IA',
           paragraphs: [
-            "Les appels aux modèles OpenAI peuvent impliquer un transfert temporaire de données vers les États-Unis. Ces transferts sont encadrés par les Clauses Contractuelles Types de la Commission européenne. Aucune donnée sensible (santé) n'est transmise sans ton initiative explicite (poser une question à l'assistant).",
+            "Pour personnaliser tes analyses, tes synthèses, tes comparaisons et les réponses de l'assistant Beauty Advisor, les informations nécessaires — y compris, le cas échéant, ton profil beauté (type de peau, sensibilités, restrictions d'ingrédients) et la composition des produits — sont transmises de façon sécurisée à nos prestataires d'intelligence artificielle (OpenAI et Mistral AI). Ce traitement n'a lieu que si tu as renseigné ces informations et repose sur ton consentement (art. 6.1.a et 9.2.a RGPD).",
+            "Les appels aux modèles OpenAI impliquent un transfert de données vers les États-Unis, encadré par les Clauses Contractuelles Types de la Commission européenne. Les données transmises via l'API ne sont pas utilisées pour entraîner les modèles et sont conservées 30 jours maximum côté fournisseur. Tu peux à tout moment retirer ton consentement en effaçant ton profil beauté depuis « Mon profil ».",
           ],
         },
         {
@@ -100,7 +110,8 @@ export default function PrivacyScreen() {
         {
           title: '9. Cookies et traceurs',
           paragraphs: [
-            "L'Application mobile n'utilise PAS de cookies publicitaires, ni de traceurs marketing tiers. Aucun ID publicitaire (IDFA, GAID) n'est lu ni transmis. Les seules informations stockées localement sont indispensables au fonctionnement de l'app (session, cache des analyses, préférences).",
+            "L'Application mobile n'utilise PAS de cookies publicitaires, ni de traceurs marketing tiers. Aucun identifiant publicitaire (IDFA, GAID) n'est lu ni transmis.",
+            "Nous utilisons uniquement un outil de mesure d'audience anonyme (PostHog) pour comprendre l'usage global de l'app (nombre de scans, taux de complétion de l'onboarding). Cette mesure ne t'identifie pas nominativement, n'enregistre pas ton écran et ne recoupe pas ton activité avec d'autres services : elle est donc exemptée de consentement. Les autres informations stockées localement sont indispensables au fonctionnement de l'app (session, cache des analyses, préférences).",
           ],
         },
         {

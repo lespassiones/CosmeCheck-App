@@ -20,7 +20,7 @@ export default function CguScreen() {
         {
           title: '1. Objet du service',
           paragraphs: [
-            "Cosme Check est une application d'analyse de produits cosmétiques destinée au grand public. Elle te permet : de scanner ou saisir la liste d'ingrédients (INCI) d'un produit, d'obtenir une décomposition pédagogique de la formule, de constituer une routine, de comparer des produits et de poser des questions à un assistant cosmétique factuel.",
+            "Cosme Check est une application d'analyse de produits cosmétiques destinée au grand public. Elle te permet : de scanner le code-barres d'un produit ou de saisir sa liste d'ingrédients (INCI), d'obtenir une décomposition pédagogique de la formule, de constituer une routine, de comparer des produits et de poser des questions à un assistant IA.",
             "L'Application ne remplace en aucun cas l'avis d'un professionnel de santé (médecin, dermatologue, pharmacien). Voir l'avertissement médical dans la rubrique « À propos ».",
           ],
         },
@@ -41,7 +41,8 @@ export default function CguScreen() {
           title: '4. Crédits et abonnement Premium',
           paragraphs: [
             "L'Application est gratuite à l'usage et inclut un quota quotidien d'analyses. Au-delà du quota, l'accès aux analyses peut être limité jusqu'au renouvellement quotidien (à minuit UTC) ou via l'abonnement Premium.",
-            "L'abonnement Premium est facturé via les stores Apple App Store et Google Play. Les conditions de facturation, renouvellement automatique et rétractation sont régies par les conditions des stores respectifs.",
+            "L'abonnement Premium est facturé via les stores Apple App Store et Google Play. Les conditions de facturation, renouvellement automatique et remboursement sont régies par les conditions des stores respectifs.",
+            "Pour un abonnement souscrit directement sur le site (hors stores), tu disposes d'un droit de rétractation de 14 jours. En cas de rétractation dans ce délai après avoir commencé à utiliser Premium, seul le temps d'abonnement non utilisé est remboursé.",
           ],
         },
         {

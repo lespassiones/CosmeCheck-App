@@ -524,7 +524,10 @@ export const OnboardingWizard: FC<Props> = ({ onStepChange }) => {
           <View style={styles.iconBtn} />
         )}
         <Pressable
-          onPress={() => finish(false)}
+          // « Passer » saute UNIQUEMENT la sous-question courante (une étape).
+          // Sur la dernière (notifications), il termine le questionnaire sans
+          // activer les notifs. L'auto-save a déjà persisté l'éventuel remplissage.
+          onPress={isLast ? () => finish(false) : goNext}
           disabled={finishing}
           hitSlop={10}
           style={({ pressed }) => pressed && { opacity: 0.5 }}
@@ -596,6 +599,17 @@ export const OnboardingWizard: FC<Props> = ({ onStepChange }) => {
               step.render(profile, handleChange, goNext)
             )}
           </View>
+          {/* Information RGPD (art. 9) affichée UNE fois, à l'entrée du
+              questionnaire : ces réponses (peau, sensibilités) sont des données
+              de santé. Renseigner = consentir à leur usage ; « Passer » (haut
+              droite) = refuser sans bloquer l'app. Pas de case à cocher. */}
+          {index === 0 ? (
+            <Text style={styles.consentHint}>
+              Ces informations (type de peau, sensibilités) servent uniquement à
+              personnaliser tes analyses et tes conseils. Tu peux passer cette
+              étape si tu préfères.
+            </Text>
+          ) : null}
         </Animated.View>
       </ScrollView>
 
@@ -703,6 +717,13 @@ const styles = StyleSheet.create({
   },
   stepBody: {
     width: '100%',
+  },
+  consentHint: {
+    ...typography.xs,
+    color: colors.inkMuted,
+    fontStyle: 'italic',
+    lineHeight: 17,
+    marginTop: spacing.lg,
   },
   nav: {
     paddingTop: spacing.md,

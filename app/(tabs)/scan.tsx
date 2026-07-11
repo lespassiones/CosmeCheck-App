@@ -3,10 +3,9 @@
  *
  * Plus de barre de tabs : le `mode` reçu en query route DIRECTEMENT vers la
  * bonne UI plein écran (modal-like). Le picker `ScanMethodSheet` (ouvert par
- * le FAB Décode) navigue ici avec `?mode=barcode|photo|link|manual|search`.
+ * le FAB Décode) navigue ici avec `?mode=barcode|link|manual|search`.
  *
  *   - barcode → BarcodeScanner (caméra full screen avec visu cadrage)
- *   - photo   → PhotoOcrFlow (thème sombre, ScanFrame dark)
  *   - link    → PasteLinkFlow dans ScanFrame light
  *   - manual  → ManualInciInput dans ScanFrame light
  *   - search  → ProductSearchMode dans ScanFrame light (catégories + recherche)
@@ -47,15 +46,13 @@ import { ScanFrame } from '@/components/scan/ScanFrame'
 import { BarcodeScanner } from '@/components/scan/BarcodeScanner'
 import { ManualInciInput } from '@/components/scan/ManualInciInput'
 import { PasteLinkFlow } from '@/components/scan/PasteLinkFlow'
-import { PhotoOcrFlow } from '@/components/scan/PhotoOcrFlow'
 import { ProductSearchMode } from '@/components/scan/ProductSearchMode'
 
-type Mode = 'barcode' | 'photo' | 'link' | 'manual' | 'search' | null
+type Mode = 'barcode' | 'link' | 'manual' | 'search' | null
 
 function normalizeMode(raw: string | undefined | null): Mode {
   switch (raw) {
     case 'barcode':
-    case 'photo':
     case 'link':
     case 'manual':
     case 'search':
@@ -244,33 +241,6 @@ const ScanScreen: FC = () => {
     )
   }
 
-  // Photo OCR : ScanFrame dark
-  if (mode === 'photo') {
-    return (
-      <View style={styles.root}>
-        <ScanFrame title="Photos du produit" theme="dark" onClose={close}>
-          {errorBanner}
-          <KeyboardAvoidingView
-            style={styles.flex}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          >
-            <PhotoOcrFlow
-              disabled={isAnalyzing}
-              theme="dark"
-              onInciReady={(inci, productName, brand) =>
-                void launch('ocr', inci, { productName, brand })
-              }
-              onFallbackToManual={() =>
-                router.replace({ pathname: ROUTES.TABS.SCAN, params: { mode: 'manual' } })
-              }
-            />
-          </KeyboardAvoidingView>
-        </ScanFrame>
-        <ProcessingOverlay visible={isAnalyzing} message="On décode la composition…" />
-      </View>
-    )
-  }
-
   // Lien : ScanFrame light (modal-like)
   if (mode === 'link') {
     return (
@@ -371,7 +341,7 @@ const ScanScreen: FC = () => {
           <Text style={styles.landingTitle}>Décode un produit</Text>
           <Text style={styles.landingSubtitle}>
             Appuie sur le bouton Décode en bas pour choisir une méthode :
-            code-barres, photo, lien e-commerce, recherche ou saisie manuelle.
+            code-barres, recherche ou saisie manuelle.
           </Text>
 
           {pending ? (

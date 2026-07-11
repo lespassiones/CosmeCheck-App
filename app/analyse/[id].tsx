@@ -104,6 +104,15 @@ const AnalyseDetailScreen: FC = () => {
   const { config: appConfig } = useAppConfig()
   const [routinePending, setRoutinePending] = useState(false)
 
+  // Champs stables extraits de l'état « ready » : les deux effets de résolution
+  // catalogue ci-dessous en dépendent au lieu de l'objet `state` entier (qui
+  // change 2x par ouverture : cache-ready puis réseau-ready) → pas de re-run
+  // quand les valeurs n'ont pas bougé.
+  const isReady = state.status === 'ready'
+  const productEan = state.status === 'ready' ? state.ean : null
+  const productBrand = state.status === 'ready' ? state.brand : null
+  const productName = state.status === 'ready' ? state.productLabel : null
+
   // Hydrate l'URL image produit :
   //   1. cache AsyncStorage (instantané, mis en place au pick depuis catalogue
   //      / lien / web)
@@ -112,9 +121,9 @@ const AnalyseDetailScreen: FC = () => {
   //      analyse historique, puis re-cachée pour les prochaines fois
   // Le schéma `analyses` n'a pas de colonne image_url, d'où ce mécanisme.
   useEffect(() => {
-    if (!id || state.status !== 'ready') return
+    if (!id || !isReady) return
     let cancelled = false
-    void resolveAndCacheProductImage(id, state.ean, state.brand, state.productLabel).then(
+    void resolveAndCacheProductImage(id, productEan, productBrand, productName).then(
       (url) => {
         if (!cancelled) setProductImageUrl(url)
       },
@@ -122,16 +131,16 @@ const AnalyseDetailScreen: FC = () => {
     return () => {
       cancelled = true
     }
-  }, [id, state])
+  }, [id, isReady, productEan, productBrand, productName])
 
   // Résout le score catalogue CosmeCheck (catalog.score) + la dernière sous-catégorie
   // depuis le catalogue (par marque+nom). Si le produit n'est pas au catalogue
   // (saisie manuelle / internet), catalogScore reste null - on garde le score
   // calculé de result_json.
   useEffect(() => {
-    if (state.status !== 'ready') return
+    if (!isReady) return
     let cancelled = false
-    void resolveCatalogIdentity(state.brand, state.productLabel, state.ean).then((info) => {
+    void resolveCatalogIdentity(productBrand, productName, productEan).then((info) => {
       if (cancelled || !info) return
       setCatalogScore(info.score)
       setLeafCategory(leafLabelFromCategorySlug(info.category))
@@ -141,7 +150,7 @@ const AnalyseDetailScreen: FC = () => {
     return () => {
       cancelled = true
     }
-  }, [state])
+  }, [isReady, productEan, productBrand, productName])
 
   const buildReadyState = useCallback(
     (row: AnalysisRow): LoadState => {

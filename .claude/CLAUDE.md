@@ -105,8 +105,8 @@ analyser, advisor-chat, coherence-analyze, compare-insights, deep-fetch, ecommer
 | `cw:dailyPicks:<YYYY-MM-DD>` | progrès quotidien quiz | rotation journalière |
 
 ### React Query persister
-- Module `lib/storage/queryPersist.ts` : predicate `shouldDehydrateQuery` filtre `success` only + blacklist `['profile','credits','ingredient-explain','compare-insights','routine-suggest','catalog-search']`. (`catalog-search` = résultats recherche, transients staleTime 60 s, ajouté 11 juin 2026.)
-- `QUERY_PERSIST_MAX_AGE_MS = 7j`, `QUERY_PERSIST_BUSTER = 'cosmecheck-rq-v1'` (bumper si types changent).
+- Module `lib/storage/queryPersist.ts` : predicate `shouldDehydrateQuery` filtre `success` only + blacklist `['profile','credits','ingredient-explain','compare-insights','routine-suggest','catalog-search','alternatives','eanAnalysis','productByEan','appConfig','skinPhotoUrl']`. (Les clés transients — recherche, alternatives, analyses préchargées par EAN — ne sont PAS persistées : elles gonflaient le blob JSON.parse du cold start, ajout 11 juil 2026.)
+- `QUERY_PERSIST_MAX_AGE_MS = 7j`, `QUERY_PERSIST_BUSTER = 'cosmecheck-rq-v2'` (bumper si types changent ; v2 = purge des blobs pré-blacklist alternatives/eanAnalysis).
 - `gcTime` du QueryClient aligné sur `MAX_AGE_MS` (sinon caches GC'd avant rechargement).
 
 ### Cache serveur (Edge Functions)
@@ -236,12 +236,9 @@ Breadcrumb "Catégories › X › Y", barre recherche sticky en haut.
 6. `redirecting` → `router.push('/promesses/[id]')`.
 7. `error` → retry + fallback wizard manuel `/promesses/nouvelle`.
 
-### Synthèse IA — lazy (au tap "Voir l'analyse complète")
-- `lib/analysis/analyser.ts` envoie `withSynthesis: false` par défaut → analyser ne génère PAS la synthèse.
-- `AnalysisResultPanel` reçoit `analysisId` en prop. `useEffect` : quand `detailsExpanded` passe à `true` ET `result.synthesis` est null ET non-tenté → invoke `synthesis` Edge Function.
-- `SynthesisCard` affiche spinner + "Génération de la synthèse personnalisée…" pendant l'appel.
-- Edge Function persiste dans `result_json.synthesis` → re-visite = instant.
-- **Crédit : 0** côté Edge Function (à revoir si on veut faire payer).
+### Synthèse IA — remplacée par les 3 blocs personnalisés (juil 2026)
+- L'ancienne `SynthesisCard` (spinner + Edge Function `synthesis` au tap "Voir l'analyse complète") est SUPPRIMÉE (code mort retiré le 11 juil 2026).
+- Remplacée par les **3 blocs IA personnalisés** (`PersonalInsightsCards`, Edge `personal-insights`) : persistés dans `result_json.personalBlocks` (affichage instantané), sinon fetch lazy au montage du panel ; 1 crédit ; 0 crédit = blocs floutés → `/offre`.
 
 ### Image produit (cache 3 niveaux — pas de colonne DB)
 - `lib/storage/productImageCache.ts` :

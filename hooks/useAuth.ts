@@ -76,8 +76,9 @@ function initAuth(): void {
   // Abonnement temps réel : SIGNED_IN / SIGNED_OUT / TOKEN_REFRESHED /
   // USER_UPDATED / PASSWORD_RECOVERY.
   const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-    // Analytics : relie (ou delie) le profil PostHog a l'utilisateur Supabase.
-    if (session?.user) phIdentify(session.user.id, { email: session.user.email })
+    // Analytics : distinct_id = ID technique Supabase UNIQUEMENT (aucun email ni
+    // nom transmis à PostHog → mesure d'audience anonyme exemptée de consentement).
+    if (session?.user) phIdentify(session.user.id)
     else phReset()
     setSession(session)
     useAuthStore.setState({ isLoading: false })

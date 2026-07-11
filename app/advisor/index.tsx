@@ -118,7 +118,7 @@ const AdvisorScreen: FC = () => {
           <Text>✨ </Text>Beauty Advisor
         </Text>
         <Text style={styles.subtitle} numberOfLines={1}>
-          Un assistant factuel qui s'appuie sur ton profil et ta routine.
+          Un assistant IA qui s'appuie sur ton profil et ta routine.
         </Text>
 
         {isLoading ? null : !config.flag_advisor ? (

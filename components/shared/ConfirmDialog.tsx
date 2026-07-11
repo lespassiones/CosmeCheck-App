@@ -106,7 +106,9 @@ const styles = StyleSheet.create({
   },
   btn: {
     flex: 1,
-    height: 48,
+    minHeight: 48,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
@@ -119,6 +121,7 @@ const styles = StyleSheet.create({
   cancelText: {
     ...typography.button,
     color: colors.inkMuted,
+    textAlign: 'center',
   },
   confirmBtn: {
     backgroundColor: colors.ink,
@@ -129,5 +132,6 @@ const styles = StyleSheet.create({
   confirmText: {
     ...typography.button,
     color: '#FFFFFF',
+    textAlign: 'center',
   },
 })
