@@ -629,12 +629,28 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const toGenerate = qualifying.filter((q) => !cache.has(q.analysisId));
 
-  // Résolution catégorie + shortlist pour les produits à générer.
-  const eans = Array.from(new Set(toGenerate.map((i) => i.ean).filter((e): e is string => Boolean(e))));
+  // ── Crédits AVANT toute IA (règle produit) : on ne lance JAMAIS une
+  // génération qu'on ne pourra pas débiter. Solde lu UNE fois ici ; seuls les
+  // `remaining` produits les plus sévères sont préparés/évalués, le reste est
+  // verrouillé d'emblée (0 coût IA, 0 crédit, pas de cache → re-tentable).
+  // Lecture en échec → fail-closed (0) : on ne dépense pas d'IA à l'aveugle.
+  let remaining = 0;
+  try {
+    const { data: credData } = await g.supabase.rpc("cosme_check_get_credits");
+    const cd = (credData ?? {}) as { remaining?: number };
+    if (typeof cd.remaining === "number") remaining = cd.remaining;
+  } catch { /* fail-closed */ }
+
+  const lockedIds = new Set<string>();
+  const affordable = toGenerate.slice(0, Math.max(0, remaining));
+  for (const item of toGenerate.slice(affordable.length)) lockedIds.add(item.analysisId);
+
+  // Résolution catégorie + shortlist pour les produits à générer (finançables).
+  const eans = Array.from(new Set(affordable.map((i) => i.ean).filter((e): e is string => Boolean(e))));
   const catByEan = await categoriesByEan(svc, eans);
 
   const prepared = await Promise.all(
-    toGenerate.map(async (item) => {
+    affordable.map(async (item) => {
       let category = await resolveCategory(item, catByEan, svc);
       let cands = category ? shortlist(item, await fetchAlternatives(svc, category), restrictions) : [];
       // Repli 1 — ÉLARGIR AUX SŒURS : la feuille exacte peut être affamée (ex. déo
@@ -728,17 +744,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   // Débit crédit PAR produit généré avec alternative, + persistance cache.
-  // On lit le solde une fois ; au-delà, les produits restants sont `locked`.
-  let remaining = g.credits.remaining;
-  try {
-    const { data: credData } = await g.supabase.rpc("cosme_check_get_credits");
-    const cd = (credData ?? {}) as { remaining?: number };
-    if (typeof cd.remaining === "number") remaining = cd.remaining;
-  } catch { /* garde g.credits.remaining */ }
-
-  const lockedIds = new Set<string>();
+  // Le solde a été lu AVANT l'IA ; le `remaining <= 0` ci-dessous n'est qu'un
+  // filet anti-course (débit concurrent entre la lecture et ici).
   let generatedCount = 0;
-  for (const item of toGenerate) {
+  for (const item of affordable) {
     const c = chosen.get(item.analysisId)!;
     if (c.abstained) continue; // IA indispo → ne pas cacher, réessayer au prochain tour
     if (c.alternative) {
@@ -778,5 +787,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
     };
   });
 
-  return jsonResponse({ suggestions, generatedCount, creditsRemaining: remaining });
+  // `aiUnavailable` : l'IA n'a pas pu évaluer (abstention, rien caché) → le
+  // client doit dire « réessaie dans un instant », PAS « aucune alternative ».
+  return jsonResponse({
+    suggestions,
+    generatedCount,
+    creditsRemaining: remaining,
+    aiUnavailable: evals === null,
+  });
 });

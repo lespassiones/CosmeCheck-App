@@ -166,7 +166,7 @@ function sunscreenSignals(p: ConflictInput) {
     category: p.category,
     categoryPrecise: p.categoryPrecise,
     productType: p.productType,
-    itemTags: p.items.map((it) => ({ tags: it.tags ?? [], position: it.position })),
+    itemTags: p.items.map((it) => ({ tags: (Array.isArray(it.tags) ? it.tags : []), position: it.position })),
   }
 }
 
@@ -392,7 +392,7 @@ export function detectConflicts(
           it.position > 0 &&
           it.position <= 8 &&
           !isInTrace(it) &&
-          (it.tags ?? []).includes(ALCOHOL_TAG),
+          ((Array.isArray(it.tags) ? it.tags : [])).includes(ALCOHOL_TAG),
       )
       if (!hasAlcohol) continue
       push(
@@ -410,7 +410,7 @@ export function detectConflicts(
   // ── R11 huiles essentielles et peau sensible ─────────────────────────────
   if (concerns.has('sensibilite')) {
     const eoProducts = analyzed.filter((a) =>
-      a.input.items.some((it) => !isInTrace(it) && (it.tags ?? []).includes(ESSENTIAL_OIL_TAG)),
+      a.input.items.some((it) => !isInTrace(it) && ((Array.isArray(it.tags) ? it.tags : [])).includes(ESSENTIAL_OIL_TAG)),
     )
     if (eoProducts.length > 0) {
       push(

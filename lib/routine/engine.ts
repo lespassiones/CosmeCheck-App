@@ -212,7 +212,7 @@ export function computeRoutineMetrics(products: RoutineProduct[]): RoutineMetric
     const weight = FREQ_WEIGHT[p.frequency];
     const tagsInProduct = new Set<string>();
     for (const it of p.result.items) {
-      for (const t of it.tags ?? []) {
+      for (const t of (Array.isArray(it.tags) ? it.tags : [])) {
         tagsInProduct.add(t);
         const key = (it.slug ?? it.name ?? it.input).toUpperCase();
         if (!tagIngColors.has(t)) tagIngColors.set(t, new Map());
@@ -369,7 +369,7 @@ export function computeRoutineMetrics(products: RoutineProduct[]): RoutineMetric
         name: it.name ?? it.input,
         slug: it.slug,
         colorRating: it.colorRating,
-        tags: it.tags ?? [],
+        tags: (Array.isArray(it.tags) ? it.tags : []),
       })),
     };
   });

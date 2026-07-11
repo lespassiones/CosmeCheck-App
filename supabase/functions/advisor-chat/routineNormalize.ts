@@ -52,7 +52,10 @@ export function normalizeRoutineRows(raw: unknown): RoutineFact[] {
     if (!analyses) continue
     const tags = new Set<string>()
     for (const it of analyses.result_json?.items ?? []) {
-      for (const t of it.tags ?? []) tags.add(t)
+      // Défensif : `tags` peut être un OBJET corrompu (analyses cachées) —
+      // `?? []` ne protège pas contre un non-itérable (`for...of` crasherait).
+      const itemTags = Array.isArray(it.tags) ? it.tags : []
+      for (const t of itemTags) tags.add(t)
     }
     out.push({
       name: analyses.product_label ?? analyses.name ?? 'Analyse',

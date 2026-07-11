@@ -75,7 +75,7 @@ export function checkRestrictions(
     const normalised = normaliseInci(inciName)
 
     // Famille : un des tags de l'item correspond à une famille restreinte.
-    if (item.tags && item.tags.length > 0) {
+    if (Array.isArray(item.tags) && item.tags.length > 0) {
       for (const tag of item.tags) {
         const fam = tagToFamily.get(tag)
         if (!fam) continue

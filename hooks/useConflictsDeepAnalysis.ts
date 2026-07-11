@@ -75,7 +75,7 @@ function buildSignals(input: ConflictInput): string[] {
   }
   const tagSet = new Set<string>()
   for (const it of input.items) {
-    for (const t of it.tags ?? []) {
+    for (const t of (Array.isArray(it.tags) ? it.tags : [])) {
       if (NOTABLE_TAGS.includes(t)) tagSet.add(t)
     }
   }

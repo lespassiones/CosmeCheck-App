@@ -113,7 +113,7 @@ function formulaHasDeclaredFragrance(items: AnalyseItem[]): boolean {
   for (const it of items) {
     const upperName = (it.name ?? it.input ?? "").toUpperCase().trim();
     if (FRAGRANCE_MARKER_NAMES.has(upperName)) return true;
-    const tags = it.tags ?? [];
+    const tags = (Array.isArray(it.tags) ? it.tags : []);
     if (tags.includes("parfum-synthese")) return true;
     if (tags.includes("allergene-parfumant") && !isDualUseAllergen(it)) {
       return true;
@@ -370,7 +370,7 @@ export function resolveAbsencePromise(
   }
 
   const tag = cat.forbiddenTag;
-  let offenders = items.filter((it) => (it.tags ?? []).includes(tag));
+  let offenders = items.filter((it) => ((Array.isArray(it.tags) ? it.tags : [])).includes(tag));
 
   // Cas particulier « sans allergène parfumant » + formule SANS parfum déclaré
   // (PARITÉ STRICTE avec le moteur web). Les substances dual-use (Benzyl
@@ -578,7 +578,7 @@ export function computePositionSnapshot(
   let firstFragrancePos: number | null = null;
   let firstPreservativePos: number | null = null;
   for (const it of parent.items) {
-    const tags = it.tags ?? [];
+    const tags = (Array.isArray(it.tags) ? it.tags : []);
     if (
       firstFragrancePos === null &&
       (tags.includes("parfum-synthese") || tags.includes("allergene-parfumant"))

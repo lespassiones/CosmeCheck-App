@@ -161,24 +161,28 @@ export function useAlternativesDeck(items: RoutineItem[]): UseAlternativesDeckRe
         reason: string | null
         locked: boolean
       }
-      const resp = (data ?? {}) as { suggestions?: SuggestionOut[] }
+      const resp = (data ?? {}) as { suggestions?: SuggestionOut[]; aiUnavailable?: boolean }
       const suggestions = resp.suggestions ?? []
       const withAlt = suggestions.filter((s) => s.alternative)
       const anyLocked = suggestions.some((s) => s.locked)
 
       if (withAlt.length === 0) {
         if (anyLocked) {
-          // Des produits méritaient une suggestion mais les crédits sont épuisés.
+          // Des produits méritaient une suggestion mais les crédits sont épuisés
+          // (le serveur n'a lancé AUCUNE IA : vérification du solde en amont).
           showToast('Crédits épuisés pour aujourd’hui.', 'info')
           router.push(ROUTES.OFFRE.INDEX)
         } else if (suggestions.length === 0) {
           // AUCUN produit ne qualifie (pas d'orange/rouge, pas de restriction, vert ≥ jaune)
           // → la routine est réellement propre.
           showToast('Rien à optimiser ✨ tes produits sont déjà propres.', 'success')
+        } else if (resp.aiUnavailable) {
+          // L'IA s'est abstenue (indispo ponctuelle) : rien n'a été conclu, ne
+          // SURTOUT pas dire « aucune alternative » (ce serait faux).
+          showToast('Analyse momentanément indisponible. Réessaie dans un instant.', 'info')
         } else {
-          // Des produits qualifient (orange/rouge/restriction/jaune dominant) MAIS aucune
-          // alternative plus propre et compatible n'a été trouvée (souvent à cause de tes
-          // restrictions). NE PAS dire « déjà propres » : ce serait faux.
+          // L'IA a réellement évalué et rien n'était à la fois plus propre ET
+          // compatible (souvent à cause des restrictions). Message honnête.
           showToast(
             'Aucune alternative plus propre trouvée pour l’instant (compte tenu de ton profil et de tes restrictions).',
             'info',

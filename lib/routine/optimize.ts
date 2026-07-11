@@ -33,7 +33,7 @@ const TAG_LABELS: Record<string, string> = {
 }
 
 function labelForItem(it: ItemWithRestriction): string {
-  for (const t of it.tags ?? []) {
+  for (const t of (Array.isArray(it.tags) ? it.tags : [])) {
     if (TAG_LABELS[t]) return TAG_LABELS[t]
   }
   return it.name || it.input || 'Ingrédient'

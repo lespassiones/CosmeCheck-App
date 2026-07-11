@@ -184,7 +184,10 @@ export function computeRoutineMetrics(products: RoutineProduct[]): RoutineMetric
     const weight = FREQ_WEIGHT[p.frequency];
     const tagsInProduct = new Set<string>();
     for (const it of p.result.items) {
-      for (const t of it.tags ?? []) {
+      // Défensif : `tags` peut être un OBJET corrompu (analyses cachées) —
+      // `?? []` ne protège pas contre un non-itérable.
+      const itemTags = Array.isArray(it.tags) ? it.tags : [];
+      for (const t of itemTags) {
         tagsInProduct.add(t);
         const key = (it.slug ?? it.name ?? it.input ?? "").toUpperCase();
         if (!tagIngColors.has(t)) tagIngColors.set(t, new Map());
