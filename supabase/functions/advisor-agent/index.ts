@@ -113,7 +113,7 @@ const TOOLS = [
           form: {
             type: "string",
             description:
-              "Type + zone du produit, mots FR simples fidèles au besoin, comparés aux catégories en base. Ex: 'hydratant corps', 'hydratant visage', 'serum visage', 'shampoing', 'mains', 'baume levres', 'deodorant', 'fond teint'. Pour un bébé <3 ans: 'bebe'. Ne mets PAS 'creme'/'soin'/'produit' seuls.",
+              "Type + zone du produit, mots FR simples fidèles au besoin, comparés aux catégories en base. Ex: 'hydratant corps', 'hydratant visage', 'serum visage', 'shampoing', 'mains', 'baume levres', 'deodorant', 'fond teint'. Hygiène dentaire : mauvaise haleine -> 'bain bouche' (ou 'haleine' pour sprays/pastilles), dentifrice -> 'dentifrice', dents blanches/taches -> 'blanchiment' (seul, sans 'dents'). Pour un bébé <3 ans: 'bebe'. Ne mets PAS 'creme'/'soin'/'produit' seuls.",
           },
           terms: {
             type: "array",

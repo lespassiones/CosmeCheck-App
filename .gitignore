@@ -31,6 +31,10 @@ cosme-check-*.json
 .env
 .env*.local
 
+# Sentry : tokens d'auth CLI/source-maps (SECRET, ne JAMAIS committer)
+.sentryclirc
+sentry.properties
+
 # Logs / debug
 npm-debug.*
 yarn-debug.*

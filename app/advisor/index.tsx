@@ -77,6 +77,8 @@ const AdvisorScreen: FC = () => {
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <BackgroundGlow variant="default" />
 
+      {/* Header UNE ligne : retour + ✨ titre à gauche, crayon + historique à droite
+          (le titre n'occupe plus sa propre ligne → plus de place pour le chat). */}
       <View style={styles.topBar}>
         <Pressable
           onPress={() => router.back()}
@@ -87,6 +89,9 @@ const AdvisorScreen: FC = () => {
         >
           <Ionicons name="chevron-back" size={22} color={colors.ink} />
         </Pressable>
+        <Text style={styles.h1} numberOfLines={1}>
+          <Text>✨ </Text>Beauty Advisor
+        </Text>
         {started ? (
           <View style={styles.topActions}>
             <Pressable
@@ -108,15 +113,10 @@ const AdvisorScreen: FC = () => {
               <Ionicons name="time-outline" size={22} color={colors.ink} />
             </Pressable>
           </View>
-        ) : (
-          <View style={styles.backBtn} />
-        )}
+        ) : null}
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.h1}>
-          <Text>✨ </Text>Beauty Advisor
-        </Text>
         <Text style={styles.subtitle} numberOfLines={1}>
           Un assistant IA qui s'appuie sur ton profil et ta routine.
         </Text>
@@ -216,15 +216,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.base,
   },
   h1: {
-    ...typography.h2,
+    ...typography.h4,
     color: colors.ink,
-    marginBottom: spacing.xs,
+    flex: 1,
+    marginLeft: spacing.xs,
   },
   subtitle: {
     fontFamily: fontFamilies.regular,
     fontSize: 12,
     color: colors.inkMuted,
-    marginBottom: spacing.lg,
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
   },
   gateCard: {},
   gateTitle: {

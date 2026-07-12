@@ -80,6 +80,8 @@ type ChatMsg = {
   time?: string
   /** Message d'accueil : exclu de l'historique envoyé à l'API. */
   uiOnly?: boolean
+  /** Bulle d'erreur locale (auth/réseau/crédits) : pas de bouton reco dessus. */
+  errorMsg?: boolean
   /** Une recommandation produit a été demandée pour ce message. */
   recoTried?: boolean
   /** Recherche des produits en cours. */
@@ -106,6 +108,13 @@ const SUGGESTED_PROMPTS = [
 ]
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? ''
+
+/**
+ * Message envoyé à l'agent quand l'utilisateur tape le bouton « Montre-moi des
+ * recommandations » (affiché sous une réponse SANS produits). Il n'apparaît pas
+ * comme bulle : seul le carrousel du message concerné se remplit.
+ */
+const RECO_REQUEST_PROMPT = 'Montre-moi des produits recommandés adaptés à ma demande.'
 
 function getTime() {
   return new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
@@ -229,8 +238,7 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
           return copy
         })
 
-      const replaceLastAssistant = (content: string) => updateLastAssistant({ content })
-      const failWith = (msg: string) => replaceLastAssistant(msg)
+      const failWith = (msg: string) => updateLastAssistant({ content: msg, errorMsg: true })
 
       try {
         const { data: sessionData } = await supabase.auth.getSession()
@@ -320,6 +328,68 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
     )
   }, [])
 
+  // Bouton « Montre-moi des recommandations » (sous la dernière réponse sans
+  // produits) : relance l'agent avec l'historique + une demande de reco explicite.
+  // Le texte de la bulle ne change pas ; seul le carrousel du message se remplit.
+  const [recoRequesting, setRecoRequesting] = useState(false)
+  const requestReco = useCallback(
+    async (index: number) => {
+      if (streaming || recoRequesting) return
+      setRecoRequesting(true)
+      setMessages((prev) =>
+        prev.map((m, i) => (i === index ? { ...m, recoTried: true, recoLoading: true } : m)),
+      )
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData.session?.access_token
+        if (!token || !SUPABASE_URL) throw new AdvisorUnavailableError()
+
+        const apiMessages = [
+          ...messages
+            .slice(0, index + 1)
+            .filter((m) => !m.uiOnly && !m.errorMsg)
+            .map((m) => ({ role: m.role, content: m.content })),
+          { role: 'user' as const, content: RECO_REQUEST_PROMPT },
+        ]
+        const seenEans = Array.from(
+          new Set(
+            messages.flatMap((m) => (m.products ?? []).map((p) => p.ean)).filter(Boolean),
+          ),
+        )
+        const result = await askAdvisorAgent(apiMessages, token, seenEans)
+        setMessages((prev) =>
+          prev.map((m, i) =>
+            i === index
+              ? {
+                  ...m,
+                  recoLoading: false,
+                  products: result.products,
+                  recoEmptyReason: result.products.length === 0 ? 'none' : null,
+                }
+              : m,
+          ),
+        )
+        if (result.products.length > 0) {
+          prefetchProductsAnalyses(qc, result.products.map((p) => p.ean))
+        }
+      } catch (err) {
+        // Échec : on retire l'état de chargement et on remet le bouton.
+        setMessages((prev) =>
+          prev.map((m, i) =>
+            i === index ? { ...m, recoTried: false, recoLoading: false } : m,
+          ),
+        )
+        if (err instanceof AdvisorNoCreditsError) {
+          DeviceEventEmitter.emit(CREDITS_EXHAUSTED_EVENT, { used: err.used, limit: err.limit })
+        }
+      } finally {
+        setRecoRequesting(false)
+        void qc.invalidateQueries({ queryKey: ['credits'] })
+      }
+    },
+    [messages, streaming, recoRequesting, qc],
+  )
+
   const showSuggestions = messages.filter((m) => !m.uiOnly).length === 0
 
   return (
@@ -346,6 +416,32 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
               }
               loadingColor={advisorLoadingColor(loadingTick)}
             />
+            {/* Bouton « Montre-moi des recommandations » : uniquement sous la
+                DERNIÈRE réponse de l'assistant quand aucune reco n'a été faite. */}
+            {m.role === 'assistant' &&
+            !m.recoTried &&
+            !m.uiOnly &&
+            !m.errorMsg &&
+            m.content.length > 0 &&
+            i === messages.length - 1 &&
+            !streaming ? (
+              <View style={styles.recoAskWrap}>
+                <Pressable
+                  onPress={() => void requestReco(i)}
+                  disabled={recoRequesting}
+                  style={({ pressed }) => [
+                    styles.recoAskBtn,
+                    pressed && styles.recoAskBtnPressed,
+                    recoRequesting && styles.recoAskBtnDisabled,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Montre-moi des recommandations"
+                >
+                  <Text style={styles.recoAskEmoji}>✨</Text>
+                  <Text style={styles.recoAskText}>Montre-moi des recommandations</Text>
+                </Pressable>
+              </View>
+            ) : null}
             {m.role === 'assistant' && m.recoTried ? (
               <View style={styles.recoWrap}>
                 {m.recoRelaxation && !m.recoLoading && (m.products?.length ?? 0) === 0 ? (
@@ -680,6 +776,28 @@ const ShimmerText: FC<{ text: string; color: string }> = ({ text, color }) => {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   recoWrap: { paddingHorizontal: spacing.xs, marginTop: -spacing.sm },
+  // ── Bouton « Montre-moi des recommandations » ──
+  recoAskWrap: { paddingHorizontal: spacing.xs, marginTop: -spacing.sm },
+  recoAskBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: '#FECDD3',
+    backgroundColor: '#FFF1F2',
+  },
+  recoAskBtnPressed: { opacity: 0.8 },
+  recoAskBtnDisabled: { opacity: 0.5 },
+  recoAskEmoji: { fontSize: 12 },
+  recoAskText: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 12.5,
+    color: '#BE123C',
+  },
   relaxBox: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
