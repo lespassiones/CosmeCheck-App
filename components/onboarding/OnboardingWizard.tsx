@@ -606,8 +606,7 @@ export const OnboardingWizard: FC<Props> = ({ onStepChange }) => {
           {index === 0 ? (
             <Text style={styles.consentHint}>
               Ces informations (type de peau, sensibilités) servent uniquement à
-              personnaliser tes analyses et tes conseils. Tu peux passer cette
-              étape si tu préfères.
+              personnaliser tes analyses et tes conseils.
             </Text>
           ) : null}
         </Animated.View>

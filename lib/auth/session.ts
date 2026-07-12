@@ -176,6 +176,14 @@ export async function signOut(): Promise<AuthActionResult> {
 }
 
 /**
+ * URL WEB de réinitialisation. Le reset se fait sur le site (PAS de deep link) :
+ * le lien de l'email ouvre cette page, l'utilisateur choisit son nouveau mot de
+ * passe, puis revient se connecter dans l'app. La page web lit le jeton dans le
+ * fragment d'URL et pose la session (cf. RecoveryGate côté CosmetWiki).
+ */
+const PASSWORD_RESET_WEB_URL = 'https://cosme-check.com/auth/reset-password'
+
+/**
  * Demande l'envoi d'un email de réinitialisation.
  * Renvoie TOUJOURS `{ ok: true }` (anti-énumération de comptes) : on ne révèle
  * jamais si l'email existe en base. Les vraies erreurs sont logguées en dev.
@@ -184,7 +192,7 @@ export async function requestPasswordReset(email: string): Promise<AuthActionRes
   try {
     const { error } = await supabase.auth.resetPasswordForEmail(
       email.trim().toLowerCase(),
-      { redirectTo: buildResetRedirect() },
+      { redirectTo: PASSWORD_RESET_WEB_URL },
     )
     if (error && __DEV__) {
       // eslint-disable-next-line no-console

@@ -83,7 +83,7 @@ const ForgotPasswordScreen: FC = () => {
                 </Text>
                 <Pressable
                   onPress={() => router.back()}
-                  style={({ pressed }) => [styles.submit, pressed && styles.submitPressed]}
+                  style={({ pressed }) => [styles.successCta, pressed && styles.submitPressed]}
                 >
                   <Text style={styles.submitText}>Retour à la connexion</Text>
                 </Pressable>
@@ -229,6 +229,17 @@ const styles = StyleSheet.create({
   },
   submitPressed: { backgroundColor: colors.successDeep },
   submitDisabled: { opacity: 0.6 },
+  // Bouton secondaire de l'écran de confirmation : plus bas, plus large (padding
+  // horizontal) et détaché du texte pour ne pas paraître à l'étroit.
+  successCta: {
+    marginTop: spacing.lg,
+    minHeight: 46,
+    paddingHorizontal: spacing['2xl'],
+    borderRadius: radius.full,
+    backgroundColor: colors.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   submitText: {
     ...typography.button,
     color: colors.surface,
