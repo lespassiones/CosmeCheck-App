@@ -35,6 +35,14 @@ interface Props {
 
 type Phase = 'idle' | 'loading' | 'ready' | 'unavailable'
 
+/**
+ * Version de la clé de cache local pour l'explication. À bumper quand le prompt
+ * `ingredient-explain` change, sinon les appareils resservent l'ancien texte
+ * (TTL 30j). v2 = prompt "définition générique pure" (12 juil 2026 : plus de
+ * conseil d'achat ni d'adresse au lecteur).
+ */
+const EXPLAIN_CACHE_VERSION = 'v2'
+
 /** Extrait défensivement le texte d'explication d'une réponse Edge Function. */
 function extractText(data: unknown): string | null {
   if (!data || typeof data !== 'object') return null
@@ -62,10 +70,14 @@ export const ExplainIngredient: FC<Props> = ({ slug }) => {
     setPhase('loading')
     setPersonalLine(null)
 
+    // Clé de cache explain versionnée : un changement de prompt (v2) invalide
+    // les anciens textes locaux au lieu de les resservir 30j.
+    const explainKey = `${slug}:${EXPLAIN_CACHE_VERSION}`
+
     // 1. Cache local : explain (30j) + exposure (1h). On peut afficher dès que
-    // l'explain est trouvé — l'exposure est bonus.
+    // l'explain est trouvé, l'exposure est bonus.
     const [cachedExplain, cachedExposure] = await Promise.all([
-      readAiCache<string>('ingredient-explain', slug, TTL_INGREDIENT_EXPLAIN_MS),
+      readAiCache<string>('ingredient-explain', explainKey, TTL_INGREDIENT_EXPLAIN_MS),
       readAiCache<string>('ingredient-exposure', slug, TTL_INGREDIENT_EXPOSURE_MS),
     ])
     if (cachedExplain) {
@@ -98,7 +110,7 @@ export const ExplainIngredient: FC<Props> = ({ slug }) => {
     }
 
     setText(explanation)
-    void writeAiCache('ingredient-explain', slug, explanation)
+    void writeAiCache('ingredient-explain', explainKey, explanation)
 
     if (!exposureRes.error) {
       const line = extractPersonalLine(exposureRes.data)

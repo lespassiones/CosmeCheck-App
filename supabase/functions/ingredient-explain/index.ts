@@ -35,7 +35,8 @@ const NO_EXPLANATION = "Pas d'explication disponible pour le moment.";
 type ExplainContext = {
   inciId: number;
   name: string;
-  primaryFunction: string | null;
+  /** Toutes les fonctions déclarées (liste non ordonnée de la base). */
+  functionNames: string[];
   colorRating: ColorRating | null;
   tags: string[] | null;
 };
@@ -68,16 +69,45 @@ async function explainIngredient(
   }
 
   // 3. Génère une fois, puis stocke à vie.
+  //
+  // Prompt v2 (12 juil 2026) : DÉFINITION GÉNÉRIQUE PURE. Le texte décrit
+  // l'ingrédient dans l'absolu, comme une entrée de dictionnaire ultra-
+  // simplifiée. Il ne s'adresse JAMAIS au lecteur et ne renvoie JAMAIS au
+  // profil de l'utilisateur, et ne donne AUCUN conseil d'achat. Le verdict
+  // personnalisé ("adapté pour toi") reste le rôle exclusif de l'analyse
+  // produit (personal-insights). Objectif : supprimer les contradictions où
+  // cette fiche disait "privilégiez des produits sans X" pendant que l'analyse
+  // jugeait le produit adapté au profil.
+  // ⚠️ Si tu modifies ce prompt : re-purge la table `cosme_check.ingredient_explanations`
+  // (cache permanent par inci_id, sans versionnage) sinon les anciens textes restent servis.
   const tags = (ctx.tags ?? []).join(", ") || "(aucun tag connu)";
+  // La liste `functions` de la base (import INCI Beauty) n'est PAS ordonnée par
+  // importance : la 1re entrée peut être une fonction marginale (ex. GLYCERIN a
+  // "Dénaturant" en tête alors que son rôle réel est humectant). On donne donc
+  // la liste complète au modèle et on lui demande de déduire la fonction
+  // principale d'après le NOM, plutôt que de forcer functions[0].
+  const functionsList = ctx.functionNames.length
+    ? ctx.functionNames.slice(0, 10).join(", ")
+    : "(non renseignées)";
   const system =
-    "Tu vulgarises un ingrédient INCI cosmétique pour un grand public francophone. Style: factuel, court, jamais alarmiste, jamais marketing. AUCUN conseil médical. Pas d'emoji. Tu rends en 3 phrases, séparées par des sauts de ligne :\n1) À quoi sert cet ingrédient (fonction principale).\n2) Pourquoi cette tolérance Vert/Jaune/Orange/Rouge selon la grille (impact santé, environnement, ou réglementaire).\n3) Une alternative ou une vigilance courte si pertinent. Si la note est Vert, dis simplement pourquoi il est considéré comme sûr.\nN'invente AUCUNE étude, AUCUNE marque, AUCUNE statistique. " +
+    "Tu rédiges une définition ultra-simplifiée d'un ingrédient INCI cosmétique pour un grand public francophone, comme une entrée de dictionnaire. Style: factuel, neutre, très court, jamais alarmiste, jamais marketing. AUCUN conseil médical, AUCUN conseil d'achat. Pas d'emoji.\n" +
+    "RÈGLES ABSOLUES :\n" +
+    "- Tu parles UNIQUEMENT de l'ingrédient en général, jamais d'un produit précis ni d'une personne.\n" +
+    "- Tu ne t'adresses JAMAIS au lecteur : interdit d'écrire « tu », « vous », « ta peau », « votre peau », « pour toi », « pour vous ».\n" +
+    "- Tu ne donnes AUCUNE recommandation d'action : interdit d'écrire « évitez », « privilégiez », « choisissez », « préférez », « vérifiez », « optez pour ».\n" +
+    "- Tu ne relies l'ingrédient à AUCUN profil ni type de peau particulier de l'utilisateur.\n" +
+    "- Déduis la fonction PRINCIPALE et la plus courante de l'ingrédient à partir de son NOM et de la liste de fonctions fournie ; ignore les fonctions marginales ou anecdotiques (par exemple un humectant très courant comme la glycérine n'est pas un « dénaturant »).\n" +
+    "Tu rends 2 phrases, séparées par un saut de ligne :\n" +
+    "1) Ce qu'est cet ingrédient et à quoi il sert (sa fonction principale), en mots simples.\n" +
+    "2) De manière neutre et générale, pourquoi il porte cette tolérance (Vert/Jaune/Orange/Rouge) : une propriété factuelle de l'ingrédient (impact santé, environnemental ou réglementaire). Si la note est Vert, dis simplement pourquoi il est généralement considéré comme sûr.\n" +
+    "N'invente AUCUNE étude, AUCUNE marque, AUCUNE statistique. " +
     NO_LONG_DASHES_RULE;
   const user = `Ingrédient : ${ctx.name}
-Fonction principale : ${ctx.primaryFunction ?? "non renseignée"}
+Fonctions cosmétiques déclarées (liste NON ordonnée, certaines peuvent être marginales) : ${functionsList}
 Tolérance : ${ctx.colorRating ?? "non classée"}
 Tags : ${tags}
 
-Réponds avec UNIQUEMENT le texte de l'explication (3 phrases sur 3 lignes).`;
+Réponds avec UNIQUEMENT le texte de l'explication (2 phrases sur 2 lignes), sans t'adresser au lecteur et sans aucun conseil d'achat.`;
 
   const messages = [
     { role: "system" as const, content: system },
@@ -176,7 +206,9 @@ Deno.serve(async (req) => {
     {
       inciId: ing.inci_id,
       name: ing.name,
-      primaryFunction: ing.functions?.[0]?.name ?? null,
+      functionNames: (ing.functions ?? [])
+        .map((f) => f?.name)
+        .filter((n): n is string => typeof n === "string" && n.trim().length > 0),
       colorRating: ing.color_rating,
       tags: ing.tags,
     },

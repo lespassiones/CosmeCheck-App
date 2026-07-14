@@ -1,10 +1,10 @@
 /**
- * LegalScreen — layout partagé pour les écrans légaux (CGU, confidentialité,
- * mentions, à propos). Rend un en-tête simple + une ScrollView texte avec
- * mise en page hiérarchisée (titres / paragraphes / listes).
+ * LegalScreen — layout PLEIN ÉCRAN pour les écrans légaux (CGU, confidentialité,
+ * mentions, à propos). En-tête avec bouton retour + ScrollView.
  *
- * Ne PAS mettre la logique métier ici — c'est juste un container réutilisé
- * par les 4 écrans de `app/legal/`.
+ * Le rendu du corps (sections) est délégué à `LegalSections`, partagé avec
+ * `LegalModal` (ouverture en modal depuis l'inscription, sans navigation).
+ * Ne PAS mettre de logique métier ici — c'est juste un container.
  */
 
 import { type FC, type ReactNode } from 'react'
@@ -14,15 +14,12 @@ import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
+import { LegalSections, type LegalSection } from '@/components/legal/LegalSections'
 import { colors } from '@/constants/colors'
 import { spacing } from '@/constants/spacing'
-import { fontFamilies, typography } from '@/constants/typography'
+import { typography } from '@/constants/typography'
 
-export interface LegalSection {
-  title?: string
-  paragraphs?: (string | { strong: string })[]
-  bullets?: string[]
-}
+export type { LegalSection }
 
 interface Props {
   title: string
@@ -63,32 +60,7 @@ export const LegalScreen: FC<Props> = ({ title, subtitle, sections, footer }) =>
           ]}
           showsVerticalScrollIndicator={false}
         >
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-
-          {sections.map((s, i) => (
-            <View key={i} style={styles.section}>
-              {s.title ? <Text style={styles.sectionTitle}>{s.title}</Text> : null}
-              {s.paragraphs?.map((p, j) =>
-                typeof p === 'string' ? (
-                  <Text key={j} style={styles.paragraph}>
-                    {p}
-                  </Text>
-                ) : (
-                  <Text key={j} style={styles.paragraphStrong}>
-                    {p.strong}
-                  </Text>
-                ),
-              )}
-              {s.bullets?.map((b, j) => (
-                <View key={j} style={styles.bulletRow}>
-                  <Text style={styles.bulletDot}>•</Text>
-                  <Text style={styles.bulletText}>{b}</Text>
-                </View>
-              ))}
-            </View>
-          ))}
-
-          {footer}
+          <LegalSections subtitle={subtitle} sections={sections} footer={footer} />
         </ScrollView>
       </SafeAreaView>
     </View>
@@ -111,43 +83,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.base,
     gap: spacing.lg,
-  },
-  subtitle: {
-    ...typography.small,
-    color: colors.inkMuted,
-    fontStyle: 'italic',
-  },
-  section: { gap: spacing.sm },
-  sectionTitle: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 15,
-    color: colors.ink,
-    marginTop: spacing.sm,
-  },
-  paragraph: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 13,
-    lineHeight: 19,
-    color: colors.ink,
-  },
-  paragraphStrong: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 13,
-    lineHeight: 19,
-    color: colors.ink,
-  },
-  bulletRow: { flexDirection: 'row', gap: 8, paddingLeft: spacing.xs },
-  bulletDot: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 13,
-    lineHeight: 19,
-    color: colors.inkMuted,
-  },
-  bulletText: {
-    flex: 1,
-    fontFamily: fontFamilies.regular,
-    fontSize: 13,
-    lineHeight: 19,
-    color: colors.ink,
   },
 })

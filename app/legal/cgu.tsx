@@ -4,14 +4,9 @@
  *
  * Éditeur : Brian-Clarky BIENDOU, entrepreneur individuel (Toulouse, FR).
  */
-import { LegalScreen } from '@/components/legal/LegalScreen'
+import { LegalScreen, type LegalSection } from '@/components/legal/LegalScreen'
 
-export default function CguScreen() {
-  return (
-    <LegalScreen
-      title="Conditions d'utilisation"
-      subtitle="Dernière mise à jour : 2 juin 2026"
-      sections={[
+const CGU_SECTIONS: LegalSection[] = [
         {
           paragraphs: [
             "Les présentes Conditions Générales d'Utilisation (« CGU ») régissent l'usage de l'application mobile Cosme Check (« l'Application »), éditée par Monsieur Brian-Clarky BIENDOU, entrepreneur individuel immatriculé au RCS de Toulouse sous le numéro 919 153 189, dont le siège est situé 5 Bis rue Vestrepain, 31100 Toulouse, France (« l'Éditeur »), et l'ensemble des services associés. En téléchargeant, installant ou utilisant l'Application, tu acceptes sans réserve les présentes CGU.",
@@ -95,7 +90,14 @@ export default function CguScreen() {
             "Pour toute question relative aux présentes CGU, contacte-nous à contact@cosme-check.com.",
           ],
         },
-      ]}
-    />
-  )
+]
+
+export const CGU_CONTENT = {
+  title: "Conditions d'utilisation",
+  subtitle: 'Dernière mise à jour : 2 juin 2026',
+  sections: CGU_SECTIONS,
+}
+
+export default function CguScreen() {
+  return <LegalScreen {...CGU_CONTENT} />
 }

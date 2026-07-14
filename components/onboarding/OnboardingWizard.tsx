@@ -48,6 +48,7 @@ import Animated, {
 } from 'react-native-reanimated'
 
 import { useProfile } from '@/hooks/useProfile'
+import { setNewsletterConsent } from '@/lib/newsletter/subscribe'
 import {
   HAIR_CONCERN_LABEL,
   HAIR_PROBLEM_CONCERNS,
@@ -471,6 +472,11 @@ export const OnboardingWizard: FC<Props> = ({ onStepChange }) => {
             })
             if (granted) await registerPushToken()
             await saveNotifPromptState(markNotifPromptGranted(await loadNotifPromptState()))
+            // Couplage assumé (choix produit) : accepter les notifications inscrit
+            // aussi à la newsletter Brevo (#5). Best-effort, ne bloque jamais la fin
+            // d'onboarding. La microcopie de l'étape mentionne l'email (consentement
+            // éclairé). Écrit dans user_profiles.newsletter_consent côté serveur.
+            void setNewsletterConsent(true, 'onboarding_notifications')
           } else if (onNotifStep) {
             await saveNotifPromptState(markNotifPromptSkipped(await loadNotifPromptState()))
           }

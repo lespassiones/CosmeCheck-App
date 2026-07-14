@@ -33,6 +33,8 @@ import {
   PASSWORD_RULES,
   type PasswordChecks,
 } from '@/lib/auth/session'
+import { setNewsletterConsent } from '@/lib/newsletter/subscribe'
+import { LegalModal, type LegalDoc } from '@/components/legal/LegalModal'
 
 const signUpSchema = z
   .object({
@@ -45,6 +47,7 @@ const signUpSchema = z
       .string()
       .refine(isPasswordValid, 'Le mot de passe ne respecte pas toutes les règles'),
     confirmPassword: z.string().min(1, 'Confirme ton mot de passe'),
+    acceptsNewsletter: z.boolean(),
     acceptedPrivacy: z.boolean().refine((v) => v === true, {
       message: 'Tu dois accepter la politique de confidentialité pour continuer.',
     }),
@@ -81,6 +84,7 @@ export const SignUpForm: FC = () => {
   const [globalError, setGlobalError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [legalDoc, setLegalDoc] = useState<LegalDoc | null>(null)
   const emailRef = useRef<TextInput>(null)
   const passwordRef = useRef<TextInput>(null)
   const confirmRef = useRef<TextInput>(null)
@@ -97,6 +101,7 @@ export const SignUpForm: FC = () => {
       email: '',
       password: '',
       confirmPassword: '',
+      acceptsNewsletter: false,
       acceptedPrivacy: false,
     },
   })
@@ -117,6 +122,11 @@ export const SignUpForm: FC = () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {})
       setGlobalError(result.error ?? 'Inscription impossible. Réessaie.')
       return
+    }
+    if (data.acceptsNewsletter) {
+      // Best-effort : session déjà active (confirm email OFF) → l'edge lit l'email
+      // du JWT. Ne bloque pas la navigation vers l'onboarding.
+      void setNewsletterConsent(true, 'signup_email')
     }
     router.replace(ROUTES.ONBOARDING.INDEX)
   })
@@ -289,39 +299,58 @@ export const SignUpForm: FC = () => {
         </View>
       )}
 
-      {/* RGPD — consentement explicite (obligatoire) */}
+      {/* Newsletter — opt-in FACULTATIF (décoché par défaut = RGPD) */}
       <Controller
         control={control}
-        name="acceptedPrivacy"
+        name="acceptsNewsletter"
         render={({ field: { value, onChange } }) => (
           <Pressable
             style={styles.consentRow}
             onPress={() => onChange(!value)}
             accessibilityRole="checkbox"
             accessibilityState={{ checked: value }}
-            accessibilityLabel="J'accepte les conditions d'utilisation et la politique de confidentialité"
+            accessibilityLabel="Je veux recevoir la newsletter"
           >
             <View style={[styles.checkbox, value && styles.checkboxChecked]}>
               {value && <Ionicons name="checkmark" size={14} color={colors.surface} />}
             </View>
             <Text style={styles.legal}>
+              Je veux recevoir la newsletter Cosme Check (conseils, nouveautés).
+            </Text>
+          </Pressable>
+        )}
+      />
+
+      {/* RGPD — consentement explicite (obligatoire). La case et le libellé sont
+          séparés pour qu'un tap sur un lien ouvre le modal SANS (dé)cocher la case. */}
+      <Controller
+        control={control}
+        name="acceptedPrivacy"
+        render={({ field: { value, onChange } }) => (
+          <View style={styles.consentRow}>
+            <Pressable
+              onPress={() => onChange(!value)}
+              hitSlop={8}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: value }}
+              accessibilityLabel="J'accepte les conditions d'utilisation et la politique de confidentialité"
+            >
+              <View style={[styles.checkbox, value && styles.checkboxChecked]}>
+                {value && <Ionicons name="checkmark" size={14} color={colors.surface} />}
+              </View>
+            </Pressable>
+            <Text style={styles.legal}>
               J&apos;accepte les{' '}
-              <Text
-                style={styles.legalLink}
-                onPress={() => router.push(ROUTES.LEGAL.CGU)}
-              >
+              <Text style={styles.legalLink} onPress={() => setLegalDoc('cgu')}>
                 Conditions d&apos;utilisation
               </Text>{' '}
               et la{' '}
-              <Text
-                style={styles.legalLink}
-                onPress={() => router.push(ROUTES.LEGAL.PRIVACY)}
-              >
+              <Text style={styles.legalLink} onPress={() => setLegalDoc('privacy')}>
                 Politique de confidentialité
               </Text>
               .
             </Text>
-          </Pressable>
+          </View>
         )}
       />
       {errors.acceptedPrivacy && (
@@ -344,6 +373,9 @@ export const SignUpForm: FC = () => {
           <Text style={styles.submitText}>Créer mon compte</Text>
         )}
       </Pressable>
+
+      {/* CGU / Confidentialité en modal (pas de navigation → pas de rejet AuthGuard) */}
+      <LegalModal doc={legalDoc} onClose={() => setLegalDoc(null)} />
     </View>
   )
 }

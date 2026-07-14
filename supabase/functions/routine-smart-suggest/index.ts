@@ -469,9 +469,14 @@ function parseEval(raw: string | null, n: number): EvalResult[] | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as { results?: unknown };
-    const arr = Array.isArray(parsed.results) ? parsed.results : null;
-    if (!arr || arr.length !== n) return null;
-    return arr.map((r) => {
+    // On ne rejette QUE si `results` n'est vraiment pas un tableau (malformation
+    // réelle → l'appelant s'abstient et réessaie). On NE jette PLUS le lot entier
+    // quand la longueur diffère de `n` : le modèle renvoie parfois une case de
+    // moins, ce qui affichait à tort « Analyse momentanément indisponible »
+    // (bug 12 juil 2026). On aligne par index côté appelant ; les produits sans
+    // résultat s'abstiennent individuellement. On borne à `n` (ignore un surplus).
+    if (!Array.isArray(parsed.results)) return null;
+    return (parsed.results as unknown[]).slice(0, n).map((r) => {
       const o = (r ?? {}) as Record<string, unknown>;
       const bi = Array.isArray(o.best_indices)
         ? (o.best_indices as unknown[])
@@ -719,8 +724,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
     });
   } else {
     evalTasks.forEach((t, k) => {
-      const r = evals[k] ?? { best_indices: [], reason: "" };
       const p = prepared[t.idx];
+      const r = evals[k];
+      // Le modèle a renvoyé MOINS de résultats que de produits (réponse plus
+      // courte que le lot) : ce produit-là n'a PAS été évalué → on S'ABSTIENT
+      // (pas de cache, réessai au prochain tour) au lieu de le figer à tort en
+      // « aucune alternative ». Ne PAS confondre avec un best_indices=[] explicite
+      // (l'IA a vu le produit et n'a rien retenu → ça, on le cache légitimement).
+      if (!r) {
+        chosen.get(p.item.analysisId)!.abstained = true;
+        return;
+      }
       // 2 passes MAX : on tente l'indice 1 (pass 1) puis l'indice 2 (pass 2)
       // renvoyés par l'IA (best-first), chacun revalidé par le garde déterministe.
       let picked: CatalogAlt | null = null;

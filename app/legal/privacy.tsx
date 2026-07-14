@@ -3,14 +3,9 @@
  * exigences Apple App Store §5.1 / Google Play Data safety. Doit être
  * accessible AVANT l'inscription (lien dans /sign-up) ET depuis le profil.
  */
-import { LegalScreen } from '@/components/legal/LegalScreen'
+import { LegalScreen, type LegalSection } from '@/components/legal/LegalScreen'
 
-export default function PrivacyScreen() {
-  return (
-    <LegalScreen
-      title="Confidentialité"
-      subtitle="Dernière mise à jour : 2 juin 2026"
-      sections={[
+const PRIVACY_SECTIONS: LegalSection[] = [
         {
           paragraphs: [
             "La présente Politique de confidentialité explique comment Cosme Check (« nous », « l'Application ») collecte, utilise et protège tes données personnelles, conformément au Règlement Général sur la Protection des Données (RGPD, UE 2016/679) et à la loi Informatique et Libertés.",
@@ -132,7 +127,14 @@ export default function PrivacyScreen() {
             "Nous pouvons mettre à jour cette politique. Toute modification substantielle sera notifiée dans l'Application avant son entrée en vigueur. La date en haut indique la version courante.",
           ],
         },
-      ]}
-    />
-  )
+]
+
+export const PRIVACY_CONTENT = {
+  title: 'Confidentialité',
+  subtitle: 'Dernière mise à jour : 2 juin 2026',
+  sections: PRIVACY_SECTIONS,
+}
+
+export default function PrivacyScreen() {
+  return <LegalScreen {...PRIVACY_CONTENT} />
 }

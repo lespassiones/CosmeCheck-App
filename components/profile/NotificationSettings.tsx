@@ -30,6 +30,7 @@ import {
   type PermissionStatus,
 } from '@/lib/notifications/scheduler'
 import { registerPushToken } from '@/lib/notifications/pushToken'
+import { setNewsletterConsent } from '@/lib/newsletter/subscribe'
 
 export const NotificationSettings: FC = () => {
   const { profile, updateProfile } = useProfile()
@@ -74,6 +75,9 @@ export const NotificationSettings: FC = () => {
             // lien vers les réglages (rien n'est programmé tant que refusé).
             await updateProfile({ notifications: { ...prefs, enabled: true, promptSeen: true } })
           }
+          // Couplage assumé : activer les notifications inscrit aussi à la
+          // newsletter Brevo (#5). Best-effort (non bloquant).
+          void setNewsletterConsent(true, 'settings_notifications')
         } else {
           await updateProfile({ notifications: { ...prefs, enabled: false } })
           await cancelByChannel('bilan-hebdo')

@@ -55,6 +55,8 @@ verify_jwt = true
 verify_jwt = true
 [functions.routine-conflicts-ai]
 verify_jwt = true
+[functions.newsletter-subscribe]
+verify_jwt = true
 
 # ── Endpoints publics documentés (getOptionalUser / santé) ───────────────────
 [functions.health]

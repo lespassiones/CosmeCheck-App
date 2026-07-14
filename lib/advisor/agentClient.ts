@@ -36,6 +36,14 @@ export type AdvisorAgentResult = {
   reply: string
   products: AlternativeProduct[]
   followup: string | null
+  /** Intention produit décidée par l'agent : 'offer' → bouton « Explorer quelques
+   *  pistes » proposé quand aucun produit n'est affiché ; 'none' → rien. */
+  productOffer: 'none' | 'offer'
+}
+
+/** Normalise le champ product_offer de l'agent (défaut prudent : 'none'). */
+function normalizeOffer(v: unknown): 'none' | 'offer' {
+  return v === 'offer' ? 'offer' : 'none'
 }
 
 export class AdvisorNoCreditsError extends Error {
@@ -50,6 +58,9 @@ export class AdvisorNoCreditsError extends Error {
 }
 export class AdvisorRateLimitError extends Error {}
 export class AdvisorUnavailableError extends Error {}
+/** Le runtime ne sait pas lire le flux (pas de getReader) OU le flux s'est
+ *  interrompu sans résultat exploitable → le caller retombe sur le mode bloquant. */
+export class AdvisorStreamUnsupportedError extends Error {}
 
 /** Mappe un produit vérifié par l'agent vers la forme carrousel `AlternativeProduct`.
  *  Le score renvoyé par la RPC est DÉJÀ plafonné (sidecar product_score_cap) →
@@ -106,7 +117,7 @@ export async function askAdvisorAgent(
   }
 
   const data = (await res.json().catch(() => null)) as
-    | { reply?: string; products?: AgentProduct[]; followup?: string | null }
+    | { reply?: string; products?: AgentProduct[]; followup?: string | null; product_offer?: unknown }
     | null
   if (!data) throw new AdvisorUnavailableError()
 
@@ -114,7 +125,136 @@ export async function askAdvisorAgent(
     reply: (data.reply ?? '').trim() || "Je n'ai pas pu générer de réponse cette fois-ci.",
     products: Array.isArray(data.products) ? data.products.map(toAlternative) : [],
     followup: typeof data.followup === 'string' && data.followup.trim() ? data.followup.trim() : null,
+    productOffer: normalizeOffer(data.product_offer),
   }
+}
+
+/** Événement de progression émis par l'agent en mode streaming (phase outils). */
+export type AdvisorStreamStatus = {
+  step: 'thinking' | 'searching' | 'analyzing' | 'writing'
+  label: string
+  count?: number
+}
+
+/**
+ * Variante STREAMING de {@link askAdvisorAgent}. Le corps `stream:true` demande
+ * à l'Edge d'émettre des événements SSE : des `status` de progression RÉELS
+ * pendant la phase de recherche (appelés via `onStatus`), puis un unique `result`
+ * dont le contenu est IDENTIQUE à la réponse bloquante (mêmes produits vérifiés).
+ *
+ * La logique de l'agent est la même côté serveur : seul le transport change.
+ * Lève `AdvisorStreamUnsupportedError` si le flux ne peut pas être lu ou se coupe
+ * sans résultat → le caller retombe alors proprement sur {@link askAdvisorAgent}.
+ * Les 429 (crédits / rate-limit) et 502 sont typés comme en mode bloquant.
+ */
+export async function askAdvisorAgentStreaming(
+  messages: AdvisorApiMessage[],
+  token: string,
+  seenEans: string[] = [],
+  onStatus?: (s: AdvisorStreamStatus) => void,
+): Promise<AdvisorAgentResult> {
+  let res: Response
+  try {
+    res = (await expoFetch(`${SUPABASE_URL}/functions/v1/advisor-agent`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        apikey: SUPABASE_ANON,
+      },
+      body: JSON.stringify({ messages, seen_eans: seenEans, stream: true }),
+    })) as unknown as Response
+  } catch {
+    // Échec réseau AVANT toute réponse : rien n'a été consommé côté serveur de
+    // façon exploitable → on laisse le caller retomber sur le mode bloquant.
+    throw new AdvisorStreamUnsupportedError()
+  }
+
+  // Erreurs serveur renvoyées en JSON (le flux, lui, est toujours 200) : gate
+  // crédits / rate-limit / indispo. Traitement IDENTIQUE au mode bloquant.
+  if (!res.ok) {
+    const errBody = (await res.json().catch(() => null)) as
+      | { code?: string; error?: string; credits?: { used?: number; limit?: number } }
+      | null
+    if (res.status === 429 && errBody?.code === 'no_credits') {
+      throw new AdvisorNoCreditsError(
+        errBody.error ??
+          'Tu as utilisé tous tes crédits du jour. Reviens demain ou passe en Premium pour en avoir plus 💜',
+        errBody.credits?.used,
+        errBody.credits?.limit,
+      )
+    }
+    if (res.status === 429) throw new AdvisorRateLimitError()
+    throw new AdvisorUnavailableError()
+  }
+
+  const reader = res.body?.getReader?.()
+  if (!reader) throw new AdvisorStreamUnsupportedError()
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let result: AdvisorAgentResult | null = null
+  let serverError = false
+
+  const handleEvent = (json: string) => {
+    let evt: {
+      type?: string
+      step?: AdvisorStreamStatus['step']
+      label?: string
+      count?: number
+      reply?: string
+      products?: AgentProduct[]
+      followup?: string | null
+      product_offer?: unknown
+      message?: string
+    }
+    try {
+      evt = JSON.parse(json)
+    } catch {
+      return
+    }
+    if (evt.type === 'status' && evt.label) {
+      onStatus?.({ step: evt.step ?? 'thinking', label: evt.label, count: evt.count })
+    } else if (evt.type === 'result') {
+      result = {
+        reply: (evt.reply ?? '').trim() || "Je n'ai pas pu générer de réponse cette fois-ci.",
+        products: Array.isArray(evt.products) ? evt.products.map(toAlternative) : [],
+        followup: typeof evt.followup === 'string' && evt.followup.trim() ? evt.followup.trim() : null,
+        productOffer: normalizeOffer(evt.product_offer),
+      }
+    } else if (evt.type === 'error') {
+      serverError = true
+    }
+  }
+
+  try {
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      let sep: number
+      while ((sep = buffer.indexOf('\n\n')) !== -1) {
+        const frame = buffer.slice(0, sep).trim()
+        buffer = buffer.slice(sep + 2)
+        if (frame.startsWith('data:')) {
+          const json = frame.slice(5).trim()
+          if (json) handleEvent(json)
+        }
+      }
+    }
+  } catch {
+    // Coupure en cours de flux : si on avait déjà le résultat on le renvoie,
+    // sinon on bascule sur le mode bloquant.
+    if (result) return result
+    throw new AdvisorStreamUnsupportedError()
+  }
+
+  if (result) return result
+  // Flux terminé sans `result` : erreur serveur explicite → indispo ; sinon on
+  // considère le flux inexploitable et on laisse le caller retomber sur bloquant.
+  if (serverError) throw new AdvisorUnavailableError()
+  throw new AdvisorStreamUnsupportedError()
 }
 
 /**

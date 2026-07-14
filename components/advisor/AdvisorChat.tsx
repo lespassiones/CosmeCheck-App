@@ -59,12 +59,15 @@ import { AlternativesCarousel } from '@/components/analysis/AlternativesCarousel
 import { ProcessingOverlay } from '@/components/shared/ProcessingOverlay'
 import {
   askAdvisorAgent,
+  askAdvisorAgentStreaming,
   makeLoadingSequence,
   advisorLoadingColor,
   ADVISOR_LOADING_STEPS,
   AdvisorNoCreditsError,
   AdvisorRateLimitError,
   AdvisorUnavailableError,
+  AdvisorStreamUnsupportedError,
+  type AdvisorAgentResult,
 } from '@/lib/advisor/agentClient'
 import { prefetchProductsAnalyses } from '@/lib/analysis/eanAnalysisPrefetch'
 import {
@@ -82,6 +85,9 @@ type ChatMsg = {
   uiOnly?: boolean
   /** Bulle d'erreur locale (auth/réseau/crédits) : pas de bouton reco dessus. */
   errorMsg?: boolean
+  /** Intention produit décidée par l'agent : 'offer' → bouton « Explorer quelques
+   *  pistes » proposé quand aucun produit n'est affiché ; 'none' → aucun bouton. */
+  productOffer?: 'none' | 'offer'
   /** Une recommandation produit a été demandée pour ce message. */
   recoTried?: boolean
   /** Recherche des produits en cours. */
@@ -156,6 +162,9 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
   )
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
+  // Statut de progression RÉEL remonté par le flux (« Je cherche… », « J'analyse
+  // N produits… »). Quand il est renseigné, il remplace la phrase rotative.
+  const [liveStatus, setLiveStatus] = useState<string | null>(null)
   // Tick pour faire tourner les messages de chargement pendant l'attente de l'agent.
   const [loadingTick, setLoadingTick] = useState(0)
   // Ordre aléatoire des phrases de chargement, régénéré à chaque envoi.
@@ -193,8 +202,10 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
     async (rawText: string) => {
       const text = rawText.trim()
       if (!text || streaming) return
-      // Nouvel ordre aléatoire des phrases de chargement pour cet envoi.
+      // Nouvel ordre aléatoire des phrases de chargement pour cet envoi (fallback
+      // si le flux ne remonte pas de statut réel).
       loadingSeqRef.current = makeLoadingSequence()
+      setLiveStatus(null)
       setStreaming(true)
 
       const userMsg: ChatMsg = { role: 'user', content: text, time: getTime() }
@@ -255,12 +266,32 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
             messages.flatMap((m) => (m.products ?? []).map((p) => p.ean)).filter(Boolean),
           ),
         )
-        // Agent : réponse JSON en UN appel (texte + produits DÉJÀ vérifiés côté
-        // serveur). L'effet « streaming » est rendu côté client : on dévoile le
-        // texte en machine à écrire, PUIS on affiche les cartes produit.
-        const result = await askAdvisorAgent(apiMessages, token, seenEans)
+        // Agent : on tente le STREAMING (événements de progression réels pendant
+        // la phase outils → on affiche « Je cherche… », « J'analyse N produits… »).
+        // Le `result` final (texte + produits DÉJÀ vérifiés côté serveur) est
+        // identique au mode bloquant. Si le runtime ne sait pas lire le flux, on
+        // retombe proprement sur l'appel bloquant (mêmes données).
+        let result: AdvisorAgentResult
+        try {
+          result = await askAdvisorAgentStreaming(apiMessages, token, seenEans, (s) =>
+            setLiveStatus(s.label),
+          )
+        } catch (streamErr) {
+          if (streamErr instanceof AdvisorStreamUnsupportedError) {
+            result = await askAdvisorAgent(apiMessages, token, seenEans)
+          } else {
+            throw streamErr
+          }
+        }
         finalAssistant = result.reply
         finalProducts = result.products
+
+        // Une fois la réponse reçue, on rend la main à l'animation typewriter :
+        // le statut live n'a plus lieu d'être.
+        setLiveStatus(null)
+        // Mémorise l'intention produit décidée par l'agent (pilote le bouton).
+        // Posée avant le typewriter : les updates de contenu la préservent (spread).
+        updateLastAssistant({ productOffer: result.productOffer })
 
         // 1) Dévoilement progressif du texte (~1,2 s max quelle que soit la longueur).
         const full = finalAssistant
@@ -310,6 +341,7 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
         }
       } finally {
         setStreaming(false)
+        setLiveStatus(null)
         // L'agent débite le(s) crédit(s) côté serveur → on rafraîchit la pastille.
         void qc.invalidateQueries({ queryKey: ['credits'] })
       }
@@ -412,13 +444,14 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
               isLast={i === messages.length - 1}
               streaming={streaming}
               loadingLabel={
-                loadingSeqRef.current[loadingTick % loadingSeqRef.current.length]
+                liveStatus ?? loadingSeqRef.current[loadingTick % loadingSeqRef.current.length]
               }
               loadingColor={advisorLoadingColor(loadingTick)}
             />
             {/* Bouton « Montre-moi des recommandations » : uniquement sous la
                 DERNIÈRE réponse de l'assistant quand aucune reco n'a été faite. */}
             {m.role === 'assistant' &&
+            m.productOffer === 'offer' &&
             !m.recoTried &&
             !m.uiOnly &&
             !m.errorMsg &&
@@ -435,10 +468,10 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
                     recoRequesting && styles.recoAskBtnDisabled,
                   ]}
                   accessibilityRole="button"
-                  accessibilityLabel="Montre-moi des recommandations"
+                  accessibilityLabel="Explorer quelques pistes"
                 >
                   <Text style={styles.recoAskEmoji}>✨</Text>
-                  <Text style={styles.recoAskText}>Montre-moi des recommandations</Text>
+                  <Text style={styles.recoAskText}>Explorer quelques pistes</Text>
                 </Pressable>
               </View>
             ) : null}
@@ -480,7 +513,7 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
                         },
                       })
                     }}
-                    title="Quelques produits sûrs pour toi"
+                    title="Quelques pistes à considérer"
                     emptyText={
                       m.recoEmptyReason === 'restrictions'
                         ? "Des produits correspondaient, mais aucun ne respecte tes restrictions actuelles. Assouplis-les dans ton profil pour voir des suggestions."

@@ -42,7 +42,9 @@ export const NotificationOptInStep: FC<Props> = ({ checked, onToggle }) => {
       <Text style={styles.body}>
         Sois prévenu(e) quand un de tes produits mérite ton attention.
       </Text>
-      <Text style={styles.sub}>Jamais de spam. Désactivable à tout moment.</Text>
+      <Text style={styles.sub}>
+        Tu recevras aussi nos meilleurs conseils par email. Jamais de spam.
+      </Text>
 
       {/* Case à cocher (non cochée par défaut) */}
       <Pressable
