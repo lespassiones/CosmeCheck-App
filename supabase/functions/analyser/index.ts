@@ -30,12 +30,12 @@ import { sha256Hex } from "../_shared/aiClient.ts";
 import { type ColorRating, pastilleTone, type ScoreTone, scoreLabel, synthScore } from "./score.ts";
 import { isCleanInciInput, parseInciList } from "./parse.ts";
 import {
-  EU_ALLERGENS_TOTAL,
-  getEuFragranceAllergen,
-  isEuFragranceAllergen,
-} from "./euAllergens.ts";
+  buildAnalysisCore,
+  type MatchRow,
+  recomputeThresholdContext,
+  type ThresholdItem,
+} from "./core.ts";
 import {
-  NEUTRAL_OR_POSITIVE_TAGS,
   normalizeProductTypeToCategory,
   type ProductCategory,
 } from "./engine.ts";
@@ -54,26 +54,6 @@ import {
   loadRestrictionsContext,
 } from "./personalization.ts";
 
-type MatchRow = {
-  input_token: string;
-  position_idx: number;
-  inci_id: number | null;
-  slug: string | null;
-  name: string | null;
-  color_rating: ColorRating | null;
-  cas_number: string | null;
-  translation_fr: string | null;
-  primary_function: string | null;
-  all_functions: string[] | null;
-  tags: string[] | null;
-  match_kind: "exact" | "alias" | "fuzzy_high" | "suggestion" | null;
-  confidence: number | string | null;
-};
-
-type ThresholdContext =
-  | "before_fragrance" | "after_fragrance"
-  | "before_preservative" | "after_preservative" | null;
-
 type AnalysePayload = {
   text?: string;
   hp?: string;
@@ -85,84 +65,9 @@ type AnalysePayload = {
   productEan?: string;
 };
 
-const TAG_LABELS: Record<string, string> = {
-  paraben: "Parabens",
-  silicone: "Silicones",
-  sulfate: "Sulfates",
-  "huile-minerale": "Huiles minérales",
-  ethoxyle: "Composés éthoxylés",
-  propoxyle: "Composés propoxylés",
-  "colorant-synthese": "Colorants de synthèse",
-  "ammonium-quaternaire": "Ammoniums quaternaires",
-  "allergene-parfumant": "Allergènes parfum",
-  "allergene-reglemente": "Allergènes réglementés",
-  conservateur: "Conservateurs",
-  "parfum-synthese": "Parfums de synthèse",
-  "huile-essentielle": "Huiles essentielles",
-  "filtre-uv": "Filtres UV",
-  cmr: "CMR",
-  ogm: "OGM",
-};
-
-const ABSENCE_REPORTED = new Set([
-  "paraben", "sulfate", "huile-minerale", "silicone", "allergene-parfumant",
-  "allergene-reglemente", "ethoxyle", "propoxyle", "colorant-synthese",
-  "ammonium-quaternaire", "parfum-synthese", "filtre-uv", "cmr",
-  "conservateur", "ogm",
-]);
-const NEUTRAL_WHEN_ABSENT = new Set(["huile-essentielle"]);
-ABSENCE_REPORTED.add("huile-essentielle");
-
-// (CATEGORY_ENUM_TO_SLUG retiré : plus aucun mapping enum→slug au runtime. Le slug
-//  de catégorie vient du catalogue (source de vérité) ; un produit hors catalogue
-//  part en file de curation, jamais écrit au catalogue.)
-
-const WATER_NAMES = new Set(["aqua", "water", "eau"]);
-const TOP_LIST_WINDOW = 5;
-const DIACRITICS_RE = new RegExp("[\\u0300-\\u036f]", "g");
-const FRAGRANCE_NAMES = new Set(["PARFUM", "FRAGRANCE", "AROMA", "FLAVOR"]);
-
-type Observation = {
-  tag: string;
-  label: string;
-  status: "present" | "absent" | "info" | "warn";
-  count: number;
-  items: { name: string; slug: string | null; colorRating: ColorRating | null }[];
-  message?: string;
-};
-
-/** Recompute thresholdContext sur des items déjà stockés (cache EAN ETL). */
-type ThresholdItem = {
-  name: string | null;
-  tags?: string[] | null;
-  thresholdContext?: ThresholdContext;
-  thresholdLabel?: string | null;
-  [key: string]: unknown;
-};
-function recomputeThresholdContext(items: ThresholdItem[]): ThresholdItem[] {
-  const firstFragranceIdx = items.findIndex(
-    (it) =>
-      (it.name && FRAGRANCE_NAMES.has(it.name.toUpperCase())) ||
-      (it.tags?.includes("parfum-synthese") ?? false),
-  );
-  const firstPreservativeIdx = items.findIndex((it) => it.tags?.includes("conservateur") ?? false);
-  let referenceIdx: number;
-  let kind: "fragrance" | "preservative" | null;
-  if (firstFragranceIdx >= 0) { referenceIdx = firstFragranceIdx; kind = "fragrance"; }
-  else if (firstPreservativeIdx >= 0) { referenceIdx = firstPreservativeIdx; kind = "preservative"; }
-  else { referenceIdx = -1; kind = null; }
-
-  return items.map((it, idx) => {
-    if (referenceIdx < 0 || !kind || idx === referenceIdx) {
-      return { ...it, thresholdContext: null, thresholdLabel: null };
-    }
-    const before = idx < referenceIdx;
-    if (kind === "fragrance") {
-      return { ...it, thresholdContext: before ? "before_fragrance" : "after_fragrance", thresholdLabel: before ? "avant parfum" : "après parfum" };
-    }
-    return { ...it, thresholdContext: before ? "before_preservative" : "after_preservative", thresholdLabel: before ? "avant conservateur" : "après conservateur" };
-  });
-}
+// (Constantes d'assemblage TAG_LABELS / ABSENCE_REPORTED / WATER_NAMES / seuils /
+//  Observation / ThresholdItem / recomputeThresholdContext : DÉPLACÉES dans
+//  ./core.ts — logique partagée avec le script de backfill product_analyses.)
 
 // ─── Idempotence (port de CosmetWiki/lib/idempotency.ts, Deno) ──────────────
 const IDEM_TTL_MS = 24 * 60 * 60 * 1000;
@@ -253,8 +158,25 @@ Deno.serve(async (req: Request) => {
     return jsonResponse(cached, { headers: { "X-Idempotent-Replay": "1" } });
   }
 
-  // ── 3. Cache EAN pré-calculé (SANS débit de crédit) ─────────────────────
+  // ── 3. Produit catalogué : INCI AUTORITAIRE + cache EAN pré-calculé ─────
   const productEan = body.productEan?.trim() || null;
+
+  // SOURCE DE VÉRITÉ INCI (fix 14 juil 2026) : pour un EAN catalogué, on
+  // n'analyse PAS aveuglément le texte envoyé par le client — il peut être
+  // tronqué (bug web ProductBrowsePage : INCI coupé à 200 car. dans l'URL →
+  // listes à 9 ingrédients "tout vert"). On lit l'INCI COMPLET du catalogue et
+  // on ne garde le texte client QUE s'il est plus complet (ligne catalogue
+  // incomplète/stub) ou si le catalogue n'a pas d'INCI exploitable.
+  const catalogInfo = productEan ? await getCatalogInfo(productEan) : null;
+  let effectiveText = rawText;
+  if (catalogInfo?.ingredientsText) {
+    const catTokenCount = parseInciList(catalogInfo.ingredientsText).length;
+    const clientTokenCount = parseInciList(rawText).length;
+    if (catTokenCount >= 5 && catTokenCount >= clientTokenCount) {
+      effectiveText = catalogInfo.ingredientsText.slice(0, 8000);
+    }
+  }
+
   if (productEan) {
     try {
       const svc = serviceClient();
@@ -265,9 +187,9 @@ Deno.serve(async (req: Request) => {
         : []) as ThresholdItem[];
       // Garde anti-cache-corrompu : un batch ETL (v1.1) a écrit des analyses
       // tronquées (souvent 1 seul item) alors que l'INCI réel en compte bien plus.
-      // Si le cache a nettement moins d'ingrédients que la liste fournie, on
+      // Si le cache a nettement moins d'ingrédients que la liste de référence, on
       // l'IGNORE et on recalcule depuis le bon INCI (re-cache propre ensuite).
-      const inputTokenCount = parseInciList(rawText).length;
+      const inputTokenCount = parseInciList(effectiveText).length;
       const cacheTrustworthy = inputTokenCount < 5 || cachedItems.length >= inputTokenCount * 0.5;
       if (cachedResult && cacheTrustworthy) {
         cachedResult.items = recomputeThresholdContext(cachedItems);
@@ -311,13 +233,13 @@ Deno.serve(async (req: Request) => {
 
         // SCORE = source de vérité catalogue CosmeCheck si dispo. On ne sert
         // JAMAIS le score calculé en cache pour un produit présent au catalogue.
-        const catInfo = await getCatalogInfo(productEan);
-        const catScore = catInfo?.score ?? null;
+        // (catalogInfo déjà chargé en amont — un seul fetch par requête.)
+        const catScore = catalogInfo?.score ?? null;
         // Catégorie catalogue = source de vérité (comme le score) : on l'impose au
         // résultat caché pour ne jamais resservir une catégorie dérivée obsolète.
-        if (catInfo?.category) {
-          cachedResult.category = catInfo.category;
-          cachedResult.catalogCategory = catInfo.category;
+        if (catalogInfo?.category) {
+          cachedResult.category = catalogInfo.category;
+          cachedResult.catalogCategory = catalogInfo.category;
         }
         if (catScore != null) {
           const { label, tone } = scoreLabel(catScore);
@@ -355,7 +277,7 @@ Deno.serve(async (req: Request) => {
             p_brand: body.brand?.slice(0, 120) ?? null,
             p_product_type: body.productType?.slice(0, 120) ?? null,
             p_category: (cachedResult.category as string | null) ?? null,
-            p_input_text: rawText,
+            p_input_text: effectiveText,
             p_result_json: cachedResult,
             p_score: Number(((cachedResult.score as number) ?? 0).toFixed(2)),
             p_ean: productEan?.slice(0, 32) ?? null,
@@ -375,14 +297,16 @@ Deno.serve(async (req: Request) => {
   // voir le classement + les restrictions d'un produit.
 
   // ── 5. Fast-path déterministe vs cascade IA ─────────────────────────────
-  const skipAiParse = isCleanInciInput(rawText);
+  // `effectiveText` = INCI catalogue (autoritaire) pour un EAN connu, sinon le
+  // texte client. Un INCI catalogue est propre → fast-path déterministe.
+  const skipAiParse = isCleanInciInput(effectiveText);
 
   let text: string;
   if (skipAiParse) {
-    text = rawText;
+    text = effectiveText;
   } else {
-    const aiParsed = await parseInciWithAI(rawText, user.id);
-    text = aiParsed && aiParsed.ingredients.length > 0 ? aiParsed.ingredients.join(", ") : rawText;
+    const aiParsed = await parseInciWithAI(effectiveText, user.id);
+    text = aiParsed && aiParsed.ingredients.length > 0 ? aiParsed.ingredients.join(", ") : effectiveText;
     // La garde « est-ce vraiment une liste INCI ? » protège la saisie MANUELLE
     // libre (éviter d'analyser du texte quelconque). Un produit CONNU du catalogue
     // / code-barres (productEan présent) a une composition LÉGITIME même très
@@ -503,69 +427,23 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // Ré-attache le token brut par position ; suggestions traitées comme non-match.
-  const rawEnriched = rows.map((r) => {
-    const tok = tokens[r.position_idx];
-    const isSuggestion = r.match_kind === "suggestion";
-    const confidence = typeof r.confidence === "string" ? Number(r.confidence) : (r.confidence ?? 0);
-    return {
-      ...r,
-      input_raw: tok ? tok.raw : r.input_token,
-      effective_color: isSuggestion ? null : r.color_rating,
-      effective_inci_id: isSuggestion ? null : r.inci_id,
-      effective_name: isSuggestion ? null : r.name,
-      effective_tags: isSuggestion ? null : r.tags,
-      effective_all_functions: isSuggestion ? null : r.all_functions,
-      suggested_name: isSuggestion ? r.name : null,
-      db_color_rating: r.color_rating,
-      confidence,
-    };
-  });
+  // ── Assemblage déterministe (PARTAGÉ avec le backfill product_analyses) ──
+  // Toute la logique enrichissement → dédup → comptes → observations → seuils →
+  // allergènes UE → spectre → items → score propriétaire vit dans ./core.ts
+  // (extraction verbatim, 14 juil 2026) pour que le script de repeuplement
+  // produise EXACTEMENT les mêmes result_json que le live.
+  const core = buildAnalysisCore({ tokens, rows });
+  const { enriched, counts, matched, observations, thresholdFor } = core;
 
-  // Alias FR/EN avant dédup.
-  const aliasesUsed = rawEnriched
-    .filter((r) => r.match_kind === "alias")
-    .map((r) => ({ from: r.input_raw, to: r.name }));
-
-  // Dédup par inci_id canonique (garde la 1re position), renumérote.
-  const seenInciIds = new Set<string | number>();
-  const enriched = rawEnriched
-    .slice()
-    .sort((a, b) => a.position_idx - b.position_idx)
-    .filter((r) => {
-      if (!r.effective_inci_id) return true;
-      if (seenInciIds.has(r.effective_inci_id)) return false;
-      seenInciIds.add(r.effective_inci_id);
-      return true;
-    })
-    .map((r, i) => ({ ...r, position_idx: i }));
-
-  // Comptes.
-  const counts: Record<string, number> = { Vert: 0, Jaune: 0, Orange: 0, Rouge: 0, "Non reconnu": 0 };
-  for (const r of enriched) {
-    if (r.effective_color) counts[r.effective_color]++;
-    else counts["Non reconnu"]++;
-  }
-  const matched = enriched.length - counts["Non reconnu"];
-
-  // NOTATION PROPRIÉTAIRE CosmeCheck, pastille couleur : position +
-  // composition, plafond par zone intégré. Synthétisée en score 0–20 pour rester
-  // compatible avec tout le code existant (`verdictToneFromScore`, tri, RPC).
-  // Utilisé tel quel pour un produit internet ; remplacé par le score précalculé
-  // (product_score_cap) juste après pour un produit du catalogue.
-  const pastille = pastilleTone(
-    enriched.map((r) => ({ color: r.effective_color, position: r.position_idx })),
-    enriched.length,
-    false,
-  );
-  let score = synthScore(pastille) ?? 0;
-  let { label: scoreLabelText, tone: scoreTone } = scoreLabel(score);
+  let score = core.score;
+  let scoreLabelText = core.scoreLabelText;
+  let scoreTone = core.scoreTone;
 
   // SOURCE DE VÉRITÉ : le catalogue. Si l'EAN est catalogué, on LIT son score
   // propriétaire ET sa catégorie curée → pastille + catégorie identiques partout
   // (recherche, catalogue, analyse). On ne recalcule pas, on ne re-catégorise pas
-  // et on n'écrit jamais dans le catalogue au runtime.
-  const catalogInfo = productEan ? await getCatalogInfo(productEan) : null;
+  // et on n'écrit jamais dans le catalogue au runtime. (catalogInfo chargé en
+  // amont — un seul fetch par requête.)
   const catalogScore = catalogInfo?.score ?? null;
   const catalogCategorySlug = catalogInfo?.category ?? null;
   if (catalogScore != null) {
@@ -575,46 +453,11 @@ Deno.serve(async (req: Request) => {
     scoreTone = lab.tone;
   }
 
-  // Agrégation de tags.
-  const tagCounts: Record<string, number> = {};
-  const tagItems: Record<string, { name: string; slug: string | null; colorRating: ColorRating | null }[]> = {};
-  for (const r of enriched) {
-    if (!r.effective_tags) continue;
-    for (const t of r.effective_tags) {
-      tagCounts[t] = (tagCounts[t] || 0) + 1;
-      if (!tagItems[t]) tagItems[t] = [];
-      tagItems[t].push({ name: r.effective_name ?? r.input_raw, slug: r.slug, colorRating: r.effective_color });
-    }
-  }
-
-  const observations: Observation[] = [];
-  for (const tag of ABSENCE_REPORTED) {
-    const c = tagCounts[tag] || 0;
-    if (c === 0) {
-      const status: "absent" | "info" = NEUTRAL_WHEN_ABSENT.has(tag) ? "info" : "absent";
-      observations.push({ tag, label: TAG_LABELS[tag] ?? tag, status, count: 0, items: [] });
-    } else {
-      observations.push({ tag, label: TAG_LABELS[tag] ?? tag, status: "present", count: c, items: tagItems[tag] ?? [] });
-    }
-  }
-  for (const [tag, c] of Object.entries(tagCounts)) {
-    if (ABSENCE_REPORTED.has(tag)) continue;
-    if (NEUTRAL_OR_POSITIVE_TAGS.has(tag)) continue;
-    if (c > 0) {
-      observations.push({ tag, label: TAG_LABELS[tag] ?? tag, status: "present", count: c, items: tagItems[tag] ?? [] });
-    }
-  }
-
-  const byPosition = [...enriched].sort((a, b) => a.position_idx - b.position_idx);
-
   // Catégorisation : UNIQUEMENT pour un produit hors catalogue (ou catalogué sans
   // catégorie). Un produit déjà catalogué garde SA catégorie (source de vérité) :
   // on ne relance PAS le classifieur LLM. Cf. consigne « scan = lecture seule ».
   const needsCategory = !catalogCategorySlug;
-  const categoryTop5Names = byPosition
-    .slice(0, 5)
-    .map((r) => r.effective_name ?? r.input_raw)
-    .filter((n): n is string => Boolean(n));
+  const categoryTop5Names = core.categoryTop5Names;
   const categoryPromise: Promise<ProductCategory> =
     needsCategory && categoryTop5Names.length > 0
       ? categorizeProduct(categoryTop5Names, user.id).catch(() => "autre" as ProductCategory)
@@ -627,124 +470,6 @@ Deno.serve(async (req: Request) => {
         user.id,
       ).catch(() => null)
     : Promise.resolve(null);
-
-  // 1. Formule à base d'eau.
-  const first = byPosition[0];
-  if (first) {
-    const firstNorm = (first.name ?? first.input_raw ?? "")
-      .toLowerCase().normalize("NFD").replace(DIACRITICS_RE, "").trim();
-    if (WATER_NAMES.has(firstNorm)) {
-      const display = (first.name ?? first.input_raw ?? "Aqua").trim();
-      const displayCased = display.charAt(0).toUpperCase() + display.slice(1).toLowerCase();
-      observations.push({
-        tag: "water-based", label: "Formule à base d'eau", status: "info", count: 0, items: [],
-        message: `${displayCased} en première position`,
-      });
-    }
-  }
-
-  // 2. Couverture.
-  if (enriched.length > 0) {
-    const pct = Math.round((matched / enriched.length) * 100);
-    observations.push({
-      tag: "coverage", label: "Couverture", status: "info", count: matched, items: [],
-      message: `${matched}/${enriched.length} ingrédients reconnus (${pct}%)`,
-    });
-  }
-
-  // 3. Pénalités en début de liste.
-  const topProblematic = byPosition
-    .slice(0, TOP_LIST_WINDOW)
-    .filter((r) => r.effective_color === "Orange" || r.effective_color === "Rouge");
-  if (topProblematic.length > 0) {
-    observations.push({
-      tag: "top-list-warning", label: "Ingrédients de pénalité en début de liste", status: "warn",
-      count: topProblematic.length,
-      items: topProblematic.map((r) => ({ name: r.effective_name ?? r.input_raw, slug: r.slug, colorRating: r.effective_color })),
-      message: `${topProblematic.length} dans le top ${TOP_LIST_WINDOW} (concentration plus élevée)`,
-    });
-  }
-
-  // Suggestions.
-  const suggestions = enriched
-    .filter((r) => r.match_kind === "suggestion" && r.suggested_name)
-    .map((r) => ({
-      position: r.position_idx + 1,
-      input: r.input_raw,
-      suggestedName: r.suggested_name as string,
-      confidence: Number(r.confidence.toFixed(3)),
-    }));
-
-  // Seuils fragrance/conservateur.
-  const firstFragranceIdx = byPosition.findIndex(
-    (r) =>
-      (r.effective_name && FRAGRANCE_NAMES.has(r.effective_name.toUpperCase())) ||
-      (r.effective_tags?.includes("parfum-synthese") ?? false),
-  );
-  const firstPreservativeIdx = byPosition.findIndex((r) => r.effective_tags?.includes("conservateur") ?? false);
-  let earliestThresholdIdx: number;
-  let thresholdKind: "fragrance" | "preservative" | null;
-  if (firstFragranceIdx >= 0) { earliestThresholdIdx = firstFragranceIdx; thresholdKind = "fragrance"; }
-  else if (firstPreservativeIdx >= 0) { earliestThresholdIdx = firstPreservativeIdx; thresholdKind = "preservative"; }
-  else { earliestThresholdIdx = -1; thresholdKind = null; }
-
-  function thresholdFor(positionIdx: number): { context: ThresholdContext; label: string | null } {
-    if (earliestThresholdIdx < 0 || !thresholdKind) return { context: null, label: null };
-    if (positionIdx === earliestThresholdIdx) return { context: null, label: null };
-    const before = positionIdx < earliestThresholdIdx;
-    if (thresholdKind === "fragrance") {
-      return before
-        ? { context: "before_fragrance", label: "avant parfum" }
-        : { context: "after_fragrance", label: "après parfum" };
-    }
-    return before
-      ? { context: "before_preservative", label: "avant conservateur" }
-      : { context: "after_preservative", label: "après conservateur" };
-  }
-
-  // Allergènes parfumants UE.
-  const allergensDetected: { inciName: string; label: string; note: string; position: number }[] = [];
-  const seenAllergens = new Set<string>();
-  for (const r of enriched) {
-    const candidates = [r.effective_name, r.input_raw].filter(Boolean) as string[];
-    for (const c of candidates) {
-      const upper = c.toUpperCase().trim();
-      if (seenAllergens.has(upper)) continue;
-      if (isEuFragranceAllergen(upper)) {
-        const meta = getEuFragranceAllergen(upper)!;
-        allergensDetected.push({ inciName: meta.inciName, label: meta.label, note: meta.note, position: r.position_idx + 1 });
-        seenAllergens.add(upper);
-        break;
-      }
-    }
-  }
-  if (allergensDetected.length > 0) {
-    observations.push({
-      tag: "eu-fragrance-allergens", label: "Allergènes parfumants UE", status: "warn",
-      count: allergensDetected.length,
-      items: allergensDetected.map((a) => ({ name: a.label, slug: null, colorRating: "Jaune" as ColorRating })),
-      message: `${allergensDetected.length} sur ${EU_ALLERGENS_TOTAL} substances réglementées détectées.`,
-    });
-  }
-
-  // Pénalité atténuée par la position (après parfum).
-  if (firstFragranceIdx >= 0) {
-    const afterFragrance = byPosition
-      .slice(firstFragranceIdx + 1)
-      .filter((r) => r.effective_color === "Jaune" || r.effective_color === "Orange" || r.effective_color === "Rouge");
-    if (afterFragrance.length > 0) {
-      const n = afterFragrance.length;
-      observations.push({
-        tag: "after-fragrance", label: "Pénalité atténuée par la position", status: "info", count: n,
-        items: afterFragrance.map((r) => ({ name: r.effective_name ?? r.input_raw, slug: r.slug, colorRating: r.effective_color })),
-        message: `${n} ingrédient${n > 1 ? "s" : ""} sensible${n > 1 ? "s" : ""} apparai${n > 1 ? "ssent" : "t"} après le parfum - concentration ≤ 1 %, impact réel limité.`,
-      });
-    }
-  }
-
-  // Spectre.
-  const spectrumTop5: (ColorRating | null)[] = Array.from({ length: 5 }, (_, i) => byPosition[i]?.effective_color ?? null);
-  const spectrumTop10: (ColorRating | null)[] = Array.from({ length: 10 }, (_, i) => byPosition[i]?.effective_color ?? null);
 
   // Synthèse LLM optionnelle (GPT-4o-mini primaire, Mistral fallback, cachée).
   // PERSONNALISÉE : le profil peau de l'utilisateur (s'il existe) est injecté
@@ -801,27 +526,6 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const itemsResponse = enriched.map((r) => {
-    const threshold = thresholdFor(r.position_idx);
-    return {
-      position: r.position_idx + 1,
-      input: r.input_raw,
-      slug: r.slug,
-      name: r.effective_name,
-      colorRating: r.effective_color,
-      dbColorRating: r.db_color_rating,
-      casNumber: r.cas_number,
-      translationFr: r.translation_fr,
-      primaryFunction: r.primary_function,
-      allFunctions: r.effective_all_functions ?? null,
-      tags: r.effective_tags,
-      matchKind: r.match_kind,
-      confidence: Number(r.confidence.toFixed(3)),
-      thresholdContext: threshold.context,
-      thresholdLabel: threshold.label,
-    };
-  });
-
   // Catégorie servie : le SLUG catalogue (source de vérité) s'il existe. Sinon
   // (produit hors catalogue) catégorie PROVISOIRE déduite (course 1.5 s LLM →
   // fallback keyword sur productType) — affichée à l'écran, jamais écrite au catalogue.
@@ -835,24 +539,16 @@ Deno.serve(async (req: Request) => {
     catalogCategorySlug ?? llmCategory ?? normalizeProductTypeToCategory(body.productType) ?? null;
 
   const responsePayload = {
-    counts: {
-      total: enriched.length,
-      matched,
-      vert: counts["Vert"],
-      jaune: counts["Jaune"],
-      orange: counts["Orange"],
-      rouge: counts["Rouge"],
-      unknown: counts["Non reconnu"],
-    },
+    counts: core.countsPayload,
     score,
     scoreLabel: scoreLabelText,
     scoreTone: scoreTone as ScoreTone,
-    items: itemsResponse,
+    items: core.items,
     observations,
-    aliasesUsed,
-    suggestions,
-    spectrum: { top5: spectrumTop5, top10: spectrumTop10 },
-    euFragranceAllergens: { detected: allergensDetected, total: EU_ALLERGENS_TOTAL },
+    aliasesUsed: core.aliasesUsed,
+    suggestions: core.suggestions,
+    spectrum: core.spectrum,
+    euFragranceAllergens: core.euFragranceAllergens,
     synthesis,
     productType: body.productType?.slice(0, 120) ?? null,
     category: resolvedCategory,

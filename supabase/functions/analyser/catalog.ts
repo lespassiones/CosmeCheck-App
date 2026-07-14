@@ -30,26 +30,36 @@ export async function getCatalogScore(
 
 /**
  * Lit la ligne catalogue (SOURCE DE VÉRITÉ) pour un EAN : score propriétaire +
- * slug de catégorie curé. Renvoie null si l'EAN n'est pas au catalogue (produit
- * hors catalogue). Sert à SERVIR un produit connu (jamais recalculer ni
- * re-catégoriser). `category` est null si la ligne existe mais n'a pas de
- * catégorie (produit catalogué non classé).
+ * slug de catégorie curé + INCI complet. Renvoie null si l'EAN n'est pas au
+ * catalogue (produit hors catalogue). Sert à SERVIR un produit connu (jamais
+ * recalculer ni re-catégoriser). `category` est null si la ligne existe mais
+ * n'a pas de catégorie. `ingredientsText` est l'INCI AUTORITAIRE du catalogue :
+ * pour un EAN connu, l'analyse doit se baser dessus plutôt que sur le texte
+ * renvoyé par le client (qui peut être tronqué — bug ProductBrowsePage 200 car.).
  */
 export async function getCatalogInfo(
   ean: string,
-): Promise<{ score: number | null; category: string | null } | null> {
+): Promise<{ score: number | null; category: string | null; ingredientsText: string | null } | null> {
   try {
     const { data } = await serviceClient()
       .schema("cosme_check")
       .from("catalog")
-      .select("score, category")
+      .select("score, category, ingredients_text")
       .eq("ean", ean)
       .maybeSingle();
     if (!data) return null;
-    const row = data as { score: number | null; category: string | null };
+    const row = data as { score: number | null; category: string | null; ingredients_text: string | null };
     const cat =
       typeof row.category === "string" && row.category.trim() ? row.category : null;
-    return { score: typeof row.score === "number" ? row.score : null, category: cat };
+    const inci =
+      typeof row.ingredients_text === "string" && row.ingredients_text.trim()
+        ? row.ingredients_text.trim()
+        : null;
+    return {
+      score: typeof row.score === "number" ? row.score : null,
+      category: cat,
+      ingredientsText: inci,
+    };
   } catch {
     return null;
   }
@@ -64,18 +74,21 @@ export async function upsertProductAnalysis(params: {
   algoVersion?: string;
 }): Promise<void> {
   try {
-    await serviceClient()
-      .schema("cosme_check")
-      .rpc("cosme_check_upsert_product_analysis", {
-        p_ean: params.ean,
-        p_result_json: params.resultJson,
-        p_score: params.score,
-        p_score_label: params.scoreLabel,
-        p_score_tone: params.scoreTone,
-        p_algo_version: params.algoVersion ?? "v1.2",
-      });
-  } catch {
-    // non-bloquant
+    // ⚠️ La RPC vit dans le schéma PUBLIC (comme toutes les cosme_check_*).
+    // L'ancien appel `.schema("cosme_check").rpc(...)` cherchait la fonction
+    // dans le mauvais schéma → 404 avalé par le catch → product_analyses ne
+    // se remplissait JAMAIS (découvert 14 juil 2026, table restée à 0 ligne).
+    const { error } = await serviceClient().rpc("cosme_check_upsert_product_analysis", {
+      p_ean: params.ean,
+      p_result_json: params.resultJson,
+      p_score: params.score,
+      p_score_label: params.scoreLabel,
+      p_score_tone: params.scoreTone,
+      p_algo_version: params.algoVersion ?? "v1.2",
+    });
+    if (error) console.warn("[product_analyses] upsert error:", error.message);
+  } catch (err) {
+    console.warn("[product_analyses] upsert failed:", err);
   }
 }
 
