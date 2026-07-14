@@ -65,3 +65,4 @@ google-service-account*.json
 fcm-*.json
 # Clé APNs iOS (SECRET)
 *.p8
+scripts/.backfill_checkpoint.json
