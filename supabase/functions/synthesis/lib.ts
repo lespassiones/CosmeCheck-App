@@ -96,6 +96,49 @@ const HAIR_CONCERN_LABEL: Record<HairConcern, string> = {
   ternes_cassants: "Cheveux ternes / cassants",
 };
 
+// ─── Objectifs (port de lib/skin/profile.ts) ─────────────────────────────────
+// AJOUT juil 2026 : le port serveur avait OUBLIÉ les objectifs → l'IA ne les
+// recevait pas (alors que le prompt parle d'« objectifs »). On les remet, car le
+// score de compatibilité et le bloc « goals » en dépendent directement.
+const PROFILE_GOALS = [
+  "peau_douce", "teint_uniforme", "attenuer_boutons", "reduire_rides", "calmer_rougeurs",
+  "hydrater_profondeur", "reduire_taches", "renforcer_barriere",
+  "adoucir_corps", "reduire_vergetures", "proteger_soleil",
+  "cheveux_brillants", "renforcer_cheveux", "definir_boucles", "cuir_chevelu_sain", "reduire_chute",
+  "simplifier_routine", "decouvrir_clean",
+] as const;
+export type ProfileGoal =
+  | typeof PROFILE_GOALS[number]
+  | "comprendre_produits" | "eviter_risques" | "alternatives_adaptees" | "construire_routine";
+const PROFILE_GOAL_LABEL: Record<ProfileGoal, string> = {
+  peau_douce: "Avoir une peau plus douce",
+  teint_uniforme: "Uniformiser mon teint",
+  attenuer_boutons: "Atténuer mes boutons",
+  reduire_rides: "Réduire mes rides et ridules",
+  calmer_rougeurs: "Calmer mes rougeurs",
+  hydrater_profondeur: "Hydrater ma peau en profondeur",
+  reduire_taches: "Réduire mes taches",
+  renforcer_barriere: "Renforcer ma peau face aux agressions",
+  adoucir_corps: "Adoucir ma peau du corps",
+  reduire_vergetures: "Réduire l'apparence des vergetures",
+  proteger_soleil: "Mieux protéger ma peau du soleil",
+  cheveux_brillants: "Avoir des cheveux plus brillants",
+  renforcer_cheveux: "Renforcer mes cheveux abîmés",
+  definir_boucles: "Définir mes boucles",
+  cuir_chevelu_sain: "Avoir un cuir chevelu sain",
+  reduire_chute: "Réduire la chute / casse",
+  simplifier_routine: "Simplifier ma routine quotidienne",
+  decouvrir_clean: "Découvrir des produits plus clean",
+  comprendre_produits: "Mieux comprendre mes produits",
+  eviter_risques: "Éviter les ingrédients risqués",
+  alternatives_adaptees: "Trouver des alternatives adaptées",
+  construire_routine: "Construire / améliorer ma routine",
+};
+/** Objectifs rattachés à l'axe capillaire — sert au gating de pertinence. */
+export const HAIR_GOAL_KEYS: readonly ProfileGoal[] = [
+  "cheveux_brillants", "renforcer_cheveux", "definir_boucles", "cuir_chevelu_sain", "reduire_chute",
+];
+
 export type SkinProfile = {
   skinTypeFace?: SkinTypeFace;
   otherSkinTypeFace?: string;
@@ -107,6 +150,8 @@ export type SkinProfile = {
   otherConcerns?: string;
   otherHair?: string;
   otherNotes?: string;
+  goals?: ProfileGoal[];
+  otherGoals?: string;
 };
 
 /** Port byte-for-byte (champs utiles à la synthèse) de readSkinProfile. */
@@ -154,6 +199,12 @@ export function readSkinProfile(prefs: Record<string, unknown> | null | undefine
   const skinTypeBody = newBody ?? legacyBody;
   const otherSkinTypeBody = readShort("otherSkinTypeBody", 120) ?? readShort("otherSkinType", 120);
 
+  const goals: ProfileGoal[] = Array.isArray(r.goals)
+    ? (r.goals as unknown[]).filter(
+      (g): g is ProfileGoal => typeof g === "string" && g in PROFILE_GOAL_LABEL,
+    )
+    : [];
+
   return {
     skinTypeFace,
     otherSkinTypeFace,
@@ -165,6 +216,8 @@ export function readSkinProfile(prefs: Record<string, unknown> | null | undefine
     otherConcerns: readShort("otherConcerns", 300),
     otherHair: readShort("otherHair", 200),
     otherNotes: readShort("otherNotes", 500),
+    goals: goals.length > 0 ? goals : undefined,
+    otherGoals: readShort("otherGoals", 300),
   };
 }
 
@@ -195,6 +248,13 @@ export function formatSkinProfileForPrompt(skin: SkinProfile): string | null {
   }
   if (skin.otherHair) hairParts.push(skin.otherHair);
   if (hairParts.length > 0) lines.push(`- Cheveux : ${hairParts.join(" ; ")}`);
+
+  const goalParts: string[] = [];
+  if (skin.goals && skin.goals.length > 0) {
+    goalParts.push(skin.goals.map((g) => PROFILE_GOAL_LABEL[g]).join(", "));
+  }
+  if (skin.otherGoals) goalParts.push(skin.otherGoals);
+  if (goalParts.length > 0) lines.push(`- Objectifs : ${goalParts.join(" ; ")}`);
 
   if (skin.allergiesFreeform) lines.push(`- Allergies / intolérances : ${skin.allergiesFreeform}`);
   if (skin.otherNotes) lines.push(`- Autres précisions : ${skin.otherNotes}`);
@@ -334,7 +394,7 @@ export type RestrictionsContext = {
 export async function loadUserContext(
   sb: SupabaseClient,
   userId: string,
-): Promise<{ profileBlock: string | null; restrictions: RestrictionsContext }> {
+): Promise<{ profileBlock: string | null; skin: SkinProfile; restrictions: RestrictionsContext }> {
   try {
     const { data } = await sb
       .schema("cosme_check")
@@ -353,6 +413,7 @@ export async function loadUserContext(
     if (!hasAnyRestriction(restrictions)) {
       return {
         profileBlock,
+        skin,
         restrictions: { block: null, restrictions: EMPTY_RESTRICTIONS, families: [] },
       };
     }
@@ -360,6 +421,7 @@ export async function loadUserContext(
     const labels = new Map(families.map((f) => [f.slug, f.name] as const));
     return {
       profileBlock,
+      skin,
       restrictions: {
         block: formatRestrictionsForPrompt(restrictions, labels),
         restrictions,
@@ -369,6 +431,7 @@ export async function loadUserContext(
   } catch {
     return {
       profileBlock: null,
+      skin: {},
       restrictions: { block: null, restrictions: EMPTY_RESTRICTIONS, families: [] },
     };
   }

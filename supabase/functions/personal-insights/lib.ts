@@ -27,6 +27,14 @@ import {
 } from "../_shared/aiClient.ts";
 import { stripLongDashes } from "../_shared/sanitize.ts";
 import { buildPrompt, PERSONAL_PROMPT_VERSION, type PersonalInput } from "./prompt.ts";
+import {
+  buildCompatLines,
+  composeCompatScore,
+  majorityByIngredient,
+  negativeSubtitle,
+  type CompatBreakdown,
+  type CompatTone,
+} from "./compat.ts";
 
 // buildPrompt / PersonalInput / PERSONAL_PROMPT_VERSION vivent dans prompt.ts
 // (pur, sans dépendance Deno) pour être testables en Jest. Ré-exportés ici pour
@@ -37,6 +45,32 @@ export type { PersonalInput } from "./prompt.ts";
 export type Tone = "vert" | "ambre" | "rouge" | "neutre";
 export type Block = { title: string; description: string; tone: Tone };
 export type PersonalBlocks = { goals: Block; skin: Block; watch: Block };
+
+// ─── Score de compatibilité (juil 2026) ──────────────────────────────────────
+// Les fonctions PURES (labels, tons, plafonds) vivent dans ./compat.ts (testable
+// Jest). Ici : les types de sortie + le glue LLM (coerce + subtitle).
+export type Compatibility = {
+  score: number; // 0-100, entier
+  label: string; // 1 des 10 paliers (dérivé du score → déterministe)
+  tone: CompatTone; // couleur de l'anneau (dérivée du score)
+  subtitle: string; // phrase IA affichée sous le score
+  relevance: "personal" | "product_only";
+  /** Détail affichable (base qualité + lignes signées). Absent sur l'ancien persisté. */
+  breakdown?: CompatBreakdown;
+};
+export type PersonalResult = { blocks: PersonalBlocks; compatibility: Compatibility | null };
+
+// Sortie IA v21 : des CONTRIBUTEURS (ingrédients verts OU jaunes qui servent le
+// profil, sans distinction de couleur : un jaune bénéfique compte comme un vert)
+// et des contre-indications ; aucun chiffre (le code calcule tout).
+type RawContributor = { ingredient: string; need: string };
+type RawAgainst = { ingredient: string; need: string };
+type RawCompat = {
+  contributors: RawContributor[];
+  against: RawAgainst[];
+  subtitle: string;
+  relevance: "personal" | "product_only";
+};
 
 /** Clé de cache : ingrédients + profil + restrictions + version de prompt. */
 export async function makePersonalCacheKey(input: PersonalInput): Promise<string> {
@@ -64,6 +98,13 @@ const TONES: Tone[] = ["vert", "ambre", "rouge", "neutre"];
  */
 function plainifyIngredientNames(s: string): string {
   return s
+    .replace(/\bglycerine?\b/gi, "glycérine")
+    .replace(/\baqua\b/gi, "eau")
+    .replace(/salix\s+alba(\s+bark)?(\s+extract)?/gi, "extrait de saule")
+    .replace(/butyrospermum\s+parkii(\s+butter)?/gi, "beurre de karité")
+    .replace(/sodium\s+hyaluronate|hyaluronic\s+acid/gi, "acide hyaluronique")
+    .replace(/niacinamide/gi, "niacinamide")
+    .replace(/aloe\s+barbadensis(\s+leaf)?(\s+juice|\s+extract)?/gi, "aloe vera")
     .replace(/sodium\s+(laureth|lauryl)\s+sulfate/gi, "agent lavant sulfaté")
     .replace(/\b(methyl|propyl|butyl|ethyl)paraben\b/gi, "conservateur (parabène)")
     .replace(/(methylchloroiso|methyliso)thiazolinone|phenoxyethanol/gi, "conservateur")
@@ -151,7 +192,149 @@ function enforceInvariants(
   return blocks;
 }
 
-function parseBlocks(raw: string | null): PersonalBlocks | null {
+/** Valide/normalise l'objet compatibility renvoyé par le LLM (contributeurs v16). */
+function coerceCompatibility(raw: unknown): RawCompat | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const relevance = o.relevance === "product_only" ? "product_only" : "personal";
+  const subtitle = typeof o.subtitle === "string"
+    ? plainifyIngredientNames(stripLongDashes(o.subtitle)).replace(/[.\s]+$/, "").slice(0, 90)
+    : "";
+  const cleanShort = (s: unknown, max: number): string =>
+    typeof s === "string" ? plainifyIngredientNames(stripLongDashes(s)).trim().slice(0, max) : "";
+  const contributors: RawContributor[] = Array.isArray(o.contributors)
+    ? (o.contributors as unknown[])
+      .map((m): RawContributor | null => {
+        if (!m || typeof m !== "object") return null;
+        const mm = m as Record<string, unknown>;
+        const ingredient = cleanShort(mm.ingredient, 40);
+        const need = cleanShort(mm.need, 60);
+        if (!ingredient || !need) return null;
+        return { ingredient, need };
+      })
+      .filter((m): m is RawContributor => m !== null)
+      .slice(0, 10)
+    : [];
+  const against: RawAgainst[] = Array.isArray(o.against)
+    ? (o.against as unknown[])
+      .map((m): RawAgainst | null => {
+        if (!m || typeof m !== "object") return null;
+        const mm = m as Record<string, unknown>;
+        const ingredient = cleanShort(mm.ingredient, 40);
+        const need = cleanShort(mm.need, 60);
+        if (!ingredient || !need) return null;
+        return { ingredient, need };
+      })
+      .filter((m): m is RawAgainst => m !== null)
+      .slice(0, 2)
+    : [];
+  return { contributors, against, subtitle, relevance };
+}
+
+/**
+ * Applique les garde-fous DÉTERMINISTES (compat.ts) au score IA puis compose la
+ * sortie. Le LLM propose ; finalizeCompatScore borne (restrictions + couleurs)
+ * et fige les 10 mots ; ici on ajoute le sous-titre (avec repli).
+ */
+function enforceCompatibility(
+  compat: RawCompat | null,
+  ctx: {
+    orange: number;
+    red: number;
+    restrictionMatches: PersonalInput["restrictionMatches"];
+    productOnly?: boolean;
+    scoreOver20?: number;
+    forcedAgainst?: { name: string; need: string }[];
+  },
+): Compatibility | null {
+  if (!compat) return null;
+  // ANTI-DOUBLE-COMPTAGE : un ingrédient déjà pénalisé comme RESTRICTION (-8)
+  // ne peut pas être re-pénalisé en contre-indication (-5). Match par nom
+  // (inclusion bidirectionnelle, insensible à la casse).
+  const restrictedNames = ctx.restrictionMatches
+    .flatMap((m) => [m.inciName, m.label])
+    .map((s) => (s ?? "").toLowerCase().trim())
+    .filter(Boolean);
+  const against = compat.against.filter((a) => {
+    const n = a.ingredient.toLowerCase().trim();
+    // L'IA glisse parfois une RESTRICTION dans against (« à éviter pour tes
+    // restrictions sur les sulfates ») → double-comptage -5 ET -8. Le mot
+    // « restriction » dans le besoin trahit ce cas : on l'écarte (le -8 suffit).
+    if (/restriction/i.test(a.need)) return false;
+    return !restrictedNames.some((r) => r.includes(n) || n.includes(r));
+  });
+  // Contre-indications GARANTIES (code) : fusion avec celles de l'IA, même
+  // filtre anti-double-comptage restrictions, dédup par nom, cap à 2.
+  const aiAgainst = against.map((a) => ({ name: a.ingredient, need: a.need }));
+  const forced = (ctx.forcedAgainst ?? []).filter((f) => {
+    const n = f.name.toLowerCase().trim();
+    if (restrictedNames.some((r) => r.includes(n) || n.includes(r))) return false;
+    return !aiAgainst.some((a) => {
+      const an = a.name.toLowerCase().trim();
+      return an.includes(n) || n.includes(an);
+    });
+  });
+  const againstInputs = [...aiAgainst, ...forced].slice(0, 2);
+  const iaLines = buildCompatLines({
+    contributors: compat.contributors.map((c) => ({ name: c.ingredient })),
+    against: againstInputs,
+  });
+  // Restrictions DISTINCTES présentes → libellés (une ligne -8 chacune).
+  const seen = new Set<string>();
+  const restrictionLabels: string[] = [];
+  for (const m of ctx.restrictionMatches) {
+    const key = `${m.kind}:${m.slug}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    restrictionLabels.push(m.label);
+  }
+  const { score, label, tone, breakdown } = composeCompatScore({
+    scoreOver20: ctx.scoreOver20 ?? 0,
+    orange: ctx.orange,
+    red: ctx.red,
+    iaLines,
+    restrictionLabels,
+    productOnly: ctx.productOnly,
+  });
+  // La relevance AFFICHÉE suit le verdict DÉTERMINISTE (productOnly), pas le
+  // champ IA : le header (« Pour toi » / « Qualité ») reste cohérent avec la
+  // base réelle du score.
+  const relevance = typeof ctx.productOnly === "boolean"
+    ? (ctx.productOnly ? "product_only" : "personal")
+    : compat.relevance;
+  // Score < 60 → sous-titre NÉGATIF déterministe (jamais un bénéfice sous un
+  // score faible). Sinon : sous-titre IA (avec repli neutre).
+  const negative = negativeSubtitle({
+    score,
+    restrictionLabels,
+    against: againstInputs,
+    orange: ctx.orange,
+    red: ctx.red,
+  });
+  let subtitle = negative
+    ?? (compat.subtitle && compat.subtitle.trim()
+      ? compat.subtitle
+      : relevance === "personal"
+        ? "d'après ton profil"
+        : "d'après la qualité de la formule");
+  // FILET product_only : l'IA n'a pas le droit d'attribuer un besoin personnel
+  // à un produit hors profil (« ton besoin d'hydratation buccale » sur profil
+  // vide, vu en campagne E2E). Le sous-titre négatif (<60), lui, est légitime.
+  if (!negative && relevance === "product_only" && /\b(ton|ta|tes)\b/i.test(subtitle)) {
+    subtitle = "d'après la qualité de la formule";
+  }
+  // FILET allergie : si une contre-indication forcée vient d'une allergie
+  // déclarée, elle PRIME sur un sous-titre IA positif (même à score ≥ 60).
+  const allergyHit = againstInputs.find((a) => a.need.startsWith("ton allergie"));
+  if (!negative && allergyHit) {
+    subtitle = `${allergyHit.name.toLowerCase()} présent malgré ${allergyHit.need}`;
+  }
+  return { score, label, tone, subtitle, relevance, breakdown };
+}
+
+function parsePersonal(
+  raw: string | null,
+): { blocks: PersonalBlocks; compat: RawCompat | null } | null {
   if (!raw) return null;
   let jsonText = raw.trim();
   // Robustesse : extraire le 1er objet JSON si le modèle a ajouté du texte.
@@ -170,60 +353,86 @@ function parseBlocks(raw: string | null): PersonalBlocks | null {
   const skin = coerceBlock(obj.skin, "À quoi ça sert");
   const watch = coerceBlock(obj.watch, "À surveiller pour toi");
   if (!goals || !skin || !watch) return null;
-  return { goals, skin, watch };
+  return { blocks: { goals, skin, watch }, compat: coerceCompatibility(obj.compatibility) };
 }
 
-export async function generatePersonalBlocks(input: PersonalInput): Promise<PersonalBlocks | null> {
+export async function generatePersonalBlocks(input: PersonalInput): Promise<PersonalResult | null> {
   const cacheKey = await makePersonalCacheKey(input);
-  const cached = await getCached<PersonalBlocks>(cacheKey);
-  if (cached?.goals && cached?.skin && cached?.watch) return cached;
+  const cached = await getCached<PersonalResult>(cacheKey);
+  if (cached?.blocks?.goals && cached.blocks.skin && cached.blocks.watch) return cached;
 
   if (!hasOpenAI() && !hasMistral()) return null;
 
   const { system, user } = buildPrompt(input);
 
   try {
-    const blocks = await callWithFallback<PersonalBlocks | null>({
+    const parsed = await callWithFallback<{ blocks: PersonalBlocks; compat: RawCompat | null } | null>({
       feature: "personal-insights",
       userId: input.userId ?? null,
       timeoutMs: 25_000,
       primary: async () => {
         if (!hasOpenAI()) throw new Error("openai disabled");
-        const resp = await openai().chat.completions.create({
-          model: AI_MODEL,
-          temperature: 0.3,
-          max_tokens: 600,
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: user },
-          ],
-        });
-        return {
-          value: parseBlocks(resp.choices?.[0]?.message?.content ?? null),
-          tokensIn: resp.usage?.prompt_tokens,
-          tokensOut: resp.usage?.completion_tokens,
-        };
+        // SELF-CONSISTENCY (assurance user) : 3 appels EN PARALLÈLE (seeds
+        // distincts, température basse mais non nulle pour que le vote serve),
+        // puis consensus MAJORITAIRE 2/3 sur contributors / against. Les blocs
+        // texte viennent du premier run valide. Coût ×3 à
+        // la PREMIÈRE génération uniquement (le cache fige le consensus).
+        const callOnce = (seed: number) =>
+          openai().chat.completions.create({
+            model: AI_MODEL,
+            temperature: 0.2,
+            seed,
+            max_tokens: 700,
+            response_format: { type: "json_object" },
+            messages: [
+              { role: "system", content: system },
+              { role: "user", content: user },
+            ],
+          });
+        const settled = await Promise.allSettled([callOnce(11), callOnce(23), callOnce(37)]);
+        let tokensIn = 0;
+        let tokensOut = 0;
+        const runs: { blocks: PersonalBlocks; compat: RawCompat | null }[] = [];
+        for (const s of settled) {
+          if (s.status !== "fulfilled") continue;
+          tokensIn += s.value.usage?.prompt_tokens ?? 0;
+          tokensOut += s.value.usage?.completion_tokens ?? 0;
+          const p = parsePersonal(s.value.choices?.[0]?.message?.content ?? null);
+          if (p) runs.push(p);
+        }
+        if (!runs.length) return { value: null, tokensIn, tokensOut };
+        const compats = runs.map((r) => r.compat).filter((c): c is RawCompat => c !== null);
+        const compat: RawCompat | null = compats.length
+          ? {
+            contributors: majorityByIngredient(compats.map((c) => c.contributors)).slice(0, 10),
+            against: majorityByIngredient(compats.map((c) => c.against)).slice(0, 2),
+            subtitle: compats[0].subtitle,
+            relevance: compats[0].relevance,
+          }
+          : null;
+        return { value: { blocks: runs[0].blocks, compat }, tokensIn, tokensOut };
       },
       fallback: async () => {
         if (!hasMistral()) return { value: null, provider: "mistral" as const };
         const raw = await mistralChat({
           model: MISTRAL_MODEL,
-          temperature: 0.3,
-          maxTokens: 600,
+          temperature: 0.2,
+          maxTokens: 700,
           messages: [
             { role: "system", content: `${system}\n\nRéponds UNIQUEMENT avec l'objet JSON, rien d'autre.` },
             { role: "user", content: user },
           ],
         });
-        return { value: parseBlocks(raw), provider: "mistral" as const };
+        return { value: parsePersonal(raw), provider: "mistral" as const };
       },
     });
 
-    if (!blocks) return null;
-    const enforced = enforceInvariants(blocks, {
-      orange: input.counts.Orange ?? 0,
-      red: input.counts.Rouge ?? 0,
+    if (!parsed) return null;
+    const orange = input.counts.Orange ?? 0;
+    const red = input.counts.Rouge ?? 0;
+    const blocks = enforceInvariants(parsed.blocks, {
+      orange,
+      red,
       scoreTone: input.scoreTone ?? null,
       restrictionHit: input.restrictionMatches.length > 0,
       signalCats: [
@@ -236,8 +445,17 @@ export async function generatePersonalBlocks(input: PersonalInput): Promise<Pers
         ),
       ],
     });
-    void setCached(cacheKey, enforced);
-    return enforced;
+    const compatibility = enforceCompatibility(parsed.compat, {
+      orange,
+      red,
+      restrictionMatches: input.restrictionMatches,
+      productOnly: input.productOnly,
+      scoreOver20: input.score,
+      forcedAgainst: input.forcedAgainst,
+    });
+    const result: PersonalResult = { blocks, compatibility };
+    void setCached(cacheKey, result);
+    return result;
   } catch {
     return null;
   }

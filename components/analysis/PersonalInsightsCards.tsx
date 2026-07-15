@@ -39,7 +39,10 @@ export type PersonalBlocks = { goals: Block; skin: Block; watch: Block }
 // `PERSONAL_PROMPT_VERSION` de supabase/functions/personal-insights/lib.ts.
 // Sert à détecter des blocs persistés PÉRIMÉS (générés sous un ancien prompt)
 // et à déclencher un rafraîchissement silencieux (gratuit, déjà payé).
-export const PERSONAL_BLOCKS_VERSION = 10
+// v12 (juil 2026) : + score de compatibilité + objectifs transmis à l'IA.
+// v21 : bonus tout actif utile (vert OU jaune), plus de malus « jaune sans lien ».
+// v22 : fix affichage « Plafond : 0 orange » (clamp 100% n'est pas un plafond).
+export const PERSONAL_BLOCKS_VERSION = 22
 
 // Ton → couleurs pastel (halo + texte). Icône FIXE par bloc (clé).
 const TONE_VISUAL: Record<Tone, { bg: string; text: string }> = {
@@ -244,37 +247,46 @@ export const PersonalInsightsCards: FC<Props> = ({
   }
 
   // ready
-  return (
-    <View style={styles.list}>
-      {BLOCK_ORDER.map(({ key, icon }) => {
-        const block = state.blocks[key]
-        const v = TONE_VISUAL[block.tone] ?? TONE_VISUAL.neutre
-        return (
-          <WhiteCard key={key} padding={spacing.md}>
-            <View style={styles.row}>
-              <View style={styles.haloWrap}>
-                <View style={[styles.haloRing, { backgroundColor: v.bg }]} />
-                <View style={[styles.haloInner, { backgroundColor: v.bg }]}>
-                  <Image
-                    source={icon}
-                    style={[styles.blockIcon, { tintColor: v.text }]}
-                    resizeMode="contain"
-                  />
-                </View>
-              </View>
-              <View style={styles.body}>
-                <Text style={styles.title}>{block.title}</Text>
-                {block.description ? (
-                  <Text style={styles.desc}>{block.description}</Text>
-                ) : null}
+  return <PersonalBlocksList blocks={state.blocks} />
+}
+
+/**
+ * Rendu PRÉSENTATIONNEL des 3 blocs (sans fetch). Réutilisé tel quel dans le
+ * modal ouvert depuis <CompatibilityCard/> (« Ce qu'il faut retenir »).
+ * `hideSkin` : masque le bloc « à quoi sert ce produit » (demande user : pas
+ * de mode d'emploi pour un produit dont le score de compatibilité est < 60).
+ */
+export const PersonalBlocksList: FC<{ blocks: PersonalBlocks; hideSkin?: boolean }> = ({
+  blocks,
+  hideSkin,
+}) => (
+  <View style={styles.list}>
+    {BLOCK_ORDER.filter(({ key }) => !(hideSkin && key === 'skin')).map(({ key, icon }) => {
+      const block = blocks[key]
+      const v = TONE_VISUAL[block.tone] ?? TONE_VISUAL.neutre
+      return (
+        <WhiteCard key={key} padding={spacing.md}>
+          <View style={styles.row}>
+            <View style={styles.haloWrap}>
+              <View style={[styles.haloRing, { backgroundColor: v.bg }]} />
+              <View style={[styles.haloInner, { backgroundColor: v.bg }]}>
+                <Image
+                  source={icon}
+                  style={[styles.blockIcon, { tintColor: v.text }]}
+                  resizeMode="contain"
+                />
               </View>
             </View>
-          </WhiteCard>
-        )
-      })}
-    </View>
-  )
-}
+            <View style={styles.body}>
+              <Text style={styles.title}>{block.title}</Text>
+              {block.description ? <Text style={styles.desc}>{block.description}</Text> : null}
+            </View>
+          </View>
+        </WhiteCard>
+      )
+    })}
+  </View>
+)
 
 const styles = StyleSheet.create({
   list: { gap: spacing.md },

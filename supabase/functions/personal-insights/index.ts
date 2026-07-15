@@ -24,12 +24,14 @@ import {
   loadUserContext,
 } from "../synthesis/lib.ts";
 import {
+  type Compatibility,
   generatePersonalBlocks,
   type PersonalBlocks,
   profileSignature,
 } from "./lib.ts";
+import { detectForcedAgainst, relevanceVerdict } from "./relevance.ts";
 
-type Body = { analysisId?: string };
+type Body = { analysisId?: string; compat?: boolean };
 
 type StoredItem = {
   position: number;
@@ -51,6 +53,7 @@ type StoredResultJson = {
   productType?: string | null;
   personalBlocks?: PersonalBlocks | null;
   personalBlocksKey?: string | null;
+  compatibility?: Compatibility | null;
 };
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -81,7 +84,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const { data: row, error: rowError } = await supabase
     .schema("cosme_check")
     .from("analyses")
-    .select("id, user_id, product_label, score, result_json")
+    .select("id, user_id, product_label, product_type, category, score, result_json")
     .eq("id", analysisId)
     .single();
   if (rowError || !row) return jsonResponse({ error: "Analyse introuvable." }, { status: 404 });
@@ -93,12 +96,36 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   // ── Profil + restrictions → signature ───────────────────────────────────────
-  const { profileBlock, restrictions } = await loadUserContext(supabase, user.id);
+  const { profileBlock, skin, restrictions } = await loadUserContext(supabase, user.id);
   const sig = await profileSignature(profileBlock, restrictions.block);
+  // `||` (pas `??`) : une chaîne VIDE doit retomber sur le champ suivant.
+  // FALLBACK COLONNES DB (fix juil 2026) : les analyses anciennes n'ont pas de
+  // catégorie dans result_json → sans ce repli, un hydratant corps passait en
+  // « produit du quotidien » (product_only) et perdait ses bonus profil.
+  const category = resultJson.productType || resultJson.catalogCategory || resultJson.category
+    || (row.product_type as string | null) || (row.category as string | null) || null;
 
   // ── Court-circuit gratuit (déjà généré pour ce profil ET version courante) ──
   if (resultJson.personalBlocks && resultJson.personalBlocksKey === sig) {
-    return jsonResponse({ blocks: resultJson.personalBlocks });
+    return jsonResponse({
+      blocks: resultJson.personalBlocks,
+      compatibility: resultJson.compatibility ?? null,
+    });
+  }
+
+  // ── Pré-check pertinence AVANT tout crédit / appel IA ───────────────────────
+  // Produit rattaché à un axe du profil (peau/cheveux) mais axe VIDE → on NE
+  // débite PAS et on renvoie l'utilisateur compléter EXACTEMENT la bonne section.
+  // Produit hors profil (dentifrice, déo, accessoire…) → jamais bloqué (le score
+  // se basera sur la qualité de la formule, MODE product_only).
+  // Le blocage « profil incomplet » n'est activé QUE si le client le demande
+  // (compat:true). RÉTRO-COMPATIBILITÉ : les anciens clients (sans le flag)
+  // reçoivent toujours leurs 3 blocs comme avant + le score (qu'ils ignorent) ;
+  // ils ne sont jamais bloqués → déploiement edge sûr avant rebuild des apps.
+  const wantCompat = body.compat === true;
+  const verdict = relevanceVerdict(category, skin);
+  if (wantCompat && verdict.kind === "profile_incomplete") {
+    return jsonResponse({ profileIncomplete: true, missingSection: verdict.missingSection });
   }
 
   // ── CRÉDIT : seule la PREMIÈRE génération coûte 1 crédit ────────────────────
@@ -150,7 +177,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     restriction_reason: reasonByPosition.get(it.position) ?? null,
   }));
 
-  const blocks = await generatePersonalBlocks({
+  const result = await generatePersonalBlocks({
     enriched,
     counts: {
       Vert: resultJson.counts?.vert ?? 0,
@@ -162,27 +189,39 @@ Deno.serve(async (req: Request): Promise<Response> => {
     scoreLabel: resultJson.scoreLabel ?? "",
     scoreTone: resultJson.scoreTone ?? null,
     productLabel: row.product_label ?? null,
-    category: resultJson.productType ?? resultJson.catalogCategory ?? resultJson.category ?? null,
+    category,
     userId: user.id,
     profileBlock,
     restrictionsBlock: restrictions.block,
     restrictionMatches: matches,
+    // product_only (ou profil incomplet non bloqué côté vieux client) → score
+    // basé sur la QUALITÉ, jamais zéroté par l'IA faute de matching profil.
+    productOnly: verdict.kind !== "personal",
+    // Filets déterministes (le LLM les rate parfois) : alcool asséchant × peau
+    // sèche/sensible, allergie texte libre × ingrédient présent.
+    forcedAgainst: verdict.kind === "personal" ? detectForcedAgainst(items, skin) : [],
   });
 
-  if (!blocks) {
+  if (!result) {
     return jsonResponse(
       { error: "Génération indisponible pour le moment." },
       { status: 503 },
     );
   }
+  const { blocks, compatibility } = result;
 
   // ── Persiste (relecture instantanée + gratuite) ─────────────────────────────
-  const updatedJson = { ...resultJson, personalBlocks: blocks, personalBlocksKey: sig };
+  const updatedJson = {
+    ...resultJson,
+    personalBlocks: blocks,
+    personalBlocksKey: sig,
+    compatibility,
+  };
   await supabase
     .schema("cosme_check")
     .from("analyses")
     .update({ result_json: updatedJson })
     .eq("id", analysisId);
 
-  return jsonResponse({ blocks });
+  return jsonResponse({ blocks, compatibility });
 });

@@ -13,7 +13,22 @@
 import type { ColorRating } from "../synthesis/prompt.ts";
 import type { RestrictionMatch } from "../synthesis/lib.ts";
 
-export const PERSONAL_PROMPT_VERSION = 11;
+// v12 (juil 2026) : + score de COMPATIBILITÉ (0-100) et objectifs enfin
+// transmis (le port serveur avait oublié `goals`). Bumper INVALIDE les blocs
+// persistés sous v11 → régénération gratuite (déjà payée) au prochain montage.
+// v19 : recalibrage après campagne E2E (20 cas) — allergie texte libre et
+// alcool asséchant → against OBLIGATOIRES ; conservateurs doux → presque
+// toujours neutres ; priorité de ZONE (shampoing → besoins cheveux) ;
+// product_only : subtitle sans « ton/ta/tes » (+ filet code).
+// v18 : neutralYellows. v17 : sous-titre négatif <60 + fallback catégorie.
+// v20 : ASSURANCE — vote majoritaire 2/3 sur 3 appels parallèles (seeds fixes,
+// temp 0.2) + table catégories exacte par slug (cartographie réelle catalogue).
+// v21 : bonus = +2 par actif UTILE (VERT OU JAUNE : un jaune bénéfique compte
+// comme un vert) ; SUPPRESSION du malus « jaune sans lien » et du concept
+// neutralYellows (un jaune neutre n'est plus pénalisé, la note /20 le fait déjà).
+// v22 : fix affichage — la ligne « Plafond » ne s'affiche plus quand 0 orange/
+// rouge (le clamp à 100% n'est pas un plafond). Bump = flush du breakdown caché.
+export const PERSONAL_PROMPT_VERSION = 22;
 
 export type PersonalInput = {
   enriched: {
@@ -40,6 +55,11 @@ export type PersonalInput = {
   profileBlock?: string | null;
   restrictionsBlock?: string | null;
   restrictionMatches: RestrictionMatch[];
+  /** Produit hors profil (déterminé serveur) → score = qualité, pas l'IA. */
+  productOnly?: boolean;
+  /** Contre-indications GARANTIES par le code (alcool asséchant, allergie
+   *  texte libre) — fusionnées avec celles de l'IA, mêmes -5. */
+  forcedAgainst?: { name: string; need: string }[];
 };
 
 export function buildPrompt(input: PersonalInput): { system: string; user: string } {
@@ -65,8 +85,9 @@ export function buildPrompt(input: PersonalInput): { system: string; user: strin
   const system = [
     "Tu es l'expert beauté de l'app : une référence qui SAIT et qui TRANCHE. Tu PARLES DIRECTEMENT à UNE personne en la TUTOYANT, comme un conseiller en face d'elle. Tu génères 3 encarts courts et factuels à partir d'une analyse INCI, du TYPE de produit et du profil.",
     "Réponds UNIQUEMENT en JSON strict, sans texte autour :",
-    `{"goals":{"title":"","description":"","tone":""},"skin":{"title":"","description":"","tone":""},"watch":{"title":"","description":"","tone":""}}`,
-    "Chaque bloc DOIT avoir les 3 champs NON VIDES : title (≤ 42 caractères), description (≤ 150 caractères, 1 phrase nette) ET tone (parmi \"vert\"|\"ambre\"|\"rouge\"|\"neutre\"). Ne jamais omettre tone ni description, même pour \"Rien à surveiller\" (alors tone=\"vert\").",
+    `{"compatibility":{"contributors":[{"ingredient":"","need":""}],"against":[{"ingredient":"","need":""}],"subtitle":"","relevance":"personal|product_only"},"goals":{"title":"","description":"","tone":""},"skin":{"title":"","description":"","tone":""},"watch":{"title":"","description":"","tone":""}}`,
+    "Chaque bloc goals/skin/watch DOIT avoir les 3 champs NON VIDES : title (≤ 42 caractères), description (≤ 150 caractères, 1 phrase nette) ET tone (parmi \"vert\"|\"ambre\"|\"rouge\"|\"neutre\"). Ne jamais omettre tone ni description, même pour \"Rien à surveiller\" (alors tone=\"vert\").",
+    "Le bloc compatibility DOIT avoir : contributors (tableau), against (tableau), relevance (\"personal\" ou \"product_only\") ET subtitle NON VIDE.",
     "",
     "ÉTAPE 1 - PERTINENCE (décide AVANT d'écrire). Le produit concerne-t-il RÉELLEMENT un élément du profil (un objectif, une préoccupation, le type de peau, une allergie/restriction, ou les cheveux SI le profil en parle) ?",
     "- Un après-shampooing / soin cheveux n'est PERTINENT que si le profil parle de cheveux.",
@@ -109,6 +130,19 @@ export function buildPrompt(input: PersonalInput): { system: string; user: strin
     "BLOC watch (TOUJOURS, mode A ou B) : ingrédients à surveiller. REGARDE les Comptes (Orange=, Rouge=) fournis.",
     "- Si Orange >= 1 OU Rouge >= 1 OU une restriction matche, tu DOIS le signaler en nommant la CATÉGORIE concernée (ex : « parfum », « conservateurs », « alcool », « agents lavants »). INTERDIT ABSOLU d'écrire « Rien à surveiller » dans ce cas, c'est une FAUTE.",
     "- tone du watch : ROUGE dès qu'il y a au moins un Rouge OU une restriction de la personne dans « À SIGNALER » (une restriction = alerte rouge, MÊME si l'ingrédient n'est qu'orange) ; AMBRE seulement s'il n'y a QUE des oranges et AUCUNE restriction ; vert UNIQUEMENT si Orange=0, Rouge=0 ET 0 restriction (alors title « Rien à surveiller »).",
+    "",
+    "BLOC compatibility - CONTRIBUTEURS PROFIL (tu ne donnes AUCUN chiffre : le système compte +2 par ingrédient UTILE listé, VERT OU JAUNE, et -5 par contre-indication). IMPORTANT : un ingrédient neutre/technique SANS lien avec le profil n'est PLUS pénalisé, ne le liste NULLE PART.",
+    "- relevance : \"personal\" si le produit est PERTINENT pour le profil (MODE A) ; \"product_only\" s'il ne l'est pas OU si le profil est vide (MODE B).",
+    "- contributors (0 à 10) : les ingrédients (VERTS OU JAUNES) de la formule qui APPORTENT réellement quelque chose au profil déclaré (objectif, préoccupation, type de peau/cheveux). La COULEUR n'a pas d'importance : un JAUNE bénéfique (ex : acide salicylique pour l'acné, un agent apaisant, un antipelliculaire) compte EXACTEMENT comme un vert et reçoit le même bonus. Sois GÉNÉREUX mais honnête : un humectant sert « ton objectif hydratation », un agent apaisant sert « ta peau sensible », un antipelliculaire sert « tes pellicules », un agent lavant doux sert « ton cuir chevelu sensible »… Ne laisse pas la liste vide si des ingrédients servent VRAIMENT le profil.",
+    "  · ingredient : nom GRAND PUBLIC (jamais INCI). need : le besoin EXACT du profil servi, tutoyé et court.",
+    "  · N'y mets QUE des ingrédients réellement UTILES au profil. Un ingrédient purement TECHNIQUE et sans lien (conservateur, régulateur de pH, épaississant, sel, émulsifiant… qui ne sert AUCUN besoin déclaré) n'est NI un contributeur NI une contre-indication : ne le liste pas du tout, il n'aura ni bonus ni malus.",
+    "  · PRIORITÉ DE ZONE : cite d'abord les besoins de la MÊME zone que le produit (produit capillaire -> besoins CHEVEUX du profil en premier ; soin visage -> besoins VISAGE ; soin corps -> besoins CORPS). Le subtitle reflète le besoin le plus fort de CETTE zone (ex : shampooing antipelliculaire + pellicules déclarées -> parle des pellicules, pas d'hydratation).",
+    "- against (0 à 2 MAX) : ingrédients (toute couleur) clairement CONTRE-INDIQUÉS / DANGEREUX pour CE profil précis. {ingredient, need}. need = l'élément EXACT du profil concerné (ex « ta peau sensible »), JAMAIS une action (pas de « éviter les irritations »). DEUX CAS OBLIGATOIRES :",
+    "  · Une ALLERGIE déclarée (y compris en texte libre, ex « allergique au parfum ») à un ingrédient PRÉSENT dans la formule -> mets cet ingrédient dans against (need = « ton allergie au parfum »).",
+    "  · Un alcool asséchant (Alcohol, Alcohol Denat) alors que peau sèche OU sensible est déclarée -> against (need = « ta peau sensible/sèche »). Autres cas certains : huile très comédogène alors qu'acné déclarée.",
+    "- INTERDIT d'inventer un lien. Ne mets JAMAIS une restriction déclarée dans against (et n'écris jamais le mot « restriction » dans un need) : le système pénalise les restrictions séparément (-8 chacune) ; toi tu les mentionnes dans watch et éventuellement subtitle.",
+    "- MODE product_only : contributors = [] et against = [] (le score sera la qualité de la formule).",
+    "- subtitle : phrase COURTE (≤ 60 caractères) affichée sous le score. Tutoiement, langage grand public, AUCUN nom INCI, commence en MINUSCULE, sans point final. MODE personal : dis le lien le PLUS FORT de la zone du produit (ex « répond à tes pellicules ») ou l'alerte dominante (ex « contient un parfum que tu évites »). MODE product_only : décris la formule OBJECTIVEMENT (ex « bonne formule lavante douce ») ; INTERDIT d'utiliser « ton/ta/tes » (aucun besoin personnel : le profil ne s'applique pas à ce produit).",
     "",
     "COHÉRENCE COULEURS (impératif, EN MODE A COMME EN MODE B) : le tone du bloc goals DOIT refléter les pastilles, jamais les contredire.",
     "- 0 orange et 0 rouge : goals peut être positif (tone vert).",
@@ -155,7 +189,7 @@ export function buildPrompt(input: PersonalInput): { system: string; user: strin
     "ROUGES :",
     reds.length ? reds.slice(0, 8).map(fmt).join("\n") : "(aucun)",
     "",
-    "Génère maintenant les 3 blocs en JSON strict (goals, skin, watch).",
+    "Génère maintenant le tout en JSON strict (compatibility, goals, skin, watch).",
   ].join("\n");
 
   return { system, user };

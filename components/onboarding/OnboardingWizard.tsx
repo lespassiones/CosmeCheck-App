@@ -46,6 +46,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated'
+import { useLocalSearchParams } from 'expo-router'
 
 import { useProfile } from '@/hooks/useProfile'
 import { setNewsletterConsent } from '@/lib/newsletter/subscribe'
@@ -368,7 +369,16 @@ export const OnboardingWizard: FC<Props> = ({ onStepChange }) => {
     updateProfile,
   } = useProfile()
 
-  const [index, setIndex] = useState(0)
+  // Deep-link « compléter la section manquante » depuis le score de
+  // compatibilité : ?section=hair démarre sur la question cheveux, sinon peau.
+  const { section } = useLocalSearchParams<{ section?: string }>()
+  const [index, setIndex] = useState(() => {
+    if (section === 'hair') {
+      const i = STEPS.findIndex((s) => s.id === 'hairState')
+      return i >= 0 ? i : 0
+    }
+    return 0
+  })
   const [dir, setDir] = useState<1 | -1>(1)
   const [profile, setProfile] = useState<SkinProfile>(skin)
   const [finishing, setFinishing] = useState(false)

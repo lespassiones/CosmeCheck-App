@@ -50,12 +50,13 @@ import {
 import { checkRestrictions } from '@/lib/restrictions/check'
 
 import { BigScoreCard } from './BigScoreCard'
-import { EssentielView, EssentielToggleButton } from './EssentielView'
+import { EssentielToggleButton } from './EssentielView'
 import { IngredientSpectrum } from './IngredientSpectrum'
 import { ObservationsCard } from './ObservationsCard'
 import { PenaltySummaryStrip } from './PenaltySummaryStrip'
 import { ProductRow } from './ProductRow'
-import { PersonalInsightsCards, type PersonalBlocks } from './PersonalInsightsCards'
+import { type PersonalBlocks } from './PersonalInsightsCards'
+import { CompatibilityCard, type Compatibility } from './CompatibilityCard'
 import { ReviewPromptCard } from '@/components/review/ReviewPromptCard'
 import { loadReviewState, saveReviewState } from '@/lib/review/storage'
 import { markDone, markShown, shouldAskReview } from '@/lib/review/prompt'
@@ -237,6 +238,8 @@ export const AnalysisResultPanel: FC<Props> = ({
     (result as { personalBlocks?: PersonalBlocks | null }).personalBlocks ?? null
   const personalBlocksKey =
     (result as { personalBlocksKey?: string | null }).personalBlocksKey ?? null
+  const compatibility =
+    (result as { compatibility?: Compatibility | null }).compatibility ?? null
 
   // Couleur dérivée UNIQUEMENT du score (source unique ; jamais du scoreTone
   // stocké) → la même pastille partout (analyse = reco = recherche = browse).
@@ -417,27 +420,20 @@ export const AnalysisResultPanel: FC<Props> = ({
 
   return (
     <View style={styles.root}>
-      {/* 1. Essentiel — 3 cartes (toggle rendu séparément en dessous) */}
-      <EssentielView
-        data={essentiel}
-        expanded={detailsExpanded}
-        onToggle={() => setDetailsExpanded((v) => !v)}
-        hideToggle
-        verdictScore={verdictScore}
-        penalizingCount={penalizingCount}
-        restrictedCount={restrictedCount}
-        restrictedFamilies={restrictedFamilies}
-        onManageRestrictions={onViewRestrictionsPress}
-        onShowRestrictedFamilies={() => setFamiliesModalOpen(true)}
-      />
-
-      {/* 3 blocs IA personnalisés (objectifs / peau / à surveiller) — lazy,
-          1 crédit à la génération, verrouillés→/offre si 0 crédit. */}
-      <PersonalInsightsCards
+      {/* Score de compatibilité (« Pour toi ») — MÊME appel IA que les 3 blocs
+          (1 crédit à la génération, gratuit en relecture). Le tap ouvre le modal
+          « Ce qu'il faut retenir » (les 3 blocs). La ligne restrictions vit dans
+          cette carte. Verrous : /offre si 0 crédit ; « compléter le profil »
+          (deep-link section exacte) si l'axe requis n'est pas renseigné. */}
+      <CompatibilityCard
         analysisId={analysisId}
+        initialCompatibility={compatibility}
         initialBlocks={personalBlocks}
         initialBlocksKey={personalBlocksKey}
-        onBlocksReady={handleBlocksReady}
+        restrictedCount={restrictedCount}
+        onManageRestrictions={onViewRestrictionsPress}
+        onShowRestrictedFamilies={() => setFamiliesModalOpen(true)}
+        onReady={handleBlocksReady}
       />
 
       {/* Cartes de sollicitation (exclusives, cf. handleBlocksReady) : re-demande
