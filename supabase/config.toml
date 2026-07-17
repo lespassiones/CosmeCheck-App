@@ -51,8 +51,13 @@ verify_jwt = true
 verify_jwt = true
 [functions.personal-insights]
 verify_jwt = true
+# goals-coverage : verify_jwt=FALSE (17 juil 2026). Appelée DIRECTEMENT depuis le
+# navigateur (web cosme-check.com) via supabase.functions.invoke -> le preflight
+# CORS OPTIONS ne porte pas d'Authorization ; avec verify_jwt=true la PLATEFORME
+# le rejetait (401 sans header CORS) AVANT le code -> erreur CORS côté web.
+# gate() authentifie déjà le Bearer en interne (401 sinon) -> sécurité inchangée.
 [functions.goals-coverage]
-verify_jwt = true
+verify_jwt = false
 [functions.routine-smart-suggest]
 verify_jwt = true
 [functions.routine-conflicts-ai]
