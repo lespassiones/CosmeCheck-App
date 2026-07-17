@@ -222,9 +222,16 @@ export type SkinProfile = {
   allergiesFreeform?: string
   otherConcerns?: string
   otherHair?: string
+  /** « Autre » inline de l'étape préoccupations cheveux. */
+  otherHairConcerns?: string
   otherNotes?: string
   goals?: ProfileGoal[]
   otherGoals?: string
+  /** « Autre » inline par sous-étape objectifs. */
+  otherGoalsFace?: string
+  otherGoalsBody?: string
+  otherGoalsHair?: string
+  otherGoalsRoutine?: string
 }
 
 export function readSkinProfile(
@@ -295,9 +302,14 @@ export function readSkinProfile(
     allergiesFreeform: readShort('allergiesFreeform', 500),
     otherConcerns: readShort('otherConcerns', 300),
     otherHair: readShort('otherHair', 200),
+    otherHairConcerns: readShort('otherHairConcerns', 200),
     otherNotes: readShort('otherNotes', 500),
     goals: goals.length > 0 ? goals : undefined,
     otherGoals: readShort('otherGoals', 300),
+    otherGoalsFace: readShort('otherGoalsFace', 200),
+    otherGoalsBody: readShort('otherGoalsBody', 200),
+    otherGoalsHair: readShort('otherGoalsHair', 200),
+    otherGoalsRoutine: readShort('otherGoalsRoutine', 200),
   }
 }
 
@@ -312,10 +324,15 @@ export function isProfileStarted(p: SkinProfile): boolean {
     Boolean(p.otherConcerns) ||
     (p.hairConcerns?.length ?? 0) > 0 ||
     Boolean(p.otherHair) ||
+    Boolean(p.otherHairConcerns) ||
     Boolean(p.allergiesFreeform) ||
     Boolean(p.otherNotes) ||
     (p.goals?.length ?? 0) > 0 ||
-    Boolean(p.otherGoals)
+    Boolean(p.otherGoals) ||
+    Boolean(p.otherGoalsFace) ||
+    Boolean(p.otherGoalsBody) ||
+    Boolean(p.otherGoalsHair) ||
+    Boolean(p.otherGoalsRoutine)
   )
 }
 
@@ -327,13 +344,20 @@ export function isProfileComplete(p: SkinProfile): boolean {
     Boolean(p.skinTypeBody) ||
     Boolean(p.otherSkinTypeBody) ||
     (p.hairConcerns?.length ?? 0) > 0 ||
-    Boolean(p.otherHair)
+    Boolean(p.otherHair) ||
+    Boolean(p.otherHairConcerns)
   const concernsDone =
     (p.concerns?.length ?? 0) > 0 ||
     Boolean(p.otherConcerns) ||
     Boolean(p.allergiesFreeform) ||
     Boolean(p.otherNotes)
-  const goalsDone = (p.goals?.length ?? 0) > 0 || Boolean(p.otherGoals)
+  const goalsDone =
+    (p.goals?.length ?? 0) > 0 ||
+    Boolean(p.otherGoals) ||
+    Boolean(p.otherGoalsFace) ||
+    Boolean(p.otherGoalsBody) ||
+    Boolean(p.otherGoalsHair) ||
+    Boolean(p.otherGoalsRoutine)
   const filled = [skinDone, concernsDone, goalsDone].filter(Boolean).length
   return filled >= 2
 }

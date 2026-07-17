@@ -41,6 +41,18 @@ export function isoWeekKey(date: Date = new Date()): string {
   return `${year}-W${String(week).padStart(2, '0')}`
 }
 
+/**
+ * Clé de JOUR calendaire LOCAL, ex. '2026-07-17'. Bascule à minuit heure locale
+ * (même convention "date calendaire locale" que la semaine ISO ci-dessus).
+ * Utilisée par les Pépites (rotation QUOTIDIENNE déterministe).
+ */
+export function localDayKey(date: Date = new Date()): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 /** Jour ISO 1..7 (1 = lundi, 7 = dimanche) en calendrier local. */
 export function isoWeekday(date: Date): number {
   return ((date.getDay() + 6) % 7) + 1

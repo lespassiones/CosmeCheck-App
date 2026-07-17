@@ -28,6 +28,7 @@ import {
 import { stripLongDashes } from "../_shared/sanitize.ts";
 import { buildPrompt, PERSONAL_PROMPT_VERSION, type PersonalInput } from "./prompt.ts";
 import {
+  AGAINST_MAX,
   buildCompatLines,
   composeCompatScore,
   majorityByIngredient,
@@ -226,7 +227,7 @@ function coerceCompatibility(raw: unknown): RawCompat | null {
         return { ingredient, need };
       })
       .filter((m): m is RawAgainst => m !== null)
-      .slice(0, 2)
+      .slice(0, 15) // borne large : le cap final (AGAINST_MAX) est appliqué dans enforce
     : [];
   return { contributors, against, subtitle, relevance };
 }
@@ -242,6 +243,9 @@ function enforceCompatibility(
     orange: number;
     red: number;
     restrictionMatches: PersonalInput["restrictionMatches"];
+    /** Familles DÉDUITES du profil détectées dans le produit (mêmes -8 que les
+     *  restrictions cochées, dédoublonnées par slug contre les cochées). */
+    inferredMatches?: PersonalInput["restrictionMatches"];
     productOnly?: boolean;
     scoreOver20?: number;
     forcedAgainst?: { name: string; need: string }[];
@@ -251,48 +255,73 @@ function enforceCompatibility(
   // ANTI-DOUBLE-COMPTAGE : un ingrédient déjà pénalisé comme RESTRICTION (-8)
   // ne peut pas être re-pénalisé en contre-indication (-5). Match par nom
   // (inclusion bidirectionnelle, insensible à la casse).
-  const restrictedNames = ctx.restrictionMatches
+  // INSENSIBLE AUX ACCENTS : le match restriction porte l'INCI brut
+  // (« Dimethicone »), l'IA écrit le nom en français (« Diméthicone ») → sans
+  // dé-accentuation l'inclusion échouait et le silicone était compté 2×
+  // (-5 contre-indication ET -8 restriction famille). Fix calcul juil 2026.
+  const norm = (s: string | null | undefined) =>
+    (s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  const restrictedNames = [...ctx.restrictionMatches, ...(ctx.inferredMatches ?? [])]
     .flatMap((m) => [m.inciName, m.label])
-    .map((s) => (s ?? "").toLowerCase().trim())
+    .map(norm)
     .filter(Boolean);
-  const against = compat.against.filter((a) => {
-    const n = a.ingredient.toLowerCase().trim();
-    // L'IA glisse parfois une RESTRICTION dans against (« à éviter pour tes
-    // restrictions sur les sulfates ») → double-comptage -5 ET -8. Le mot
-    // « restriction » dans le besoin trahit ce cas : on l'écarte (le -8 suffit).
-    if (/restriction/i.test(a.need)) return false;
-    return !restrictedNames.some((r) => r.includes(n) || n.includes(r));
-  });
-  // Contre-indications GARANTIES (code) : fusion avec celles de l'IA, même
-  // filtre anti-double-comptage restrictions, dédup par nom, cap à 2.
-  const aiAgainst = against.map((a) => ({ name: a.ingredient, need: a.need }));
-  const forced = (ctx.forcedAgainst ?? []).filter((f) => {
-    const n = f.name.toLowerCase().trim();
-    if (restrictedNames.some((r) => r.includes(n) || n.includes(r))) return false;
-    return !aiAgainst.some((a) => {
-      const an = a.name.toLowerCase().trim();
-      return an.includes(n) || n.includes(an);
+  const isRestricted = (n: string) => {
+    const nn = norm(n);
+    return nn.length > 0 && restrictedNames.some((r) => r.includes(nn) || nn.includes(r));
+  };
+  // Contre-indications GARANTIES (filets code) : PRIORITAIRES et fiables. On
+  // écarte celles déjà couvertes par une restriction (pénalisée -8 séparément).
+  const forced = (ctx.forcedAgainst ?? [])
+    .map((f) => ({ name: f.name, need: f.need }))
+    .filter((f) => !isRestricted(f.name.toLowerCase().trim()));
+  // Contre-indications IA : on retire une éventuelle RESTRICTION (double-comptage
+  // -5/-8, trahie par le mot « restriction » dans le besoin) et les doublons d'un forced.
+  const aiAgainst = compat.against
+    .filter((a) => !/restriction/i.test(a.need))
+    .map((a) => ({ name: a.ingredient, need: a.need }))
+    .filter((a) => {
+      const n = a.name.toLowerCase().trim();
+      if (isRestricted(n)) return false;
+      return !forced.some((f) => { const fn = f.name.toLowerCase().trim(); return fn.includes(n) || n.includes(fn); });
     });
-  });
-  const againstInputs = [...aiAgainst, ...forced].slice(0, 2);
-  const iaLines = buildCompatLines({
-    contributors: compat.contributors.map((c) => ({ name: c.ingredient })),
-    against: againstInputs,
-  });
-  // Restrictions DISTINCTES présentes → libellés (une ligne -8 chacune).
+  const againstInputs = [...forced, ...aiAgainst].slice(0, AGAINST_MAX);
+  // ANTI-CONTRADICTION : un ingrédient « à éviter » ne peut PAS être aussi un
+  // « actif utile » (vu E2E : huile de coco comptée en bonus ET comédogène acné).
+  const contributors = compat.contributors
+    .map((c) => ({ name: c.ingredient }))
+    .filter((c) => {
+      const n = c.name.toLowerCase().trim();
+      return !againstInputs.some((a) => { const an = a.name.toLowerCase().trim(); return an.includes(n) || n.includes(an); });
+    });
+  const iaLines = buildCompatLines({ contributors, against: againstInputs });
+  // Restrictions COCHÉES distinctes présentes → libellés (une ligne -8 chacune).
+  // On retient les slugs de famille cochés pour ne PAS re-pénaliser une famille
+  // déjà cochée via l'inférence.
   const seen = new Set<string>();
+  const checkedFamilySlugs = new Set<string>();
   const restrictionLabels: string[] = [];
   for (const m of ctx.restrictionMatches) {
     const key = `${m.kind}:${m.slug}`;
     if (seen.has(key)) continue;
     seen.add(key);
+    if (m.kind === "family" && m.slug) checkedFamilySlugs.add(m.slug);
     restrictionLabels.push(m.label);
+  }
+  // Sensibilités DÉDUITES du profil détectées dans le produit → MÊME -8, MAIS
+  // uniquement pour les familles NON déjà cochées (sinon double -8). Dédup par slug.
+  const inferredSeen = new Set<string>();
+  const inferredRestrictionLabels: string[] = [];
+  for (const m of ctx.inferredMatches ?? []) {
+    if (!m.slug || checkedFamilySlugs.has(m.slug) || inferredSeen.has(m.slug)) continue;
+    inferredSeen.add(m.slug);
+    inferredRestrictionLabels.push(m.label);
   }
   const { score, label, tone, breakdown } = composeCompatScore({
     scoreOver20: ctx.scoreOver20 ?? 0,
     orange: ctx.orange,
     red: ctx.red,
     iaLines,
+    inferredRestrictionLabels,
     restrictionLabels,
     productOnly: ctx.productOnly,
   });
@@ -307,9 +336,11 @@ function enforceCompatibility(
   const negative = negativeSubtitle({
     score,
     restrictionLabels,
+    inferredCount: inferredRestrictionLabels.length,
     against: againstInputs,
     orange: ctx.orange,
     red: ctx.red,
+    productOnly: ctx.productOnly,
   });
   let subtitle = negative
     ?? (compat.subtitle && compat.subtitle.trim()
@@ -405,7 +436,7 @@ export async function generatePersonalBlocks(input: PersonalInput): Promise<Pers
         const compat: RawCompat | null = compats.length
           ? {
             contributors: majorityByIngredient(compats.map((c) => c.contributors)).slice(0, 10),
-            against: majorityByIngredient(compats.map((c) => c.against)).slice(0, 2),
+            against: majorityByIngredient(compats.map((c) => c.against)).slice(0, 15),
             subtitle: compats[0].subtitle,
             relevance: compats[0].relevance,
           }
@@ -434,9 +465,10 @@ export async function generatePersonalBlocks(input: PersonalInput): Promise<Pers
       orange,
       red,
       scoreTone: input.scoreTone ?? null,
-      restrictionHit: input.restrictionMatches.length > 0,
+      restrictionHit: input.restrictionMatches.length > 0 || (input.inferredRestrictionMatches?.length ?? 0) > 0,
       signalCats: [
         ...new Set(input.restrictionMatches.map((m) => m.label).filter(Boolean)),
+        ...new Set((input.inferredRestrictionMatches ?? []).map((m) => m.label).filter(Boolean)),
         ...new Set(
           input.enriched
             .filter((r) => r.color_rating === "Orange" || r.color_rating === "Rouge")
@@ -449,6 +481,7 @@ export async function generatePersonalBlocks(input: PersonalInput): Promise<Pers
       orange,
       red,
       restrictionMatches: input.restrictionMatches,
+      inferredMatches: input.inferredRestrictionMatches,
       productOnly: input.productOnly,
       scoreOver20: input.score,
       forcedAgainst: input.forcedAgainst,

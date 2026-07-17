@@ -149,9 +149,14 @@ export type SkinProfile = {
   allergiesFreeform?: string;
   otherConcerns?: string;
   otherHair?: string;
+  otherHairConcerns?: string;
   otherNotes?: string;
   goals?: ProfileGoal[];
   otherGoals?: string;
+  otherGoalsFace?: string;
+  otherGoalsBody?: string;
+  otherGoalsHair?: string;
+  otherGoalsRoutine?: string;
 };
 
 /** Port byte-for-byte (champs utiles à la synthèse) de readSkinProfile. */
@@ -215,9 +220,14 @@ export function readSkinProfile(prefs: Record<string, unknown> | null | undefine
     allergiesFreeform: readShort("allergiesFreeform", 500),
     otherConcerns: readShort("otherConcerns", 300),
     otherHair: readShort("otherHair", 200),
+    otherHairConcerns: readShort("otherHairConcerns", 200),
     otherNotes: readShort("otherNotes", 500),
     goals: goals.length > 0 ? goals : undefined,
     otherGoals: readShort("otherGoals", 300),
+    otherGoalsFace: readShort("otherGoalsFace", 200),
+    otherGoalsBody: readShort("otherGoalsBody", 200),
+    otherGoalsHair: readShort("otherGoalsHair", 200),
+    otherGoalsRoutine: readShort("otherGoalsRoutine", 200),
   };
 }
 
@@ -247,6 +257,7 @@ export function formatSkinProfileForPrompt(skin: SkinProfile): string | null {
     hairParts.push(skin.hairConcerns.map((c) => HAIR_CONCERN_LABEL[c]).join(", "));
   }
   if (skin.otherHair) hairParts.push(skin.otherHair);
+  if (skin.otherHairConcerns) hairParts.push(skin.otherHairConcerns);
   if (hairParts.length > 0) lines.push(`- Cheveux : ${hairParts.join(" ; ")}`);
 
   const goalParts: string[] = [];
@@ -254,6 +265,9 @@ export function formatSkinProfileForPrompt(skin: SkinProfile): string | null {
     goalParts.push(skin.goals.map((g) => PROFILE_GOAL_LABEL[g]).join(", "));
   }
   if (skin.otherGoals) goalParts.push(skin.otherGoals);
+  for (const og of [skin.otherGoalsFace, skin.otherGoalsBody, skin.otherGoalsHair, skin.otherGoalsRoutine]) {
+    if (og) goalParts.push(og);
+  }
   if (goalParts.length > 0) lines.push(`- Objectifs : ${goalParts.join(" ; ")}`);
 
   if (skin.allergiesFreeform) lines.push(`- Allergies / intolérances : ${skin.allergiesFreeform}`);

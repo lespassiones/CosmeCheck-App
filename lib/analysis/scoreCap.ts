@@ -1,22 +1,29 @@
 /**
- * NEUTRALISÉ (juillet 2026) — le color cap n'est PLUS appliqué.
+ * COLOR CAP — filet d'affichage par INVARIANTS de la pastille (réactivé 16 juil
+ * 2026 après l'incident « feuille verte avec 2 rouges », 870 notes corrompues
+ * en base recalculées).
  *
- * Depuis le passage à la notation propriétaire par PASTILLE, le score (0-20) est
- * déjà synthétisé dans la bande de la pastille, qui intègre le plafond PAR
- * POSITION (moteur `lib/analysis/pastille.ts`). Re-plafonner ici (règle aveugle
- * à la position : ≥1 rouge → 8.9) sur-pénaliserait à tort un produit dont le
- * rouge est en fin de liste, et divergerait du score du catalogue.
- *
- * On garde la fonction (signature inchangée) pour ne pas casser les appelants
- * (recommandations, alternatives, routine, recherche) : elle renvoie désormais
- * le score tel quel. À supprimer quand tous les appels auront été retirés.
+ * Historique : neutralisé en juillet car l'ancien cap (≥1 rouge → 8,9) était
+ * AVEUGLE À LA POSITION et sur-pénalisait un rouge en fin de liste. Mais sans
+ * AUCUN filet, une note stockée corrompue (ex. 13,56 avec 2 rouges) s'affichait
+ * « verte ». On ne remet PAS l'ancien cap : on applique uniquement les bornes
+ * que le moteur pastille (lib/analysis/pastille.ts) ne peut JAMAIS dépasser,
+ * quelle que soit la position des ingrédients :
+ *   - ≥1 rouge  → au mieux « caution » (un rouge en Queue plafonne à Jaune)  → ≤ 12,9
+ *   - ≥2 rouges → au mieux « warning » (plafond ≥ Orange)                    → ≤ 8,9
+ *   - ≥4 oranges → au mieux « warning »                                      → ≤ 8,9
+ * Un produit SAIN n'est jamais modifié (sa note respecte déjà ces bornes) ;
+ * seule une note corrompue est rabattue. Zéro sur-pénalisation.
  */
 export function applyColorCap(
   score: number,
-  _countOrange: number,
-  _countRouge: number,
+  countOrange: number,
+  countRouge: number,
 ): number {
-  return score
+  let cap = Number.POSITIVE_INFINITY
+  if (countRouge >= 2 || countOrange >= 4) cap = 8.9
+  else if (countRouge >= 1) cap = 12.9
+  return Math.min(score, cap)
 }
 
 /** Libellé court depuis un score (mêmes seuils que l'app : 17/13/9). */

@@ -445,7 +445,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
     ? `Restrictions (à appliquer toi-même) : ${[...restr.families, ...restr.ingredients.map((i) => i.name)].join(", ")}`
     : "Restrictions : aucune";
 
-  const system = buildSystemPrompt({ firstName, profile: profileStr, restrictions: restrictionsStr, routine: "Routine : (non détaillée ici)" });
+  // Récap IA « sensibilités probables » (worker profile-restriction-inference) :
+  // ajouté au contexte comme INDICES (l'utilisateur ne les a PAS cochées). Les
+  // restrictions explicites ci-dessus restent prioritaires et inchangées.
+  let inferredStr = "";
+  try {
+    const { data: infRow } = await svc.schema("cosme_check")
+      .from("profile_restriction_inference")
+      .select("items").eq("user_id", user.id).maybeSingle();
+    const items = Array.isArray(infRow?.items)
+      ? (infRow.items as { label?: string; reason?: string }[]).filter((i) => typeof i?.label === "string" && i.label.trim())
+      : [];
+    if (items.length > 0) {
+      inferredStr = `\nSensibilités probables (déduites de son profil, NON confirmées — indices à considérer, jamais présentées comme ses restrictions) : ${items.slice(0, 8).map((i) => i.reason ? `${i.label} (${i.reason})` : i.label).join(" ; ")}`;
+    }
+  } catch { /* best-effort : l'advisor marche sans le récap */ }
+
+  const system = buildSystemPrompt({ firstName, profile: profileStr + inferredStr, restrictions: restrictionsStr, routine: "Routine : (non détaillée ici)" });
 
   const client = openai();
   const streamRequested = (body as { stream?: unknown }).stream === true;

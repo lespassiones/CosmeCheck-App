@@ -204,7 +204,6 @@ function RootNavigator() {
       <Stack.Screen name="compare/index" />
       <Stack.Screen name="routine/exposition" />
       <Stack.Screen name="routine/produits" />
-      <Stack.Screen name="routine/quotidien" />
       <Stack.Screen name="routine/item/[id]" />
       <Stack.Screen name="analyse/[id]" />
       <Stack.Screen name="alternatives/[ean]" />
@@ -213,6 +212,8 @@ function RootNavigator() {
       <Stack.Screen name="promesses/[id]" />
       <Stack.Screen name="profile/index" />
       <Stack.Screen name="profile/restrictions" />
+      <Stack.Screen name="profile/objectives" />
+      <Stack.Screen name="profile/beauty" />
       <Stack.Screen name="ingredient/[slug]" />
       <Stack.Screen name="offre/index" options={{ presentation: 'modal' }} />
       <Stack.Screen name="legal/cgu" />

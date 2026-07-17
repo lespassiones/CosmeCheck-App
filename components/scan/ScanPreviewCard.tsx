@@ -13,7 +13,8 @@ import Animated, { FadeInDown } from 'react-native-reanimated'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 
-import { VerdictGauge } from '@/components/analysis/VerdictGauge'
+import { Star3D } from '@/components/analysis/Star3D'
+import { STARS_BY_TONE, STAR_PALETTE_BY_TONE, STAR_EMPTY_PALETTE } from '@/lib/analysis/qualityStars'
 import { verdictToneFromScore, type VerdictTone } from '@/lib/essentiel/engine'
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
@@ -108,8 +109,17 @@ export const ScanPreviewCard = memo(function ScanPreviewCard({ preview, onSeePro
         </Pressable>
       </View>
 
-      {/* Pastilles (haut d'analyse) */}
-      <VerdictGauge tone={tone} style={styles.gauge} />
+      {/* Étoiles « Qualité de la formule » (remplace les pastilles), pleine largeur. */}
+      <View style={styles.starsRow}>
+        {[0, 1, 2, 3, 4].map((i) => (
+          <Star3D
+            key={i}
+            gradientId={`scanstar-${i}`}
+            size={48}
+            palette={i < STARS_BY_TONE[tone] ? STAR_PALETTE_BY_TONE[tone] : STAR_EMPTY_PALETTE}
+          />
+        ))}
+      </View>
 
       <View style={styles.actions}>
         <Pressable style={styles.shareBtn} onPress={onShare} hitSlop={6} accessibilityLabel="Partager">
@@ -157,7 +167,13 @@ const styles = StyleSheet.create({
   },
   chipText: { ...typography.xs, color: colors.ink },
   close: { padding: 2 },
-  gauge: { marginTop: spacing.md, marginBottom: spacing.sm },
+  starsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+  },
   actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs },
   shareBtn: {
     flexDirection: 'row',

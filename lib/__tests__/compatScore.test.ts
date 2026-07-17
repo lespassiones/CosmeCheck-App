@@ -113,7 +113,7 @@ describe('buildCompatLines — barème v21 (bonus tout actif utile, aucun malus 
     expect(buildCompatLines({ contributors: [], against: [] })).toEqual([])
   })
 
-  it('against : -5 chacune, nommée, max 2', () => {
+  it("against : -5 chacune, nommée (jusqu'à 7)", () => {
     const out = buildCompatLines({
       contributors: [],
       against: [
@@ -125,7 +125,15 @@ describe('buildCompatLines — barème v21 (bonus tout actif utile, aucun malus 
     expect(out).toEqual([
       { label: 'Alcool : à éviter pour ta peau sèche', points: -5 },
       { label: 'Huile de coco : à éviter pour ton acné', points: -5 },
+      { label: 'Parfum : à éviter pour ta peau réactive', points: -5 },
     ])
+  })
+
+  it('against plafonné à 7 (8 proposés → 7 gardés)', () => {
+    const many = Array.from({ length: 8 }, (_, i) => ({ name: `ingredient ${i}`, need: 'ton profil' }))
+    const out = buildCompatLines({ contributors: [], against: many })
+    expect(out).toHaveLength(7)
+    expect(out.every((l) => l.points === -5)).toBe(true)
   })
 
   it('bonus + contre-indication cumulés (ordre : actifs puis à éviter)', () => {
@@ -209,7 +217,9 @@ describe('composeCompatScore — moteur additif complet', () => {
     expect(r.breakdown.lines.filter((l) => l.points === -8)).toHaveLength(4)
   })
 
-  it('product_only : les lignes IA sont IGNORÉES (score = qualité)', () => {
+  it('product_only : les lignes IA sont IGNORÉES (score = qualité), pas de liste d\'actifs dans le breakdown', () => {
+    // Le positif d'un produit hors profil est porté par les 3 blocs IA, pas par
+    // le calcul du score : ici le breakdown ne liste aucun actif (v31).
     const r = composeCompatScore({
       scoreOver20: 15, orange: 0, red: 0,
       iaLines: [{ label: 'ne devrait pas compter', points: 10 }],
@@ -219,7 +229,16 @@ describe('composeCompatScore — moteur additif complet', () => {
     expect(r.breakdown.lines).toHaveLength(0)
   })
 
-  it('plancher qualité : 8/20 (base 40) - 20 de malus IA → relevé à 24', () => {
+  it('product_only : les restrictions cochées mordent quand même (86 - 8 → 78)', () => {
+    const r = composeCompatScore({
+      scoreOver20: 17.2, orange: 0, red: 0, iaLines: [{ label: 'ignorée', points: 10 }],
+      restrictionLabels: ['Sulfates'], productOnly: true,
+    })
+    expect(r.score).toBe(78)
+    expect(r.breakdown.lines).toEqual([{ label: 'Sulfates : ta restriction', points: -8 }])
+  })
+
+  it('PAS de plancher : les contre-indications font vraiment baisser (base 40 - 20 → 20)', () => {
     const r = composeCompatScore({
       scoreOver20: 8, orange: 0, red: 0,
       iaLines: [
@@ -228,10 +247,10 @@ describe('composeCompatScore — moteur additif complet', () => {
       ],
       restrictionLabels: [],
     })
-    expect(r.score).toBe(24) // floor = 60% de 40
+    expect(r.score).toBe(20) // 40 - 20, plus de plancher artificiel à 24
   })
 
-  it('un produit VERT propre ne peut JAMAIS être « Incompatible » (invariant)', () => {
+  it('une base élevée reste proportionnelle à ses malus (base 84 - 20 → 64)', () => {
     const r = composeCompatScore({
       scoreOver20: 16.82, orange: 0, red: 0,
       iaLines: [
@@ -240,8 +259,17 @@ describe('composeCompatScore — moteur additif complet', () => {
       ],
       restrictionLabels: [],
     })
-    expect(r.score).toBeGreaterThanOrEqual(50)
-    expect(r.tone).not.toBe('rouge')
+    expect(r.score).toBe(64)
+  })
+
+  it('un produit propre SANS contre-indication reste haut (aucun malus → base + bonus)', () => {
+    const r = composeCompatScore({
+      scoreOver20: 16, orange: 0, red: 0,
+      iaLines: [{ label: '2 actifs utiles à ton profil : a, b', points: 4 }],
+      restrictionLabels: [],
+    })
+    expect(r.score).toBe(84) // 80 + 4
+    expect(r.tone).toBe('vert')
   })
 
   it('clamp haut : 20/20 + bonus → 100 max, SANS ligne « Plafond » (0 orange/rouge)', () => {
@@ -254,6 +282,20 @@ describe('composeCompatScore — moteur additif complet', () => {
     // Le clamp à 100 n'est PAS un plafond couleur : aucune ligne « Plafond : 0
     // ingrédient orange » ne doit apparaître quand il n'y a ni orange ni rouge.
     expect(r.breakdown.lines.some((l) => /Plafond/i.test(l.label))).toBe(false)
+  })
+
+  it('restriction APRÈS le plafond 100 : 20/20 + 4 actifs (+8) + 1 restriction → 92 (le bonus ne l\'absorbe pas)', () => {
+    const r = composeCompatScore({
+      scoreOver20: 20, orange: 0, red: 0,
+      iaLines: [{ label: '4 actifs utiles à ton profil : glycérine, karité, amande, aloe', points: 8 }],
+      restrictionLabels: ['Silicones'],
+    })
+    expect(r.score).toBe(92) // 100 (plafonné) - 8, PAS 100
+    // Le breakdown somme toujours (bonus écrêté par le plafond, restriction -8).
+    expect(r.breakdown.base + r.breakdown.lines.reduce((s, l) => s + l.points, 0)).toBe(92)
+    // Aucune ligne « Plafond » (clamp 100 silencieux, 0 orange), mais restriction visible.
+    expect(r.breakdown.lines.some((l) => /Plafond/i.test(l.label))).toBe(false)
+    expect(r.breakdown.lines.some((l) => l.label === 'Silicones : ta restriction')).toBe(true)
   })
 })
 

@@ -8,7 +8,7 @@
  * user_id+week_key) et le déterminisme des pépites.
  */
 
-import { isoWeekKey, isoWeekParts, isoWeekday, startOfIsoWeek } from '@/lib/skin/week'
+import { isoWeekKey, isoWeekParts, isoWeekday, localDayKey, startOfIsoWeek } from '@/lib/skin/week'
 
 describe('isoWeekKey', () => {
   it('rattache le 1er janvier 2021 à la semaine 53 de 2020 (année ISO précédente)', () => {
@@ -42,6 +42,23 @@ describe('isoWeekKey', () => {
   it('isoWeekParts expose année ISO et numéro de semaine', () => {
     expect(isoWeekParts(new Date(2021, 0, 1))).toEqual({ year: 2020, week: 53 })
     expect(isoWeekParts(new Date(2026, 6, 7))).toEqual({ year: 2026, week: 28 })
+  })
+})
+
+describe('localDayKey', () => {
+  it('formate la date locale en YYYY-MM-DD (mois/jour paddés)', () => {
+    expect(localDayKey(new Date(2026, 6, 7))).toBe('2026-07-07')
+    expect(localDayKey(new Date(2026, 11, 25))).toBe('2026-12-25')
+  })
+
+  it('bascule chaque jour (deux jours consécutifs -> clés différentes)', () => {
+    expect(localDayKey(new Date(2026, 6, 17))).not.toBe(localDayKey(new Date(2026, 6, 18)))
+  })
+
+  it('même jour, heures différentes -> même clé (stable dans la journée)', () => {
+    expect(localDayKey(new Date(2026, 6, 17, 0, 5))).toBe(
+      localDayKey(new Date(2026, 6, 17, 23, 55)),
+    )
   })
 })
 

@@ -42,7 +42,17 @@ export type PersonalBlocks = { goals: Block; skin: Block; watch: Block }
 // v12 (juil 2026) : + score de compatibilité + objectifs transmis à l'IA.
 // v21 : bonus tout actif utile (vert OU jaune), plus de malus « jaune sans lien ».
 // v22 : fix affichage « Plafond : 0 orange » (clamp 100% n'est pas un plafond).
-export const PERSONAL_BLOCKS_VERSION = 22
+// v23 : fix score — plafond 100 AVANT restrictions (100% + restriction = 92).
+// v24 : détection profil->risque musclée (against 7 + balayage), plancher retiré.
+// v25 : filets déterministes étendus (allergènes/comédogènes/sulfates) + anti-contradiction.
+// v26 : tout produit personnalisé si profil rempli (product_only = profil vide).
+// v27 : sensibilités probables (inférence) comme indices against.
+// v28 : fix anti-double-comptage insensible aux accents (silicone -5 ET -8).
+// v29 : produit hors profil → score = qualité, lignes IA informatives (0 pt).
+// v30 : sensibilités déduites du profil = -8 (comme une restriction cochée).
+// v31 : produit hors profil → le positif est porté par les 3 blocs IA (goals
+// nomme les vrais atouts d'une bonne formule), plus de liste d'actifs dans le calcul.
+export const PERSONAL_BLOCKS_VERSION = 31
 
 // Ton → couleurs pastel (halo + texte). Icône FIXE par bloc (clé).
 const TONE_VISUAL: Record<Tone, { bg: string; text: string }> = {

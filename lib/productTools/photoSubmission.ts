@@ -22,8 +22,13 @@ import { supabase, db } from '@/lib/supabase/client'
 declare const atob: (data: string) => string
 
 const BUCKET = 'cosmetwiki-products'
+// Photo standard (image produit) : très légère.
 const MAX_WIDTH = 1000
 const COMPRESS = 0.4
+// Contribution (OCR de la liste d'ingrédients) : plus haute résolution pour
+// rester lisible à l'OCR — le bucket accepte désormais 2 Mio.
+const MAX_WIDTH_HIRES = 1600
+const COMPRESS_HIRES = 0.6
 
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
   const binary = atob(base64)
@@ -33,13 +38,13 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
   return bytes.buffer
 }
 
-/** Compresse une image locale en WebP léger et renvoie son ArrayBuffer. */
-async function compressToWebp(uri: string): Promise<ArrayBuffer> {
-  const result = await manipulateAsync(uri, [{ resize: { width: MAX_WIDTH } }], {
-    compress: COMPRESS,
-    format: SaveFormat.WEBP,
-    base64: true,
-  })
+/** Compresse une image locale en WebP et renvoie son ArrayBuffer. */
+async function compressToWebp(uri: string, hiRes = false): Promise<ArrayBuffer> {
+  const result = await manipulateAsync(
+    uri,
+    [{ resize: { width: hiRes ? MAX_WIDTH_HIRES : MAX_WIDTH } }],
+    { compress: hiRes ? COMPRESS_HIRES : COMPRESS, format: SaveFormat.WEBP, base64: true },
+  )
   if (!result.base64) throw new Error('compression-failed')
   return base64ToArrayBuffer(result.base64)
 }
@@ -53,6 +58,8 @@ export interface PhotoSubmissionInput {
   category: string | null
   /** URIs locales des photos prises (1 ou 2). */
   localUris: string[]
+  /** Contribution scan (photo ingrédients lisible OCR) → compression hi-res. */
+  hiRes?: boolean
 }
 
 export type SubmitResult = { ok: true } | { ok: false; error: string }
@@ -71,7 +78,7 @@ export async function submitProductPhotos(
   for (const uri of uris) {
     let buffer: ArrayBuffer
     try {
-      buffer = await compressToWebp(uri)
+      buffer = await compressToWebp(uri, input.hiRes === true)
     } catch {
       return { ok: false, error: 'compression-failed' }
     }

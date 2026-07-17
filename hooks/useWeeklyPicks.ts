@@ -1,17 +1,20 @@
 /**
- * useWeeklyPicks — « Pépites de la semaine » : sélection hebdomadaire de
- * produits catalogue adaptés au profil, DÉTERMINISTE (0 IA runtime, 0 crédit).
+ * useWeeklyPicks — « Pépites du jour » : sélection QUOTIDIENNE de produits
+ * catalogue adaptés au profil, DÉTERMINISTE (0 IA runtime, 0 crédit).
  *
  * Pipeline :
- *   1. needs dominants du profil (pickNeedsForUser, top 3) ;
- *   2. RPC batch cosme_check_weekly_picks_candidates (sur-échantillon 12/need) ;
+ *   1. needs dominants du profil (pickNeedsForUser, top 3), tournés par jour ;
+ *   2. RPC batch cosme_check_weekly_picks_candidates (sur-échantillon /need) ;
  *   3. familles restreintes -> noms INCI (cache partagé 1h avec useAlternatives) ;
- *   4. filtre restrictions + tri tiers + round-robin + diversité (selectWeeklyPicks).
+ *   4. filtre restrictions + PLANCHER SANTÉ (pastille verte ≥13, 4-5★) + tri
+ *      tiers + round-robin + diversité (selectWeeklyPicks).
  *
- * Clé React Query = ['weeklyPicks', userId, weekKey, restrictionsSig], staleTime
- * 7 j, persistée : les picks sont FIGÉS toute la semaine. Un changement de
- * restrictions en cours de semaine change la clé (sécurité > stabilité), et le
- * déterminisme reste garanti par le triplet (user, semaine, restrictions).
+ * Clé React Query = ['weeklyPicks', userId, dayKey, restrictionsSig], staleTime
+ * 24 h, persistée : les picks sont FIGÉS pour la journée puis TOURNENT chaque
+ * jour (dayKey = date locale). La graine `${userId}:${dayKey}:${restrictions}`
+ * garantit le déterminisme (mêmes picks toute la journée, différents demain) et
+ * la variété (mélange seedé par jour dans le pool sain de chaque need). Un
+ * changement de restrictions en cours de journée change la clé (sécurité).
  */
 
 import { useMemo } from 'react'
@@ -21,7 +24,7 @@ import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
 import { isProfileStarted } from '@/lib/skin/profile'
-import { isoWeekKey } from '@/lib/skin/week'
+import { localDayKey } from '@/lib/skin/week'
 import { restrictionsKey } from '@/lib/analysis/restrictionsKey'
 import { hashSeed } from '@/lib/analysis/tierShuffle'
 import { fetchFamilyIngredientNames } from '@/lib/catalog/familyIngredientNames'
@@ -36,8 +39,14 @@ import {
   type WeeklyPickCandidate,
 } from '@/lib/weeklyPicks/select'
 
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+const DAY_MS = 24 * 60 * 60 * 1000
 const FAMILY_NAMES_STALE_MS = 60 * 60 * 1000
+/**
+ * Plancher santé des Pépites : note plafonnée >= 13 = pastille VERTE uniquement
+ * (feuille verte ≥13 "Bien" 4★, cœur vert ≥17 "Très bien" 5★). Écarte jaune /
+ * orange / rouge : « toujours sain, entre 4 et 5 étoiles ».
+ */
+const HEALTHY_MIN_CAPPED_SCORE = 13
 
 interface RpcRow {
   need: string
@@ -79,7 +88,8 @@ export interface UseWeeklyPicksResult {
   isError: boolean
   /** Profil sans aucun signal -> carte CTA « complète ton profil ». */
   isEmptyProfile: boolean
-  weekKey: string
+  /** Clé de jour local (rotation quotidienne), ex. '2026-07-17'. */
+  dayKey: string
 }
 
 export function useWeeklyPicks(enabled: boolean): UseWeeklyPicksResult {
@@ -88,7 +98,7 @@ export function useWeeklyPicks(enabled: boolean): UseWeeklyPicksResult {
   const { skin, restrictions } = useProfile()
   const qc = useQueryClient()
 
-  const weekKey = useMemo(() => isoWeekKey(), [])
+  const dayKey = useMemo(() => localDayKey(), [])
   const restrictionsCanonical = useMemo(() => restrictionsKey(restrictions), [restrictions])
   const restrictionsSig = useMemo(
     () =>
@@ -100,12 +110,12 @@ export function useWeeklyPicks(enabled: boolean): UseWeeklyPicksResult {
   const profileStarted = useMemo(() => isProfileStarted(skin), [skin])
 
   const query = useQuery<WeeklyPickCandidate[]>({
-    queryKey: ['weeklyPicks', userId, weekKey, restrictionsSig],
+    queryKey: ['weeklyPicks', userId, dayKey, restrictionsSig],
     enabled: enabled && Boolean(userId) && profileStarted,
-    staleTime: WEEK_MS,
-    gcTime: WEEK_MS,
+    staleTime: DAY_MS,
+    gcTime: DAY_MS,
     queryFn: async () => {
-      const needs = pickNeedsForUser(skin, weekKey, 3)
+      const needs = pickNeedsForUser(skin, dayKey, 3)
       if (needs.length === 0) return []
 
       // p_per_need = 40 = tout le pool précalculé par besoin (600 lignes max,
@@ -137,9 +147,10 @@ export function useWeeklyPicks(enabled: boolean): UseWeeklyPicksResult {
       const picks = selectWeeklyPicks({
         candidates,
         exclusion,
-        seed: buildWeeklyPicksSeed(userId ?? 'anon', weekKey, restrictionsCanonical),
+        seed: buildWeeklyPicksSeed(userId ?? 'anon', dayKey, restrictionsCanonical),
         max: 6,
         maxPerSubCategory: 2,
+        minCappedScore: HEALTHY_MIN_CAPPED_SCORE,
       })
 
       // Précharge les analyses pour un tap quasi instantané (chemin rapide EAN).
@@ -153,6 +164,6 @@ export function useWeeklyPicks(enabled: boolean): UseWeeklyPicksResult {
     isLoading: query.isLoading,
     isError: query.isError,
     isEmptyProfile: !profileStarted,
-    weekKey,
+    dayKey,
   }
 }

@@ -2,6 +2,20 @@
 
 _Livré le 7 juillet 2026._
 
+> **Mise à jour 17 juillet 2026 — rotation QUOTIDIENNE + plancher santé.**
+> Les picks ne sont plus figés à la semaine ISO mais **tournent chaque jour**
+> (clé `localDayKey`, ex. `2026-07-17`). La graine, la clé React Query, le
+> `staleTime` (24 h) et la rotation des needs par défaut passent tous du
+> `weekKey` au `dayKey` → produits différents chaque jour, toujours
+> déterministes dans la journée. Ajout d'un **plancher santé**
+> `minCappedScore = 13` dans `selectWeeklyPicks` (via `useWeeklyPicks`) : seules
+> les pastilles VERTES (feuille ≥13 « Bien » 4★, cœur ≥17 « Très bien » 5★)
+> passent, sur la note PLAFONNÉE (un score stocké haut mais ≥2 rouges est
+> écarté). Titre UI → « PÉPITES DU JOUR ». Les fichiers gardent le nom
+> `weeklyPicks` / `useWeeklyPicks` (comportement quotidien, nom historique).
+> Le pool prod (`weekly_picks_pool`, 40/need) est déjà 100 % score ≥17, le
+> plancher ne fait qu'écarter les rares notes plafonnées.
+
 ## But
 Section « Pépites de la semaine » sur le dashboard (sous le score de peau) : 4-6 produits catalogue sélectionnés pour le profil, rafraîchis **une fois par semaine ISO**, **déterministes** (0 IA runtime, 0 crédit). Le quiz « Daily Picks » existant est conservé en dessous. Gate `flag_weekly_picks`.
 

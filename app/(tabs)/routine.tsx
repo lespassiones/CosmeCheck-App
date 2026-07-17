@@ -7,8 +7,7 @@
  *
  * Cartes :
  *   1. Exposition cumulée      -> app/routine/exposition.tsx
- *   2. Ma routine soin         -> app/routine/produits.tsx (kind = 'routine')
- *   3. Produits du quotidien   -> app/routine/quotidien.tsx (kind = 'staple')
+ *   2. Ma routine soin         -> app/routine/produits.tsx (liste unifiée)
  */
 
 import { type FC, useMemo } from 'react'
@@ -33,6 +32,7 @@ import { type BlobCounts } from '@/components/design/IngredientBlob'
 import { ScreenHeader } from '@/components/shared/ScreenHeader'
 import { ExposureSummaryCard } from '@/components/routine/ExposureSummaryCard'
 import { RoutineProductsCard } from '@/components/routine/RoutineProductsCard'
+import { GoalsCoverageCard } from '@/components/routine/GoalsCoverageCard'
 
 function titleFor(item: RoutineItem): string {
   return decodeHtml(item.analysis?.product_label?.trim() || item.analysis?.name?.trim()) || 'Produit'
@@ -64,18 +64,8 @@ const RoutineScreen: FC = () => {
 
   const metrics = useMemo(() => computeRoutineMetrics(products), [products])
 
-  // Split par bucket. Routine soin : répartition matin / soir (un 'both' compte
-  // des deux côtés). Quotidien (staples) : simple compte.
-  const { total, morning, evening, stapleCount } = useMemo(() => {
-    const usable = items.filter((it) => it.analysis)
-    const soin = usable.filter((it) => it.kind !== 'staple')
-    return {
-      total: soin.length,
-      morning: soin.filter((it) => it.time_of_day !== 'evening').length,
-      evening: soin.filter((it) => it.time_of_day !== 'morning').length,
-      stapleCount: usable.filter((it) => it.kind === 'staple').length,
-    }
-  }, [items])
+  // Liste unifiée : simple compte de tous les produits de la routine.
+  const total = useMemo(() => items.filter((it) => it.analysis).length, [items])
 
   return (
     <View style={styles.root}>
@@ -112,31 +102,20 @@ const RoutineScreen: FC = () => {
               <View style={styles.card}>
                 <RoutineProductsCard
                   total={total}
-                  morning={morning}
-                  evening={evening}
+                  morning={0}
+                  evening={0}
+                  showSlots={false}
                   iconImage={require('@/assets/icons/analyse/soin.png')}
+                  emptyText="Ajoute tes produits pour suivre ton exposition cumulée"
                   onPress={() => router.push(ROUTES.ROUTINE.PRODUITS)}
                 />
                 <Text style={styles.cardLegend}>
-                  Tes soins visage, suivis matin et soir et reliés à ton score de peau.
+                  Tous tes produits, reliés à ton exposition cumulée.
                 </Text>
               </View>
 
               <View style={styles.card}>
-                <RoutineProductsCard
-                  total={stapleCount}
-                  morning={0}
-                  evening={0}
-                  showSlots={false}
-                  title="Produits du quotidien"
-                  iconImage={require('@/assets/icons/analyse/quotidien.png')}
-                  emptyText="Déo, dentifrice, gel douche... garde tes essentiels ici"
-                  onPress={() => router.push(ROUTES.ROUTINE.QUOTIDIEN)}
-                />
-                <Text style={styles.cardLegend}>
-                  Tes essentiels d'hygiène (déo, dentifrice, gel douche...), en simple liste sans
-                  matin ni soir.
-                </Text>
+                <GoalsCoverageCard />
               </View>
             </Reveal>
           </ScrollView>

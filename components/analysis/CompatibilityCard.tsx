@@ -78,6 +78,15 @@ const TONE_COLOR: Record<CompatTone, { ring: string; text: string; bg: string }>
   rouge: { ring: colors.rating.rouge.DEFAULT, text: colors.rating.rouge.text, bg: colors.rating.rouge.bg },
 }
 
+// Teinte de la tranche d'extrusion (l'épaisseur 3D sous l'arc), par tone.
+// Miroir exact du web (CompatibilityCard.tsx, TONE.ringDark).
+const RING_DARK: Record<CompatTone, string> = {
+  vert: '#065F46',
+  jaune: '#B45309',
+  orange: '#C2410C',
+  rouge: '#BE123C',
+}
+
 type State =
   | { status: 'loading' }
   | { status: 'ready'; blocks: PersonalBlocks; compatibility: Compatibility | null }
@@ -99,7 +108,10 @@ interface Props {
 }
 
 const RING_SIZE = 132
-const RING_STROKE = 11
+// Tube épais : nécessaire pour que le relief 3D (dégradé + tranche) se lise.
+const RING_STROKE = 12
+/** Décalage vertical de la tranche d'extrusion (l'épaisseur 3D sous l'anneau). */
+const RING_DEPTH = 3
 const FILL_MS = 900
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle)
@@ -122,9 +134,17 @@ function useCountUp(target: number, duration = FILL_MS): number {
   return val
 }
 
-// ── Anneau REMPLI animé (0 → score) + compteur central ───────────────────────
-const FillRing: FC<{ score: number; color: string }> = ({ score, color }) => {
-  const r = (RING_SIZE - RING_STROKE) / 2
+// ── Anneau REMPLI animé (0 → score) + compteur central, 3D SIMPLE ────────────
+// Deux couches, rien d'autre (pas de dégradé, pas de reflet) : la face en
+// couleur PLEINE + la même forme décalée de RING_DEPTH px vers le bas en
+// teinte sombre = l'épaisseur. Même principe que les étoiles.
+// L'animation d'origine est conservée : les 2 arcs partagent la progression.
+const FillRing: FC<{ score: number; tone: CompatTone }> = ({ score, tone }) => {
+  const ring = TONE_COLOR[tone].ring
+  const dark = RING_DARK[tone]
+  const cx = RING_SIZE / 2
+  const cy = RING_SIZE / 2
+  const r = (RING_SIZE - RING_STROKE) / 2 - RING_DEPTH
   const c = 2 * Math.PI * r
   const progress = useSharedValue(0)
   const shown = useCountUp(Math.round(score))
@@ -136,32 +156,42 @@ const FillRing: FC<{ score: number; color: string }> = ({ score, color }) => {
     })
   }, [score, progress])
 
-  const animatedProps = useAnimatedProps(() => ({
+  const arcProps = useAnimatedProps(() => ({
     strokeDashoffset: c * (1 - progress.value),
   }))
 
   return (
     <View style={styles.ringBox}>
       <Svg width={RING_SIZE} height={RING_SIZE} style={StyleSheet.absoluteFill}>
-        <Circle
-          cx={RING_SIZE / 2}
-          cy={RING_SIZE / 2}
-          r={r}
-          stroke={colors.gray200}
-          strokeWidth={RING_STROKE}
-          fill="none"
-        />
+        {/* Épaisseur du rail (même forme, décalée, plus sombre) */}
+        <Circle cx={cx} cy={cy + RING_DEPTH} r={r} stroke="#CBD0D8" strokeWidth={RING_STROKE} fill="none" />
+        {/* Rail */}
+        <Circle cx={cx} cy={cy} r={r} stroke={colors.gray200} strokeWidth={RING_STROKE} fill="none" />
+        {/* Épaisseur de l'arc */}
         <AnimatedCircle
-          cx={RING_SIZE / 2}
-          cy={RING_SIZE / 2}
+          cx={cx}
+          cy={cy + RING_DEPTH}
           r={r}
-          stroke={color}
+          stroke={dark}
           strokeWidth={RING_STROKE}
           fill="none"
           strokeDasharray={`${c} ${c}`}
-          animatedProps={animatedProps}
+          animatedProps={arcProps}
           strokeLinecap="round"
-          transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
+          transform={`rotate(-90 ${cx} ${cy + RING_DEPTH})`}
+        />
+        {/* Arc de progression (couleur pleine) */}
+        <AnimatedCircle
+          cx={cx}
+          cy={cy}
+          r={r}
+          stroke={ring}
+          strokeWidth={RING_STROKE}
+          fill="none"
+          strokeDasharray={`${c} ${c}`}
+          animatedProps={arcProps}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${cx} ${cy})`}
         />
       </Svg>
       <View style={styles.ringCenter}>
@@ -174,7 +204,9 @@ const FillRing: FC<{ score: number; color: string }> = ({ score, color }) => {
 
 // ── Anneau ROTATIF (calcul en cours) : un arc qui tourne en boucle ────────────
 const SpinnerRing: FC = () => {
-  const r = (RING_SIZE - RING_STROKE) / 2
+  // Même géométrie que FillRing (rayon réduit de RING_DEPTH) : pas de saut
+  // visuel au passage loading → ready.
+  const r = (RING_SIZE - RING_STROKE) / 2 - RING_DEPTH
   const c = 2 * Math.PI * r
   const rot = useSharedValue(0)
 
@@ -327,7 +359,10 @@ export const CompatibilityCard: FC<Props> = ({
   }, [analysisId])
 
   const goComplete = (section: MissingSection) => {
-    router.push((`${ROUTES.ONBOARDING.INDEX}?section=${section}`) as Href)
+    // Écran d'édition CIBLÉ (groupe profile) — PAS l'onboarding : un utilisateur
+    // déjà onboardé serait rejeté de /(onboarding) par l'AuthGuard. « Enregistrer »
+    // y fait router.back() → retour au produit → bouton Recharger ci-dessous.
+    router.push((`${ROUTES.PROFILE.BEAUTY}?section=${section}`) as Href)
   }
 
   // ── Ligne restrictions (toujours affichée) ─────────────────────────────────
@@ -379,11 +414,7 @@ export const CompatibilityCard: FC<Props> = ({
       ) : null}
 
       {state.status === 'profileIncomplete' ? (
-        <Pressable
-          onPress={() => goComplete(state.missingSection)}
-          accessibilityRole="button"
-          style={({ pressed }) => [styles.centerArea, pressed && { opacity: 0.85 }]}
-        >
+        <View style={styles.centerArea}>
           <View style={styles.profileBadge}>
             <Ionicons name="person-add" size={22} color={colors.accent} />
           </View>
@@ -393,11 +424,27 @@ export const CompatibilityCard: FC<Props> = ({
               ? 'Renseigne tes cheveux pour voir ta compatibilité avec ce produit.'
               : 'Renseigne ta peau pour voir ta compatibilité avec ce produit.'}
           </Text>
-          <View style={styles.ctaPill}>
-            <Text style={styles.ctaPillText}>Compléter maintenant</Text>
+          <Pressable
+            onPress={() => goComplete(state.missingSection)}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.ctaPill, pressed && { opacity: 0.9 }]}
+          >
+            <Text style={styles.ctaPillText}>Compléter mon profil</Text>
             <Ionicons name="arrow-forward" size={14} color={colors.surface} />
-          </View>
-        </Pressable>
+          </Pressable>
+          {/* Recharger : au retour de l'édition, relance l'analyse. Profil
+              complété → score ; sinon → même blocage. */}
+          <Pressable
+            onPress={() => run()}
+            accessibilityRole="button"
+            accessibilityLabel="Recharger la compatibilité"
+            hitSlop={8}
+            style={({ pressed }) => [styles.reloadBtn, pressed && { opacity: 0.6 }]}
+          >
+            <Ionicons name="refresh" size={15} color={colors.accent} />
+            <Text style={styles.reloadText}>Recharger</Text>
+          </Pressable>
+        </View>
       ) : null}
 
       {state.status === 'locked' ? (
@@ -431,52 +478,61 @@ export const CompatibilityCard: FC<Props> = ({
 
       {state.status === 'ready' ? (
         state.compatibility ? (
-          <Pressable
-            onPress={() => setModalOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Voir ce qu'il faut retenir"
-            style={({ pressed }) => pressed && { opacity: 0.9 }}
-          >
-            <View style={styles.row}>
-              {/* Anneau à GAUCHE, taille pleine, remplissage animé */}
-              <FillRing
-                score={state.compatibility.score}
-                color={TONE_COLOR[state.compatibility.tone].ring}
-              />
-              {/* Textes à DROITE, apparition en fondu */}
-              <Animated.View
-                entering={FadeInRight.duration(380).delay(120)}
-                style={styles.rightCol}
+          <>
+            {/* Phrase-verdict (chip tonale) SOUS le titre, avant le cercle. */}
+            <View
+              style={[
+                styles.chip,
+                styles.chipUnderTitle,
+                { backgroundColor: TONE_COLOR[state.compatibility.tone].bg },
+              ]}
+            >
+              <Text
+                style={[styles.chipText, { color: TONE_COLOR[state.compatibility.tone].text }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
               >
-                <View
-                  style={[styles.chip, { backgroundColor: TONE_COLOR[state.compatibility.tone].bg }]}
-                >
-                  <Text
-                    style={[styles.chipText, { color: TONE_COLOR[state.compatibility.tone].text }]}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.8}
-                  >
-                    {state.compatibility.label}
-                  </Text>
-                </View>
-                {state.compatibility.subtitle ? (
-                  <Animated.Text
-                    entering={FadeIn.duration(420).delay(320)}
-                    style={styles.subtitle}
-                    numberOfLines={3}
-                  >
-                    {state.compatibility.subtitle}
-                  </Animated.Text>
-                ) : null}
-                <Animated.View entering={FadeIn.duration(420).delay(460)} style={styles.retainRow}>
-                  <Ionicons name="sparkles" size={13} color={colors.accent} />
-                  <Text style={styles.retainText}>Ce qu'il faut retenir</Text>
-                  <Ionicons name="chevron-forward" size={14} color={colors.inkLight} />
-                </Animated.View>
-              </Animated.View>
+                {state.compatibility.label}
+              </Text>
             </View>
-          </Pressable>
+            <Pressable
+              onPress={() => setModalOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Voir ce qu'il faut retenir"
+              style={({ pressed }) => pressed && { opacity: 0.9 }}
+            >
+              <View style={styles.row}>
+                {/* Anneau 3D à GAUCHE, taille pleine, remplissage animé */}
+                <FillRing score={state.compatibility.score} tone={state.compatibility.tone} />
+                {/* Textes à DROITE, centrés VERTICALEMENT vs le cercle */}
+                <Animated.View
+                  entering={FadeInRight.duration(380).delay(120)}
+                  style={styles.rightCol}
+                >
+                  {state.compatibility.subtitle ? (
+                    <Animated.Text
+                      entering={FadeIn.duration(420).delay(320)}
+                      style={styles.subtitle}
+                      numberOfLines={3}
+                    >
+                      {state.compatibility.subtitle}
+                    </Animated.Text>
+                  ) : null}
+                  <Animated.View entering={FadeIn.duration(420).delay(460)} style={styles.retainBlock}>
+                    <Ionicons name="sparkles" size={13} color={colors.accent} />
+                    <Text style={styles.retainText}>Ce qu'il faut retenir</Text>
+                    <Ionicons
+                      name="chevron-forward"
+                      size={14}
+                      color={colors.inkLight}
+                      style={styles.retainChevron}
+                    />
+                  </Animated.View>
+                </Animated.View>
+              </View>
+            </Pressable>
+          </>
         ) : (
           // Blocs présents mais score non produit (rare) : accès aux 3 blocs conservé.
           <Pressable onPress={() => setModalOpen(true)} accessibilityRole="button">
@@ -487,7 +543,7 @@ export const CompatibilityCard: FC<Props> = ({
               <Text style={styles.lockTitle}>Analyse personnalisée</Text>
               <Text style={styles.lockSub}>Découvre ce qu'il faut retenir pour toi.</Text>
             </View>
-            <View style={[styles.retainRow, styles.retainRowCentered]}>
+            <View style={[styles.retainBlock, styles.retainRowCentered]}>
               <Ionicons name="sparkles" size={13} color={colors.accent} />
               <Text style={styles.retainText}>Ce qu'il faut retenir</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.inkLight} />
@@ -587,8 +643,11 @@ const BreakdownCard: FC<{
         />
       ) : null}
 
-      {/* 3. Les bonus / malus réels (matchs profil, plafond, restrictions). */}
-      {breakdown.lines.map((l, i) => (
+      {/* 3. Les bonus / malus réels (matchs profil, restrictions). La ligne
+          « Plafond : … » est MASQUÉE à l'affichage (demande user 16 juil 2026) :
+          le plafond reste appliqué au calcul (back-end), mais n'apparaît pas
+          dans le détail. */}
+      {breakdown.lines.filter((l) => !/^Plafond\b/i.test(l.label)).map((l, i) => (
         <BdBullet
           key={i}
           dot={l.points >= 0 ? colors.rating.vert.DEFAULT : colors.rating.rouge.DEFAULT}
@@ -610,7 +669,8 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.bold,
     fontSize: 18,
     letterSpacing: -0.3,
-    color: colors.ink,
+    // Violet accent (demande user, parité web/mobile).
+    color: colors.accent,
     marginBottom: spacing.md,
   },
   // Rangée principale : anneau gauche + colonne texte droite
@@ -622,8 +682,10 @@ const styles = StyleSheet.create({
   rightCol: {
     flex: 1,
     minWidth: 0,
-    gap: 8,
+    gap: 10,
     alignItems: 'flex-start',
+    // Centre le contenu VERTICALEMENT par rapport au cercle (demande user).
+    justifyContent: 'center',
   },
   ringBox: {
     width: RING_SIZE,
@@ -648,6 +710,11 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     maxWidth: '100%',
   },
+  // Chip verdict rendue SOUS le titre (au-dessus du cercle).
+  chipUnderTitle: {
+    alignSelf: 'flex-start',
+    marginBottom: spacing.base,
+  },
   chipText: { fontFamily: fontFamilies.semiBold, fontSize: 13 },
   subtitle: {
     fontFamily: fontFamilies.regular,
@@ -655,12 +722,26 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: colors.inkMuted,
   },
-  retainRow: {
+  // Bloc encadré « Ce qu'il faut retenir » (demande user) : fond blanc,
+  // liseré, ombre douce ; le chevron est repoussé au bord droit.
+  retainBlock: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    marginTop: 2,
+    gap: 6,
+    alignSelf: 'stretch',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.08)',
+    borderRadius: radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
+  retainChevron: { marginLeft: 'auto' },
   retainRowCentered: { justifyContent: 'center', marginTop: spacing.md },
   retainText: { fontFamily: fontFamilies.semiBold, fontSize: 13, color: colors.ink },
   centerArea: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xs },
@@ -715,6 +796,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.base,
   },
   ctaPillText: { fontFamily: fontFamilies.semiBold, fontSize: 14, color: colors.surface },
+  reloadBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.md },
+  reloadText: { fontFamily: fontFamilies.semiBold, fontSize: 13, color: colors.accent },
   lockedWrap: { position: 'relative' },
   lockBlur: { ...StyleSheet.absoluteFillObject, borderRadius: radius.lg, overflow: 'hidden' },
   lockOverlay: {

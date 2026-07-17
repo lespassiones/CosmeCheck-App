@@ -196,7 +196,7 @@ describe('detectForcedAgainst — filets déterministes (le LLM les rate parfois
     expect(out[0].need).toContain('ton allergie')
   })
 
-  it('allergie sans ingrédient présent → rien ; max 2 entrées', () => {
+  it('allergie sans ingrédient présent → rien ; combine alcool (sèche) + allergie', () => {
     expect(
       detectForcedAgainst([{ name: 'Aqua' }], { allergiesFreeform: 'allergique au parfum' }),
     ).toEqual([])
@@ -204,6 +204,30 @@ describe('detectForcedAgainst — filets déterministes (le LLM les rate parfois
       [{ name: 'Alcohol' }, { name: 'Parfum' }, { name: 'Limonene' }],
       { skinTypeFace: 'seche', allergiesFreeform: 'allergie parfum et limonene' },
     )
-    expect(both.length).toBeLessThanOrEqual(2)
+    expect(both.some((o) => o.name.toLowerCase() === 'alcool')).toBe(true)
+    expect(both.some((o) => /parfum/i.test(o.name))).toBe(true)
+  })
+
+  it('allergènes de parfum × peau sensible → against forcé (SANS allergie déclarée)', () => {
+    const items = [{ name: 'Aqua' }, { name: 'Parfum' }, { name: 'Limonene' }, { name: 'Glycerin' }]
+    const out = detectForcedAgainst(items, { skinTypeFace: 'sensible' })
+    expect(out.some((o) => /parfum/i.test(o.name))).toBe(true)
+    expect(out.some((o) => /limonene/i.test(o.name))).toBe(true)
+    expect(out.every((o) => /sensible/.test(o.need))).toBe(true)
+  })
+
+  it('comédogènes × peau grasse/acné → against forcé ; mais OK sur peau sèche', () => {
+    const items = [{ name: 'Cocos Nucifera Oil' }, { name: 'Theobroma Cacao Seed Butter' }, { name: 'Glycerin' }]
+    const acne = detectForcedAgainst(items, { skinTypeFace: 'grasse', concerns: ['acne'] })
+    expect(acne.some((o) => /coco|cocos/i.test(o.name))).toBe(true)
+    expect(acne.some((o) => /cacao/i.test(o.name))).toBe(true)
+    // même coco n'est PAS un problème pour une peau très sèche
+    expect(detectForcedAgainst(items, { skinTypeFace: 'tres_seche' }).some((o) => /coco|cacao/i.test(o.name))).toBe(false)
+  })
+
+  it('sulfates × cuir chevelu sensible → against forcé', () => {
+    const out = detectForcedAgainst([{ name: 'Sodium Laureth Sulfate' }, { name: 'Aqua' }], { hairConcerns: ['cuir_chevelu_sensible'] })
+    expect(out.some((o) => /sulfate/i.test(o.name))).toBe(true)
+    expect(out.some((o) => /cuir chevelu/.test(o.need))).toBe(true)
   })
 })

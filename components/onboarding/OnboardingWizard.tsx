@@ -244,6 +244,12 @@ const STEPS: StepDef[] = [
         onToggle={(key) =>
           onChange({ hairConcerns: toggleIn(p.hairConcerns, key as HairConcern) })
         }
+        other={{
+          value: p.otherHairConcerns,
+          placeholder: 'Décris ton souci cheveux',
+          onToggle: (open) => onChange(open ? {} : { otherHairConcerns: undefined }),
+          onChange: (t) => onChange({ otherHairConcerns: t }),
+        }}
       />
     ),
   },
@@ -275,6 +281,12 @@ const STEPS: StepDef[] = [
         options={goalOptions('Visage')}
         values={p.goals ?? []}
         onToggle={(key) => onChange({ goals: toggleIn(p.goals, key as ProfileGoal) })}
+        other={{
+          value: p.otherGoalsFace,
+          placeholder: 'Décris ton objectif visage',
+          onToggle: (open) => onChange(open ? {} : { otherGoalsFace: undefined }),
+          onChange: (t) => onChange({ otherGoalsFace: t }),
+        }}
       />
     ),
   },
@@ -290,6 +302,12 @@ const STEPS: StepDef[] = [
         options={goalOptions('Corps')}
         values={p.goals ?? []}
         onToggle={(key) => onChange({ goals: toggleIn(p.goals, key as ProfileGoal) })}
+        other={{
+          value: p.otherGoalsBody,
+          placeholder: 'Décris ton objectif corps',
+          onToggle: (open) => onChange(open ? {} : { otherGoalsBody: undefined }),
+          onChange: (t) => onChange({ otherGoalsBody: t }),
+        }}
       />
     ),
   },
@@ -305,6 +323,12 @@ const STEPS: StepDef[] = [
         options={goalOptions('Cheveux')}
         values={p.goals ?? []}
         onToggle={(key) => onChange({ goals: toggleIn(p.goals, key as ProfileGoal) })}
+        other={{
+          value: p.otherGoalsHair,
+          placeholder: 'Décris ton objectif cheveux',
+          onToggle: (open) => onChange(open ? {} : { otherGoalsHair: undefined }),
+          onChange: (t) => onChange({ otherGoalsHair: t }),
+        }}
       />
     ),
   },
@@ -320,6 +344,12 @@ const STEPS: StepDef[] = [
         options={goalOptions('Routine')}
         values={p.goals ?? []}
         onToggle={(key) => onChange({ goals: toggleIn(p.goals, key as ProfileGoal) })}
+        other={{
+          value: p.otherGoalsRoutine,
+          placeholder: 'Décris ton objectif routine',
+          onToggle: (open) => onChange(open ? {} : { otherGoalsRoutine: undefined }),
+          onChange: (t) => onChange({ otherGoalsRoutine: t }),
+        }}
       />
     ),
   },

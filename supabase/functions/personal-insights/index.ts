@@ -21,6 +21,7 @@ import {
   type CheckableItem,
   checkRestrictions,
   type ColorRating,
+  loadIngredientFamilies,
   loadUserContext,
 } from "../synthesis/lib.ts";
 import {
@@ -96,7 +97,42 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   // ── Profil + restrictions → signature ───────────────────────────────────────
-  const { profileBlock, skin, restrictions } = await loadUserContext(supabase, user.id);
+  const { profileBlock: rawProfileBlock, skin, restrictions } = await loadUserContext(supabase, user.id);
+
+  // Récap IA « sensibilités probables » (worker profile-restriction-inference,
+  // back-end invisible) : injecté dans le BLOC PROFIL comme INDICES pour les
+  // contre-indications (-5). JAMAIS un malus restriction (-8) : seules les
+  // restrictions COCHÉES pénalisent. Inclus AVANT la signature → un récap mis à
+  // jour régénère les blocs gratuitement (self-heal), zéro appel supplémentaire
+  // au chemin d'analyse (une simple lecture d'une ligne indexée par PK).
+  let profileBlock = rawProfileBlock;
+  // Slugs de FAMILLE des sensibilités déduites (worker d'inférence). Servent au
+  // SCORING : détectés dans le produit → -8 (comme une restriction cochée),
+  // dédoublonnés vs les cochées côté enforceCompatibility.
+  const inferredFamilySlugs: string[] = [];
+  if (rawProfileBlock) {
+    const { data: inferredRow } = await supabase
+      .schema("cosme_check")
+      .from("profile_restriction_inference")
+      .select("items")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const inferredItems = Array.isArray(inferredRow?.items)
+      ? (inferredRow.items as { label?: string; reason?: string; slug?: string | null }[])
+          .filter((i) => typeof i?.label === "string" && i.label.trim())
+      : [];
+    if (inferredItems.length > 0) {
+      const line = inferredItems
+        .slice(0, 8)
+        .map((i) => (i.reason ? `${i.label} (${i.reason})` : (i.label as string)))
+        .join(" ; ");
+      profileBlock = `${rawProfileBlock}\n- Sensibilités probables (déduites automatiquement du profil, NON confirmées par l'utilisateur) : ${line}`;
+      for (const it of inferredItems) {
+        const s = (it.slug ?? "").trim();
+        if (s && !inferredFamilySlugs.includes(s)) inferredFamilySlugs.push(s);
+      }
+    }
+  }
   const sig = await profileSignature(profileBlock, restrictions.block);
   // `||` (pas `??`) : une chaîne VIDE doit retomber sur le champ suivant.
   // FALLBACK COLONNES DB (fix juil 2026) : les analyses anciennes n'ont pas de
@@ -164,6 +200,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
     tags: it.tags ?? null,
   }));
   const matches = checkRestrictions(checkItems, restrictions.restrictions, restrictions.families);
+  // Détection des familles DÉDUITES du profil présentes dans le produit (mêmes
+  // -8 que les restrictions cochées). loadUserContext ne charge le catalogue de
+  // familles QUE si l'utilisateur a des restrictions cochées → on le charge ici
+  // si besoin (cas « aucune restriction cochée mais sensibilités déduites »).
+  let familyCatalogue = restrictions.families;
+  if (inferredFamilySlugs.length > 0 && familyCatalogue.length === 0) {
+    familyCatalogue = await loadIngredientFamilies(supabase);
+  }
+  const inferredMatches = inferredFamilySlugs.length > 0
+    ? checkRestrictions(checkItems, { families: inferredFamilySlugs, ingredients: [] }, familyCatalogue)
+    : [];
   const reasonByPosition = new Map<number, string>();
   for (const m of matches) if (!reasonByPosition.has(m.position)) reasonByPosition.set(m.position, m.label);
 
@@ -194,11 +241,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
     profileBlock,
     restrictionsBlock: restrictions.block,
     restrictionMatches: matches,
-    // product_only (ou profil incomplet non bloqué côté vieux client) → score
-    // basé sur la QUALITÉ, jamais zéroté par l'IA faute de matching profil.
+    inferredRestrictionMatches: inferredMatches,
+    // product_only = produit HORS PROFIL (axe "none" : dentifrice, déo…) OU
+    // profil/axe non renseigné (v29, demande user 16 juil 2026) : le score suit
+    // la QUALITÉ de la formule, mais l'IA liste quand même les bons actifs
+    // (utiles de manière globale) et les points à surveiller — affichés à
+    // 0 point dans le détail du calcul. Seul verdict "personal" (axe peau/
+    // cheveux rattaché ET renseigné) donne les bonus/malus qui bougent le score.
     productOnly: verdict.kind !== "personal",
     // Filets déterministes (le LLM les rate parfois) : alcool asséchant × peau
-    // sèche/sensible, allergie texte libre × ingrédient présent.
+    // sèche/sensible, allergènes parfum, comédogènes, sulfates, allergie déclarée.
+    // Uniquement en mode personal : ces filets croisent le profil PEAU/CHEVEUX,
+    // hors sujet pour un produit hors profil (dentifrice × « ta peau sensible »).
     forcedAgainst: verdict.kind === "personal" ? detectForcedAgainst(items, skin) : [],
   });
 

@@ -22,6 +22,10 @@ export interface ProductByEanRow {
   image_url: string | null
   brand?: string | null
   name?: string | null
+  /** Compteurs pénalisants du sidecar product_score_cap (mêmes que la recherche/
+   *  navigation) → alimentent applyColorCap pour une pastille identique partout. */
+  count_orange?: number | null
+  count_rouge?: number | null
 }
 
 const STALE_MS = 5 * 60 * 1000

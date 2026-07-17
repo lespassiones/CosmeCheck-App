@@ -63,6 +63,12 @@ export interface SelectWeeklyPicksInput {
   maxPerSubCategory?: number
   /** Nb max de produits par grande famille avant backfill (défaut 3). */
   maxPerFamily?: number
+  /**
+   * Plancher de SANTÉ : note PLAFONNÉE (applyColorCap) minimale d'un pick.
+   * Défaut 0 (pas de filtre). Passer 13 = uniquement pastilles vertes
+   * (feuille ≥13 "Bien" 4★ + cœur ≥17 "Très bien" 5★), jamais jaune/orange/rouge.
+   */
+  minCappedScore?: number
 }
 
 /** Graine canonique des picks : user + semaine ISO + restrictions. */
@@ -116,11 +122,19 @@ export function selectWeeklyPicks(
   const cappedScore = (c: WeeklyPickCandidate): number =>
     applyColorCap(c.score ?? 0, c.countOrange, c.countRouge)
 
+  // 3b. Plancher de SANTÉ : on ne garde que les produits dont la pastille est
+  //     >= au seuil (défaut 0 = pas de filtre). Sur la note PLAFONNÉE, donc un
+  //     produit avec une note stockée haute mais 2 rouges est bien écarté.
+  const minScore = input.minCappedScore ?? 0
+  const healthy =
+    minScore > 0 ? safe.filter((c) => cappedScore(c) >= minScore) : safe
+  if (healthy.length === 0) return []
+
   // 4. Files par need (ordre de première apparition = ordre des needs RPC),
   //    chacune ordonnée par tiers + mélange seedé propre au need.
   const needOrder: string[] = []
   const byNeed = new Map<string, WeeklyPickCandidate[]>()
-  for (const c of safe) {
+  for (const c of healthy) {
     const q = byNeed.get(c.need)
     if (q) {
       q.push(c)

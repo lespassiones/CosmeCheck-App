@@ -339,6 +339,67 @@ describe('selectWeeklyPicks : garde diversité par grande famille + backfill', (
   })
 })
 
+describe('selectWeeklyPicks : plancher santé (minCappedScore)', () => {
+  it('écarte les produits sous le seuil (jaune/orange/rouge) quand minCappedScore=13', () => {
+    const candidates = [
+      cand('vert-1', 'hydration_face', { score: 18 }), // cœur vert 5★
+      cand('vert-2', 'brightening', { score: 14 }), // feuille verte 4★
+      cand('jaune', 'sun_protection', { score: 10 }), // 3★ -> écarté
+      cand('orange', 'hydration_face', { score: 6 }), // écarté
+      cand('rouge', 'brightening', { score: 2 }), // écarté
+    ]
+    const picks = selectWeeklyPicks({
+      candidates,
+      exclusion: noExclusion(),
+      seed: SEED_W28,
+      minCappedScore: 13,
+    })
+    const eans = picks.map((p) => p.ean)
+    expect(eans).toContain('vert-1')
+    expect(eans).toContain('vert-2')
+    expect(eans).not.toContain('jaune')
+    expect(eans).not.toContain('orange')
+    expect(eans).not.toContain('rouge')
+  })
+
+  it('applique le plancher sur la note PLAFONNÉE : note haute mais 2 rouges -> écartée', () => {
+    const candidates = [
+      // Note stockée verte (16) mais 2 ingrédients rouges -> plafonnée à 8.9.
+      cand('corrompu', 'hydration_face', { score: 16, countRouge: 2 }),
+      cand('sain', 'brightening', { score: 18 }),
+    ]
+    const picks = selectWeeklyPicks({
+      candidates,
+      exclusion: noExclusion(),
+      seed: SEED_W28,
+      minCappedScore: 13,
+    })
+    expect(picks.map((p) => p.ean)).toEqual(['sain'])
+  })
+
+  it('tous sous le seuil -> tableau vide', () => {
+    const candidates = NEEDS.map((need, i) => cand(`p-${i}`, need, { score: 8 }))
+    expect(
+      selectWeeklyPicks({
+        candidates,
+        exclusion: noExclusion(),
+        seed: SEED_W28,
+        minCappedScore: 13,
+      }),
+    ).toEqual([])
+  })
+
+  it('minCappedScore absent -> aucun filtre santé (rétrocompatible)', () => {
+    const candidates = [cand('bas', 'hydration_face', { score: 6 })]
+    const picks = selectWeeklyPicks({
+      candidates,
+      exclusion: noExclusion(),
+      seed: SEED_W28,
+    })
+    expect(picks.map((p) => p.ean)).toEqual(['bas'])
+  })
+})
+
 describe('selectWeeklyPicks : bornes et coupes', () => {
   it('coupe à max (défaut 6) sur la fixture de 30 candidats', () => {
     const picks = selectWeeklyPicks({

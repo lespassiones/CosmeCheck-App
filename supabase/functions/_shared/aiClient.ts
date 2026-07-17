@@ -49,6 +49,7 @@ export type AIFeature =
   | "compare"
   | "routine_conflicts"
   | "routine_organize"
+  | "goals_coverage"
   | "face_scan";
 
 export type AIProvider = "openai" | "mistral" | "tesseract" | "cache";

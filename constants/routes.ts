@@ -41,7 +41,6 @@ export const ROUTES = {
   ROUTINE: {
     EXPOSITION: '/routine/exposition',
     PRODUITS: '/routine/produits',
-    QUOTIDIEN: '/routine/quotidien',
     ITEM: (id: string) => `/routine/item/${id}` as const,
   },
 
@@ -77,6 +76,8 @@ export const ROUTES = {
   PROFILE: {
     INDEX: '/profile',
     RESTRICTIONS: '/profile/restrictions',
+    OBJECTIVES: '/profile/objectives',
+    BEAUTY: '/profile/beauty',
   },
 
   // ── Ingrédient ──────────────────────────────────────────────────

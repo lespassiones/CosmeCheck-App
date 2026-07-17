@@ -3,10 +3,8 @@
  *
  * Ne montre plus QUE : photo produit verticale à gauche + nom + marque, et le
  * donut de proportions couleur en bas à droite. Toute l'édition (fréquence,
- * créneau matin/soir, déplacement de bloc, suppression, voir l'analyse) a été
- * déplacée sur la sous-page de l'item (app/routine/item/[id].tsx), atteinte au
- * tap sur la carte. Le drag (réorganisation) reste géré par RoutineSection via
- * un appui long.
+ * suppression, voir l'analyse) a été déplacée sur la sous-page de l'item
+ * (app/routine/item/[id].tsx), atteinte au tap sur la carte.
  *
  * Aucune note produit chiffrée (règle éditoriale) : le donut seul.
  */

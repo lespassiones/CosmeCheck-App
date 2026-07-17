@@ -25,9 +25,14 @@ export type SkinProfileLike = {
   hairConcerns?: readonly string[];
   otherConcerns?: string;
   otherHair?: string;
+  otherHairConcerns?: string;
   allergiesFreeform?: string;
   goals?: readonly string[];
   otherGoals?: string;
+  otherGoalsFace?: string;
+  otherGoalsBody?: string;
+  otherGoalsHair?: string;
+  otherGoalsRoutine?: string;
 };
 
 /** Objectifs rattachés à l'axe capillaire. */
@@ -62,6 +67,9 @@ const SLUG_AXIS: Record<string, ProfileAxis> = {
   "hygiene-du-corps/savon": "skin",
   "hygiene-du-corps/gel-douche": "skin",
   "hygiene-du-corps/deodorant": "none",
+  // Taxonomie RÉELLE du catalogue (pluriel, 3 niveaux) : sans cette entrée, un déo
+  // `hygiene-du-corps/deodorants/deodorant` retombe sur la racine (skin) par défaut.
+  "hygiene-du-corps/deodorants": "none",
   "hygiene-du-corps/hygiene-intime": "none",
   "hygiene-du-corps/papier-toilette-humide": "none",
   "hygiene-du-corps/anti-poux": "hair",
@@ -129,6 +137,8 @@ export function categoryToAxis(category: string | null | undefined): ProfileAxis
 function hairFilled(skin: SkinProfileLike): boolean {
   return (skin.hairConcerns?.length ?? 0) > 0
     || Boolean(skin.otherHair)
+    || Boolean(skin.otherHairConcerns)
+    || Boolean(skin.otherGoalsHair)
     || (skin.goals?.some((g) => HAIR_GOAL_SET.has(g)) ?? false);
 }
 
@@ -140,6 +150,9 @@ function skinFilled(skin: SkinProfileLike): boolean {
     || (skin.concerns?.length ?? 0) > 0
     || Boolean(skin.otherConcerns)
     || Boolean(skin.allergiesFreeform)
+    || Boolean(skin.otherGoalsFace)
+    || Boolean(skin.otherGoalsBody)
+    || Boolean(skin.otherGoalsRoutine)
     || (skin.goals?.some((g) => !HAIR_GOAL_SET.has(g)) ?? false);
 }
 
@@ -148,6 +161,17 @@ export function axisFilled(axis: ProfileAxis, skin: SkinProfileLike): boolean {
   if (axis === "none") return true;
   if (axis === "hair") return hairFilled(skin);
   return skinFilled(skin);
+}
+
+/**
+ * Le profil contient-il LA MOINDRE donnée (peau OU cheveux) ? Décide du mode
+ * product_only : TOUT produit est personnalisé dès que le profil est rempli
+ * (décision user, juil 2026 : « tout doit être analysé, l'IA cherche
+ * elle-même ; si elle ne trouve rien tant pis ») — un déodorant à la
+ * niacinamide sert « tes boutons ». Seul un profil VIDE → score = qualité.
+ */
+export function profileHasData(skin: SkinProfileLike): boolean {
+  return skinFilled(skin) || hairFilled(skin);
 }
 
 // ── Filets déterministes « against » (campagne E2E juil 2026) ────────────────
@@ -160,6 +184,26 @@ export type ForcedAgainst = { name: string; need: string };
 /** INCI d'alcool asséchant (ancré : ne matche PAS cetyl/cetearyl alcohol, gras). */
 const DRYING_ALCOHOL_RE = /^(sd\s+)?alcohol(\s+denat\.?)?(\s+\d+-?\w*)?$/i;
 
+// Allergènes de parfum (UE) — sur peau sensible/réactive, à écarter MÊME sans
+// allergie déclarée (beaucoup l'ignorent).
+const FRAGRANCE_ALLERGENS = [
+  "parfum", "fragrance", "limonene", "linalool", "citronellol", "geraniol", "citral",
+  "coumarin", "eugenol", "cinnamal", "hexyl cinnamal", "benzyl salicylate", "benzyl benzoate",
+  "alpha-isomethyl ionone", "hydroxycitronellal", "isoeugenol", "farnesol", "amyl cinnamal",
+  "cinnamyl alcohol", "anise alcohol", "butylphenyl methylpropional", "evernia",
+];
+// Corps gras comédogènes — sur peau grasse/acnéique, aggravent boutons/points noirs.
+const COMEDOGENIC = [
+  "cocos nucifera", "coconut oil", "theobroma cacao", "cocoa butter", "isopropyl myristate",
+  "isopropyl palmitate", "myristyl myristate", "triticum vulgare germ", "wheat germ",
+  "linum usitatissimum", "linseed", "laureth-4", "oleth-3", "lanolin", "butyl stearate",
+  "decyl oleate", "cetyl acetate",
+];
+// Sulfates agressifs.
+const SULFATES = [
+  "sodium lauryl sulfate", "sodium laureth sulfate", "ammonium lauryl sulfate", "ammonium laureth sulfate",
+];
+
 const ALLERGY_STOPWORDS = new Set([
   "allergie", "allergique", "allergies", "suis", "very", "tres", "très", "avec",
   "sans", "pour", "dans", "les", "des", "aux", "une", "mon", "mes", "est",
@@ -170,41 +214,85 @@ function normalize(s: string): string {
 }
 
 /**
- * Détecte les contre-indications GARANTIES par le code :
- *  1. Alcool asséchant présent + peau sèche/sensible déclarée.
- *  2. Allergie texte libre dont un mot matche un ingrédient présent.
- * Renvoie au plus 2 entrées (cap du barème).
+ * Détecte les contre-indications GARANTIES par le code (l'IA rate ces cas, même
+ * avec un prompt musclé — prouvé E2E). Balaye le profil et force le malus :
+ *  1. Alcool asséchant × peau sèche/sensible.
+ *  2. Allergènes de parfum × peau sensible/réactive (MÊME sans allergie déclarée).
+ *  3. Comédogènes × peau grasse/acné.
+ *  4. Sulfates agressifs × cuir chevelu sensible / peau sensible / sèche.
+ *  5. Allergie déclarée (texte libre) × ingrédient présent (libellé prioritaire).
+ * Renvoie jusqu'à 10 (le cap final AGAINST_MAX est appliqué dans enforce).
  */
 export function detectForcedAgainst(
   items: { name?: string | null; input?: string | null }[],
   skin: SkinProfileLike,
 ): ForcedAgainst[] {
   const out: ForcedAgainst[] = [];
+  const nameOf = (i: { name?: string | null; input?: string | null }) => (i.name ?? i.input ?? "").trim();
+  const push = (name: string, need: string) => {
+    const nm = name.trim();
+    if (!nm || out.some((o) => normalize(o.name) === normalize(nm))) return;
+    out.push({ name: nm, need });
+  };
+
+  const face = (skin.skinTypeFace ?? "").toLowerCase();
+  const body = (skin.skinTypeBody ?? "").toLowerCase();
+  const concerns = (skin.concerns ?? []).map((c) => c.toLowerCase());
+  const goals = (skin.goals ?? []).map((g) => g.toLowerCase());
+  const hair = (skin.hairConcerns ?? []).map((h) => h.toLowerCase());
+
+  const sensitive = face === "sensible" || body === "sensible"
+    || concerns.some((c) => ["rougeurs", "sensibilite", "eczema", "rosacee", "couperose", "reactivite", "dermatite"].includes(c));
+  const dry = face === "seche" || face === "tres_seche" || body === "seche" || body === "tres_seche" || concerns.includes("secheresse");
+  const acneOily = face === "grasse" || body === "grasse"
+    || concerns.some((c) => ["acne", "points_noirs", "imperfections", "boutons", "exces_sebum", "brillance"].includes(c))
+    || goals.some((g) => ["attenuer_boutons", "reduire_imperfections", "matifier"].includes(g));
+  const scalpSensitive = hair.some((h) => ["cuir_chevelu_sensible", "pellicules", "demangeaisons"].includes(h));
 
   // 1. Alcool asséchant × peau sèche/sensible
-  const drySensitive = skin.skinTypeFace === "sensible" || skin.skinTypeFace === "seche"
-    || skin.skinTypeBody === "seche" || skin.skinTypeBody === "tres_seche" || skin.skinTypeBody === "sensible"
-    || (skin.concerns ?? []).some((c) => c === "secheresse" || c === "sensibilite" || c === "rougeurs");
-  if (drySensitive) {
-    const hit = items.find((i) => DRYING_ALCOHOL_RE.test((i.name ?? i.input ?? "").trim()));
-    if (hit) out.push({ name: "alcool", need: "ta peau sensible ou sèche" });
+  if (sensitive || dry) {
+    if (items.some((i) => DRYING_ALCOHOL_RE.test(nameOf(i)))) push("alcool", "ta peau sensible ou sèche");
   }
-
-  // 2. Allergie texte libre × ingrédient présent (match par mot significatif)
+  // 2. Allergènes de parfum × peau sensible/réactive
+  if (sensitive) {
+    for (const it of items) {
+      const n = normalize(nameOf(it));
+      if (n && FRAGRANCE_ALLERGENS.some((a) => n === normalize(a) || n.includes(normalize(a)))) push(nameOf(it), "ta peau sensible");
+    }
+  }
+  // 3. Comédogènes × peau grasse/acné
+  if (acneOily) {
+    for (const it of items) {
+      const n = normalize(nameOf(it));
+      if (n && COMEDOGENIC.some((k) => n.includes(normalize(k)))) push(nameOf(it), "ta peau grasse et tes imperfections");
+    }
+  }
+  // 4. Sulfates agressifs × cuir chevelu sensible / peau sensible / sèche
+  if (scalpSensitive || sensitive || dry) {
+    for (const it of items) {
+      const n = normalize(nameOf(it));
+      if (n && SULFATES.some((k) => n.includes(normalize(k)))) {
+        push(nameOf(it), scalpSensitive ? "ton cuir chevelu sensible" : sensitive ? "ta peau sensible" : "ta peau sèche");
+      }
+    }
+  }
+  // 5. Allergie DÉCLARÉE (texte libre) × ingrédient présent — libellé prioritaire.
   const allergyText = normalize(skin.allergiesFreeform ?? "");
   if (allergyText) {
     const tokens = [...new Set(allergyText.split(/[^a-z]+/).filter((t) => t.length >= 4 && !ALLERGY_STOPWORDS.has(t)))];
     for (const item of items) {
-      const n = normalize(item.name ?? item.input ?? "");
+      const n = normalize(nameOf(item));
       if (!n) continue;
       const tok = tokens.find((t) => n.includes(t) || t.includes(n));
-      if (tok && !out.some((o) => normalize(o.name) === n)) {
-        out.push({ name: item.name ?? item.input ?? tok, need: `ton allergie (${tok})` });
+      if (tok) {
+        const idx = out.findIndex((o) => normalize(o.name) === n);
+        if (idx >= 0) out[idx] = { name: nameOf(item), need: `ton allergie (${tok})` };
+        else out.push({ name: nameOf(item), need: `ton allergie (${tok})` });
       }
     }
   }
 
-  return out.slice(0, 2);
+  return out.slice(0, 10);
 }
 
 export type RelevanceVerdict =

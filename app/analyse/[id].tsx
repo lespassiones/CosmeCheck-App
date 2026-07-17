@@ -29,7 +29,8 @@ import { router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnalysisResultPanel } from '@/components/analysis/AnalysisResultPanel'
-import { VerdictGauge } from '@/components/analysis/VerdictGauge'
+import { Star3D } from '@/components/analysis/Star3D'
+import { STARS_BY_TONE, STAR_PALETTE_BY_TONE, STAR_EMPTY_PALETTE } from '@/lib/analysis/qualityStars'
 import { PromesseFlowModal } from '@/components/promesses/PromesseFlowModal'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { GlassCard } from '@/components/design/GlassCard'
@@ -44,7 +45,7 @@ import { parseAnalyseResponse, type AnalyseResponse } from '@/lib/analysis/types
 import { db } from '@/lib/supabase/client'
 import { isProductCategory } from '@/lib/ai/categorize'
 import { categoryLabel } from '@/lib/categoryLabel'
-import { computeEssentiel, verdictToneFromScore, type EssentielData } from '@/lib/essentiel/engine'
+import { computeEssentiel, verdictToneFromScore, type EssentielData, type VerdictTone } from '@/lib/essentiel/engine'
 import {
   cacheAnalysisRow,
   getCachedAnalysisRow,
@@ -55,13 +56,17 @@ import { leafLabelFromCategorySlug } from '@/constants/categories'
 import type { AnalysisRow } from '@/lib/supabase/types'
 import { useProfile } from '@/hooks/useProfile'
 import { useRoutine } from '@/hooks/useRoutine'
-import { classifyProductKind } from '@/lib/routine/productKind'
-import { RoutineBucketSheet } from '@/components/routine/RoutineBucketSheet'
-import type { RoutineItemKind } from '@/lib/supabase/types'
 import { useAppConfig } from '@/hooks/useAppConfig'
 
 /** Base du lien de partage web (page publique /a/[id] sur le twin web). */
 const SHARE_BASE_URL = 'https://cosme-check.com'
+
+// Barème étoiles « Qualité de la formule » (STARS_BY_TONE / STAR_PALETTE_BY_TONE /
+// STAR_EMPTY_PALETTE) extrait dans lib/analysis/qualityStars.ts — partagé avec la
+// carte d'aperçu scan (ScanPreviewCard). Miroir exact du web.
+
+/** Taille des étoiles (≈2× l'ancienne taille Ionicons de 30). */
+const STAR_SIZE = 54
 
 type LoadState =
   | { status: 'loading' }
@@ -88,6 +93,10 @@ const AnalyseDetailScreen: FC = () => {
   const { id } = useLocalSearchParams<{ id: string }>()
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [productImageUrl, setProductImageUrl] = useState<string | null>(null)
+  // Nombre de lignes rendues par le titre produit (mesuré via onTextLayout).
+  // Pilote la disposition marque/sous-catégorie : titre sur 3 lignes → méta sur
+  // UNE ligne (place comptée) ; titre sur 1-2 lignes → méta empilée.
+  const [titleLines, setTitleLines] = useState(2)
   // Score catalogue propriétaire CosmeCheck (catalog.score) + dernière sous-catégorie,
   // résolus depuis le catalogue par marque+nom. catalog.score est la SOURCE DE VÉRITÉ
   // du score (l'écran doit l'afficher, pas le score calculé de result_json).
@@ -253,12 +262,13 @@ const AnalyseDetailScreen: FC = () => {
     scrollRef.current?.scrollTo({ y: y + HEADER_OFFSET, animated: !reduceMotion })
   }, [reduceMotion])
 
-  // Pastille du VerdictGauge dérivée du SCORE. SOURCE DE VÉRITÉ = catalog.score
-  // (= NOTRE pastille, déjà position-aware) dès qu'il est résolu ; sinon le score
-  // de result_json (produit hors catalogue). PLUS DE COLOR CAP ICI : le score est
-  // pris TEL QUEL, sinon l'analyse afficherait une pastille différente de la
-  // reco/recherche (qui utilisent le score direct). UNE seule pastille partout.
-  // penalizingCount reste affiché (nombre d'ingrédients orange+rouge, info).
+  // Pastille / étoiles « Qualité » = LECTURE DIRECTE de catalog.score (source de
+  // vérité, déjà plafonnée par le moteur pastille V2 : le ceiling orange/rouge
+  // est CUIT dans la note → verdictToneFromScore retombe pile sur la pastille).
+  // Sinon result_json (produit hors catalogue). AUCUN applyColorCap ici : la note
+  // est déjà correcte ; re-plafonner avec des compteurs (souvent périmés/faux)
+  // ne ferait que DÉSYNCHRONISER l'affichage (audit 16 juil 2026 : 99,6 % des
+  // notes catalog == V2, 0 « faux vert » ; le vrai bug était le plafond client).
   const { effectiveVerdictScore, penalizingCount } = useMemo(() => {
     if (state.status !== 'ready') return { effectiveVerdictScore: null as number | null, penalizingCount: 0 }
     const nOrange = state.result.counts.orange ?? 0
@@ -273,40 +283,20 @@ const AnalyseDetailScreen: FC = () => {
   )
 
   const alreadyInRoutine = id ? isInRoutine(id) : false
-  const [bucketSheetOpen, setBucketSheetOpen] = useState(false)
 
-  // Bucket suggéré (le nom prime) : pré-signale « quotidien » pour un déo,
-  // dentifrice, gel douche… sans imposer le choix.
-  const suggestedBucket = useMemo<RoutineItemKind>(
-    () =>
-      state.status === 'ready'
-        ? classifyProductKind(state.productLabel, state.categoryPrecise)
-        : 'routine',
-    [state],
-  )
-
-  // Tap sur « Ajouter à ma routine » : on demande d'abord le bucket (les deux
-  // ne suivent pas la même logique), au lieu d'ajouter en silence.
-  const handleAddRoutine = useCallback(() => {
+  // Tap sur « Ajouter à ma routine » : ajout direct (liste unifiée, aucun choix
+  // de bloc). Parité avec le web.
+  const handleAddRoutine = useCallback(async () => {
     if (!id || alreadyInRoutine || routinePending) return
-    setBucketSheetOpen(true)
-  }, [id, alreadyInRoutine, routinePending])
-
-  const handleChooseBucket = useCallback(
-    async (kind: RoutineItemKind) => {
-      setBucketSheetOpen(false)
-      if (!id) return
-      setRoutinePending(true)
-      try {
-        await addToRoutine(id, 'daily', kind)
-      } catch {
-        Alert.alert('Erreur', "Impossible d'ajouter ce produit à ta routine.")
-      } finally {
-        setRoutinePending(false)
-      }
-    },
-    [id, addToRoutine],
-  )
+    setRoutinePending(true)
+    try {
+      await addToRoutine(id, 'daily')
+    } catch {
+      Alert.alert('Erreur', "Impossible d'ajouter ce produit à ta routine.")
+    } finally {
+      setRoutinePending(false)
+    }
+  }, [id, alreadyInRoutine, routinePending, addToRoutine])
 
   const [promesseModalOpen, setPromesseModalOpen] = useState(false)
 
@@ -420,7 +410,16 @@ const AnalyseDetailScreen: FC = () => {
               {/* Colonne droite : titre, puis marque + sous-catégorie SOUS le
                   titre (l'image à gauche remplit la hauteur de cette colonne). */}
               <View style={styles.titleTextCol}>
-                <Text style={styles.title} numberOfLines={3}>{state.title}</Text>
+                <Text
+                  style={styles.title}
+                  numberOfLines={3}
+                  onTextLayout={(e) => {
+                    const n = e.nativeEvent.lines.length
+                    if (n > 0 && n !== titleLines) setTitleLines(n)
+                  }}
+                >
+                  {state.title}
+                </Text>
                 {(() => {
                   // Priorité à la catégorie précise (famille/sous/feuille) pour
                   // les produits analysés, sinon la feuille catalogue, sinon l'enum.
@@ -428,20 +427,32 @@ const AnalyseDetailScreen: FC = () => {
                     ? leafLabelFromCategorySlug(state.categoryPrecise)
                     : null
                   const chipLabel = leafCategory || preciseLeaf || state.categoryText
-                  return (chipLabel || state.brand) ? (
-                    <View style={styles.metaRow}>
-                      {chipLabel ? (
-                        <View style={styles.categoryChip}>
-                          <Text style={styles.categoryText} numberOfLines={1}>
-                            {chipLabel}
-                          </Text>
-                        </View>
-                      ) : null}
-                      {state.brand ? (
-                        <Text style={styles.brandText} numberOfLines={1}>{state.brand}</Text>
-                      ) : null}
+                  if (!chipLabel && !state.brand) return null
+                  const chip = chipLabel ? (
+                    <View style={styles.categoryChip}>
+                      <Text style={styles.categoryText} numberOfLines={1}>
+                        {chipLabel}
+                      </Text>
                     </View>
                   ) : null
+                  const brand = state.brand ? (
+                    <View style={styles.brandChip}>
+                      <Text style={styles.brandChipText} numberOfLines={1}>{state.brand}</Text>
+                    </View>
+                  ) : null
+                  // Titre sur 3 lignes → sous-catégorie + marque sur la MÊME ligne.
+                  // Titre sur 1-2 lignes → empilé : marque sous le titre, sous-catégorie en bas.
+                  return titleLines >= 3 ? (
+                    <View style={styles.metaRow}>
+                      {chip}
+                      {brand}
+                    </View>
+                  ) : (
+                    <View style={styles.metaStack}>
+                      {brand}
+                      {chip}
+                    </View>
+                  )
                 })()}
               </View>
             </View>
@@ -486,22 +497,41 @@ const AnalyseDetailScreen: FC = () => {
               </View>
             </WhiteCard>
 
-            <View style={styles.shareRow}>
-              {/* Partage public : masqué si le flag admin est OFF (Paramètres). */}
-              {appConfig.flag_public_share && (
-                <Pressable
-                  onPress={handleShare}
-                  style={({ pressed }) => [styles.shareBtn, pressed && styles.btnPressed]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Partager"
-                  hitSlop={6}
-                >
-                  <Ionicons name="share-social-outline" size={16} color={colors.inkMuted} />
-                  <Text style={styles.shareText}>Partager</Text>
-                </Pressable>
-              )}
-              <VerdictGauge tone={verdictTone} orientation="horizontal" style={styles.gauge} />
-            </View>
+            {/* Qualité de la formule — note en étoiles (remplace les pastilles).
+                Partager en haut à droite, sur la ligne du titre. */}
+            <WhiteCard padding={16} style={styles.qualityCard}>
+              <View style={styles.qualityHeader}>
+                <Text style={styles.qualityTitle}>Qualité de la formule</Text>
+                {/* Partage public : masqué si le flag admin est OFF (Paramètres). */}
+                {appConfig.flag_public_share && (
+                  <Pressable
+                    onPress={handleShare}
+                    style={({ pressed }) => [styles.shareBtn, pressed && styles.btnPressed]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Partager"
+                    hitSlop={6}
+                  >
+                    <Ionicons name="share-social-outline" size={16} color={colors.inkMuted} />
+                    <Text style={styles.shareText}>Partager</Text>
+                  </Pressable>
+                )}
+              </View>
+              <Text style={styles.qualitySubtitle}>Évaluation générale de la formule</Text>
+              <View style={styles.starsRow}>
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <Star3D
+                    key={i}
+                    gradientId={`qstar-${i}`}
+                    size={STAR_SIZE}
+                    palette={
+                      i < STARS_BY_TONE[verdictTone]
+                        ? STAR_PALETTE_BY_TONE[verdictTone]
+                        : STAR_EMPTY_PALETTE
+                    }
+                  />
+                ))}
+              </View>
+            </WhiteCard>
           </View>
 
           <AnalysisResultPanel
@@ -535,13 +565,6 @@ const AnalyseDetailScreen: FC = () => {
           analysisId={id ?? null}
         />
       ) : null}
-
-      <RoutineBucketSheet
-        visible={bucketSheetOpen}
-        onClose={() => setBucketSheetOpen(false)}
-        onChoose={handleChooseBucket}
-        suggested={suggestedBucket}
-      />
     </SafeAreaView>
   )
 }
@@ -653,6 +676,12 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
+  // Méta empilée (titre court, 1-2 lignes) : marque au-dessus, sous-cat en bas.
+  metaStack: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+  },
   categoryChip: {
     alignSelf: 'flex-start',
     backgroundColor: 'rgba(0,0,0,0.06)',
@@ -666,11 +695,22 @@ const styles = StyleSheet.create({
     color: colors.inkMuted,
     textTransform: 'capitalize',
   },
-  brandText: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 12,
-    color: colors.ink,
+  // Marque en petit badge DORÉ (même forme que la sous-catégorie, teinte or).
+  brandChip: {
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    backgroundColor: '#FBF3DF',
+    borderWidth: 1,
+    borderColor: 'rgba(180,138,42,0.35)',
+    borderRadius: 9999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
     flexShrink: 1,
+  },
+  brandChipText: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 11,
+    color: '#8B6B21',
   },
   ctaRow: {
     flexDirection: 'row',
@@ -684,7 +724,9 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: spacing.sm,
     paddingVertical: 9,
-    borderRadius: radius.full,
+    // Rectangle arrondi (mockup) : coins arrondis mais avec un segment
+    // vertical droit sur les côtés, PAS une pilule pleine (radius.full).
+    borderRadius: radius.lg,
   },
   ctaBtnGreen: {
     backgroundColor: colors.success,
@@ -709,38 +751,43 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     flexShrink: 1,
   },
-  // Pilule blanche regroupant "Partager" + la jauge des 5 pastilles
-  // (NB : pas d'overflow:hidden — laisse le halo de la pastille active déborder).
-  shareRow: {
+  // Bloc « Qualité de la formule » — note en étoiles (remplace les pastilles).
+  qualityCard: {},
+  qualityHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: spacing.sm,
-    backgroundColor: '#FFFFFF',
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 2,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    elevation: 3,
+  },
+  qualityTitle: {
+    fontFamily: fontFamilies.bold,
+    fontSize: 15,
+    color: colors.ink,
+    flexShrink: 1,
+  },
+  qualitySubtitle: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 13,
+    color: colors.inkLight,
+    marginTop: 2,
+  },
+  starsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
   },
   shareBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
+    paddingVertical: 4,
     flexShrink: 0,
   },
   shareText: {
     fontFamily: fontFamilies.medium,
     fontSize: 13,
     color: colors.inkMuted,
-  },
-  gauge: {
-    // La jauge prend la place restante et distribue les pastilles (flex+space-between
-    // gérés en interne par VerdictGauge.styles.row).
   },
   errorCard: {
     alignItems: 'center',

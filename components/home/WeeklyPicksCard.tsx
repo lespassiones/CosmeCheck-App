@@ -1,5 +1,5 @@
 /**
- * WeeklyPicksCard — « Pépites de la semaine » sur le dashboard.
+ * WeeklyPicksCard — « Pépites du jour » sur le dashboard (rotation quotidienne).
  *
  * PAS de bloc/carte englobante : un simple en-tête + un carrousel horizontal
  * PLEINE LARGEUR (les cartes débordent jusqu'aux bords de l'écran et défilent
@@ -39,7 +39,7 @@ export const WeeklyPicksCard: FC = () => {
     <View>
       <View style={styles.header}>
         <Ionicons name="sparkles" size={18} color={colors.accent} />
-        <Text style={styles.kicker}>PÉPITES DE LA SEMAINE</Text>
+        <Text style={styles.kicker}>PÉPITES DU JOUR</Text>
       </View>
       <Text style={styles.subtitle}>Sélectionnées pour toi</Text>
 
@@ -65,8 +65,7 @@ export const WeeklyPicksCard: FC = () => {
         </View>
       ) : picks.length === 0 ? (
         <Text style={styles.emptyText}>
-          Pas de pépites compatibles avec tes restrictions cette semaine. Reviens la semaine
-          prochaine.
+          Pas de pépites compatibles avec tes restrictions aujourd'hui. Reviens demain.
         </Text>
       ) : (
         <FlatList

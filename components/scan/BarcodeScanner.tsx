@@ -31,6 +31,7 @@ import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
 import { supabase } from '@/lib/supabase/client'
 import { ScanPreviewCard, type ScanPreview } from './ScanPreviewCard'
+import { ContributeProductSheet } from './ContributeProductSheet'
 
 interface Props {
   /** Appelé quand l'INCI est disponible (produit trouvé). */
@@ -64,6 +65,8 @@ export const BarcodeScanner: FC<Props> = ({
 }) => {
   const [permission, requestPermission] = useCameraPermissions()
   const [state, setState] = useState<ScanState>({ kind: 'scanning' })
+  // EAN pour lequel la modale « Ajouter ce produit » est ouverte (contribution).
+  const [contributeEan, setContributeEan] = useState<string | null>(null)
   // Verrou : empêche les détections multiples d'un même cadre.
   const lockedRef = useRef(false)
   // Dernier code scanné + timestamp : évite de re-scanner le MÊME code en boucle
@@ -266,12 +269,22 @@ export const BarcodeScanner: FC<Props> = ({
           <View style={styles.registeredHeader}>
             <Ionicons name="checkmark-circle" size={20} color={colors.success} />
             <Text style={styles.registeredText}>
-              Ce produit a été enregistré et sera référencé très prochainement.
+              Ce produit n'est pas encore chez nous. Aide-nous à l'ajouter en 2 photos, on le
+              décrypte pour toi et toute la communauté.
             </Text>
           </View>
-          <View style={[styles.btnRow, { marginTop: spacing.md }]}>
-            <Pressable style={styles.primaryBtn} onPress={onFallbackToSearch} hitSlop={8}>
-              <Text style={styles.primaryBtnText}>Rechercher le produit</Text>
+          <Pressable
+            style={[styles.contributeBtn, { marginTop: spacing.md }]}
+            onPress={() => setContributeEan(state.barcode)}
+            hitSlop={8}
+            accessibilityRole="button"
+          >
+            <Ionicons name="camera-outline" size={18} color="#FFFFFF" />
+            <Text style={styles.contributeBtnText}>Ajouter ce produit</Text>
+          </Pressable>
+          <View style={[styles.btnRow, { marginTop: spacing.sm }]}>
+            <Pressable style={styles.secondaryBtn} onPress={onFallbackToSearch} hitSlop={8}>
+              <Text style={styles.secondaryBtnText}>Rechercher</Text>
             </Pressable>
             <Pressable style={styles.secondaryBtn} onPress={resume} hitSlop={8}>
               <Text style={styles.secondaryBtnText}>Scanner un autre</Text>
@@ -279,6 +292,15 @@ export const BarcodeScanner: FC<Props> = ({
           </View>
         </Animated.View>
       )}
+
+      <ContributeProductSheet
+        visible={contributeEan !== null}
+        ean={contributeEan ?? ''}
+        onClose={() => {
+          setContributeEan(null)
+          resume()
+        }}
+      />
 
       {/* Edge Function indisponible (non déployée / erreur) */}
       {state.kind === 'unavailable' && (
@@ -393,6 +415,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   secondaryBtnText: { ...typography.buttonSmall, color: colors.ink },
+  contributeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.rose,
+    borderRadius: radius.full,
+    paddingVertical: spacing.md,
+  },
+  contributeBtnText: { ...typography.buttonSmall, color: '#FFFFFF' },
   permWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing['2xl'], gap: spacing.md },
   permTitle: { ...typography.h4, color: colors.ink },
   permText: { ...typography.small, color: colors.inkMuted, textAlign: 'center', paddingHorizontal: spacing.lg },

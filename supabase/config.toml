@@ -51,6 +51,8 @@ verify_jwt = true
 verify_jwt = true
 [functions.personal-insights]
 verify_jwt = true
+[functions.goals-coverage]
+verify_jwt = true
 [functions.routine-smart-suggest]
 verify_jwt = true
 [functions.routine-conflicts-ai]
@@ -79,6 +81,8 @@ verify_jwt = false
 verify_jwt = false
 [functions.push-dispatch]
 verify_jwt = false
+[functions.profile-restriction-inference]
+verify_jwt = false
 [functions.brevo-sync]
 verify_jwt = false
 [functions.admin-health-alert]
@@ -92,4 +96,6 @@ verify_jwt = false
 [functions.admin-resolve-barcode]
 verify_jwt = true
 [functions.admin-score-upsert]
+verify_jwt = true
+[functions.admin-ocr-submission]
 verify_jwt = true

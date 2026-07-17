@@ -24,6 +24,10 @@ export interface CatalogIdentity {
    *  (ex. produit internet) mais que la catégorie a quand même pu être votée. */
   ean: string | null
   score: number | null
+  /** Compteurs pénalisants (sidecar) — MÊME source que les pastilles recherche/
+   *  navigation → l'écran analyse peut appliquer applyColorCap à l'identique. */
+  countOrange: number | null
+  countRouge: number | null
   /** Chemin de catégorie EXACT au format catalog.category
    *  (ex. "soins-corps/savon/savon-surgras"). Compatible avec
    *  cosme_check_alternatives_by_category_exact. */
@@ -46,6 +50,8 @@ export async function resolveCatalogIdentity(
         return {
           ean: row.ean ?? ean.trim(),
           score: typeof row.score === 'number' ? row.score : null,
+          countOrange: typeof row.count_orange === 'number' ? row.count_orange : null,
+          countRouge: typeof row.count_rouge === 'number' ? row.count_rouge : null,
           category: row.category ?? null,
         }
       }
@@ -77,9 +83,34 @@ export async function resolveCatalogIdentity(
       top.category ??
       null
 
+    // search_catalog renvoie 0/0 pour les compteurs pénalisants → si on a un EAN,
+    // on récupère les VRAIS compteurs (sidecar) via fetchProductByEan (dédupliqué
+    // React Query, souvent déjà en cache via la résolution d'image) pour pouvoir
+    // appliquer le MÊME plafond couleur que la recherche/navigation.
+    if (top.ean) {
+      try {
+        const row = await fetchProductByEan(top.ean)
+        if (row) {
+          return {
+            ean: row.ean ?? top.ean,
+            score: typeof row.score === 'number'
+              ? row.score
+              : (typeof top.score === 'number' ? top.score : null),
+            countOrange: typeof row.count_orange === 'number' ? row.count_orange : null,
+            countRouge: typeof row.count_rouge === 'number' ? row.count_rouge : null,
+            category: votedCategory,
+          }
+        }
+      } catch {
+        // Repli sur le retour minimal ci-dessous.
+      }
+    }
+
     return {
       ean: top.ean ?? null,
       score: typeof top.score === 'number' ? top.score : null,
+      countOrange: null,
+      countRouge: null,
       category: votedCategory,
     }
   } catch {

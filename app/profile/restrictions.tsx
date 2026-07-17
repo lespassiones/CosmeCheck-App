@@ -35,6 +35,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { NeuCard } from '@/components/design/NeuCard'
+import { InferredRestrictionsCard } from '@/components/profile/InferredRestrictionsCard'
 
 const MAX_FAMILIES = 60
 const MAX_INGREDIENTS = 80
@@ -277,6 +278,10 @@ const RestrictionsScreen: FC = () => {
             Choisis les familles et les ingrédients précis que tu veux éviter. Cosme Check te
             préviendra à chaque analyse si un produit en contient.
           </Text>
+
+          {/* Récap LECTURE SEULE des sensibilités déduites du profil (worker IA
+              back-end). Rien n'est activé ; null si pas encore calculé. */}
+          <InferredRestrictionsCard userId={userId} />
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
