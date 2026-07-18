@@ -4,7 +4,8 @@
  * Pipeline (zéro appel externe) :
  *   1. gate (auth Bearer + IP rate-limit, costCredits:0). 20/min/IP.
  *   2. Server gate: barcode must match /^\d{8,14}$/ (EAN-8..ITF-14).
- *   3. Cache KV Deno TTL 12h.
+ *   3. Cache Postgres (cosme_check.scan_cache) TTL 12h — POSITIFS uniquement
+ *      (found:true) : un négatif caché gèlerait « introuvable » 12h.
  *   4. Lookup EAN dans le catalog Cosme Check.
  *      - Trouvé avec INCI valide → found.
  *      - Trouvé sans INCI        → reason:"incomplete".
@@ -135,8 +136,12 @@ Deno.serve(async (req: Request) => {
   }
 
   if (row) {
-    // EAN connu mais INCI manquant/insuffisant.
-    void cacheBarcodeResult(barcode, INCOMPLETE);
+    // EAN connu mais INCI manquant/insuffisant. JAMAIS mis en cache (18 juil
+    // 2026) : un INCOMPLETE caché 12h gelait « pas encore référencé » même
+    // après publication de l'INCI (fenêtre stub → contribution → publication),
+    // d'où des scans « introuvable » alors que le produit venait d'être
+    // complété. Le lookup est une lecture PK indexée (~1 ms) : cacher un
+    // négatif = 100 % risque, 0 % gain. Seul le found:true reste caché.
     return jsonResponse(INCOMPLETE);
   }
 
