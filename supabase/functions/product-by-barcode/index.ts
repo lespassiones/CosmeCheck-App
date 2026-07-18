@@ -94,7 +94,17 @@ Deno.serve(async (req: Request) => {
   }
 
   // Lookup dans le catalog Cosme Check (source unique de vérité).
-  const row = await getCatalogByEan(barcode);
+  // ÉCHEC de requête (≠ produit inconnu) → 503 honnête : l'app affiche
+  // « Recherche produit indisponible / Rescanner », JAMAIS le faux
+  // « pas dans notre base » (bug intermittent corrigé le 18 juil 2026).
+  const lookup = await getCatalogByEan(barcode);
+  if (!lookup.ok) {
+    return jsonResponse(
+      { error: "Recherche momentanément indisponible. Réessaie dans un instant." },
+      { status: 503 },
+    );
+  }
+  const row = lookup.row;
 
   if (row && row.ingredients_text && looksLikeInci(row.ingredients_text)) {
     const payload = {

@@ -109,21 +109,31 @@ export async function lookupCatalogByEan(ean: string): Promise<{
   }
 }
 
+/** Résultat du lookup EAN : distingue « ligne absente » (réponse DB saine,
+ *  row:null) d'un ÉCHEC de requête (ok:false). CRUCIAL : avant (18 juil 2026),
+ *  une erreur transitoire (timeout, pool saturé) renvoyait null = traitée comme
+ *  « produit inconnu » → faux « pas dans notre base » intermittent au scan. */
+export type CatalogLookup = { ok: true; row: CatalogRow | null } | { ok: false };
+
 /** Lecture du catalogue par EAN exact (forme snake_case complète). Source
- *  unique de vérité du scan. Lecture seule, jamais bloquante → null si erreur. */
-export async function getCatalogByEan(ean: string): Promise<CatalogRow | null> {
-  try {
-    const { data, error } = await serviceClient()
-      .schema("cosme_check")
-      .from("catalog")
-      .select("ean, brand, name, ingredients_text, source_url, image_url, count_total, category, score, score_tone, score_label, count_orange, count_rouge")
-      .eq("ean", ean)
-      .maybeSingle();
-    if (error || !data) return null;
-    return data as CatalogRow;
-  } catch {
-    return null;
+ *  unique de vérité du scan. 1 retry léger (150 ms) absorbe les hoquets DB ;
+ *  au-delà on signale l'échec (ok:false) au lieu de mentir « inconnu ». */
+export async function getCatalogByEan(ean: string): Promise<CatalogLookup> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const { data, error } = await serviceClient()
+        .schema("cosme_check")
+        .from("catalog")
+        .select("ean, brand, name, ingredients_text, source_url, image_url, count_total, category, score, score_tone, score_label, count_orange, count_rouge")
+        .eq("ean", ean)
+        .maybeSingle();
+      if (!error) return { ok: true, row: (data as CatalogRow | null) ?? null };
+    } catch {
+      /* transitoire → retry */
+    }
+    if (attempt === 0) await new Promise((r) => setTimeout(r, 150));
   }
+  return { ok: false };
 }
 
 /** Enregistre un code-barres scanné mais inconnu dans le catalogue, en mode

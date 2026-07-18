@@ -141,8 +141,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const category = resultJson.productType || resultJson.catalogCategory || resultJson.category
     || (row.product_type as string | null) || (row.category as string | null) || null;
 
+  const wantCompat = body.compat === true;
+
   // ── Court-circuit gratuit (déjà généré pour ce profil ET version courante) ──
-  if (resultJson.personalBlocks && resultJson.personalBlocksKey === sig) {
+  // SELF-HEAL (18 juil 2026) : si le client veut la compat mais que la ligne a
+  // des blocs SANS compatibility (bug historique : l'upsert dédup au re-scan
+  // préservait les blocs mais effaçait la compat → carte sans score, pour
+  // toujours), on NE court-circuite PAS : on retombe sur la régénération —
+  // GRATUITE (alreadyHasBlocks ⇒ aucun débit) — qui re-persiste blocs + compat.
+  if (
+    resultJson.personalBlocks && resultJson.personalBlocksKey === sig &&
+    (!wantCompat || resultJson.compatibility)
+  ) {
     return jsonResponse({
       blocks: resultJson.personalBlocks,
       compatibility: resultJson.compatibility ?? null,
@@ -158,7 +168,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // (compat:true). RÉTRO-COMPATIBILITÉ : les anciens clients (sans le flag)
   // reçoivent toujours leurs 3 blocs comme avant + le score (qu'ils ignorent) ;
   // ils ne sont jamais bloqués → déploiement edge sûr avant rebuild des apps.
-  const wantCompat = body.compat === true;
   const verdict = relevanceVerdict(category, skin);
   if (wantCompat && verdict.kind === "profile_incomplete") {
     return jsonResponse({ profileIncomplete: true, missingSection: verdict.missingSection });
