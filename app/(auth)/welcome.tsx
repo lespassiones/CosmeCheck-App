@@ -9,9 +9,10 @@
  * Le wordmark « Cosme Check » ferme l'écran en bas.
  */
 
-import { type FC, useState } from 'react'
+import { type FC, type ReactNode, useState } from 'react'
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -31,6 +32,7 @@ import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { LogoMark } from '@/components/shared/Logo'
 import { fontFamilies } from '@/constants/typography'
 import { signInWithGoogle } from '@/lib/auth/google'
+import { signInWithApple } from '@/lib/auth/apple'
 
 /** Logo Google officiel multicolore (4 couleurs). */
 const GoogleLogo: FC<{ size?: number }> = ({ size = 24 }) => (
@@ -54,47 +56,96 @@ const GoogleLogo: FC<{ size?: number }> = ({ size = 24 }) => (
   </Svg>
 )
 
-/**
- * Bouton Google circulaire (icône dans une pastille blanche + label dessous),
- * façon « Continuer avec ». Déclenche le flux OAuth PKCE ; l'annulation reste
- * silencieuse, seules les vraies erreurs s'affichent.
- */
-const GoogleCircleButton: FC = () => {
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+/** Logo Apple (silhouette noire). */
+const AppleLogo: FC<{ size?: number }> = ({ size = 24 }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24">
+    <Path
+      fill="#000000"
+      d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"
+    />
+  </Svg>
+)
 
-  const handlePress = async (): Promise<void> => {
+/** Bouton provider circulaire générique (icône dans une pastille + label dessous). */
+const ProviderCircle: FC<{
+  label: string
+  a11y: string
+  loading: boolean
+  onPress: () => void
+  children: ReactNode
+}> = ({ label, a11y, loading, onPress, children }) => (
+  <View style={styles.providerItem}>
+    <Pressable
+      onPress={onPress}
+      disabled={loading}
+      style={({ pressed }) => [
+        styles.googleCircle,
+        pressed && !loading && styles.googleCirclePressed,
+        loading && styles.googleCircleDisabled,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={a11y}
+    >
+      {loading ? <ActivityIndicator color={colors.inkMuted} size="small" /> : children}
+    </Pressable>
+    <Text style={styles.googleLabel}>{label}</Text>
+  </View>
+)
+
+/**
+ * Boutons sociaux « Continuer avec » : Google (toutes plateformes) + Apple
+ * (iOS uniquement — feuille système native, exigé par Apple dès qu'il y a Google).
+ * L'annulation reste silencieuse ; seules les vraies erreurs s'affichent.
+ */
+const SocialButtons: FC = () => {
+  const [loading, setLoading] = useState<null | 'google' | 'apple'>(null)
+  const [error, setError] = useState<string | null>(null)
+  const appleAvailable = Platform.OS === 'ios'
+
+  const runGoogle = async (): Promise<void> => {
     Haptics.selectionAsync().catch(() => {})
     setError(null)
-    setIsLoading(true)
+    setLoading('google')
     const result = await signInWithGoogle()
-    setIsLoading(false)
-
+    setLoading(null)
     if (result.ok || result.cancelled) return
     setError(result.error ?? 'La connexion Google a échoué. Réessaie.')
+  }
+
+  const runApple = async (): Promise<void> => {
+    Haptics.selectionAsync().catch(() => {})
+    setError(null)
+    setLoading('apple')
+    const result = await signInWithApple()
+    setLoading(null)
+    if (result.ok || result.cancelled) return
+    setError(result.error ?? 'La connexion Apple a échoué. Réessaie.')
   }
 
   return (
     <View style={styles.googleWrap}>
       <Text style={styles.googleCaption}>Continuer avec</Text>
-      <Pressable
-        onPress={() => void handlePress()}
-        disabled={isLoading}
-        style={({ pressed }) => [
-          styles.googleCircle,
-          pressed && !isLoading && styles.googleCirclePressed,
-          isLoading && styles.googleCircleDisabled,
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel="Continuer avec Google"
-      >
-        {isLoading ? (
-          <ActivityIndicator color={colors.inkMuted} size="small" />
-        ) : (
+      <View style={styles.providerRow}>
+        <ProviderCircle
+          label="Google"
+          a11y="Continuer avec Google"
+          loading={loading === 'google'}
+          onPress={() => void runGoogle()}
+        >
           <GoogleLogo size={26} />
+        </ProviderCircle>
+
+        {appleAvailable && (
+          <ProviderCircle
+            label="Apple"
+            a11y="Continuer avec Apple"
+            loading={loading === 'apple'}
+            onPress={() => void runApple()}
+          >
+            <AppleLogo size={28} />
+          </ProviderCircle>
         )}
-      </Pressable>
-      <Text style={styles.googleLabel}>Google</Text>
+      </View>
 
       {error && (
         <View style={styles.errorRow}>
@@ -132,9 +183,9 @@ const WelcomeScreen: FC = () => {
             </Text>
           </View>
 
-          {/* Bouton Google (unique dans l'app) — rapproché du sous-titre */}
+          {/* Boutons sociaux (Google + Apple sur iOS) — rapprochés du sous-titre */}
           <View style={styles.googleBlock}>
-            <GoogleCircleButton />
+            <SocialButtons />
           </View>
 
           {/* Séparateur */}
@@ -228,6 +279,15 @@ const styles = StyleSheet.create({
   },
   // ── Google ─────────────────────────────────────────────────────────
   googleWrap: {
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  providerRow: {
+    flexDirection: 'row',
+    gap: spacing.xl,
+    alignItems: 'flex-start',
+  },
+  providerItem: {
     alignItems: 'center',
     gap: spacing.sm,
   },
