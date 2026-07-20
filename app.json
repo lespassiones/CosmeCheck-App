@@ -29,7 +29,7 @@
     "android": {
       "package": "com.cosmecheck.app",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 8,
+      "versionCode": 9,
       "minSdkVersion": 26,
       "targetSdkVersion": 35,
       "softwareKeyboardLayoutMode": "pan",

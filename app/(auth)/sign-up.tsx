@@ -1,9 +1,8 @@
 /**
- * SignUpScreen — inscription (nom + email + mot de passe).
+ * SignUpScreen — inscription (Google + nom + email + mot de passe).
  *
- * Le bouton Google vit désormais uniquement sur l'écran de bienvenue
- * (/(auth)/welcome). Ici on affiche directement le formulaire complet, sans
- * toggle ni doublon Google.
+ * En haut : raccourci « S'inscrire avec Google », séparateur « ou », puis le
+ * formulaire e-mail complet.
  */
 
 import { type FC } from 'react'
@@ -27,6 +26,7 @@ import { ROUTES } from '@/constants/routes'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { LogoMark } from '@/components/shared/Logo'
 import { SignUpForm } from '@/components/auth/SignUpForm'
+import { GoogleAuthButton } from '@/components/auth/GoogleAuthButton'
 import { useAppConfig } from '@/hooks/useAppConfig'
 
 const SignUpScreen: FC = () => {
@@ -78,7 +78,15 @@ const SignUpScreen: FC = () => {
                 ou connecte-toi si tu as déjà un compte.
               </Text>
             ) : (
-              <SignUpForm />
+              <>
+                <GoogleAuthButton label="S'inscrire avec Google" />
+                <View style={styles.separator}>
+                  <View style={styles.line} />
+                  <Text style={styles.separatorText}>ou</Text>
+                  <View style={styles.line} />
+                </View>
+                <SignUpForm />
+              </>
             )}
 
             <View style={styles.footer}>
@@ -139,6 +147,13 @@ const styles = StyleSheet.create({
     color: colors.inkMuted,
     textAlign: 'center',
   },
+  separator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  line: { flex: 1, height: 1, backgroundColor: colors.border },
+  separatorText: { ...typography.small, color: colors.inkLight },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',

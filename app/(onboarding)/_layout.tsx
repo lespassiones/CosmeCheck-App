@@ -2,8 +2,9 @@
  * OnboardingLayout — groupe (onboarding).
  *
  * Stack sans header natif. Protection : si l'utilisateur n'est pas connecté,
- * on redirige vers l'écran de connexion. La barre de progression / navigation
- * vit dans OnboardingWizard (monté par index.tsx).
+ * on redirige vers l'écran de BIENVENUE (welcome, avec Google) — surtout PAS
+ * vers la page email/mdp (sign-in), qui ne doit jamais être un point d'entrée.
+ * La barre de progression / navigation vit dans OnboardingWizard (index.tsx).
  */
 
 import { type FC } from 'react'
@@ -26,7 +27,7 @@ const OnboardingLayout: FC = () => {
   }
 
   if (!isAuthenticated) {
-    return <Redirect href={ROUTES.AUTH.SIGN_IN} />
+    return <Redirect href={ROUTES.AUTH.WELCOME} />
   }
 
   return (

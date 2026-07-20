@@ -75,7 +75,7 @@ const asyncStoragePersister = createAsyncStoragePersister({
  *
  * Règles (anti-boucle : chaque branche est conditionnée par le segment courant) :
  *   - auth en cours de chargement → on attend (splash visible) ;
- *   - pas de session et hors (auth) → /(auth)/sign-in ;
+ *   - pas de session et hors (auth) → /(auth)/welcome (ou /(preonboarding) au 1er lancement) ;
  *   - session et dans (auth) → onboarding si nécessaire, sinon /(tabs) ;
  *   - session, onboarding non vu et profil incomplet, hors (onboarding)
  *     → /(onboarding) (on attend que le profil soit chargé avant de décider) ;
