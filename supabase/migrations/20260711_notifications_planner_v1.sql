@@ -127,7 +127,7 @@ BEGIN
           v_scn.key || ':' || aud.uid::text || ':' || v_week,
           'planner'
         FROM aud
-        ON CONFLICT (dedup_key) DO NOTHING
+        ON CONFLICT (dedup_key) WHERE dedup_key IS NOT NULL DO NOTHING
         RETURNING 1
       )
       SELECT count(*) INTO v_queued FROM ins;
