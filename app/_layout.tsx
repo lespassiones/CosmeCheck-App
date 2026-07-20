@@ -214,6 +214,7 @@ function RootNavigator() {
       <Stack.Screen name="profile/restrictions" />
       <Stack.Screen name="profile/objectives" />
       <Stack.Screen name="profile/beauty" />
+      <Stack.Screen name="profile/credits" />
       <Stack.Screen name="ingredient/[slug]" />
       <Stack.Screen name="offre/index" options={{ presentation: 'modal' }} />
       <Stack.Screen name="legal/cgu" />

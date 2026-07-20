@@ -70,6 +70,11 @@ const ProfileScreen: FC = () => {
         onPress: () => router.push(ROUTES.OFFRE.INDEX),
       },
       {
+        icon: 'pricetags-outline',
+        label: 'Crédits & fonctionnalités',
+        onPress: () => router.push(ROUTES.PROFILE.CREDITS),
+      },
+      {
         icon: 'flag-outline',
         label: 'Signaler un problème',
         onPress: () => setReportOpen(true),

@@ -27,8 +27,6 @@ import { ROUTES } from '@/constants/routes'
 import { useGoalsCoverage } from '@/hooks/useGoalsCoverage'
 import type { CoverageItem, CoverageTone } from '@/lib/routine/goalsCoverage'
 
-const EVAL_COST = 3
-
 /** Libellés COURTS pour les jauges (les libellés profil sont des phrases). */
 const SHORT_GOAL_LABEL: Record<string, string> = {
   peau_douce: 'Peau douce',
@@ -67,19 +65,36 @@ function shortLabel(item: CoverageItem): string {
   return SHORT_GOAL_LABEL[item.key] ?? item.label
 }
 
-// ── Ligne jauge ──────────────────────────────────────────────────────────────
+// ── Ligne jauge (dépliable) ────────────────────────────────────────────────
+// Repliée : libellé court + barre + %. Au tap → se déroule : nom COMPLET de
+// l'objectif en haut, barre de progression + % en dessous.
 const GaugeRow: FC<{ item: CoverageItem }> = ({ item }) => {
   const color = TONE_COLOR[item.tone] ?? colors.rating.rouge.DEFAULT
-  return (
-    <View style={styles.gaugeRow}>
-      <Text style={styles.gaugeLabel} numberOfLines={1}>
-        {shortLabel(item)}
-      </Text>
-      <View style={styles.track}>
-        <View style={[styles.fill, { width: `${Math.max(2, item.percent)}%`, backgroundColor: color }]} />
-      </View>
-      <Text style={[styles.percent, { color }]}>{item.percent}%</Text>
+  const [open, setOpen] = useState(false)
+  const fill = (
+    <View style={styles.track}>
+      <View style={[styles.fill, { width: `${Math.max(2, item.percent)}%`, backgroundColor: color }]} />
     </View>
+  )
+  return (
+    <Pressable
+      onPress={() => setOpen((v) => !v)}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.label} : ${item.percent}%`}
+    >
+      <Animated.View layout={LinearTransition.duration(220)} style={styles.gaugeRowStacked}>
+        {/* Nom de l'objectif en haut (pleine largeur, jamais tronqué). Tap →
+            révèle le libellé complet ; sinon libellé court. */}
+        <Text style={styles.gaugeLabelFull} numberOfLines={open ? undefined : 1}>
+          {open ? item.label : shortLabel(item)}
+        </Text>
+        {/* Barre de niveau + % EN DESSOUS de l'objectif. */}
+        <View style={styles.gaugeBarRow}>
+          {fill}
+          <Text style={[styles.percent, { color }]}>{item.percent}%</Text>
+        </View>
+      </Animated.View>
+    </Pressable>
   )
 }
 
@@ -277,11 +292,10 @@ export const GoalsCoverageCard: FC = () => {
           onPress={() => void evaluate(false)}
           accessibilityRole="button"
         >
-          <Ionicons name="sparkles-outline" size={16} color="#FFFFFF" />
-          <Text style={styles.evalBtnText}>Évaluer la couverture de mes objectifs</Text>
-          <View style={styles.costPill}>
-            <Text style={styles.costPillText}>{EVAL_COST} crédits</Text>
-          </View>
+          <Ionicons name="sparkles-outline" size={15} color="#FFFFFF" />
+          <Text style={styles.evalBtnText} numberOfLines={1} adjustsFontSizeToFit>
+            Évaluer la couverture de mes objectifs
+          </Text>
         </Pressable>
       </View>
     )
@@ -316,12 +330,15 @@ const styles = StyleSheet.create({
   },
   moreText: { fontFamily: fontFamilies.semiBold, fontSize: 12.5, color: colors.accent },
   gaugeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  gaugeLabel: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 12.5,
+  // Ligne empilée (défaut) : nom de l'objectif au-dessus, barre + % en dessous.
+  gaugeRowStacked: { gap: 7 },
+  gaugeLabelFull: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 13.5,
     color: colors.ink,
-    width: 108,
+    lineHeight: 18,
   },
+  gaugeBarRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   track: {
     flex: 1,
     height: 10,
@@ -382,20 +399,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: colors.rose,
+    backgroundColor: colors.success,
     borderRadius: radius.full,
     paddingVertical: 12,
     paddingHorizontal: spacing.md,
   },
-  evalBtnPressed: { backgroundColor: colors.roseDeep },
-  evalBtnText: { fontFamily: fontFamilies.semiBold, fontSize: 13.5, color: '#FFFFFF' },
-  costPill: {
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    borderRadius: radius.full,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+  evalBtnPressed: { backgroundColor: colors.successDeep },
+  evalBtnText: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 12,
+    color: '#FFFFFF',
+    flexShrink: 1,
+    textAlign: 'center',
   },
-  costPillText: { fontFamily: fontFamilies.semiBold, fontSize: 10.5, color: '#FFFFFF' },
 
   centerBlock: { alignItems: 'center', gap: 8, paddingVertical: spacing.md },
   loadingText: { fontFamily: fontFamilies.regular, fontSize: 13, color: colors.inkMuted },

@@ -501,7 +501,7 @@ const AnalyseDetailScreen: FC = () => {
                 Partager en haut à droite, sur la ligne du titre. */}
             <WhiteCard padding={16} style={styles.qualityCard}>
               <View style={styles.qualityHeader}>
-                <Text style={styles.qualityTitle}>Qualité de la formule</Text>
+                <Text style={styles.qualityTitle}>Qualité de la composition</Text>
                 {/* Partage public : masqué si le flag admin est OFF (Paramètres). */}
                 {appConfig.flag_public_share && (
                   <Pressable
@@ -516,7 +516,6 @@ const AnalyseDetailScreen: FC = () => {
                   </Pressable>
                 )}
               </View>
-              <Text style={styles.qualitySubtitle}>Évaluation générale de la formule</Text>
               <View style={styles.starsRow}>
                 {[0, 1, 2, 3, 4].map((i) => (
                   <Star3D
@@ -764,12 +763,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.ink,
     flexShrink: 1,
-  },
-  qualitySubtitle: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 13,
-    color: colors.inkLight,
-    marginTop: 2,
   },
   starsRow: {
     flexDirection: 'row',

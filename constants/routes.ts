@@ -78,6 +78,7 @@ export const ROUTES = {
     RESTRICTIONS: '/profile/restrictions',
     OBJECTIVES: '/profile/objectives',
     BEAUTY: '/profile/beauty',
+    CREDITS: '/profile/credits',
   },
 
   // ── Ingrédient ──────────────────────────────────────────────────
