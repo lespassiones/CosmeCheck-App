@@ -29,9 +29,9 @@
     "android": {
       "package": "com.cosmecheck.app",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 9,
+      "versionCode": 12,
       "minSdkVersion": 26,
-      "targetSdkVersion": 35,
+      "targetSdkVersion": 36,
       "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
@@ -57,8 +57,8 @@
         {
           "android": {
             "minSdkVersion": 26,
-            "compileSdkVersion": 35,
-            "targetSdkVersion": 35
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36
           }
         }
       ],

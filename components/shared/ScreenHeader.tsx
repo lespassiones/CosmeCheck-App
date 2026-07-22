@@ -101,16 +101,15 @@ const styles = StyleSheet.create({
     ...typography.h3,
     color: colors.ink,
     flexShrink: 1,
-    // Aligne le glyphe avec la CreditsPill : on supprime l'espace haut/bas
-    // que crée `lineHeight: 32` autour d'un fontSize 24.
-    lineHeight: 24,
+    // lineHeight 32 (= h3 naturel) : NE PAS resserrer à 24, sinon les jambages
+    // (j, g, p, y) sont rognés et le bord de la zone de texte devient visible.
+    // L'alignement avec la CreditsPill est assuré par alignItems:'center' de la row.
+    lineHeight: 32,
     includeFontPadding: false,
   },
-  // Compense visuellement la cap-line du titre : on abaisse la pastille
-  // de quelques pixels pour qu'elle s'aligne sur la baseline du texte.
-  creditsWrap: {
-    marginTop: 6,
-  },
+  // Alignée sur le centre du titre via alignItems:'center' (lineHeight 32
+  // rétablie) : plus besoin d'abaisser la pastille manuellement.
+  creditsWrap: {},
   hairline: {
     height: 1,
     backgroundColor: '#c5ccd6',

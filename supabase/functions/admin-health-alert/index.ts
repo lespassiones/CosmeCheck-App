@@ -25,7 +25,7 @@ const CRON_MAX_AGE_H: Record<string, number> = {
   cosme_check_dispatch_notifications: 2, // passe toutes les 15 min
   cosme_check_nightly_score_maintenance: 30, // quotidien
   cosme_check_run_notif_planner: 30, // quotidien
-  cosme_check_brevo_sync: 30, // quotidien
+  cosme_check_brevo_sync: 100, // lun + ven (2x/sem) : écart max lun->ven = 96 h, +marge
 }
 
 type Health = {
