@@ -23,6 +23,7 @@ import {
   SKIN_TYPE_BODY_LABEL,
   SKIN_TYPE_FACE_LABEL,
 } from "../advisor-chat/lib.ts";
+import { normalizeAdvisorForm } from "../advisor-chat/normalizeAdvisorForm.ts";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 // deno-lint-ignore no-explicit-any
@@ -90,21 +91,51 @@ async function searchProducts(
   seen?: Set<string>,
 ): Promise<Candidate[]> {
   const terms = Array.isArray(args.terms) ? args.terms.filter((t) => typeof t === "string" && t.trim()).slice(0, 6) : [];
-  const { data, error } = await sb.rpc("cosme_check_recommend_products", {
-    p_terms: terms.length ? terms : ["glycerin"],
-    p_form: (args.form ?? "").trim() || null,
-    p_min_score: typeof args.min_score === "number" ? args.min_score : 13,
-    // On récupère large (défaut 30, max 40) pour proposer 5-8 produits ET garder
-    // de la marge après exclusion de ceux déjà montrés (« montre-m'en d'autres »
-    // doit encore trouver de vrais candidats pertinents, pas tomber à 0).
-    p_limit: Math.min(Math.max(args.limit ?? 30, 1), 40),
-    p_exclude_families: Array.isArray(args.exclude_families) ? args.exclude_families.slice(0, 20) : [],
-    p_exclude_ingredients: Array.isArray(args.exclude_ingredients) ? args.exclude_ingredients.slice(0, 20) : [],
-  });
-  if (error || !Array.isArray(data)) return [];
+  const p_terms = terms.length ? terms : ["glycerin"];
+  const p_min_score = typeof args.min_score === "number" ? args.min_score : 13;
+  // On récupère large (défaut 30, max 40) pour proposer 5-8 produits ET garder
+  // de la marge après exclusion de ceux déjà montrés (« montre-m'en d'autres »
+  // doit encore trouver de vrais candidats pertinents, pas tomber à 0).
+  const p_limit = Math.min(Math.max(args.limit ?? 30, 1), 40);
+  const p_exclude_families = Array.isArray(args.exclude_families) ? args.exclude_families.slice(0, 20) : [];
+  const p_exclude_ingredients = Array.isArray(args.exclude_ingredients) ? args.exclude_ingredients.slice(0, 20) : [];
+
+  // NORMALISATION du `form` — CORRECTIF CLÉ. Le LLM (surtout gpt-5*) génère
+  // souvent une PHRASE descriptive ("traitement anti-imperfections visage",
+  // "soin anti-taches peau sensible", "boutons visage", "anti-rides") au lieu
+  // d'un token de catégorie. Or la RPC fait un AND STRICT sur les segments de
+  // `catalog.category` : un seul mot hors-taxonomie (« boutons », « traitement »,
+  // « anti-taches »…) → 0 produit. normalizeAdvisorForm() mappe ces phrases vers
+  // des tokens fiables ("imperfections", "serum visage"…). C'est EXACTEMENT la
+  // normalisation que l'ancien advisor-chat appliquait au bloc RECO — l'agent
+  // l'avait perdue, d'où les carrousels vides intermittents.
+  const normalizedForm = normalizeAdvisorForm(args.form ?? null);
+
+  const runRpc = async (formArg: string | null): Promise<Record<string, unknown>[]> => {
+    const { data, error } = await sb.rpc("cosme_check_recommend_products", {
+      p_terms,
+      p_form: formArg,
+      p_min_score,
+      p_limit,
+      p_exclude_families,
+      p_exclude_ingredients,
+    });
+    return error || !Array.isArray(data) ? [] : (data as Record<string, unknown>[]);
+  };
+
+  let data = await runRpc(normalizedForm);
+  // FILET ANTI-0 : si le form (même normalisé) ne matche AUCUNE catégorie, on
+  // relance SANS filtre catégorie (ingrédients seuls). L'agent voit alors de
+  // vrais candidats notés et fait lui-même le tri de pertinence — infiniment
+  // mieux qu'un carrousel vide. On ne fait ce repli QUE quand un form était
+  // demandé (sinon la 1re requête est déjà sans filtre).
+  if (data.length === 0 && normalizedForm) {
+    data = await runRpc(null);
+  }
+
   const rows = seen && seen.size
-    ? (data as Record<string, unknown>[]).filter((r) => !seen.has(String(r.ean ?? "")))
-    : (data as Record<string, unknown>[]);
+    ? data.filter((r) => !seen.has(String(r.ean ?? "")))
+    : data;
   return rows.map((r) => ({
     ean: String(r.ean ?? ""),
     brand: (r.brand as string | null) ?? null,
@@ -146,7 +177,7 @@ const TOOLS = [
           form: {
             type: "string",
             description:
-              "Type + zone du produit, mots FR simples fidèles au besoin, comparés aux catégories en base. Ex: 'hydratant corps', 'hydratant visage', 'serum visage', 'shampoing', 'mains', 'baume levres', 'deodorant', 'fond teint'. Hygiène dentaire : mauvaise haleine -> 'bain bouche' (ou 'haleine' pour sprays/pastilles), dentifrice -> 'dentifrice', dents blanches/taches -> 'blanchiment' (seul, sans 'dents'). Pour un bébé <3 ans: 'bebe'. Ne mets PAS 'creme'/'soin'/'produit' seuls.",
+              "TOKEN de CATÉGORIE (type + zone), en mots FR simples, comparé aux catégories en base. RÈGLE STRICTE : mets UNIQUEMENT le type/zone, JAMAIS une phrase descriptive ni un mot de symptôme (« boutons », « traitement », « anti-taches », « peau sensible »… ne sont PAS des catégories et renvoient 0 produit). Ex: 'hydratant corps', 'hydratant visage', 'serum visage', 'shampoing', 'mains', 'baume levres', 'deodorant', 'fond teint'. Correspondances : boutons/acné/points noirs -> 'imperfections' ; rides/anti-âge/taches/éclat/teint -> 'serum visage' ; cernes/poches -> 'yeux contour'. Hygiène dentaire : mauvaise haleine -> 'bain bouche' (ou 'haleine' pour sprays/pastilles), dentifrice -> 'dentifrice', dents blanches/taches -> 'blanchiment' (seul, sans 'dents'). Pour un bébé <3 ans: 'bebe'. Ne mets PAS 'creme'/'soin'/'produit' seuls.",
           },
           terms: {
             type: "array",
@@ -284,8 +315,11 @@ async function runAgent(params: {
 
   onStatus?.({ type: "status", step: "thinking", label: "Je lis ta demande…" });
 
+  // Passe à true quand le modèle "narre" en texte libre sans appeler `answer`
+  // alors qu'il a déjà des candidats en main : on force alors un tour `answer`.
+  let mustAnswer = false;
   for (let step = 0; step <= MAX_TOOL_CALLS; step++) {
-    const forceAnswer = step === MAX_TOOL_CALLS; // dernier tour → force la réponse
+    const forceAnswer = step === MAX_TOOL_CALLS || mustAnswer; // force la réponse finale
     // deno-lint-ignore no-explicit-any
     const createArgs: any = {
       model,
@@ -299,8 +333,19 @@ async function runAgent(params: {
     if (!msg) break;
     const calls = msg.tool_calls ?? [];
     if (calls.length === 0) {
-      // Pas d'appel d'outil → texte libre = réponse finale.
+      // Le modèle a répondu en TEXTE LIBRE sans appeler `answer`. Glitch de
+      // tool-calling fréquent sur gpt-5 @ low/minimal : il "annonce" qu'il va
+      // chercher/proposer des produits… puis s'arrête. Si une recherche a DÉJÀ
+      // ramené des candidats, ce texte n'est PAS une vraie réponse finale : on
+      // force un dernier tour `answer` pour récupérer les product_eans (sinon
+      // carrousel vide malgré des produits pertinents en main). Sans candidats
+      // (vraie réponse info / decline), on accepte le texte tel quel.
       finalText = (msg.content ?? "").trim();
+      if (!mustAnswer && candidatePool.size > 0 && step < MAX_TOOL_CALLS) {
+        convo.push({ role: "assistant", content: finalText });
+        mustAnswer = true;
+        continue;
+      }
       break;
     }
     convo.push({ role: "assistant", content: msg.content ?? "", tool_calls: calls });
@@ -347,6 +392,22 @@ async function runAgent(params: {
         .replace(/\n{3,}/g, "\n\n")
         .trim();
     }
+  }
+
+  // FILET FINAL ANTI-0 : une recherche produit a bien été lancée (donc intention
+  // produit réelle) et des candidats notés existent, mais le modèle n'a listé
+  // AUCUN EAN (glitch : narration sans `answer`, ou `answer` renvoyé vide par
+  // erreur). Plutôt qu'un carrousel vide sur une VRAIE demande produit, on montre
+  // les meilleurs candidats de SA propre recherche (note ≥13, exclusions déjà
+  // appliquées, déjà filtrés des « seen »). Ne se déclenche JAMAIS sur une
+  // question info ou un hors-sujet : dans ces cas aucune recherche n'a lieu
+  // (toolCalls = 0, pool vide), donc on respecte le « 0 produit » légitime.
+  if (finalEans.length === 0 && toolCalls >= 1 && candidatePool.size > 0) {
+    finalEans = [...candidatePool.values()]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6)
+      .map((c) => c.ean);
+    if (productOffer === "none") productOffer = "offer";
   }
 
   const toOut = (c: Candidate): ProductOut => ({ ean: c.ean, brand: c.brand, name: c.name, category: c.category, score: c.score, score_label: c.score_label, score_tone: c.score_tone, count_total: c.count_total, image_url: c.image_url, ingredients_text: c.ingredients_text });
