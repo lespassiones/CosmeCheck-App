@@ -41,6 +41,7 @@ export const ROUTES = {
   ROUTINE: {
     EXPOSITION: '/routine/exposition',
     PRODUITS: '/routine/produits',
+    FAVORIS: '/routine/favoris',
     ITEM: (id: string) => `/routine/item/${id}` as const,
   },
 

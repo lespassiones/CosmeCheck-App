@@ -26,6 +26,7 @@ import { decodeHtml } from '@/lib/decodeHtml'
 import { useRoutine, type RoutineItem } from '@/hooks/useRoutine'
 import { useProfile } from '@/hooks/useProfile'
 import { useAppConfig } from '@/hooks/useAppConfig'
+import { useFavorites } from '@/hooks/useFavorites'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { Reveal } from '@/components/design/Reveal'
 import { type BlobCounts } from '@/components/design/IngredientBlob'
@@ -43,6 +44,7 @@ const RoutineScreen: FC = () => {
   const { items, isLoading } = useRoutine()
   const { restrictions } = useProfile()
   const { config: appConfig } = useAppConfig()
+  const { count: favoritesCount } = useFavorites()
   const restrictionsCount = restrictions.families.length + restrictions.ingredients.length
 
   // Exposition : mêmes métriques que la page détail (dérivées du cache useRoutine).
@@ -111,6 +113,24 @@ const RoutineScreen: FC = () => {
                 />
                 <Text style={styles.cardLegend}>
                   Tous tes produits, reliés à ton exposition cumulée.
+                </Text>
+              </View>
+
+              <View style={styles.card}>
+                <RoutineProductsCard
+                  total={favoritesCount}
+                  morning={0}
+                  evening={0}
+                  showSlots={false}
+                  title="Mes favoris"
+                  icon="bookmark"
+                  iconTint={colors.rose}
+                  iconBg={colors.roseSoft}
+                  emptyText="Mets des produits en favori pour les retrouver ici"
+                  onPress={() => router.push(ROUTES.ROUTINE.FAVORIS)}
+                />
+                <Text style={styles.cardLegend}>
+                  Tes produits gardés en favori (historique et alternatives).
                 </Text>
               </View>
 

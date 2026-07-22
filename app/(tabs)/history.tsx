@@ -294,6 +294,8 @@ const HistoryScreen: FC = () => {
     },
     onSuccess: (_data, vars) => {
       void invalidateCachedAnalysisRow(vars.id).catch(() => {})
+      // La carte + page « Mes favoris » lisent la query ['favorites'].
+      void queryClient.invalidateQueries({ queryKey: ['favorites'] })
     },
   })
 

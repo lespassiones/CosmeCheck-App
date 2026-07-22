@@ -102,7 +102,8 @@ const ProduitsScreen: FC = () => {
           </View>
         ) : (
           <ScrollView
-            contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing['3xl'] }]}
+            style={styles.scroll}
+            contentContainerStyle={[styles.content, { paddingBottom: spacing.xl }]}
             showsVerticalScrollIndicator={false}
           >
             <Pressable
@@ -123,47 +124,60 @@ const ProduitsScreen: FC = () => {
                 </Text>
               </View>
             ) : (
-              <>
-                <View style={styles.list}>
-                  {routineItems.map((item) => (
-                    <RoutineProductCard
-                      key={item.id}
-                      itemId={item.id}
-                      analysisId={item.analysis_id}
-                      displayIndex={0}
-                      name={titleFor(item)}
-                      brand={item.analysis?.brand ?? null}
-                      ean={item.analysis?.ean ?? null}
-                      fallbackImageUrl={fallbackImage(item)}
-                      counts={countsOf(item)}
-                      onPress={(itemId) =>
-                        router.push({ pathname: '/routine/item/[id]', params: { id: itemId } })
-                      }
-                    />
-                  ))}
-                </View>
-
-                {appConfig.flag_suggestions && (
-                  <Pressable
-                    style={styles.suggestBtn}
-                    onPress={deck.openSuggestions}
-                    disabled={deck.deckLoading}
-                    accessibilityRole="button"
-                    accessibilityLabel="Proposer de meilleures alternatives"
-                  >
-                    {deck.deckLoading ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <>
-                        <Ionicons name="sparkles" size={16} color="#FFFFFF" />
-                        <Text style={styles.suggestBtnText}>Proposer de meilleures alternatives</Text>
-                      </>
-                    )}
-                  </Pressable>
-                )}
-              </>
+              <View style={styles.list}>
+                {routineItems.map((item) => (
+                  <RoutineProductCard
+                    key={item.id}
+                    itemId={item.id}
+                    analysisId={item.analysis_id}
+                    displayIndex={0}
+                    name={titleFor(item)}
+                    brand={item.analysis?.brand ?? null}
+                    ean={item.analysis?.ean ?? null}
+                    fallbackImageUrl={fallbackImage(item)}
+                    counts={countsOf(item)}
+                    onPress={(itemId) =>
+                      router.push({ pathname: '/routine/item/[id]', params: { id: itemId } })
+                    }
+                  />
+                ))}
+              </View>
             )}
           </ScrollView>
+        )}
+
+        {/* Barre d'action fixe : toujours visible (hors scroll). Bouton alternatives
+            (vert) + lien « Voir mes favoris » juste en dessous. */}
+        {!isLoading && routineItems.length > 0 && (
+          <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.sm }]}>
+            {appConfig.flag_suggestions && (
+              <Pressable
+                style={styles.suggestBtn}
+                onPress={deck.openSuggestions}
+                disabled={deck.deckLoading}
+                accessibilityRole="button"
+                accessibilityLabel="Proposer de meilleures alternatives"
+              >
+                {deck.deckLoading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="sparkles" size={16} color="#FFFFFF" />
+                    <Text style={styles.suggestBtnText}>Proposer de meilleures alternatives</Text>
+                  </>
+                )}
+              </Pressable>
+            )}
+            <Pressable
+              onPress={() => router.push(ROUTES.ROUTINE.FAVORIS)}
+              hitSlop={8}
+              style={styles.favLinkWrap}
+              accessibilityRole="link"
+              accessibilityLabel="Voir mes favoris"
+            >
+              <Text style={styles.favLink}>Voir mes favoris</Text>
+            </Pressable>
+          </View>
         )}
       </SafeAreaView>
 
@@ -222,6 +236,7 @@ const styles = StyleSheet.create({
   backPillText: { fontFamily: fontFamilies.semiBold, fontSize: 13, color: colors.ink },
   topTitle: { fontFamily: fontFamilies.semiBold, fontSize: 15, color: colors.ink },
   topSpacer: { width: 78 },
+  scroll: { flex: 1 },
   content: { paddingHorizontal: spacing.sm, paddingTop: spacing.xs },
   center: { paddingTop: spacing['3xl'], alignItems: 'center', flex: 1 },
   addBtn: {
@@ -236,18 +251,32 @@ const styles = StyleSheet.create({
   },
   addBtnText: { fontFamily: fontFamilies.semiBold, fontSize: 13, color: '#FFFFFF' },
   list: { gap: ROUTINE_CARD_GAP },
+  // Barre d'action fixe collée au bas de l'écran (hors ScrollView).
+  footer: {
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+    backgroundColor: colors.bg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#c5ccd6',
+  },
   suggestBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: colors.rose,
+    backgroundColor: colors.success,
     borderRadius: radius.full,
     paddingVertical: 13,
-    marginTop: spacing.lg,
     minHeight: 46,
   },
   suggestBtnText: { fontFamily: fontFamilies.semiBold, fontSize: 14, color: '#FFFFFF' },
+  favLinkWrap: { alignSelf: 'center', paddingVertical: spacing.sm, marginTop: 2 },
+  favLink: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 13,
+    color: colors.success,
+    textDecorationLine: 'underline',
+  },
   emptyWrap: {
     alignItems: 'center',
     justifyContent: 'center',

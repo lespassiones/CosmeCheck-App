@@ -63,6 +63,7 @@ export function useKeepFavorite(): {
             void cacheAnalysisRow(row).catch(() => {})
             if (product.imageUrl) void cacheProductImage(row.id, product.imageUrl).catch(() => {})
             void qc.invalidateQueries({ queryKey: ['history'] })
+            if (favori) void qc.invalidateQueries({ queryKey: ['favorites'] })
             return row.id
           }
         }
@@ -86,6 +87,7 @@ export function useKeepFavorite(): {
           void cacheProductImage(result.analysisId, product.imageUrl).catch(() => {})
         }
         void qc.invalidateQueries({ queryKey: ['history'] })
+        if (favori) void qc.invalidateQueries({ queryKey: ['favorites'] })
         return result.analysisId
       }
       return null
