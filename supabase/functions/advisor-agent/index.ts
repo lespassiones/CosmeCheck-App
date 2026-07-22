@@ -89,6 +89,10 @@ async function searchProducts(
     limit?: number;
   },
   seen?: Set<string>,
+  /** Exclusions du PROFIL (cochées ou déduites) TOUJOURS appliquées, en plus de
+   *  celles que le modèle demande — garantit le respect des restrictions même si
+   *  le modèle les oublie. */
+  forced?: { families: string[]; ingredients: string[] },
 ): Promise<Candidate[]> {
   const terms = Array.isArray(args.terms) ? args.terms.filter((t) => typeof t === "string" && t.trim()).slice(0, 6) : [];
   const p_terms = terms.length ? terms : ["glycerin"];
@@ -97,8 +101,15 @@ async function searchProducts(
   // de la marge après exclusion de ceux déjà montrés (« montre-m'en d'autres »
   // doit encore trouver de vrais candidats pertinents, pas tomber à 0).
   const p_limit = Math.min(Math.max(args.limit ?? 30, 1), 40);
-  const p_exclude_families = Array.isArray(args.exclude_families) ? args.exclude_families.slice(0, 20) : [];
-  const p_exclude_ingredients = Array.isArray(args.exclude_ingredients) ? args.exclude_ingredients.slice(0, 20) : [];
+  // Union : exclusions demandées par le modèle + exclusions FORCÉES du profil.
+  const p_exclude_families = [...new Set([
+    ...(Array.isArray(args.exclude_families) ? args.exclude_families : []),
+    ...(forced?.families ?? []),
+  ])].slice(0, 40);
+  const p_exclude_ingredients = [...new Set([
+    ...(Array.isArray(args.exclude_ingredients) ? args.exclude_ingredients : []),
+    ...(forced?.ingredients ?? []),
+  ])].slice(0, 40);
 
   // NORMALISATION du `form` — CORRECTIF CLÉ. Le LLM (surtout gpt-5*) génère
   // souvent une PHRASE descriptive ("traitement anti-imperfections visage",
@@ -300,9 +311,11 @@ async function runAgent(params: {
   messages: ChatMessage[];
   svc: SB;
   seenEans: Set<string>;
+  /** Exclusions profil (cochées ou déduites) forcées sur chaque recherche. */
+  profileExclude?: { families: string[]; ingredients: string[] };
   onStatus?: (e: StatusEvent) => void;
 }): Promise<AgentOutput> {
-  const { client, model, reasoningEffort, system, messages, svc, seenEans, onStatus } = params;
+  const { client, model, reasoningEffort, system, messages, svc, seenEans, profileExclude, onStatus } = params;
 
   // deno-lint-ignore no-explicit-any
   const convo: any[] = [{ role: "system", content: system }, ...messages];
@@ -365,7 +378,7 @@ async function runAgent(params: {
       } else if (fn === "search_products") {
         toolCalls++;
         onStatus?.({ type: "status", step: "searching", label: "Je cherche de vrais produits notés…" });
-        const cands = await searchProducts(svc, parsed as Parameters<typeof searchProducts>[1], seenEans);
+        const cands = await searchProducts(svc, parsed as Parameters<typeof searchProducts>[1], seenEans, profileExclude);
         for (const c of cands) candidatePool.set(c.ean, c);
         onStatus?.({ type: "status", step: "analyzing", label: `J’analyse ${cands.length} produit${cands.length > 1 ? "s" : ""}…`, count: cands.length });
         convo.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(cands.map(candidateForModel)) });
@@ -502,25 +515,60 @@ Deno.serve(async (req: Request): Promise<Response> => {
     skin.allergiesFreeform ? `Allergies : ${skin.allergiesFreeform}` : "",
     (skin.goals?.length || skin.otherGoals) ? `Objectifs : ${[...(skin.goals ?? []).map((gg) => GOAL_LABEL[gg] ?? gg), skin.otherGoals ?? ""].filter(Boolean).join(", ")}` : "",
   ].filter(Boolean).join("\n");
-  const restrictionsStr = (restr.families.length || restr.ingredients.length)
-    ? `Restrictions (à appliquer toi-même) : ${[...restr.families, ...restr.ingredients.map((i) => i.name)].join(", ")}`
-    : "Restrictions : aucune";
-
-  // Récap IA « sensibilités probables » (worker profile-restriction-inference) :
-  // ajouté au contexte comme INDICES (l'utilisateur ne les a PAS cochées). Les
-  // restrictions explicites ci-dessus restent prioritaires et inchangées.
-  let inferredStr = "";
+  // ── Restrictions : COCHÉES (explicites) OU DÉDUITES par l'IA ──────────────
+  // Le worker `profile-restriction-inference` déduit des restrictions PROBABLES
+  // à partir du profil (peau sensible → parfum/alcool ; acné → huiles comédogènes…),
+  // stockées en lecture seule dans profile_restriction_inference.items.
+  // Règle métier (demandée) : si l'utilisateur n'a coché AUCUNE restriction, le
+  // Beauty Advisor UTILISE ces restrictions déduites par défaut — à la fois dans
+  // le prompt ET comme filtre RÉEL côté serveur (RPC exclude). S'il en a coché,
+  // les siennes priment et les déduites redeviennent de simples indices.
+  type InferredItem = { label: string; slug: string | null; reason: string };
+  let inferred: InferredItem[] = [];
   try {
     const { data: infRow } = await svc.schema("cosme_check")
       .from("profile_restriction_inference")
       .select("items").eq("user_id", user.id).maybeSingle();
-    const items = Array.isArray(infRow?.items)
-      ? (infRow.items as { label?: string; reason?: string }[]).filter((i) => typeof i?.label === "string" && i.label.trim())
+    inferred = Array.isArray(infRow?.items)
+      ? (infRow.items as Record<string, unknown>[])
+          .map((i) => ({
+            label: typeof i?.label === "string" ? i.label.trim() : "",
+            slug: typeof i?.slug === "string" && i.slug.trim() ? i.slug.trim() : null,
+            reason: typeof i?.reason === "string" ? i.reason.trim() : "",
+          }))
+          .filter((i) => i.label)
+          .slice(0, 8)
       : [];
-    if (items.length > 0) {
-      inferredStr = `\nSensibilités probables (déduites de son profil, NON confirmées — indices à considérer, jamais présentées comme ses restrictions) : ${items.slice(0, 8).map((i) => i.reason ? `${i.label} (${i.reason})` : i.label).join(" ; ")}`;
-    }
   } catch { /* best-effort : l'advisor marche sans le récap */ }
+
+  const hasExplicitRestrictions = restr.families.length > 0 || restr.ingredients.length > 0;
+
+  // Familles/ingrédients réellement passés à la RPC (exclusion côté serveur, en
+  // plus de ceux que le modèle peut ajouter). Garantit l'application, que le
+  // modèle y pense ou non.
+  let enforceExcludeFamilies: string[] = [];
+  let enforceExcludeIngredients: string[] = [];
+  let restrictionsStr: string;
+  let inferredStr = "";
+
+  if (hasExplicitRestrictions) {
+    enforceExcludeFamilies = restr.families;
+    enforceExcludeIngredients = restr.ingredients.map((i) => i.name).filter(Boolean);
+    restrictionsStr = `Restrictions (à appliquer toi-même) : ${[...restr.families, ...restr.ingredients.map((i) => i.name)].join(", ")}`;
+    if (inferred.length > 0) {
+      inferredStr = `\nSensibilités probables (déduites de son profil, NON confirmées — indices à considérer, jamais présentées comme ses restrictions) : ${inferred.map((i) => i.reason ? `${i.label} (${i.reason})` : i.label).join(" ; ")}`;
+    }
+  } else if (inferred.length > 0) {
+    // Aucune restriction cochée → on APPLIQUE les déduites par défaut (familles
+    // connues seulement pour le filtre serveur ; les labels sans slug restent
+    // dans le prompt pour le jugement du modèle).
+    enforceExcludeFamilies = inferred.map((i) => i.slug).filter((s): s is string => Boolean(s));
+    restrictionsStr = `Restrictions : l'utilisateur n'en a coché AUCUNE. Restrictions DÉDUITES automatiquement de son profil, à appliquer PAR DÉFAUT (comme si c'étaient les siennes) : ${inferred.map((i) => i.reason ? `${i.label} (${i.reason})` : i.label).join(", ")}`;
+  } else {
+    restrictionsStr = "Restrictions : aucune";
+  }
+
+  const profileExclude = { families: enforceExcludeFamilies, ingredients: enforceExcludeIngredients };
 
   const system = buildSystemPrompt({ firstName, profile: profileStr + inferredStr, restrictions: restrictionsStr, routine: "Routine : (non détaillée ici)" });
 
@@ -570,6 +618,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
             messages,
             svc,
             seenEans,
+            profileExclude,
             onStatus: (e) => safeEnqueue(sse(e)),
           });
           const payload = await finalize(out);
@@ -593,7 +642,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   // ── Mode BLOQUANT (défaut, comportement INCHANGÉ) ─────────────────────────
   try {
-    const out = await runAgent({ client, model, reasoningEffort, system, messages, svc, seenEans });
+    const out = await runAgent({ client, model, reasoningEffort, system, messages, svc, seenEans, profileExclude });
     return jsonResponse(await finalize(out));
   } catch (err) {
     return jsonResponse({ error: "Agent indisponible.", detail: String((err as Error).message).slice(0, 300) }, { status: 502 });
