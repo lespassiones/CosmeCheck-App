@@ -95,7 +95,9 @@ async function searchProducts(
   forced?: { families: string[]; ingredients: string[] },
 ): Promise<Candidate[]> {
   const terms = Array.isArray(args.terms) ? args.terms.filter((t) => typeof t === "string" && t.trim()).slice(0, 6) : [];
-  const p_terms = terms.length ? terms : ["glycerin"];
+  // Terms vides = mode natif RPC « top du TYPE par score » (PAS de glycerin forcé
+  // qui filtrait arbitrairement).
+  const p_terms = terms;
   const p_min_score = typeof args.min_score === "number" ? args.min_score : 13;
   // On récupère large (défaut 30, max 40) pour proposer 5-8 produits ET garder
   // de la marge après exclusion de ceux déjà montrés (« montre-m'en d'autres »
@@ -122,9 +124,9 @@ async function searchProducts(
   // l'avait perdue, d'où les carrousels vides intermittents.
   const normalizedForm = normalizeAdvisorForm(args.form ?? null);
 
-  const runRpc = async (formArg: string | null): Promise<Record<string, unknown>[]> => {
+  const runRpc = async (formArg: string | null, termsArg: string[]): Promise<Record<string, unknown>[]> => {
     const { data, error } = await sb.rpc("cosme_check_recommend_products", {
-      p_terms,
+      p_terms: termsArg,
       p_form: formArg,
       p_min_score,
       p_limit,
@@ -134,14 +136,24 @@ async function searchProducts(
     return error || !Array.isArray(data) ? [] : (data as Record<string, unknown>[]);
   };
 
-  let data = await runRpc(normalizedForm);
-  // FILET ANTI-0 : si le form (même normalisé) ne matche AUCUNE catégorie, on
-  // relance SANS filtre catégorie (ingrédients seuls). L'agent voit alors de
-  // vrais candidats notés et fait lui-même le tri de pertinence — infiniment
-  // mieux qu'un carrousel vide. On ne fait ce repli QUE quand un form était
-  // demandé (sinon la 1re requête est déjà sans filtre).
-  if (data.length === 0 && normalizedForm) {
-    data = await runRpc(null);
+  let data = await runRpc(normalizedForm, p_terms);
+  // COMPLÉMENT MÊME-CATÉGORIE — règle ABSOLUE : on ne perd JAMAIS la catégorie
+  // (le TYPE+ZONE est l'intention de l'utilisateur ; les ingrédients sont
+  // secondaires). Si form+terms donne MOINS de 5 candidats, on complète avec le
+  // top de la MÊME catégorie par score (sans filtre ingrédients), dédupliqué —
+  // le modèle voit assez de bons candidats au lieu de n'en garder que 1-2 ou de
+  // répondre 0. Un ancien repli qui supprimait le form (ingrédients seuls)
+  // renvoyait des produits HORS CATÉGORIE (bug réel : déos aisselles sur
+  // « déodorant pieds ») → interdit. Si la catégorie seule ne donne rien, on
+  // renvoie 0 : le modèle re-cherche avec un autre form ou répond honnêtement.
+  if (data.length < 5 && normalizedForm && p_terms.length > 0) {
+    const topOfForm = await runRpc(normalizedForm, []);
+    const have = new Set(data.map((r) => String(r.ean ?? "")));
+    for (const r of topOfForm) {
+      if (data.length >= p_limit) break;
+      const e = String(r.ean ?? "");
+      if (e && !have.has(e)) { have.add(e); data.push(r); }
+    }
   }
 
   const rows = seen && seen.size
@@ -188,7 +200,7 @@ const TOOLS = [
           form: {
             type: "string",
             description:
-              "TOKEN de CATÉGORIE (type + zone), en mots FR simples, comparé aux catégories en base. RÈGLE STRICTE : mets UNIQUEMENT le type/zone, JAMAIS une phrase descriptive ni un mot de symptôme (« boutons », « traitement », « anti-taches », « peau sensible »… ne sont PAS des catégories et renvoient 0 produit). Ex: 'hydratant corps', 'hydratant visage', 'serum visage', 'shampoing', 'mains', 'baume levres', 'deodorant', 'fond teint'. Correspondances : boutons/acné/points noirs -> 'imperfections' ; rides/anti-âge/taches/éclat/teint -> 'serum visage' ; cernes/poches -> 'yeux contour'. Hygiène dentaire : mauvaise haleine -> 'bain bouche' (ou 'haleine' pour sprays/pastilles), dentifrice -> 'dentifrice', dents blanches/taches -> 'blanchiment' (seul, sans 'dents'). Pour un bébé <3 ans: 'bebe'. Ne mets PAS 'creme'/'soin'/'produit' seuls.",
+              "TOKEN de CATÉGORIE (type + zone), en mots FR simples, comparé aux catégories en base. RÈGLE STRICTE : mets UNIQUEMENT le type/zone, JAMAIS une phrase descriptive ni un mot de symptôme (« boutons », « traitement », « anti-taches », « peau sensible »… ne sont PAS des catégories et renvoient 0 produit). Ex: 'hydratant corps', 'hydratant visage', 'serum visage', 'shampoing', 'mains', 'baume levres', 'deodorant', 'fond teint'. Correspondances : boutons/acné/points noirs -> 'imperfections' ; rides/anti-âge/taches/éclat/teint -> 'serum visage' ; cernes/poches -> 'yeux contour' ; odeur/transpiration des PIEDS -> 'deodorant pieds' (JAMAIS 'deodorant' seul qui renvoie les déos aisselles) ; pieds secs -> 'hydratants pieds' ; talons abîmés -> 'gommage pieds' ; crème solaire/SPF/protection soleil -> 'solaire' (sans zone : la base ne distingue pas visage/corps) ; après-soleil -> 'apres soleil' ; cellulite/capitons/peau d'orange/raffermir (cuisses, ventre, bras) -> 'anti cellulite' ; eau micellaire -> 'micellaire'. Hygiène dentaire : mauvaise haleine -> 'bain bouche' (ou 'haleine' pour sprays/pastilles), dentifrice -> 'dentifrice', dents blanches/taches -> 'blanchiment' (seul, sans 'dents'). Pour un bébé <3 ans: 'bebe'. Ne mets PAS 'creme'/'soin'/'produit' seuls.",
           },
           terms: {
             type: "array",
@@ -266,9 +278,10 @@ QUAND RECOMMANDER : dès que la personne cherche un produit / décrit un besoin 
 - COMBIEN : dès qu'AU MOINS 5 candidats conviennent (cas le plus fréquent), tu DOIS en proposer 5 à 8 (vise 6). Ne te limite à 2-3 QUE si vraiment très peu de candidats conviennent réellement. Le critère reste la PERTINENCE : n'ajoute jamais un produit hors-sujet juste pour gonfler la liste, mais ne sous-sélectionne pas non plus s'il y a plus de bons candidats. Classe-les du meilleur au moins bon.
 - Puis answer avec text + product_eans (les bons, du meilleur au moins bon).
 - EN DEMANDER D'AUTRES : si la personne veut plus/d'autres produits (« montre-m'en d'autres », « j'en veux plus », « et sinon ? », « d'autres options »), relance search_products pour le MÊME besoin. Le système exclut AUTOMATIQUEMENT ce que tu as déjà montré : tu obtiendras donc de NOUVEAUX produits. Ne réponds JAMAIS « je t'ai déjà montré » et ne redonne pas les mêmes.
+- PARFUM (le produit) : catégorie LÉGITIME du catalogue → si la personne cherche un parfum, cherche (form 'parfum') et RECOMMANDE directement, sans questionner sur les allergies ou la senteur (les restrictions du profil sont déjà appliquées ; précise seulement en une demi-phrase que la senteur reste son choix). Ne refuse JAMAIS un parfum.
 - Un ingrédient/produit explicitement demandé (« sérum vitamine C », « rétinol ») → cherche-le et recommande UNIQUEMENT des produits contenant VRAIMENT cet ingrédient. VÉRIFIE le nom ET la composition de chaque candidat : rejette tout produit d'un autre actif même s'il apparaît dans la liste (ex: sur une demande vitamine C, EXCLUS impérativement tout produit « Vitamin A » / rétinol ; sur une demande rétinol, exclus la vitamine C). Ne le remplace jamais par un autre actif.
 
-HONNÊTETÉ : si après recherche aucun candidat ne convient vraiment, appelle answer avec product_eans vide et explique honnêtement qu'on n'a pas de produit adapté, puis oriente sur le TYPE à chercher (ex: « en pharmacie, un baume émollient type Cicaplast/Cicalfate, sans parfum »). N'invente JAMAIS de produit ni de marque.
+HONNÊTETÉ : product_eans vide UNIQUEMENT si AUCUN candidat du bon TYPE ne convient même approximativement. Si des candidats du bon type existent mais sans l'actif idéal ou le format exact demandé, PROPOSE les meilleurs en le disant en une phrase (« pas exactement X, mais voici les meilleurs du rayon ») : c'est toujours plus utile qu'un carrousel vide. Réserve le 0 produit aux cas où le rayon lui-même ne correspond pas ; explique alors quoi chercher (ex: « en pharmacie, un baume émollient type Cicaplast/Cicalfate, sans parfum »). N'invente JAMAIS de produit ni de marque.
 
 NE FUIS PAS LES VRAIES QUESTIONS : peau sensible, eczéma léger, bébé/enfant, maquillage même sur peau grasse, parfum, cheveux… tu AIDES normalement (produit doux + « ce n'est pas un avis médical » si pertinent). Ne dis JAMAIS « je ne peux pas t'aider » pour un besoin cosmétique légitime.
 
@@ -325,6 +338,9 @@ async function runAgent(params: {
   let finalEans: string[] = [];
   let followup: string | null = null;
   let productOffer: "none" | "offer" = "none";
+  // true dès que le modèle a appelé l'outil `answer` : un product_eans VIDE est
+  // alors une décision DÉLIBÉRÉE (« rien d'adapté ») qu'on doit respecter.
+  let answerCalled = false;
 
   onStatus?.({ type: "status", step: "thinking", label: "Je lis ta demande…" });
 
@@ -374,6 +390,7 @@ async function runAgent(params: {
         followup = typeof parsed.followup_question === "string" && parsed.followup_question.trim() ? parsed.followup_question.trim() : null;
         productOffer = parsed.product_offer === "offer" ? "offer" : "none";
         answered = true;
+        answerCalled = true;
         convo.push({ role: "tool", tool_call_id: call.id, content: "ok" });
       } else if (fn === "search_products") {
         toolCalls++;
@@ -421,15 +438,16 @@ async function runAgent(params: {
       .trim();
   }
 
-  // FILET FINAL ANTI-0 : une recherche produit a bien été lancée (donc intention
-  // produit réelle) et des candidats notés existent, mais le modèle n'a listé
-  // AUCUN EAN (glitch : narration sans `answer`, ou `answer` renvoyé vide par
-  // erreur). Plutôt qu'un carrousel vide sur une VRAIE demande produit, on montre
-  // les meilleurs candidats de SA propre recherche (note ≥13, exclusions déjà
-  // appliquées, déjà filtrés des « seen »). Ne se déclenche JAMAIS sur une
-  // question info ou un hors-sujet : dans ces cas aucune recherche n'a lieu
-  // (toolCalls = 0, pool vide), donc on respecte le « 0 produit » légitime.
-  if (finalEans.length === 0 && toolCalls >= 1 && candidatePool.size > 0) {
+  // FILET FINAL ANTI-0 : réservé au GLITCH « narration sans `answer` » — le
+  // modèle a cherché, a des candidats en main, mais n'a JAMAIS appelé l'outil
+  // answer (texte libre terminal). Là seulement, on promeut ses meilleurs
+  // candidats (note ≥13, exclusions appliquées, « seen » filtrés).
+  // EN REVANCHE, si `answer` a été appelé avec product_eans VIDE, c'est un
+  // choix DÉLIBÉRÉ (« rien d'adapté dans le catalogue ») : on le RESPECTE —
+  // forcer des produits contredirait le texte (bug réel : « pas de crème
+  // solaire trouvée » + 6 hydratants affichés). Jamais déclenché sur info /
+  // hors-sujet (aucune recherche → pool vide).
+  if (!answerCalled && finalEans.length === 0 && toolCalls >= 1 && candidatePool.size > 0) {
     finalEans = [...candidatePool.values()]
       .sort((a, b) => b.score - a.score)
       .slice(0, 6)

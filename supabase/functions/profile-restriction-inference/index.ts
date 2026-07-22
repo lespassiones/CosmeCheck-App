@@ -230,7 +230,9 @@ serve(async (req) => {
         passes++;
       }
 
-      // ── Passes 2-4 : RELECTURES (gpt-5-mini → mistral → gpt-5-mini) ──────
+      // ── Passes 2-3 : RELECTURES (gpt-5-mini → gpt-5-mini conditionnelle) ──
+      // RÈGLE (demande user) : PAS de Mistral dans les boucles de vérification.
+      // Mistral = uniquement SECOURS si OpenAI est indisponible.
       const reviewSystem = `${rules}\nOn te montre la liste ACTUELLE des restrictions probables déduites. RELIS-la de façon critique : manque-t-il un lien fondé ? Y a-t-il un item injustifié pour CE profil ? Réponds en JSON strict : {"complete":true|false,"add":[{"label":"","slug":null,"reason":""}],"remove":["label à retirer"]} — complete=true si la liste est bonne telle quelle (add et remove vides).`;
       const reviewUser = () =>
         `${baseContext}\n\nLISTE ACTUELLE :\n${items.length ? items.map((i) => `- ${i.label} (${i.reason})`).join("\n") : "(vide)"}`;
@@ -253,22 +255,23 @@ serve(async (req) => {
           return r.choices?.[0]?.message?.content ?? null;
         };
         reviewers.push({ name: "gpt-5-mini", call: gpt5 });
-        if (hasMistral()) {
-          reviewers.push({
-            name: MISTRAL_MODEL,
-            call: () =>
-              mistralChat({
-                model: MISTRAL_MODEL,
-                temperature: 0.2,
-                maxTokens: 500,
-                messages: [
-                  { role: "system", content: `${reviewSystem}\nRéponds UNIQUEMENT avec l'objet JSON.` },
-                  { role: "user", content: reviewUser() },
-                ],
-              }),
-          });
-        }
-        reviewers.push({ name: "gpt-5-mini", call: gpt5 }); // passe 4 conditionnelle
+        reviewers.push({ name: "gpt-5-mini", call: gpt5 }); // passe finale conditionnelle
+      } else if (hasMistral()) {
+        // SECOURS UNIQUEMENT : OpenAI indisponible → une relecture Mistral vaut
+        // mieux que zéro vérification. Jamais utilisé quand OpenAI répond.
+        reviewers.push({
+          name: MISTRAL_MODEL,
+          call: () =>
+            mistralChat({
+              model: MISTRAL_MODEL,
+              temperature: 0.2,
+              maxTokens: 500,
+              messages: [
+                { role: "system", content: `${reviewSystem}\nRéponds UNIQUEMENT avec l'objet JSON.` },
+                { role: "user", content: reviewUser() },
+              ],
+            }),
+        });
       }
 
       let lastChanged = true;

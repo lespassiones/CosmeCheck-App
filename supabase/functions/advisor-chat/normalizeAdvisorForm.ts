@@ -27,12 +27,14 @@ type Rule = { match: RegExp; form: string | null };
  */
 const RULES: Rule[] = [
   // ── PIEDS (priorité haute — évite confusion avec corps/jambes) ───────────
-  { match: /hydrat.{0,10}pied|pied.{0,10}hydrat|lotion.{0,5}pied/i,     form: "hydratants pieds" },
-  { match: /deodor.{0,10}pied|pied.{0,10}deodor|anti.?odeur.{0,5}pied|transpir.{0,10}pied/i, form: "deodorant pieds" },
-  { match: /gomm.{0,10}pied|exfoli.{0,10}pied|pied.{0,10}gomm/i,        form: "gommage pieds" },
-  { match: /masque.{0,10}pied|pied.{0,10}masque/i,                       form: "masque pieds" },
-  { match: /bain.{0,10}pied|pied.{0,10}bain/i,                           form: "bain pieds" },
-  { match: /callosit|durillon|fissur.{0,10}pied/i,                       form: "gommage pieds" },
+  // Gaps à 20 chars pour couvrir « pour les » (« déodorant pour les pieds »).
+  // L'entrée est désaccentuée en amont : écrire les motifs SANS accent suffit.
+  { match: /hydrat.{0,20}pied|pied.{0,20}hydrat|lotion.{0,20}pied/i,    form: "hydratants pieds" },
+  { match: /deodor.{0,20}pied|pied.{0,20}deodor|deo.{0,20}pied|odeur.{0,20}pied|pied.{0,20}odeur|transpir.{0,20}pied|pied.{0,20}transpir/i, form: "deodorant pieds" },
+  { match: /gomm.{0,20}pied|exfoli.{0,20}pied|pied.{0,20}gomm/i,        form: "gommage pieds" },
+  { match: /masque.{0,20}pied|pied.{0,20}masque/i,                       form: "masque pieds" },
+  { match: /bain.{0,20}pied|pied.{0,20}bain/i,                           form: "bain pieds" },
+  { match: /callosit|durillon|fissur.{0,20}pied/i,                       form: "gommage pieds" },
   { match: /\bpieds?\b/i,                                                  form: "hydratants pieds" },
 
   // ── YEUX / CONTOUR ────────────────────────────────────────────────────────
@@ -58,6 +60,13 @@ const RULES: Rule[] = [
   // "serum" seul → visage (cas le plus fréquent ; cheveux ont leur propre règle ci-dessus)
   { match: /\bs[eé]rum\b/i,                                                form: "serum visage" },
 
+  // ── SOLAIRE (avant les règles visage : « crème solaire visage » doit donner
+  // "solaire", pas un résidu "solaire visage" qui ne matche aucune catégorie —
+  // le segment en base est "creme-solaire", sans zone) ──────────────────────
+  { match: /apres.?soleil/i,                                               form: "apres soleil" },
+  { match: /autobronzant|auto.?bronzant/i,                                 form: "autobronzant" },
+  { match: /solaire|\bspf\b|ecran.{0,10}total|protection.{0,10}(uv|soleil)|coup.{0,5}de.{0,5}soleil/i, form: "solaire" },
+
   // ── VISAGE (soins généraux) ───────────────────────────────────────────────
   { match: /[eé]clat|luminosit[eé]|teint.{0,10}visage|taches?.{0,10}visage/i, form: "serum visage" },
   { match: /acn[eé]|boutons?|imperfection|points?.{0,5}noirs?/i,          form: "imperfections" },
@@ -74,7 +83,7 @@ const RULES: Rule[] = [
   { match: /gomm.{0,10}corps|corps.{0,10}gomm|exfoli.{0,10}corps/i,      form: "gommage corps" },
   // "gommage" seul sans zone → corps par défaut (plus courant que visage/pieds)
   { match: /\bgommage\b/i,                                                  form: "gommage corps" },
-  { match: /anti.?cellulite|cellulite/i,                                   form: "anti cellulite" },
+  { match: /anti.?cellulite|cellulite|capiton|peau.{0,3}d.orange/i,        form: "anti cellulite" },
   { match: /vergeture|vergetur/i,                                           form: "vergetures" },
   { match: /jambe.{0,10}lourde|lourdeur.{0,10}jambe|circulation/i,        form: "jambes" },
   { match: /huile.{0,10}corps|corps.{0,10}huile/i,                        form: "huile corps" },
@@ -110,7 +119,10 @@ const RULES: Rule[] = [
   { match: /primer|base.{0,10}teint/i,                                     form: "primer" },
   { match: /bb.?cr[eè]me|bb.?creme/i,                                      form: "bb" },
   { match: /poudre.{0,10}bronz|bronzant/i,                                 form: "poudre" },
-  { match: /d[eé]maquillant|eau.{0,10}micellaire|micellaire/i,             form: "demaquillant" },
+  // Eau micellaire : segment base "eau-micellaire" (il ne contient PAS
+  // "demaquillant" → la règle générique le rendait invisible : 1039 verts ratés).
+  { match: /micellaire/i,                                                   form: "micellaire" },
+  { match: /d[eé]maquillant/i,                                              form: "demaquillant" },
 
   // ── PARFUM ───────────────────────────────────────────────────────────────
   { match: /parfum.{0,10}femme|femme.{0,10}parfum/i,                      form: "parfum femme" },
@@ -132,7 +144,13 @@ const RULES: Rule[] = [
 export function normalizeAdvisorForm(raw: string | null | undefined): string | null {
   if (!raw) return null;
 
-  const input = raw.toLowerCase().trim();
+  // DÉSACCENTUATION obligatoire : le LLM écrit en français accentué
+  // (« déodorant pieds », « déo ») et les règles sont écrites sans accent.
+  // Sans ça, « déodorant pieds » ratait la règle déo-pieds et tombait sur
+  // /\bpieds?\b/ → « hydratants pieds » (bug réel : déos aisselles au lieu
+  // de déos pieds, via le repli). La RPC désaccentue déjà de son côté
+  // (f_unaccent), donc renvoyer des tokens sans accent est sans risque.
+  const input = raw.toLowerCase().trim().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
   // 1. Essai des règles dans l'ordre
   for (const rule of RULES) {

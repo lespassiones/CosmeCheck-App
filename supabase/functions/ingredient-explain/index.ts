@@ -114,25 +114,13 @@ Réponds avec UNIQUEMENT le texte de l'explication (2 phrases sur 2 lignes), san
     { role: "user" as const, content: user },
   ];
 
-  // 3. Génération : MISTRAL PRIMAIRE → GPT en repli.
+  // 3. Génération : OPENAI PRIMAIRE → Mistral en SECOURS uniquement.
+  // (Règle projet : Mistral n'est JAMAIS primaire ni dans une boucle de
+  // vérification — dernier recours si OpenAI est indisponible.)
   let text = "";
   const t0 = Date.now();
 
-  if (hasMistral()) {
-    try {
-      const raw = await mistralChat({ model: MISTRAL_MODEL, temperature: 0.4, maxTokens: 220, messages });
-      const cleaned = stripLongDashes((raw ?? "").trim());
-      if (cleaned) {
-        text = cleaned;
-        logAI({ feature: "explain", provider: "mistral", status: "success", duration_ms: Date.now() - t0, user_id: userId });
-      }
-    } catch {
-      logAI({ feature: "explain", provider: "mistral", status: "fallback", duration_ms: Date.now() - t0, user_id: userId });
-    }
-  }
-
-  // Repli GPT si Mistral indisponible / vide.
-  if (!text && hasOpenAI()) {
+  if (hasOpenAI()) {
     try {
       const r = await openai().chat.completions.create({
         model: AI_MODEL,
@@ -140,10 +128,24 @@ Réponds avec UNIQUEMENT le texte de l'explication (2 phrases sur 2 lignes), san
         max_tokens: 220,
         messages,
       });
-      text = stripLongDashes((r.choices?.[0]?.message?.content ?? "").trim());
-      logAI({ feature: "explain", provider: "openai", status: "fallback", duration_ms: Date.now() - t0, user_id: userId });
+      const cleaned = stripLongDashes((r.choices?.[0]?.message?.content ?? "").trim());
+      if (cleaned) {
+        text = cleaned;
+        logAI({ feature: "explain", provider: "openai", status: "success", duration_ms: Date.now() - t0, user_id: userId });
+      }
     } catch {
-      logAI({ feature: "explain", provider: "openai", status: "error", duration_ms: Date.now() - t0, user_id: userId });
+      logAI({ feature: "explain", provider: "openai", status: "fallback", duration_ms: Date.now() - t0, user_id: userId });
+    }
+  }
+
+  // Secours Mistral si OpenAI indisponible / vide.
+  if (!text && hasMistral()) {
+    try {
+      const raw = await mistralChat({ model: MISTRAL_MODEL, temperature: 0.4, maxTokens: 220, messages });
+      text = stripLongDashes((raw ?? "").trim());
+      logAI({ feature: "explain", provider: "mistral", status: "fallback", duration_ms: Date.now() - t0, user_id: userId });
+    } catch {
+      logAI({ feature: "explain", provider: "mistral", status: "error", duration_ms: Date.now() - t0, user_id: userId });
     }
   }
 
