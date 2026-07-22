@@ -407,6 +407,20 @@ async function runAgent(params: {
     }
   }
 
+  // Nettoyage INCONDITIONNEL : le modèle recopie parfois les NOMS DE CHAMPS de
+  // l'outil answer dans le texte visible (« product_eans: [] », « product_offer:
+  // "offer" ») — vu sur les réponses d'info sans recherche. Ces artefacts ne
+  // doivent JAMAIS s'afficher : on les retire toujours (pas seulement quand on
+  // récupère des EAN).
+  if (finalText && /product_eans|product_offer|followup_question/i.test(finalText)) {
+    finalText = finalText
+      .replace(/product_eans\s*:?\s*\[[^\]]*\]/gi, "")
+      .replace(/product_offer\s*:?\s*"?[a-z]+"?/gi, "")
+      .replace(/followup_question\s*:?\s*"[^"]*"/gi, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
   // FILET FINAL ANTI-0 : une recherche produit a bien été lancée (donc intention
   // produit réelle) et des candidats notés existent, mais le modèle n'a listé
   // AUCUN EAN (glitch : narration sans `answer`, ou `answer` renvoyé vide par
