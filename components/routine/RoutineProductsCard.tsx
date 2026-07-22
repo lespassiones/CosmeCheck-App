@@ -49,7 +49,7 @@ export const RoutineProductsCard = memo(function RoutineProductsCard({
   evening,
   onPress,
   style,
-  title = 'Ma routine soin',
+  title = 'Routine produit',
   icon = 'sparkles-outline',
   iconTint = colors.rose,
   iconBg = colors.roseSoft,

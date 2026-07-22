@@ -92,7 +92,7 @@ const ProduitsScreen: FC = () => {
             <Ionicons name="chevron-back" size={16} color={colors.ink} />
             <Text style={styles.backPillText}>Retour</Text>
           </Pressable>
-          <Text style={styles.topTitle}>Ma routine soin</Text>
+          <Text style={styles.topTitle}>Routine produit</Text>
           <View style={styles.topSpacer} />
         </View>
 
