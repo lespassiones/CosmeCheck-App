@@ -42,6 +42,9 @@ export interface RoutineJoinedAnalysis {
   result_json: unknown
   category: string | null
   category_precise: string | null
+  /** Type produit structuré de l'analyseur (ex. « Nettoyant visage ») — signal
+   *  de catégorie prioritaire pour les suggestions d'alternatives. */
+  product_type: string | null
   ean: string | null
 }
 
@@ -75,7 +78,7 @@ interface UseRoutineReturn {
 }
 
 const SELECT =
-  'id,user_id,analysis_id,frequency,added_at,time_of_day,position,kind,analysis:analyses(id,name,product_label,brand,score,result_json,category,category_precise,ean)'
+  'id,user_id,analysis_id,frequency,added_at,time_of_day,position,kind,analysis:analyses(id,name,product_label,brand,score,result_json,category,category_precise,product_type,ean)'
 
 const TIME_OF_DAY_VALUES: readonly RoutineTimeOfDay[] = ['morning', 'evening', 'both']
 
@@ -94,6 +97,7 @@ function normalizeAnalysis(raw: unknown): RoutineJoinedAnalysis | null {
     result_json: r.result_json ?? null,
     category: typeof r.category === 'string' ? r.category : null,
     category_precise: typeof r.category_precise === 'string' ? r.category_precise : null,
+    product_type: typeof r.product_type === 'string' ? r.product_type : null,
     ean: typeof r.ean === 'string' ? r.ean : null,
   }
 }

@@ -1,5 +1,5 @@
 /**
- * SuggestionCard — carte « Meilleur choix pour toi » (avant → après).
+ * SuggestionCard — carte « Alternative plus clean » (avant → après).
  * Présentational : ton produit (gauche, élément le plus dangereux) → alternative
  * (droite, respecte tes restrictions). Pastilles de tier (pas de note chiffrée).
  * Bouton « Garder en favori » + lien « Voir l'analyse ».
@@ -59,7 +59,7 @@ export const SuggestionCard: FC<Props> = ({
       {/* En-tête */}
       <View style={styles.header}>
         <Ionicons name="sparkles" size={15} color={colors.accent} />
-        <Text style={styles.headerText}>Meilleur choix pour toi</Text>
+        <Text style={styles.headerText}>Alternative plus clean</Text>
         <Ionicons name="trending-up" size={16} color={colors.success} />
       </View>
 

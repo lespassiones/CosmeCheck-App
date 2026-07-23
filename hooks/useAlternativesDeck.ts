@@ -115,6 +115,7 @@ export function useAlternativesDeck(items: RoutineItem[]): UseAlternativesDeckRe
             name: titleFor(it),
             ean: a.ean ?? null,
             category: a.category_precise ?? null,
+            productType: a.product_type ?? null,
             counts: {
               vert: counts.vert ?? 0,
               jaune: counts.jaune ?? 0,

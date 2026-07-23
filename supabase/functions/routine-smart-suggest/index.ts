@@ -40,6 +40,11 @@ import {
   mistralChat,
   openai,
 } from "../_shared/aiClient.ts";
+import {
+  type CategoryPlan,
+  productTypeToCategoryPrefix,
+  resolveCategoryPlan,
+} from "./categoryResolve.ts";
 
 type Counts = { vert: number; jaune: number; orange: number; rouge: number };
 
@@ -48,6 +53,9 @@ type ReqItem = {
   name: string;
   ean: string | null;
   category: string | null; // category_precise côté client (fallback)
+  /** Type produit STRUCTURÉ de l'analyseur (ex. « Nettoyant visage ») — signal
+   *  de catégorie prioritaire sur la classification par nom (peu fiable). */
+  productType: string | null;
   counts: Counts;
   cappedScore: number;
   restrictedCount: number;
@@ -93,7 +101,10 @@ const MAX_ITEMS = 40;
 // Version du MOTEUR : incluse dans profile_sig → un changement de logique
 // invalide TOUT le cache existant (régénération à la prochaine ouverture, comme
 // le bump de clé localStorage côté web). Bumper à chaque évolution de la règle.
-const ENGINE_VERSION = "e3";
+// e4 (juil 2026) : résolution de catégorie fiabilisée (product_type prioritaire
+// sur la classification par nom + garde-fou de confiance) + réanalyse IA exigeant
+// la même FONCTION/bénéfice → invalide les suggestions incohérentes précédentes.
+const ENGINE_VERSION = "e4";
 
 // ─── Règle de sélection (À GARDER EN PHASE avec mobile lib/routine/qualify.ts) ─
 // Le jaune doit simplement DÉPASSER le vert (jaune > vert) pour un produit sans
@@ -282,14 +293,18 @@ async function imagesByEan(sb: SB, eans: string[]): Promise<Map<string, string>>
   return out;
 }
 
-async function classifyByName(sb: SB, name: string): Promise<string | null> {
+/** Classification par SIMILARITÉ DE NOM (peu fiable sur les noms marketing) :
+ *  renvoie la catégorie gagnante ET son nombre de votes, pour que l'appelant
+ *  applique un seuil de confiance (cf. resolveCategoryPlan / MIN_CLASSIFY_VOTES). */
+async function classifyByName(sb: SB, name: string): Promise<{ category: string; votes: number } | null> {
   const q = name.trim();
   if (q.length < 3) return null;
   try {
     const { data, error } = await sb.rpc("cosme_check_classify_product_category", { p_query: q });
     if (!error && Array.isArray(data) && data.length > 0) {
-      const cat = (data[0] as { category?: string }).category?.trim();
-      if (cat) return cat;
+      const row = data[0] as { category?: string; votes?: number };
+      const cat = row.category?.trim();
+      if (cat) return { category: cat, votes: Number(row.votes) || 0 };
     }
   } catch { /* ignore */ }
   return null;
@@ -390,11 +405,36 @@ function shortlist(item: ReqItem, alts: CatalogAlt[], r: UserRestrictions): Cata
     .slice(0, SHORTLIST);
 }
 
-async function resolveCategory(item: ReqItem, catByEan: Map<string, string>, sb: SB): Promise<string | null> {
-  const fromEan = item.ean ? catByEan.get(item.ean) ?? null : null;
-  if (fromEan) return fromEan;
-  if (item.category && item.category.trim()) return item.category.trim();
-  return classifyByName(sb, item.name);
+/**
+ * Résout la catégorie de recherche d'alternatives (plan {value, isPrefix}) selon
+ * la hiérarchie de signaux (cf. categoryResolve.ts). La classification par nom —
+ * peu fiable — n'est appelée QUE si aucun signal plus sûr n'existe, et n'est
+ * retenue que si son vote dépasse le seuil de confiance. `null` → on s'abstient
+ * (pas de suggestion pour ce produit).
+ */
+async function resolveCategory(item: ReqItem, catByEan: Map<string, string>, sb: SB): Promise<CategoryPlan | null> {
+  const eanCat = item.ean ? catByEan.get(item.ean) ?? null : null;
+  const precise = item.category && item.category.trim() ? item.category.trim() : null;
+  const ptPrefix = productTypeToCategoryPrefix(item.productType);
+
+  // Classification par nom UNIQUEMENT en dernier recours (coûte un appel DB).
+  let classifyCategory: string | null = null;
+  let classifyVotes = 0;
+  if (!eanCat && !precise && !ptPrefix) {
+    const c = await classifyByName(sb, item.name);
+    if (c) {
+      classifyCategory = c.category;
+      classifyVotes = c.votes;
+    }
+  }
+
+  return resolveCategoryPlan({
+    eanCatalogCategory: eanCat,
+    categoryPrecise: precise,
+    productTypePrefix: ptPrefix,
+    classifyCategory,
+    classifyVotes,
+  });
 }
 
 // ─── Réanalyse IA : type d'usage + restrictions + profil (2 passes max) ───────
@@ -444,11 +484,13 @@ function buildEvalPrompt(
     "Tu es un expert cosmétique rigoureux. Pour CHAQUE produit de la routine de l'utilisateur, on te donne son nom et une liste numérotée d'ALTERNATIVES candidates (déjà plus propres : sans ingrédient orange/rouge, bien notées). Chaque candidate a sa RECETTE (INCI). "
     + "RÉANALYSE la recette de chaque candidate et sélectionne jusqu'à DEUX meilleures candidates (best-first) qui remplissent TOUTES ces conditions : "
     + "(1) MÊME ZONE d'application (visage / corps / cheveux / bouche-dents / aisselles) ET MÊME usage (laver-rincer ; hydrater-laisser poser ; déodorer ; démaquiller...). La TEXTURE/forme peut différer tant que la zone ET l'usage sont identiques. "
-    + "COMPATIBLES (exemples) : pour HYDRATER le corps, lait ↔ crème ↔ baume ↔ beurre corporel ; pour LAVER le corps, gel douche ↔ crème lavante ↔ savon liquide corps ↔ huile de douche ↔ body wash ↔ pain surgras ; pour les AISSELLES, déodorant ↔ anti-transpirant ↔ déo stick/bille/spray/crème (proposer un déodorant SANS sels d'aluminium à la place d'un anti-transpirant à l'aluminium est un TRÈS BON remplacement) ; deux nettoyants VISAGE (gel/mousse/huile/gelée) ; deux dentifrices ; deux shampooings. "
-    + "INCOMPATIBLES (zone OU usage différent) : gel douche (laver le corps) ≠ shampooing (laver les cheveux) ; laver ≠ hydrater ; soin VISAGE ≠ soin CORPS ; dentifrice ≠ déodorant ; démaquillant/nettoyant ≠ crème de jour ; soin cheveux ≠ soin peau. "
-    + "(2) la recette RESPECTE les restrictions : elle NE doit contenir AUCUN ingrédient d'une famille bannie NI aucun ingrédient nommé banni. Reconnais les familles dans l'INCI : sulfate = ...SULFATE (sodium lauryl/laureth/coco sulfate...) ; silicone = DIMETHICONE, ...SILOXANE, ...SILANOL, ...-CONE/-CONOL ; paraben = ...PARABEN ; ethoxyle (éthoxylé) = PEG-..., ...-ETH-... (LAURETH, STEARETH, CETEARETH...), POLYSORBATE ; propoxyle = PPG-.... "
-    + "(3) raisonnablement adaptée au profil (type de peau, préoccupations, objectifs) — ne retiens du profil que ce qui est pertinent pour CE type de produit. "
-    + "Si AUCUNE candidate ne remplit tout → best_indices = []. En cas de DOUTE sur la ZONE, l'USAGE ou une RESTRICTION → EXCLURE la candidate. Mais NE rejette PAS une candidate seulement parce que sa TEXTURE/forme diffère (lait vs baume, gel vs crème lavante, savon liquide vs gel douche) si la zone et l'usage sont identiques. "
+    + "COMPATIBLES (exemples) : pour HYDRATER le corps, lait ↔ crème ↔ baume ↔ beurre corporel ; pour LAVER le corps, gel douche ↔ crème lavante ↔ savon liquide corps ↔ huile de douche ↔ body wash ↔ pain surgras ; pour les AISSELLES, déodorant ↔ anti-transpirant ↔ déo stick/bille/spray/crème (proposer un déodorant SANS sels d'aluminium à la place d'un anti-transpirant à l'aluminium est un TRÈS BON remplacement) ; deux nettoyants VISAGE quotidiens (gel/mousse/huile/gelée/eau micellaire) ; deux dentifrices ; deux shampooings. "
+    + "INCOMPATIBLES (zone OU usage différent) : gel douche (laver le corps) ≠ shampooing (laver les cheveux) ; laver ≠ hydrater ; soin VISAGE ≠ soin CORPS ; dentifrice ≠ déodorant ; démaquillant/nettoyant ≠ crème de jour ; soin cheveux ≠ soin peau ; "
+    + "et SURTOUT : un NETTOYANT/démaquillant QUOTIDIEN ≠ un GOMMAGE / EXFOLIANT / peeling (usage occasionnel, action mécanique ou acide) — ce sont des usages DIFFÉRENTS, ne les échange jamais l'un pour l'autre. "
+    + "(2) MÊME FONCTION / BÉNÉFICE PRINCIPAL que le produit actuel. Déduis le bénéfice dominant du produit actuel d'après son nom (ex. « lait nutritif » = nourrir/hydrater ; « eau micellaire » = nettoyer en douceur ; « soin hydratant » = hydrater) et n'accepte une candidate QUE si elle rend ce même service. Ne remplace JAMAIS un produit dont le bénéfice principal est l'HYDRATATION/la NUTRITION par un produit qui l'assèche ou ne fait que nettoyer/exfolier, et inversement. "
+    + "(3) la recette RESPECTE les restrictions : elle NE doit contenir AUCUN ingrédient d'une famille bannie NI aucun ingrédient nommé banni. Reconnais les familles dans l'INCI : sulfate = ...SULFATE (sodium lauryl/laureth/coco sulfate...) ; silicone = DIMETHICONE, ...SILOXANE, ...SILANOL, ...-CONE/-CONOL ; paraben = ...PARABEN ; ethoxyle (éthoxylé) = PEG-..., ...-ETH-... (LAURETH, STEARETH, CETEARETH...), POLYSORBATE ; propoxyle = PPG-.... "
+    + "(4) adaptée au profil (type de peau, préoccupations, objectifs) — ne retiens du profil que ce qui est pertinent pour CE type de produit. Si le profil a un BESOIN FORT (peau sèche, sensible, préoccupation sécheresse...), la candidate ne doit pas SACRIFIER ce besoin par rapport au produit actuel : pour une peau sèche, ne propose pas une alternative qui hydrate/nourrit MOINS bien. "
+    + "Si AUCUNE candidate ne remplit tout → best_indices = []. En cas de DOUTE sur la ZONE, l'USAGE, la FONCTION ou une RESTRICTION → EXCLURE la candidate (mieux vaut ne rien proposer qu'une mauvaise alternative). Mais NE rejette PAS une candidate seulement parce que sa TEXTURE/forme diffère (lait vs baume, gel vs crème lavante, savon liquide vs gel douche) si la zone, l'usage ET la fonction sont identiques. "
     + "best_indices = indices 1-based (max 2, best-first). reason = une phrase courte en tutoiement (≤ 18 mots) expliquant pourquoi CE TYPE de produit te convient, SANS nommer aucune marque ni produit (ex : « Plus doux pour ton corps très sec, et sans les ingrédients que tu évites »). Pas de marketing. "
     + "Réponds en JSON strict : un élément par produit, MÊME ordre, MÊME nombre.";
   const blocks = tasks
@@ -584,6 +626,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
           name,
           ean: typeof o.ean === "string" && o.ean.trim() ? o.ean.trim().slice(0, 40) : null,
           category: typeof o.category === "string" && o.category.trim() ? o.category.trim() : null,
+          productType: typeof o.productType === "string" && o.productType.trim()
+            ? o.productType.trim().slice(0, 120)
+            : null,
           counts,
           cappedScore: typeof o.cappedScore === "number" ? o.cappedScore : (typeof o.score === "number" ? o.score : 20),
           restrictedCount: Number(o.restrictedCount) || 0,
@@ -656,31 +701,37 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const prepared = await Promise.all(
     affordable.map(async (item) => {
-      let category = await resolveCategory(item, catByEan, svc);
-      let cands = category ? shortlist(item, await fetchAlternatives(svc, category), restrictions) : [];
-      // Repli 1 — ÉLARGIR AUX SŒURS : la feuille exacte peut être affamée (ex. déo
-      // « anti-transpirant » : ~91 produits, presque tous à l'aluminium) alors que
-      // les feuilles sœurs (« deodorant-stick/bille/spray... ») contiennent des
-      // milliers d'alternatives propres. On cherche alors dans la catégorie PARENTE.
-      if (cands.length === 0 && category) {
-        const prefix = parentPrefix(category);
-        if (prefix) {
-          cands = shortlist(item, await fetchAlternativesByPrefix(svc, prefix), restrictions);
-        }
-      }
-      // Repli 2 — re-route par nom (taxonomie catalogue) si toujours rien.
-      if (cands.length === 0) {
-        const byName = await classifyByName(svc, item.name);
-        if (byName && byName !== category) {
-          let reCands = shortlist(item, await fetchAlternatives(svc, byName), restrictions);
-          if (reCands.length === 0) {
-            const p = parentPrefix(byName);
-            if (p) reCands = shortlist(item, await fetchAlternativesByPrefix(svc, p), restrictions);
+      const plan = await resolveCategory(item, catByEan, svc);
+      // Aucun signal de catégorie fiable → on S'ABSTIENT (pas de devinette) :
+      // 0 candidat → aucune suggestion pour ce produit (0 crédit).
+      if (!plan) return { item, category: null as string | null, cands: [] as CatalogAlt[] };
+
+      let cands: CatalogAlt[] = [];
+      if (plan.isPrefix) {
+        // product_type → préfixe LARGE (l1/l2/%) : beaucoup de candidats propres.
+        cands = shortlist(item, await fetchAlternativesByPrefix(svc, plan.value), restrictions);
+        // Repli — élargir au niveau 1 (l1/%) si la sous-catégorie est affamée.
+        if (cands.length === 0) {
+          const l1 = plan.value.split("/")[0];
+          const wide = l1 ? `${l1}/%` : null;
+          if (wide && wide !== plan.value) {
+            cands = shortlist(item, await fetchAlternativesByPrefix(svc, wide), restrictions);
           }
-          if (reCands.length > 0) { category = byName; cands = reCands; }
+        }
+      } else {
+        // Feuille EXACTE (EAN catalogue, category_precise, ou classification confiante).
+        cands = shortlist(item, await fetchAlternatives(svc, plan.value), restrictions);
+        // Repli — ÉLARGIR AUX SŒURS : la feuille exacte peut être affamée (ex. déo
+        // « anti-transpirant » : presque tous à l'aluminium) alors que les feuilles
+        // sœurs (« deodorant-stick/bille/spray... ») regorgent d'alternatives propres.
+        if (cands.length === 0) {
+          const prefix = parentPrefix(plan.value);
+          if (prefix) {
+            cands = shortlist(item, await fetchAlternativesByPrefix(svc, prefix), restrictions);
+          }
         }
       }
-      return { item, category, cands };
+      return { item, category: plan.value, cands };
     }),
   );
 

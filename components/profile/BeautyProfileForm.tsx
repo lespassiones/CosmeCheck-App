@@ -14,7 +14,7 @@
  */
 
 import { type FC, useCallback, useEffect, useRef, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
@@ -45,6 +45,10 @@ export const BeautyProfileForm: FC<Props> = ({
 }) => {
   const [skin, setSkin] = useState<SkinProfile>(initialSkin)
   const [hasChanges, setHasChanges] = useState(false)
+  // `dirty` = des modifications restent à enregistrer. À l'ouverture le profil
+  // est déjà persisté → false → le bouton affiche « Enregistré ✓ » (désactivé).
+  // Repasse à true à la moindre modif, à false après une sauvegarde réussie.
+  const [dirty, setDirty] = useState(false)
   const [status, setStatus] = useState<SaveStatus>('idle')
   const [confirmCancel, setConfirmCancel] = useState(false)
 
@@ -68,6 +72,11 @@ export const BeautyProfileForm: FC<Props> = ({
       try {
         await onSave(next)
         setStatus('saved')
+        // On ne repasse « propre » QUE si rien n'a changé depuis cet envoi
+        // (égalité de référence : handleChange crée un nouvel objet à chaque
+        // modif). Évite d'afficher « Enregistré » alors qu'une nouvelle édition
+        // est déjà en attente d'auto-save.
+        if (latestSkin.current === next) setDirty(false)
         if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
         savedTimerRef.current = setTimeout(() => setStatus('idle'), SAVED_VISIBLE_MS)
       } catch {
@@ -86,6 +95,7 @@ export const BeautyProfileForm: FC<Props> = ({
         return next
       })
       setHasChanges(true)
+      setDirty(true)
       if (autosaveRef.current) clearTimeout(autosaveRef.current)
       autosaveRef.current = setTimeout(() => {
         void runSave(latestSkin.current)
@@ -105,6 +115,20 @@ export const BeautyProfileForm: FC<Props> = ({
   }, [hasChanges, onCancel])
 
   const saving = isSaving || status === 'saving'
+  // État du bouton d'enregistrement :
+  //  - saving : en cours (spinner, désactivé)
+  //  - error  : échec → « Réessayer » (cliquable)
+  //  - dirty  : modifs à enregistrer → « Enregistrer » (cliquable)
+  //  - saved  : tout est à jour → « Enregistré ✓ » (DÉSACTIVÉ, jusqu'à la
+  //             prochaine modification)
+  const saveMode: 'saving' | 'error' | 'dirty' | 'saved' = saving
+    ? 'saving'
+    : status === 'error'
+      ? 'error'
+      : dirty
+        ? 'dirty'
+        : 'saved'
+  const saveDisabled = saveMode === 'saving' || saveMode === 'saved'
 
   return (
     <View style={styles.root}>
@@ -138,16 +162,27 @@ export const BeautyProfileForm: FC<Props> = ({
       <View style={styles.actions}>
         <Pressable
           onPress={handleSaveNow}
-          disabled={saving}
+          disabled={saveDisabled}
           accessibilityRole="button"
+          accessibilityState={{ disabled: saveDisabled }}
           style={({ pressed }) => [
             styles.saveBtn,
-            (pressed || saving) && styles.saveBtnPressed,
+            saveMode === 'saved' && styles.saveBtnSaved,
+            pressed && !saveDisabled && styles.saveBtnPressed,
           ]}
         >
-          <Text style={styles.saveText}>
-            {saving ? 'Enregistrement…' : 'Enregistrer'}
-          </Text>
+          {saveMode === 'saving' ? (
+            <View style={styles.saveRow}>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+              <Text style={styles.saveText}>Enregistrement…</Text>
+            </View>
+          ) : saveMode === 'saved' ? (
+            <Text style={[styles.saveText, styles.saveTextSaved]}>Enregistré ✓</Text>
+          ) : (
+            <Text style={styles.saveText}>
+              {saveMode === 'error' ? 'Réessayer' : 'Enregistrer'}
+            </Text>
+          )}
         </Pressable>
         <Pressable
           onPress={requestCancel}
@@ -214,7 +249,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   saveBtnPressed: { opacity: 0.85 },
+  // État « à jour » : vert clair, non cliquable — signale que tout est enregistré.
+  saveBtnSaved: { backgroundColor: colors.successSoft },
+  saveRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   saveText: { ...typography.button, color: '#FFFFFF' },
+  saveTextSaved: { color: colors.success },
   cancelBtn: { height: 48, alignItems: 'center', justifyContent: 'center' },
   cancelPressed: { opacity: 0.6 },
   cancelText: { ...typography.button, color: colors.inkMuted },

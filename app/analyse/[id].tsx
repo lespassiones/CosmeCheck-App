@@ -42,6 +42,7 @@ import { fontFamilies, typography } from '@/constants/typography'
 import { applyRestrictions, getAnalysisById } from '@/lib/analysis/analyser'
 import { decodeHtml } from '@/lib/decodeHtml'
 import { parseAnalyseResponse, type AnalyseResponse } from '@/lib/analysis/types'
+import { applyColorCap } from '@/lib/analysis/scoreCap'
 import { db } from '@/lib/supabase/client'
 import { isProductCategory } from '@/lib/ai/categorize'
 import { categoryLabel } from '@/lib/categoryLabel'
@@ -262,18 +263,19 @@ const AnalyseDetailScreen: FC = () => {
     scrollRef.current?.scrollTo({ y: y + HEADER_OFFSET, animated: !reduceMotion })
   }, [reduceMotion])
 
-  // Pastille / étoiles « Qualité » = LECTURE DIRECTE de catalog.score (source de
-  // vérité, déjà plafonnée par le moteur pastille V2 : le ceiling orange/rouge
-  // est CUIT dans la note → verdictToneFromScore retombe pile sur la pastille).
-  // Sinon result_json (produit hors catalogue). AUCUN applyColorCap ici : la note
-  // est déjà correcte ; re-plafonner avec des compteurs (souvent périmés/faux)
-  // ne ferait que DÉSYNCHRONISER l'affichage (audit 16 juil 2026 : 99,6 % des
-  // notes catalog == V2, 0 « faux vert » ; le vrai bug était le plafond client).
+  // Score de verdict (étoiles « Qualité » + jauge) = catalog.score si dispo, sinon
+  // result_json. On applique le MÊME plafond couleur que la recherche
+  // (ProductSearchMode → applyColorCap) : sans lui, une note stockée corrompue
+  // (ex. Kalos 17,47 avec 2 rouges) s'affichait « 5 étoiles vertes » sur la fiche
+  // alors que la recherche la plafonnait en orange. Le plafond ne touche QUE les
+  // notes qui violent l'invariant (≥1 rouge → ≤12,9 ; ≥2 rouges / ≥4 oranges →
+  // ≤8,9) ; une note saine est inchangée. Aligne fiche ↔ recherche ↔ jauge.
   const { effectiveVerdictScore, penalizingCount } = useMemo(() => {
     if (state.status !== 'ready') return { effectiveVerdictScore: null as number | null, penalizingCount: 0 }
     const nOrange = state.result.counts.orange ?? 0
     const nRouge = state.result.counts.rouge ?? 0
-    const effectiveVerdictScore = catalogScore ?? state.result.score
+    const baseScore = catalogScore ?? state.result.score
+    const effectiveVerdictScore = baseScore == null ? null : applyColorCap(baseScore, nOrange, nRouge)
     return { effectiveVerdictScore, penalizingCount: nOrange + nRouge }
   }, [state, catalogScore])
 
