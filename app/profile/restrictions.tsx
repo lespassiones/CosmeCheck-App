@@ -35,6 +35,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { NeuCard } from '@/components/design/NeuCard'
+import { Reveal } from '@/components/design/Reveal'
+import { StaggerItem } from '@/components/design/motion'
 import { InferredRestrictionsCard } from '@/components/profile/InferredRestrictionsCard'
 
 const MAX_FAMILIES = 60
@@ -274,54 +276,56 @@ const RestrictionsScreen: FC = () => {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.intro}>
-            Choisis les familles et les ingrédients précis que tu veux éviter. Cosme Check te
-            préviendra à chaque analyse si un produit en contient.
-          </Text>
+          {/* Entrée douce : intro, carte déduite, onglets puis panneau. */}
+          <Reveal stagger={70} style={styles.revealStack}>
+            <Text style={styles.intro}>
+              Choisis les familles et les ingrédients précis que tu veux éviter. Cosme Check te
+              préviendra à chaque analyse si un produit en contient.
+            </Text>
 
-          {/* Récap LECTURE SEULE des sensibilités déduites du profil (worker IA
-              back-end). Rien n'est activé ; null si pas encore calculé. */}
-          <InferredRestrictionsCard userId={userId} />
+            {/* Récap LECTURE SEULE des sensibilités déduites du profil (worker IA
+                back-end). Rien n'est activé ; null si pas encore calculé. */}
+            <InferredRestrictionsCard userId={userId} />
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+            {error ? <Text style={styles.error}>{error}</Text> : null}
 
-          {/* ── Onglets ──────────────────────────────────────── */}
-          <View style={styles.tabs}>
-            <TabButton
-              label="Familles"
-              count={restrictions.families.length}
-              active={tab === 'families'}
-              onPress={() => setTab('families')}
-            />
-            <TabButton
-              label="Ingrédients"
-              count={restrictions.ingredients.length}
-              active={tab === 'ingredients'}
-              onPress={() => setTab('ingredients')}
-            />
-          </View>
+            {/* ── Onglets ──────────────────────────────────────── */}
+            <View style={styles.tabs}>
+              <TabButton
+                label="Familles"
+                count={restrictions.families.length}
+                active={tab === 'families'}
+                onPress={() => setTab('families')}
+              />
+              <TabButton
+                label="Ingrédients"
+                count={restrictions.ingredients.length}
+                active={tab === 'ingredients'}
+                onPress={() => setTab('ingredients')}
+              />
+            </View>
 
-          {tab === 'families' ? (
-            <FamiliesPanel
-              families={sortedFamilies}
-              loading={familiesLoading}
-              selected={familySet}
-              onToggle={toggleFamily}
-              disabled={isSaving}
-            />
-          ) : (
-            <IngredientsPanel
-              query={query}
-              onChangeQuery={onChangeQuery}
-              searching={searching}
-              results={filteredResults}
-              onAdd={addIngredient}
-              ingredients={restrictions.ingredients}
-              onRemove={removeIngredient}
-              disabled={isSaving}
-            />
-          )}
-
+            {tab === 'families' ? (
+              <FamiliesPanel
+                families={sortedFamilies}
+                loading={familiesLoading}
+                selected={familySet}
+                onToggle={toggleFamily}
+                disabled={isSaving}
+              />
+            ) : (
+              <IngredientsPanel
+                query={query}
+                onChangeQuery={onChangeQuery}
+                searching={searching}
+                results={filteredResults}
+                onAdd={addIngredient}
+                ingredients={restrictions.ingredients}
+                onRemove={removeIngredient}
+                disabled={isSaving}
+              />
+            )}
+          </Reveal>
         </ScrollView>
       </SafeAreaView>
     </View>
@@ -381,24 +385,26 @@ const FamiliesPanel: FC<{
       {families.map((fam, i) => {
         const on = selected.has(fam.slug)
         return (
-          <Pressable
-            key={fam.slug}
-            onPress={() => onToggle(fam.slug)}
-            disabled={disabled}
-            style={[styles.familyRow, i > 0 && styles.familyRowBorder]}
-          >
-            <View style={styles.familyInfo}>
-              <Text style={styles.familyName}>{fam.name}</Text>
-              {!fam.tagSlug ? (
-                <View style={styles.soonBadge}>
-                  <Text style={styles.soonBadgeText}>Bientôt actif</Text>
-                </View>
-              ) : null}
-            </View>
-            <View style={[styles.toggle, on && styles.toggleOn]}>
-              <View style={[styles.knob, on && styles.knobOn]} />
-            </View>
-          </Pressable>
+          // Entrée échelonnée des lignes (délai plafonné par StaggerItem).
+          <StaggerItem key={fam.slug} index={i}>
+            <Pressable
+              onPress={() => onToggle(fam.slug)}
+              disabled={disabled}
+              style={[styles.familyRow, i > 0 && styles.familyRowBorder]}
+            >
+              <View style={styles.familyInfo}>
+                <Text style={styles.familyName}>{fam.name}</Text>
+                {!fam.tagSlug ? (
+                  <View style={styles.soonBadge}>
+                    <Text style={styles.soonBadgeText}>Bientôt actif</Text>
+                  </View>
+                ) : null}
+              </View>
+              <View style={[styles.toggle, on && styles.toggleOn]}>
+                <View style={[styles.knob, on && styles.knobOn]} />
+              </View>
+            </Pressable>
+          </StaggerItem>
         )
       })}
     </NeuCard>
@@ -524,6 +530,8 @@ const styles = StyleSheet.create({
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { ...typography.h4, color: colors.ink },
   content: { paddingHorizontal: spacing.xl, paddingTop: spacing.base, gap: spacing.lg },
+  // Reveal devient l'unique enfant du ScrollView : on y reporte le gap.
+  revealStack: { gap: spacing.lg },
   intro: { ...typography.small, color: colors.inkMuted },
   error: { ...typography.small, color: colors.error },
 

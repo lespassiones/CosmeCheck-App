@@ -11,7 +11,7 @@
  * Couleurs depuis `colors.spectrum`. Purement présentationnel.
  */
 
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import {
   Pressable,
   StyleSheet,
@@ -20,6 +20,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 
 import { colors } from '@/constants/colors'
 import {
@@ -56,6 +57,9 @@ export const IngredientSpectrum = memo(function IngredientSpectrum({
   const top5 = spectrum?.top5 ?? []
   const top10 = spectrum?.top10 ?? []
 
+  // Quelle info-bulle est ouverte ('top5' | 'top10' | null). Tap pour basculer.
+  const [openInfo, setOpenInfo] = useState<'top5' | 'top10' | null>(null)
+
   function ingredientAt(position: number): AnalyseItem | undefined {
     return items.find((it) => it.position === position)
   }
@@ -78,7 +82,13 @@ export const IngredientSpectrum = memo(function IngredientSpectrum({
 
   const effectiveTop5 = top5.map((r, i) => effectiveRatingAt(i + 1, r))
   const effectiveTop10 = top10.map((r, i) => effectiveRatingAt(i + 1, r))
-  const nonGreenInTop5 = effectiveTop5.filter((r) => r && r !== 'vert').length
+  // Ne comptent comme « critiques » que l'orange et le rouge (le jaune et le
+  // vert sont exclus des chiffres).
+  const criticalInTop5 = effectiveTop5.filter(
+    (r) => r === 'orange' || r === 'rouge',
+  ).length
+  const allGreenTop5 =
+    effectiveTop5.length > 0 && effectiveTop5.every((r) => r === 'vert')
 
   function handlePress(position: number) {
     onPositionClick?.(position)
@@ -91,7 +101,26 @@ export const IngredientSpectrum = memo(function IngredientSpectrum({
 
   return (
     <View style={[styles.card, style]}>
-      <Text style={styles.h3}>Spectre top 5</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.h3}>Spectre top 5</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="À quoi sert le spectre top 5 ?"
+          hitSlop={8}
+          onPress={() => setOpenInfo((v) => (v === 'top5' ? null : 'top5'))}
+          style={({ pressed }) => [styles.infoDot, pressed && styles.pressed]}
+        >
+          <Ionicons name="information" size={12} color={colors.surface} />
+        </Pressable>
+      </View>
+
+      {openInfo === 'top5' ? (
+        <Text style={styles.infoText}>
+          Les 5 premiers ingrédients représentent la plus grande partie du
+          produit (souvent 75 à 99 %). Un ingrédient non vert ici est critique :
+          il pèse bien plus lourd que le même ingrédient en fin de liste.
+        </Text>
+      ) : null}
 
       <View style={styles.top5Row}>
         {effectiveTop5.length === 0 ? (
@@ -118,21 +147,40 @@ export const IngredientSpectrum = memo(function IngredientSpectrum({
         )}
       </View>
 
-      {nonGreenInTop5 > 0 ? (
+      {criticalInTop5 > 0 ? (
         <View style={styles.warnChip}>
           <Text style={styles.warnText}>
             <Text style={styles.warnBold}>Attention : </Text>
-            {nonGreenInTop5} ingrédient{nonGreenInTop5 > 1 ? 's' : ''} non-vert
-            {nonGreenInTop5 > 1 ? 's' : ''} dans le top 5 - c'est l'essentiel de la formule.
+            Parmi les {effectiveTop5.length} ingrédients en quantité importante,{' '}
+            {criticalInTop5} {criticalInTop5 > 1 ? 'sont critiques' : 'est critique'}.
           </Text>
         </View>
-      ) : effectiveTop5.length > 0 ? (
+      ) : allGreenTop5 ? (
         <Text style={styles.okHint}>
           Top 5 entièrement vert - la majorité de la formule est sans risque connu.
         </Text>
       ) : null}
 
-      <Text style={styles.h3small}>Spectre top 10</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.h3small}>Spectre top 10</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="À quoi sert le spectre top 10 ?"
+          hitSlop={8}
+          onPress={() => setOpenInfo((v) => (v === 'top10' ? null : 'top10'))}
+          style={({ pressed }) => [styles.infoDot, pressed && styles.pressed]}
+        >
+          <Ionicons name="information" size={12} color={colors.surface} />
+        </Pressable>
+      </View>
+
+      {openInfo === 'top10' ? (
+        <Text style={styles.infoText}>
+          Une vue élargie sur les 10 premiers ingrédients. Plus le rang est bas
+          (1, 2, 3…), plus l&apos;ingrédient est présent en quantité dans le
+          produit.
+        </Text>
+      ) : null}
 
       <View style={styles.top10Row}>
         {effectiveTop10.map((rating, i) => {
@@ -168,8 +216,23 @@ const styles = StyleSheet.create({
     borderColor: colors.glass.border,
     padding: 20,
   },
-  h3: { fontSize: 15, fontWeight: '600', color: colors.ink, marginBottom: 12 },
-  h3small: { fontSize: 13, fontWeight: '600', color: colors.ink, marginBottom: 8 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
+  h3: { fontSize: 15, fontWeight: '600', color: colors.ink },
+  h3small: { fontSize: 13, fontWeight: '600', color: colors.ink },
+  infoDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.inkLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoText: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: colors.inkMuted,
+    marginBottom: 12,
+  },
   top5Row: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginBottom: 8 },
   top5Item: { alignItems: 'center', gap: 4 },
   bigSquare: { width: 36, height: 36, borderRadius: 6 },

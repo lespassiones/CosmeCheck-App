@@ -14,7 +14,23 @@
  */
 
 import { type FC, useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
+import {
+  AccessibilityInfo,
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native'
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated'
+import * as Haptics from 'expo-haptics'
+import { Ionicons } from '@expo/vector-icons'
 
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
@@ -34,8 +50,17 @@ interface Props {
 
 const AUTOSAVE_MS = 800
 const SAVED_VISIBLE_MS = 2000
+// Durée pendant laquelle le bouton du bas affiche « Enregistré ✓ » après un tap
+// explicite, avant de revenir à l'état actif « Enregistrer ».
+const BTN_SAVED_MS = 1800
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+// État du bouton du bas : indépendant de l'auto-save. Toujours « ready »
+// (bouton actif « Enregistrer ») par défaut, même si le profil est déjà
+// persisté en base. Passe à « done » (animation ✓) uniquement après un tap.
+type BtnState = 'ready' | 'saving' | 'done' | 'error'
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
 
 export const BeautyProfileForm: FC<Props> = ({
   initialSkin,
@@ -45,38 +70,64 @@ export const BeautyProfileForm: FC<Props> = ({
 }) => {
   const [skin, setSkin] = useState<SkinProfile>(initialSkin)
   const [hasChanges, setHasChanges] = useState(false)
-  // `dirty` = des modifications restent à enregistrer. À l'ouverture le profil
-  // est déjà persisté → false → le bouton affiche « Enregistré ✓ » (désactivé).
-  // Repasse à true à la moindre modif, à false après une sauvegarde réussie.
-  const [dirty, setDirty] = useState(false)
+  // `status` pilote la pastille discrète du titre (feedback auto-save).
   const [status, setStatus] = useState<SaveStatus>('idle')
+  // `btnState` pilote UNIQUEMENT le gros bouton du bas. Découplé de l'auto-save :
+  // il reste « ready » (bouton actif « Enregistrer ») par défaut et ne joue
+  // l'animation ✓ que sur un tap explicite de l'utilisateur.
+  const [btnState, setBtnState] = useState<BtnState>('ready')
   const [confirmCancel, setConfirmCancel] = useState(false)
+  const [reduceMotion, setReduceMotion] = useState(false)
 
   const autosaveRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const btnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const latestSkin = useRef<SkinProfile>(initialSkin)
   latestSkin.current = skin
+
+  // Valeurs animées du bouton : rebond au tap + apparition du ✓.
+  const btnScale = useSharedValue(1)
+  const checkScale = useSharedValue(0)
+  const btnAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: btnScale.value }],
+  }))
+  const checkAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: checkScale.value }],
+    opacity: checkScale.value,
+  }))
+
+  useEffect(() => {
+    let mounted = true
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((v) => mounted && setReduceMotion(v))
+      .catch(() => {})
+    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', (v) =>
+      setReduceMotion(v),
+    )
+    return () => {
+      mounted = false
+      sub.remove()
+    }
+  }, [])
 
   // Nettoyage des timers au démontage.
   useEffect(
     () => () => {
       if (autosaveRef.current) clearTimeout(autosaveRef.current)
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+      if (btnTimerRef.current) clearTimeout(btnTimerRef.current)
     },
     [],
   )
 
+  // Sauvegarde silencieuse en arrière-plan (auto-save). Ne touche PAS au bouton
+  // du bas — seulement la pastille du titre.
   const runSave = useCallback(
     async (next: SkinProfile) => {
       setStatus('saving')
       try {
         await onSave(next)
         setStatus('saved')
-        // On ne repasse « propre » QUE si rien n'a changé depuis cet envoi
-        // (égalité de référence : handleChange crée un nouvel objet à chaque
-        // modif). Évite d'afficher « Enregistré » alors qu'une nouvelle édition
-        // est déjà en attente d'auto-save.
-        if (latestSkin.current === next) setDirty(false)
         if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
         savedTimerRef.current = setTimeout(() => setStatus('idle'), SAVED_VISIBLE_MS)
       } catch {
@@ -95,7 +146,6 @@ export const BeautyProfileForm: FC<Props> = ({
         return next
       })
       setHasChanges(true)
-      setDirty(true)
       if (autosaveRef.current) clearTimeout(autosaveRef.current)
       autosaveRef.current = setTimeout(() => {
         void runSave(latestSkin.current)
@@ -104,31 +154,46 @@ export const BeautyProfileForm: FC<Props> = ({
     [runSave],
   )
 
+  // Joue l'animation de confirmation (rebond + pop du ✓) sur le bouton.
+  const playSavedAnimation = useCallback(() => {
+    if (reduceMotion) return
+    btnScale.value = withSequence(
+      withTiming(0.95, { duration: 90 }),
+      withSpring(1, { damping: 6, stiffness: 200 }),
+    )
+    checkScale.value = 0
+    checkScale.value = withSpring(1, { damping: 9, stiffness: 240 })
+  }, [reduceMotion, btnScale, checkScale])
+
+  // Tap explicite « Enregistrer » : le profil est déjà persisté par l'auto-save,
+  // mais on refait un envoi (idempotent) et on montre une vraie confirmation
+  // animée à l'utilisateur, puis on revient à l'état actif « Enregistrer ».
   const handleSaveNow = useCallback(() => {
+    if (btnState === 'saving' || btnState === 'done') return
     if (autosaveRef.current) clearTimeout(autosaveRef.current)
-    void runSave(latestSkin.current)
-  }, [runSave])
+    if (btnTimerRef.current) clearTimeout(btnTimerRef.current)
+    setBtnState('saving')
+    void (async () => {
+      try {
+        await onSave(latestSkin.current)
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
+        setBtnState('done')
+        playSavedAnimation()
+        btnTimerRef.current = setTimeout(() => setBtnState('ready'), BTN_SAVED_MS)
+      } catch {
+        setBtnState('error')
+      }
+    })()
+  }, [btnState, onSave, playSavedAnimation])
 
   const requestCancel = useCallback(() => {
     if (hasChanges) setConfirmCancel(true)
     else onCancel()
   }, [hasChanges, onCancel])
 
-  const saving = isSaving || status === 'saving'
-  // État du bouton d'enregistrement :
-  //  - saving : en cours (spinner, désactivé)
-  //  - error  : échec → « Réessayer » (cliquable)
-  //  - dirty  : modifs à enregistrer → « Enregistrer » (cliquable)
-  //  - saved  : tout est à jour → « Enregistré ✓ » (DÉSACTIVÉ, jusqu'à la
-  //             prochaine modification)
-  const saveMode: 'saving' | 'error' | 'dirty' | 'saved' = saving
-    ? 'saving'
-    : status === 'error'
-      ? 'error'
-      : dirty
-        ? 'dirty'
-        : 'saved'
-  const saveDisabled = saveMode === 'saving' || saveMode === 'saved'
+  const saving = isSaving || btnState === 'saving'
+  const saveMode: BtnState = saving ? 'saving' : btnState
+  const saveDisabled = saveMode === 'saving' || saveMode === 'done'
 
   return (
     <View style={styles.root}>
@@ -160,15 +225,15 @@ export const BeautyProfileForm: FC<Props> = ({
       <Step3Goals value={skin} onChange={handleChange} />
 
       <View style={styles.actions}>
-        <Pressable
+        <AnimatedPressable
           onPress={handleSaveNow}
           disabled={saveDisabled}
           accessibilityRole="button"
           accessibilityState={{ disabled: saveDisabled }}
-          style={({ pressed }) => [
+          style={[
             styles.saveBtn,
-            saveMode === 'saved' && styles.saveBtnSaved,
-            pressed && !saveDisabled && styles.saveBtnPressed,
+            saveMode === 'done' && styles.saveBtnDone,
+            btnAnimStyle,
           ]}
         >
           {saveMode === 'saving' ? (
@@ -176,14 +241,19 @@ export const BeautyProfileForm: FC<Props> = ({
               <ActivityIndicator size="small" color="#FFFFFF" />
               <Text style={styles.saveText}>Enregistrement…</Text>
             </View>
-          ) : saveMode === 'saved' ? (
-            <Text style={[styles.saveText, styles.saveTextSaved]}>Enregistré ✓</Text>
+          ) : saveMode === 'done' ? (
+            <View style={styles.saveRow}>
+              <Animated.View style={checkAnimStyle}>
+                <Ionicons name="checkmark-circle" size={22} color="#FFFFFF" />
+              </Animated.View>
+              <Text style={styles.saveText}>Enregistré</Text>
+            </View>
           ) : (
             <Text style={styles.saveText}>
               {saveMode === 'error' ? 'Réessayer' : 'Enregistrer'}
             </Text>
           )}
-        </Pressable>
+        </AnimatedPressable>
         <Pressable
           onPress={requestCancel}
           accessibilityRole="button"
@@ -248,12 +318,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  saveBtnPressed: { opacity: 0.85 },
-  // État « à jour » : vert clair, non cliquable — signale que tout est enregistré.
-  saveBtnSaved: { backgroundColor: colors.successSoft },
+  // État « done » (juste après un tap) : reste vert plein — le ✓ animé sert de
+  // confirmation. Revient automatiquement à « Enregistrer » après BTN_SAVED_MS.
+  saveBtnDone: { backgroundColor: colors.success },
   saveRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   saveText: { ...typography.button, color: '#FFFFFF' },
-  saveTextSaved: { color: colors.success },
   cancelBtn: { height: 48, alignItems: 'center', justifyContent: 'center' },
   cancelPressed: { opacity: 0.6 },
   cancelText: { ...typography.button, color: colors.inkMuted },

@@ -22,6 +22,8 @@ import { AdvisorHistorySheet } from '@/components/advisor/AdvisorHistorySheet'
 import { loadConversationMessages, type StoredMessage } from '@/lib/advisor/conversations'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { GlassCard } from '@/components/design/GlassCard'
+import { Reveal } from '@/components/design/Reveal'
+import { PressableScale, StaggerItem } from '@/components/design/motion'
 import { colors } from '@/constants/colors'
 import { ROUTES } from '@/constants/routes'
 import { radius, spacing } from '@/constants/spacing'
@@ -122,51 +124,59 @@ const AdvisorScreen: FC = () => {
         </Text>
 
         {isLoading ? null : !config.flag_advisor ? (
-          <GlassCard style={styles.gateCard} padding={spacing.xl}>
-            <Text style={styles.gateTitle}>Bientôt de retour</Text>
-            <Text style={styles.gateText}>
-              Le Beauty Advisor est momentanément indisponible. Reviens un peu plus tard.
-            </Text>
-          </GlassCard>
+          <Reveal>
+            <GlassCard style={styles.gateCard} padding={spacing.xl}>
+              <Text style={styles.gateTitle}>Bientôt de retour</Text>
+              <Text style={styles.gateText}>
+                Le Beauty Advisor est momentanément indisponible. Reviens un peu plus tard.
+              </Text>
+            </GlassCard>
+          </Reveal>
         ) : !started ? (
-          <GlassCard style={styles.gateCard} padding={spacing.xl}>
-            <Text style={styles.gateTitle}>Complète ton profil beauté</Text>
-            <Text style={styles.gateText}>
-              Type de peau, préoccupations, cheveux, allergies : on utilise ces informations pour
-              adapter les conseils. Tu peux modifier à tout moment.
-            </Text>
-            <Pressable
-              onPress={() => router.push(ROUTES.PROFILE.INDEX)}
-              style={({ pressed }) => [styles.gateCta, pressed && styles.pressed]}
-              accessibilityRole="button"
-            >
-              <Text style={styles.gateCtaText}>Compléter mon profil</Text>
-            </Pressable>
-          </GlassCard>
+          <Reveal>
+            <GlassCard style={styles.gateCard} padding={spacing.xl}>
+              <Text style={styles.gateTitle}>Complète ton profil beauté</Text>
+              <Text style={styles.gateText}>
+                Type de peau, préoccupations, cheveux, allergies : on utilise ces informations pour
+                adapter les conseils. Tu peux modifier à tout moment.
+              </Text>
+              <PressableScale
+                onPress={() => router.push(ROUTES.PROFILE.INDEX)}
+                style={styles.gateCta}
+                accessibilityRole="button"
+              >
+                <Text style={styles.gateCtaText}>Compléter mon profil</Text>
+              </PressableScale>
+            </GlassCard>
+          </Reveal>
         ) : (
           <View style={styles.chatWrap}>
-            {/* Résumé profil repliable (parité du <details> web). */}
+            {/* Résumé profil repliable (parité du <details> web).
+                StaggerItem index 0 : simple fondu d'apparition initiale (pas de
+                stagger, le chat en dessous gère ses propres messages). */}
             {(summaryHead || concernsText || skin.allergiesFreeform) && (
-              <Pressable
-                onPress={() => setSummaryOpen((v) => !v)}
-                style={styles.summaryBar}
-                accessibilityRole="button"
-                accessibilityLabel="Voir mon profil"
-              >
-                <Text style={styles.summaryEmoji}>🧬</Text>
-                <Text style={styles.summaryText} numberOfLines={summaryOpen ? undefined : 1}>
-                  {summaryHead ? <Text style={styles.summaryStrong}>{summaryHead}</Text> : null}
-                  {concernsText ? `${summaryHead ? ' · ' : ''}${concernsText}` : ''}
-                  {skin.allergiesFreeform ? ` · sans : ${skin.allergiesFreeform}` : ''}
-                </Text>
+              <StaggerItem index={0}>
                 <Pressable
-                  onPress={() => router.push(ROUTES.PROFILE.INDEX)}
-                  hitSlop={8}
+                  onPress={() => setSummaryOpen((v) => !v)}
+                  style={styles.summaryBar}
                   accessibilityRole="button"
+                  accessibilityLabel="Voir mon profil"
                 >
-                  <Text style={styles.summaryEdit}>Modifier</Text>
+                  <Text style={styles.summaryEmoji}>🧬</Text>
+                  <Text style={styles.summaryText} numberOfLines={summaryOpen ? undefined : 1}>
+                    {summaryHead ? <Text style={styles.summaryStrong}>{summaryHead}</Text> : null}
+                    {concernsText ? `${summaryHead ? ' · ' : ''}${concernsText}` : ''}
+                    {skin.allergiesFreeform ? ` · sans : ${skin.allergiesFreeform}` : ''}
+                  </Text>
+                  <Pressable
+                    onPress={() => router.push(ROUTES.PROFILE.INDEX)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.summaryEdit}>Modifier</Text>
+                  </Pressable>
                 </Pressable>
-              </Pressable>
+              </StaggerItem>
             )}
 
             <AdvisorChat
@@ -247,7 +257,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
   },
-  pressed: { opacity: 0.85 },
   gateCtaText: {
     ...typography.button,
     color: colors.surface,

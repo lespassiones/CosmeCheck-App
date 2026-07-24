@@ -21,6 +21,7 @@ import { spacing, radius } from '@/constants/spacing'
 import { fontFamilies, typography } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
+import { Reveal } from '@/components/design/Reveal'
 import { WhiteCard } from '@/components/design/WhiteCard'
 
 type IoniconName = keyof typeof Ionicons.glyphMap
@@ -152,60 +153,63 @@ const CreditsInfoScreen: FC = () => {
           contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing['2xl'] }]}
           showsVerticalScrollIndicator={false}
         >
-          {/* Intro */}
-          <WhiteCard padding={spacing.lg}>
-            <View style={styles.introRow}>
-              <Ionicons name="star" size={18} color={colors.accent} />
-              <Text style={styles.introTitle}>Comment marchent les crédits ?</Text>
-            </View>
-            <Text style={styles.introText}>
-              Chaque jour, tu reçois des crédits gratuits qui se rechargent
-              automatiquement. Scanner un produit et consulter tes analyses reste
-              toujours gratuit. Seules les fonctions IA en consomment.
-            </Text>
-            <Pressable
-              style={({ pressed }) => [styles.premiumCta, pressed && styles.premiumCtaPressed]}
-              onPress={() => router.push(ROUTES.OFFRE.INDEX)}
-              accessibilityRole="button"
-            >
-              <Ionicons name="diamond-outline" size={15} color="#FFFFFF" />
-              <Text style={styles.premiumCtaText}>{"Passe Premium pour l'illimité"}</Text>
-            </Pressable>
-          </WhiteCard>
-
-          {/* Sections de coût */}
-          {SECTIONS.map((section) => (
-            <View key={section.title} style={styles.section}>
-              <View style={styles.sectionHead}>
-                <Text style={styles.sectionTitle}>{section.title}</Text>
-                <CostBadge cost={section.cost} />
+          {/* Entrée douce : intro, sections et note apparaissent en fondu échelonné. */}
+          <Reveal stagger={70} style={styles.revealStack}>
+            {/* Intro */}
+            <WhiteCard padding={spacing.lg}>
+              <View style={styles.introRow}>
+                <Ionicons name="star" size={18} color={colors.accent} />
+                <Text style={styles.introTitle}>Comment marchent les crédits ?</Text>
               </View>
-              <WhiteCard padding={0}>
-                {section.items.map((item, i) => (
-                  <View
-                    key={item.label}
-                    style={[styles.featureRow, i > 0 && styles.featureRowBorder]}
-                  >
-                    <View style={styles.featureIcon}>
-                      <Ionicons
-                        name={item.icon}
-                        size={20}
-                        color={section.cost === 0 ? colors.rating.vert.DEFAULT : colors.accent}
-                      />
-                    </View>
-                    <View style={styles.featureTexts}>
-                      <Text style={styles.featureLabel}>{item.label}</Text>
-                      <Text style={styles.featureDesc}>{item.desc}</Text>
-                    </View>
-                  </View>
-                ))}
-              </WhiteCard>
-            </View>
-          ))}
+              <Text style={styles.introText}>
+                Chaque jour, tu reçois des crédits gratuits qui se rechargent
+                automatiquement. Scanner un produit et consulter tes analyses reste
+                toujours gratuit. Seules les fonctions IA en consomment.
+              </Text>
+              <Pressable
+                style={({ pressed }) => [styles.premiumCta, pressed && styles.premiumCtaPressed]}
+                onPress={() => router.push(ROUTES.OFFRE.INDEX)}
+                accessibilityRole="button"
+              >
+                <Ionicons name="diamond-outline" size={15} color="#FFFFFF" />
+                <Text style={styles.premiumCtaText}>{"Passe Premium pour l'illimité"}</Text>
+              </Pressable>
+            </WhiteCard>
 
-          <Text style={styles.footnote}>
-            {"Les crédits déjà dépensés pour un contenu ne sont jamais redébités si nous l'améliorons ou si tu le rouvres."}
-          </Text>
+            {/* Sections de coût */}
+            {SECTIONS.map((section) => (
+              <View key={section.title} style={styles.section}>
+                <View style={styles.sectionHead}>
+                  <Text style={styles.sectionTitle}>{section.title}</Text>
+                  <CostBadge cost={section.cost} />
+                </View>
+                <WhiteCard padding={0}>
+                  {section.items.map((item, i) => (
+                    <View
+                      key={item.label}
+                      style={[styles.featureRow, i > 0 && styles.featureRowBorder]}
+                    >
+                      <View style={styles.featureIcon}>
+                        <Ionicons
+                          name={item.icon}
+                          size={20}
+                          color={section.cost === 0 ? colors.rating.vert.DEFAULT : colors.accent}
+                        />
+                      </View>
+                      <View style={styles.featureTexts}>
+                        <Text style={styles.featureLabel}>{item.label}</Text>
+                        <Text style={styles.featureDesc}>{item.desc}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </WhiteCard>
+              </View>
+            ))}
+
+            <Text style={styles.footnote}>
+              {"Les crédits déjà dépensés pour un contenu ne sont jamais redébités si nous l'améliorons ou si tu le rouvres."}
+            </Text>
+          </Reveal>
         </ScrollView>
       </SafeAreaView>
     </View>
@@ -225,6 +229,8 @@ const styles = StyleSheet.create({
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { ...typography.h4, color: colors.ink },
   content: { paddingHorizontal: spacing.xl, paddingTop: spacing.base, gap: spacing.lg },
+  // Reveal devient l'unique enfant du ScrollView : on y reporte le gap.
+  revealStack: { gap: spacing.lg },
 
   // Intro
   introRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },

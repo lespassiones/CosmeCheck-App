@@ -28,6 +28,8 @@ import { useRoutine, type RoutineItem } from '@/hooks/useRoutine'
 import { useProductImage } from '@/hooks/useProductImage'
 import type { BlobCounts } from '@/components/design/IngredientBlob'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
+import { PressableScale } from '@/components/design/motion'
+import { Reveal } from '@/components/design/Reveal'
 import { RoutineMiniDonut } from '@/components/routine/RoutineMiniDonut'
 import { FrequencySelect } from '@/components/routine/FrequencySelect'
 
@@ -119,6 +121,7 @@ const RoutineItemScreen: FC = () => {
             contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing['3xl'] }]}
             showsVerticalScrollIndicator={false}
           >
+            <Reveal stagger={70}>
             {/* ── Identité produit ── */}
             <View style={styles.hero}>
               <View style={styles.heroImageWrap}>
@@ -158,19 +161,20 @@ const RoutineItemScreen: FC = () => {
             </View>
 
             {/* ── Actions ── */}
-            <Pressable
+            <PressableScale
               style={styles.primaryBtn}
               onPress={() => item.analysis && router.push(ROUTES.ANALYSE.DETAIL(item.analysis_id))}
               accessibilityRole="button"
             >
               <Ionicons name="document-text-outline" size={16} color="#FFFFFF" />
               <Text style={styles.primaryBtnText}>Voir l'analyse</Text>
-            </Pressable>
+            </PressableScale>
 
-            <Pressable style={styles.deleteBtn} onPress={handleDelete} accessibilityRole="button">
+            <PressableScale style={styles.deleteBtn} onPress={handleDelete} accessibilityRole="button">
               <Ionicons name="trash-outline" size={15} color={colors.rose} />
               <Text style={styles.deleteBtnText}>Retirer de ma routine</Text>
-            </Pressable>
+            </PressableScale>
+            </Reveal>
           </ScrollView>
         )}
       </SafeAreaView>

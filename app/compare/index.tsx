@@ -31,6 +31,8 @@ import { CompareInsights, type CompareInsightsStatus } from '@/components/compar
 import { ExposureBar, ExposureCountsRow } from '@/components/compare/ExposureBar'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { GlassCard } from '@/components/design/GlassCard'
+import { Reveal } from '@/components/design/Reveal'
+import { PressableScale } from '@/components/design/motion'
 import { colors } from '@/constants/colors'
 import { ROUTES } from '@/constants/routes'
 import { radius, spacing } from '@/constants/spacing'
@@ -299,6 +301,8 @@ const CompareScreen: FC = () => {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {/* Entrée de page : titre, héros et insights apparaissent en cascade. */}
+          <Reveal stagger={80}>
           <Text style={styles.h1}>Comparer 2 produits</Text>
 
           {/* Hero — une carte par produit : infos à gauche, image à droite,
@@ -370,24 +374,26 @@ const CompareScreen: FC = () => {
             showFull={showFull}
             onResult={setInsights}
           />
+          </Reveal>
 
           {/* Bouton « Voir l'analyse complète » (uniquement si l'IA a répondu). */}
           {insights.status === 'ready' && !showFull && (
-            <Pressable
+            <PressableScale
               onPress={() => setShowFull(true)}
-              style={({ pressed }) => [styles.expandBtn, pressed && styles.expandBtnPressed]}
+              style={styles.expandBtn}
               accessibilityRole="button"
               accessibilityLabel="Voir l'analyse complète"
             >
               <Text style={styles.expandBtnText}>Voir l'analyse complète</Text>
               <Ionicons name="chevron-down" size={18} color={colors.surface} />
-            </Pressable>
+            </PressableScale>
           )}
 
           {/* Détail : révélé par le bouton, OU affiché directement si l'IA est
-              indisponible (le reste de la page garde sa valeur). */}
+              indisponible (le reste de la page garde sa valeur). Les blocs
+              apparaissent en cascade à l'ouverture. */}
           {(showFull || insights.status === 'error') && (
-            <>
+            <Reveal stagger={70}>
               {/* À surveiller — une carte par produit, groupé par fonction. */}
               {derived && (derived.flaggedA.length > 0 || derived.flaggedB.length > 0) && (
                 <View style={styles.attentionStack}>
@@ -420,20 +426,20 @@ const CompareScreen: FC = () => {
                   Les deux compositions ne diffèrent pas sur les ingrédients pénalisants.
                 </Text>
               )}
-            </>
+            </Reveal>
           )}
 
           {/* Replier */}
           {insights.status === 'ready' && showFull && (
-            <Pressable
+            <PressableScale
               onPress={() => setShowFull(false)}
-              style={({ pressed }) => [styles.collapseBtn, pressed && styles.expandBtnPressed]}
+              style={styles.collapseBtn}
               accessibilityRole="button"
               accessibilityLabel="Réduire l'analyse"
             >
               <Text style={styles.collapseBtnText}>Voir moins</Text>
               <Ionicons name="chevron-up" size={18} color={colors.inkMuted} />
-            </Pressable>
+            </PressableScale>
           )}
         </ScrollView>
       )}
@@ -670,9 +676,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.base,
-  },
-  expandBtnPressed: {
-    opacity: 0.85,
   },
   expandBtnText: {
     ...typography.button,

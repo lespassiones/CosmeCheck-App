@@ -44,6 +44,7 @@ import { ROUTES } from '@/constants/routes'
 import { useAndroidBack } from '@/hooks/useAndroidBack'
 import { useAppConfig } from '@/hooks/useAppConfig'
 import { CatalogPastille } from '@/components/shared/CatalogPastille'
+import { PressableScale, StaggerItem } from '@/components/design/motion'
 import {
   CATEGORIES,
   CATEGORY_ICONS,
@@ -499,10 +500,20 @@ export const ProductSearchMode: FC<Props> = ({
   )
 
   // ── Barre de recherche (toujours visible) ─────────────────────────────
+  // Focus auto à l'ouverture → le clavier apparaît directement (l'utilisateur
+  // arrive ici pour TAPER). Petit délai : laisse la transition de navigation se
+  // terminer, sinon le clavier ne monte pas de façon fiable (surtout Android).
+  const searchInputRef = useRef<TextInput>(null)
+  useEffect(() => {
+    const t = setTimeout(() => searchInputRef.current?.focus(), 350)
+    return () => clearTimeout(t)
+  }, [])
+
   const searchBar = (
     <View style={[styles.searchBar, styles.searchBarFocused]}>
       <Ionicons name="search" size={18} color={colors.accent} />
       <TextInput
+        ref={searchInputRef}
         style={styles.searchInput}
         value={query}
         onChangeText={setQuery}
@@ -668,15 +679,17 @@ export const ProductSearchMode: FC<Props> = ({
               </View>
             ) : null
           }
-          renderItem={({ item }) => {
+          renderItem={({ item, index }) => {
             const busy = resolvingEan != null && resolvingEan === (item.ean ?? item.name ?? '')
             return (
-              <ProductRow
-                item={item}
-                busy={busy}
-                disabled={disabled || resolvingEan != null}
-                onPress={() => void pickCatalog(item)}
-              />
+              <StaggerItem index={index}>
+                <ProductRow
+                  item={item}
+                  busy={busy}
+                  disabled={disabled || resolvingEan != null}
+                  onPress={() => void pickCatalog(item)}
+                />
+              </StaggerItem>
             )
           }}
           onEndReachedThreshold={0.6}
@@ -711,15 +724,17 @@ export const ProductSearchMode: FC<Props> = ({
             keyExtractor={(item) => item.ean}
             contentContainerStyle={[styles.list, { paddingBottom: listBottomPad }]}
             keyboardShouldPersistTaps="handled"
-            renderItem={({ item }) => {
+            renderItem={({ item, index }) => {
               const busy = resolvingEan === item.ean
               return (
-                <ProductRow
-                  item={item}
-                  busy={busy}
-                  disabled={disabled || resolvingEan != null}
-                  onPress={() => void pickCatalog(item)}
-                />
+                <StaggerItem index={index}>
+                  <ProductRow
+                    item={item}
+                    busy={busy}
+                    disabled={disabled || resolvingEan != null}
+                    onPress={() => void pickCatalog(item)}
+                  />
+                </StaggerItem>
               )
             }}
             onEndReachedThreshold={0.6}
@@ -757,24 +772,26 @@ export const ProductSearchMode: FC<Props> = ({
           keyExtractor={(item) => item.name}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={[styles.list, { paddingBottom: listBottomPad }]}
-          renderItem={({ item }) => {
+          renderItem={({ item, index }) => {
             const isLeaf = !item.children || item.children.length === 0
             return (
-              <Pressable
-                style={styles.subRow}
-                onPress={() => tapNode(item)}
-                disabled={disabled}
-              >
-                <Text style={styles.subName} numberOfLines={1}>{item.name}</Text>
-                <View style={styles.subRight}>
-                  {isLeaf ? (
-                    <Ionicons name="layers-outline" size={14} color={colors.inkLight} />
-                  ) : (
-                    <Ionicons name="folder-outline" size={14} color={colors.inkLight} />
-                  )}
-                  <Ionicons name="chevron-forward" size={18} color={colors.inkLight} />
-                </View>
-              </Pressable>
+              <StaggerItem index={index}>
+                <PressableScale
+                  style={styles.subRow}
+                  onPress={() => tapNode(item)}
+                  disabled={disabled}
+                >
+                  <Text style={styles.subName} numberOfLines={1}>{item.name}</Text>
+                  <View style={styles.subRight}>
+                    {isLeaf ? (
+                      <Ionicons name="layers-outline" size={14} color={colors.inkLight} />
+                    ) : (
+                      <Ionicons name="folder-outline" size={14} color={colors.inkLight} />
+                    )}
+                    <Ionicons name="chevron-forward" size={18} color={colors.inkLight} />
+                  </View>
+                </PressableScale>
+              </StaggerItem>
             )
           }}
         />
@@ -792,23 +809,25 @@ export const ProductSearchMode: FC<Props> = ({
         keyExtractor={(c) => c.name}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[styles.list, { paddingBottom: listBottomPad }]}
-        renderItem={({ item: cat }) => (
-          <Pressable
-            style={styles.catRow}
-            onPress={() => tapNode(cat)}
-            disabled={disabled}
-            accessibilityRole="button"
-          >
-            <View style={styles.catIcon}>
-              <Ionicons
-                name={(CATEGORY_ICONS[cat.name] ?? DEFAULT_CATEGORY_ICON) as IoniconName}
-                size={20}
-                color={colors.accent}
-              />
-            </View>
-            <Text style={styles.catName}>{cat.name}</Text>
-            <Ionicons name="chevron-forward" size={18} color={colors.inkLight} />
-          </Pressable>
+        renderItem={({ item: cat, index }) => (
+          <StaggerItem index={index}>
+            <PressableScale
+              style={styles.catRow}
+              onPress={() => tapNode(cat)}
+              disabled={disabled}
+              accessibilityRole="button"
+            >
+              <View style={styles.catIcon}>
+                <Ionicons
+                  name={(CATEGORY_ICONS[cat.name] ?? DEFAULT_CATEGORY_ICON) as IoniconName}
+                  size={20}
+                  color={colors.accent}
+                />
+              </View>
+              <Text style={styles.catName}>{cat.name}</Text>
+              <Ionicons name="chevron-forward" size={18} color={colors.inkLight} />
+            </PressableScale>
+          </StaggerItem>
         )}
       />
     </View>
@@ -957,7 +976,7 @@ const ProductRow: FC<{
   const hasInci  = Boolean(item.ingredients_text)
   const category = 'category' in item ? item.category : null
   return (
-    <Pressable
+    <PressableScale
       style={[styles.resultRow, !hasInci && styles.resultRowDim]}
       onPress={onPress}
       disabled={disabled || (!hasInci && busy)}
@@ -1008,7 +1027,7 @@ const ProductRow: FC<{
       ) : (
         <Ionicons name="chevron-forward" size={16} color={colors.inkLight} />
       )}
-    </Pressable>
+    </PressableScale>
   )
 }
 

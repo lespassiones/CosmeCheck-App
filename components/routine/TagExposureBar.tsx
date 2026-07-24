@@ -11,10 +11,12 @@
 import { memo, useEffect } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import Animated, {
+  Easing,
+  ReduceMotion,
   useAnimatedStyle,
   useSharedValue,
+  withDelay,
   withTiming,
-  Easing,
 } from 'react-native-reanimated'
 
 import { colors } from '@/constants/colors'
@@ -60,11 +62,16 @@ export const TagExposureBar = memo(function TagExposureBar({
       return
     }
     progress.value = 0
-    progress.value = withTiming(1, {
-      duration: 600,
-      easing: Easing.out(Easing.cubic),
-    })
-  }, [animate, pct, progress])
+    // Remplissage échelonné : chaque barre part un cran après la précédente.
+    progress.value = withDelay(
+      120 + Math.min(index, 10) * 70,
+      withTiming(1, {
+        duration: 600,
+        easing: Easing.out(Easing.cubic),
+        reduceMotion: ReduceMotion.System,
+      }),
+    )
+  }, [animate, pct, index, progress])
 
   const fillStyle = useAnimatedStyle(() => ({
     width: `${pct * progress.value}%`,

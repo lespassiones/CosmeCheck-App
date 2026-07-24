@@ -1,12 +1,11 @@
 /**
- * ScanFAB — bouton d'action flottant central « Décode », twin du FAB web
- * (CosmetWiki AppShell MobileBottomNav center button).
+ * ScanFAB — bouton d'action flottant central « Scan ».
  *
  * Cercle de 64px en dégradé rose (gradients.fab : rose-400 → pink-500), anneau
  * blanc (ring-4 white/70 → border blanche translucide), halo rose intense
- * (surfaceShadows.fab). À l'intérieur : icône caméra + le label « Décode » en
- * tout petit dessous, exactement comme le web. Surélevé au-dessus de la barre
- * (marginTop négatif côté parent).
+ * (surfaceShadows.fab). À l'intérieur : icône SCAN (viseur) + le label « Scan »
+ * en tout petit dessous. Surélevé au-dessus de la barre (marginTop négatif côté
+ * parent).
  *
  * Au press : feedback haptique + spring (scale 1 → 0.9 → 1), désactivé si
  * reduce-motion est actif.
@@ -26,7 +25,7 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient'
 import * as Haptics from 'expo-haptics'
 
-import { CameraIcon } from '@/components/navigation/NavIcons'
+import { ScanIcon } from '@/components/navigation/NavIcons'
 import { colors } from '@/constants/colors'
 import { gradients } from '@/constants/gradients'
 import { surfaceShadows } from '@/constants/shadows'
@@ -68,7 +67,7 @@ export const ScanFAB: FC<Props> = ({ onPress, focused = false }) => {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="Décoder un produit"
+      accessibilityLabel="Scanner un produit"
       accessibilityState={{ selected: focused }}
       onPress={handlePress}
       onPressIn={() => {
@@ -88,9 +87,9 @@ export const ScanFAB: FC<Props> = ({ onPress, focused = false }) => {
             end={gradients.fab.end}
             style={styles.gradient}
           >
-            <CameraIcon size={20} color={colors.surface} />
+            <ScanIcon size={20} color={colors.surface} />
             <Text allowFontScaling={false} style={styles.label}>
-              Décode
+              Scan
             </Text>
           </LinearGradient>
         </View>

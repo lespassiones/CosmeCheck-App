@@ -107,6 +107,9 @@ interface Props {
   productEan?: string | null
   /** Slug de catégorie catalogue (pour rattacher une photo soumise). */
   category?: string | null
+  /** Type de produit détecté par l'analyseur (ex. « Nettoyant visage ») — signal
+   *  fonctionnel robuste pour cibler les alternatives de la bonne catégorie. */
+  productType?: string | null
 }
 
 type TabKey = 'all' | ColorRating | 'unknown'
@@ -135,6 +138,7 @@ export const AnalysisResultPanel: FC<Props> = ({
   penalizingCount,
   productEan,
   category,
+  productType,
 }) => {
   const router = useRouter()
   const { restrictions, profile, updateProfile } = useProfile()
@@ -221,6 +225,7 @@ export const AnalysisResultPanel: FC<Props> = ({
     ean: productEan,
     brand,
     productName,
+    productType,
     category,
     // Graine = ID de l'analyse → alternatives mélangées DANS chaque tier de
     // pastille, différentes à chaque analyse mais stables pour celle-ci.

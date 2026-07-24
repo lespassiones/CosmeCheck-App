@@ -32,6 +32,8 @@ import { router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Purchases, { PACKAGE_TYPE, type PurchasesPackage } from 'react-native-purchases'
 
+import { PressableScale } from '@/components/design/motion'
+import { Reveal } from '@/components/design/Reveal'
 import { WhiteCard } from '@/components/design/WhiteCard'
 import { LogoMark } from '@/components/shared/Logo'
 import { colors } from '@/constants/colors'
@@ -194,7 +196,7 @@ const OffreScreen: FC = () => {
       <ScrollView style={styles.flex1} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {activeTab === 'subscription' && isPremium ? (
           // ═══ MON ABONNEMENT ═══
-          <>
+          <Reveal stagger={70}>
             <View style={styles.subscriptionHero}>
               <Ionicons name="diamond" size={44} color={colors.rose} />
               <Text style={styles.subscriptionTitle}>Tu es Premium ⭐</Text>
@@ -222,10 +224,10 @@ const OffreScreen: FC = () => {
               )}
             </WhiteCard>
 
-          </>
+          </Reveal>
         ) : (
           // ═══ PLANS (paywall) ═══
-          <>
+          <Reveal stagger={60}>
             {/* Hero — jauge de notation (aiguille vers le vert). */}
             <Image source={GAUGE} style={styles.gauge} resizeMode="contain" />
 
@@ -261,7 +263,7 @@ const OffreScreen: FC = () => {
 
             {/* Plans côte à côte — en bas, juste avant la réassurance. */}
             <View style={[styles.plansRow, styles.plansRowBelow]}>
-              <Pressable
+              <PressableScale
                 onPress={() => setSelected('yearly')}
                 style={[styles.planCol, selected === 'yearly' && styles.planColActive]}
               >
@@ -277,9 +279,9 @@ const OffreScreen: FC = () => {
                   color={selected === 'yearly' ? colors.success : colors.inkLight}
                   style={styles.planRadio}
                 />
-              </Pressable>
+              </PressableScale>
 
-              <Pressable
+              <PressableScale
                 onPress={() => setSelected('monthly')}
                 style={[styles.planCol, selected === 'monthly' && styles.planColActive]}
               >
@@ -292,7 +294,7 @@ const OffreScreen: FC = () => {
                   color={selected === 'monthly' ? colors.success : colors.inkLight}
                   style={styles.planRadio}
                 />
-              </Pressable>
+              </PressableScale>
             </View>
 
             {/* Réassurance */}
@@ -322,7 +324,7 @@ const OffreScreen: FC = () => {
                 <Text style={styles.link}>Politique de confidentialité</Text>
               </Pressable>
             </View>
-          </>
+          </Reveal>
         )}
       </ScrollView>
 
@@ -330,7 +332,7 @@ const OffreScreen: FC = () => {
       <View style={styles.footer}>
         {isPremium && activeTab === 'subscription' ? (
           <>
-            <Pressable onPress={handleCancelSubscription} disabled={cancelling}>
+            <PressableScale onPress={handleCancelSubscription} disabled={cancelling}>
               <LinearGradient
                 colors={[colors.roseDeep, '#c41e3a']}
                 start={{ x: 0, y: 0 }}
@@ -346,12 +348,12 @@ const OffreScreen: FC = () => {
                   </>
                 )}
               </LinearGradient>
-            </Pressable>
+            </PressableScale>
             <Text style={styles.ctaHint}>Tu peux annuler quand tu veux.</Text>
           </>
         ) : (
           <>
-            <Pressable onPress={handlePurchase} disabled={isLoading || !offerings}>
+            <PressableScale onPress={handlePurchase} disabled={isLoading || !offerings}>
               <View style={[styles.cta, styles.ctaGreen, (isLoading || !offerings) && styles.ctaDisabled]}>
                 {isLoading ? (
                   <ActivityIndicator color="#FFFFFF" size="small" />
@@ -359,7 +361,7 @@ const OffreScreen: FC = () => {
                   <Text style={styles.ctaText}>Commencer l'essai gratuit</Text>
                 )}
               </View>
-            </Pressable>
+            </PressableScale>
             <Text style={styles.ctaHint}>{priceLine} Annule quand tu veux.</Text>
             {fromOnboarding && (
               <Pressable onPress={() => void dismissOnboardingPaywall()} hitSlop={8} style={styles.laterBtn}>

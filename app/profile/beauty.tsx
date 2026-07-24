@@ -24,6 +24,8 @@ import { Ionicons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
+import { Reveal } from '@/components/design/Reveal'
+import { PressableScale } from '@/components/design/motion'
 import { MultiSelectStep, SingleSelectStep } from '@/components/onboarding/OnboardingControls'
 import { useProfile } from '@/hooks/useProfile'
 import {
@@ -118,24 +120,29 @@ const BeautyProfileScreen: FC = () => {
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.subtitle}>
-            {section === 'hair'
-              ? 'Renseigne tes cheveux pour débloquer ta compatibilité avec les produits capillaires.'
-              : 'Renseigne ta peau pour débloquer ta compatibilité avec les produits visage et corps.'}
-          </Text>
+          {/* Entrée douce : sous-titre puis chaque bloc, en fondu échelonné.
+              Les blocs sont des enfants DIRECTS de Reveal (pas de fragment)
+              pour que le stagger s'applique bloc par bloc. */}
+          <Reveal stagger={70} style={styles.revealStack}>
+            <Text style={styles.subtitle}>
+              {section === 'hair'
+                ? 'Renseigne tes cheveux pour débloquer ta compatibilité avec les produits capillaires.'
+                : 'Renseigne ta peau pour débloquer ta compatibilité avec les produits visage et corps.'}
+            </Text>
 
-          {section === 'hair' ? (
-            <View style={styles.block}>
-              <Text style={styles.blockLabel}>Comment sont tes cheveux ?</Text>
-              <MultiSelectStep
-                tone="violet"
-                options={HAIR_CONCERNS.map((k) => ({ key: k, label: HAIR_CONCERN_LABEL[k] }))}
-                values={hairConcerns}
-                onToggle={(key) => setHairConcerns((prev) => toggle(prev, key as HairConcern))}
-              />
-            </View>
-          ) : (
-            <>
+            {section === 'hair' ? (
+              <View style={styles.block}>
+                <Text style={styles.blockLabel}>Comment sont tes cheveux ?</Text>
+                <MultiSelectStep
+                  tone="violet"
+                  options={HAIR_CONCERNS.map((k) => ({ key: k, label: HAIR_CONCERN_LABEL[k] }))}
+                  values={hairConcerns}
+                  onToggle={(key) => setHairConcerns((prev) => toggle(prev, key as HairConcern))}
+                />
+              </View>
+            ) : null}
+
+            {section !== 'hair' ? (
               <View style={styles.block}>
                 <Text style={styles.blockLabel}>Ton type de peau au visage ?</Text>
                 <SingleSelectStep
@@ -147,6 +154,8 @@ const BeautyProfileScreen: FC = () => {
                   }
                 />
               </View>
+            ) : null}
+            {section !== 'hair' ? (
               <View style={styles.block}>
                 <Text style={styles.blockLabel}>Et la peau de ton corps ?</Text>
                 <SingleSelectStep
@@ -158,6 +167,8 @@ const BeautyProfileScreen: FC = () => {
                   }
                 />
               </View>
+            ) : null}
+            {section !== 'hair' ? (
               <View style={styles.block}>
                 <Text style={styles.blockLabel}>Tes préoccupations (optionnel)</Text>
                 <MultiSelectStep
@@ -167,28 +178,25 @@ const BeautyProfileScreen: FC = () => {
                   onToggle={(key) => setConcerns((prev) => toggle(prev, key as SkinConcern))}
                 />
               </View>
-            </>
-          )}
+            ) : null}
+          </Reveal>
         </ScrollView>
 
         {/* Barre d'action fixe */}
         <View style={styles.footer}>
-          <Pressable
+          {/* Feedback d'appui à ressort (remplace l'opacité pressed). */}
+          <PressableScale
             onPress={onSave}
             disabled={!canSave || saving}
             accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.saveBtn,
-              (!canSave || saving) && styles.saveBtnDisabled,
-              pressed && { opacity: 0.9 },
-            ]}
+            style={[styles.saveBtn, (!canSave || saving) && styles.saveBtnDisabled]}
           >
             {saving ? (
               <ActivityIndicator color={colors.surface} />
             ) : (
               <Text style={styles.saveText}>Enregistrer et revenir</Text>
             )}
-          </Pressable>
+          </PressableScale>
         </View>
       </SafeAreaView>
     </View>
@@ -211,6 +219,8 @@ const styles = StyleSheet.create({
   headerTitle: { fontFamily: fontFamilies.bold, fontSize: 18, color: colors.ink },
   scroll: { flex: 1 },
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, gap: spacing.lg },
+  // Reveal devient l'unique enfant du ScrollView : on y reporte le gap.
+  revealStack: { gap: spacing.lg },
   subtitle: {
     ...typography.body,
     color: colors.inkMuted,

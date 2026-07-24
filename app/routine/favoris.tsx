@@ -20,6 +20,7 @@ import { typography, fontFamilies } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { useFavorites } from '@/hooks/useFavorites'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
+import { StaggerItem } from '@/components/design/motion'
 import { RoutineProductCard, ROUTINE_CARD_GAP } from '@/components/routine/RoutineProductCard'
 
 const FavorisScreen: FC = () => {
@@ -64,19 +65,20 @@ const FavorisScreen: FC = () => {
               </View>
             ) : (
               <View style={styles.list}>
-                {favorites.map((fav) => (
-                  <RoutineProductCard
-                    key={fav.id}
-                    itemId={fav.id}
-                    analysisId={fav.id}
-                    displayIndex={0}
-                    name={fav.name}
-                    brand={fav.brand}
-                    ean={fav.ean}
-                    fallbackImageUrl={fav.fallbackImageUrl}
-                    counts={fav.counts}
-                    onPress={(id) => router.push(ROUTES.ANALYSE.DETAIL(id))}
-                  />
+                {favorites.map((fav, index) => (
+                  <StaggerItem key={fav.id} index={index}>
+                    <RoutineProductCard
+                      itemId={fav.id}
+                      analysisId={fav.id}
+                      displayIndex={0}
+                      name={fav.name}
+                      brand={fav.brand}
+                      ean={fav.ean}
+                      fallbackImageUrl={fav.fallbackImageUrl}
+                      counts={fav.counts}
+                      onPress={(id) => router.push(ROUTES.ANALYSE.DETAIL(id))}
+                    />
+                  </StaggerItem>
                 ))}
               </View>
             )}

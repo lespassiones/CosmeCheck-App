@@ -61,6 +61,17 @@ export const CameraIcon: FC<Props> = ({ size = DEFAULT_SIZE, color = DEFAULT_COL
   </Svg>
 )
 
+/** Scan — viseur (coins) + ligne de balayage horizontale (icône « scanner »). */
+export const ScanIcon: FC<Props> = ({ size = DEFAULT_SIZE, color = DEFAULT_COLOR }) => (
+  <Svg {...base(size)} fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M4 8V6a2 2 0 0 1 2-2h2" />
+    <Path d="M16 4h2a2 2 0 0 1 2 2v2" />
+    <Path d="M20 16v2a2 2 0 0 1-2 2h-2" />
+    <Path d="M8 20H6a2 2 0 0 1-2-2v-2" />
+    <Path d="M4 12h16" />
+  </Svg>
+)
+
 export const SparklesIcon: FC<Props> = ({ size = DEFAULT_SIZE, color = DEFAULT_COLOR }) => (
   <Svg {...base(size)} fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
     <Path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />

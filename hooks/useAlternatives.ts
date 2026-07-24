@@ -2,13 +2,16 @@
  * useAlternatives — recommandations « produits similaires » pour l'écran d'analyse.
  *
  * Pipeline (aucun GPT) :
- *   1. Résout l'EAN du produit courant (marque+nom → `cosme_check_search_catalog`),
- *      sauf si l'EAN est fourni directement (page « Voir tout »).
+ *   1. Résout une REQUÊTE CATÉGORIE robuste (cf. lib/catalog/productTypeCategory.ts) :
+ *      catégorie catalogue SI slug spécifique → match exact ; sinon product_type
+ *      → préfixe taxonomie ; sinon nom → préfixe ; sinon ABSTENTION (rien affiché).
+ *      Cela évite de pivoter sur un bucket poubelle (« gel ») → alternatives
+ *      hors-sujet (bug bêta juil 2026 : nettoyant visage → savon mains, gel bébé…).
  *   2. Construit l'ensemble d'exclusion (restrictions ingrédients + familles
  *      étendues en noms INCI + allergies freeform du profil).
- *   3. Récupère par pages les produits de la MÊME catégorie feuille triés par
- *      score (`cosme_check_get_alternatives`), les FILTRE côté client, et
- *      accumule jusqu'à atteindre le nombre voulu (ou épuisement / plafond de scan).
+ *   3. Récupère par pages les produits de la catégorie résolue triés par score
+ *      (`cosme_check_alternatives_by_category_{exact,prefix}`), les FILTRE côté
+ *      client, et accumule jusqu'à la cible (ou épuisement / plafond de scan).
  *
  * La pagination « Voir plus » augmente la cible de `step` ; l'effet refait
  * tourner la boucle de remplissage. Le filtrage pouvant écarter beaucoup de
@@ -19,6 +22,8 @@ import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-quer
 
 import { useProfile } from '@/hooks/useProfile'
 import { resolveCatalogIdentity } from '@/lib/catalog/resolveCatalogIdentity'
+import { fetchProductByEan } from '@/lib/catalog/productByEan'
+import { resolveAlternativesQuery } from '@/lib/catalog/productTypeCategory'
 import { fetchFamilyIngredientNames } from '@/lib/catalog/familyIngredientNames'
 import { applyColorCap } from '@/lib/analysis/scoreCap'
 import { orderByTierShuffled } from '@/lib/analysis/tierShuffle'
@@ -71,9 +76,14 @@ function mapRow(r: AltRpcRow): AlternativeProduct {
 
 /**
  * Une page de candidats bruts, cachée 5 min (transient, comme la recherche).
- * `key` = l'EAN du produit (alternatives même-catégorie exacte), OU `cat:<catégorie>`
- * quand le produit n'est PAS au catalogue (ex. trouvé sur internet) → on cherche
- * alors par catégorie via l'index inversé (cosme_check_get_alternatives_by_category).
+ * `key` encode la requête catégorie résolue par `resolveAlternativesQuery` :
+ *   - `exact:<slug>`  → match EXACT sur une catégorie feuille SPÉCIFIQUE
+ *                       (cosme_check_alternatives_by_category_exact) ;
+ *   - `prefix:<l1/l2/%>` → match LIKE sur un préfixe de taxonomie dérivé du
+ *                       product_type / nom (cosme_check_alternatives_by_category_prefix).
+ * L'ancien chemin par EAN (`cosme_check_get_alternatives`) est ABANDONNÉ : il
+ * pivotait sur la catégorie propre du produit, y compris quand celle-ci était un
+ * bucket poubelle (« gel »), d'où des alternatives hors-sujet (bug bêta juil 2026).
  */
 async function fetchAlternativesPage(
   qc: QueryClient,
@@ -84,15 +94,15 @@ async function fetchAlternativesPage(
     queryKey: ['alternatives', key, offset],
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      const isCat = key.startsWith('cat:')
-      const { data, error } = isCat
+      const isPrefix = key.startsWith('prefix:')
+      const { data, error } = isPrefix
         ? await supabase.rpc(
-            'cosme_check_alternatives_by_category_exact' as never,
-            { p_category: key.slice(4), p_limit: RAW_PAGE, p_offset: offset } as never,
+            'cosme_check_alternatives_by_category_prefix' as never,
+            { p_prefix: key.slice(7), p_limit: RAW_PAGE, p_offset: offset } as never,
           )
         : await supabase.rpc(
-            'cosme_check_get_alternatives' as never,
-            { p_ean: key, p_limit: RAW_PAGE, p_offset: offset } as never,
+            'cosme_check_alternatives_by_category_exact' as never,
+            { p_category: key.slice(6), p_limit: RAW_PAGE, p_offset: offset } as never,
           )
       if (error) throw error
       return ((data as AltRpcRow[] | null) ?? []).map(mapRow)
@@ -106,6 +116,12 @@ export interface UseAlternativesParams {
   ean?: string | null
   brand?: string | null
   productName?: string | null
+  /**
+   * `product_type` de l'analyseur (ex. « Nettoyant visage »). Signal FONCTIONNEL
+   * le plus robuste aux noms marketing : mappé vers un préfixe de taxonomie et
+   * utilisé dès que la catégorie catalogue n'est pas un slug spécifique fiable.
+   */
+  productType?: string | null
   /**
    * Catégorie du produit (label/slug). Utilisée en REPLI quand aucun EAN n'est
    * résoluble — typiquement un produit trouvé sur internet, absent du catalogue :
@@ -141,6 +157,7 @@ export function useAlternatives({
   ean: directEan,
   brand,
   productName,
+  productType,
   category,
   seed,
   initialCount,
@@ -150,7 +167,8 @@ export function useAlternatives({
   const queryClient = useQueryClient()
   const { restrictions, skin } = useProfile()
 
-  // 1. Identité catalogue (EAN). Court-circuitée si fournie.
+  // 1a. Résolution marque+nom → identité catalogue (EAN + catégorie + score).
+  //     Utilisée sur l'écran d'analyse (pas d'EAN direct).
   const identityKey = normalizeToken([brand, productName].filter(Boolean).join(' '))
   const identityQuery = useQuery({
     queryKey: ['alt-identity', identityKey],
@@ -159,27 +177,47 @@ export function useAlternatives({
     gcTime: HOUR,
     queryFn: () => resolveCatalogIdentity(brand, productName),
   })
+
+  // 1b. Page « Voir tout » : on n'a QUE l'EAN → on récupère la ligne catalogue
+  //     (catégorie + nom) pour reconstruire les mêmes signaux que le carrousel.
+  const directRowQuery = useQuery({
+    queryKey: ['alt-direct-row', directEan],
+    enabled: enabled && !!directEan,
+    staleTime: HOUR,
+    gcTime: HOUR,
+    queryFn: () => fetchProductByEan(directEan as string),
+  })
+
   const ean = directEan ?? identityQuery.data?.ean ?? null
-  // Catégorie exacte résolue via le catalogue (slug complet, ex. "soins-corps/savon/savon-surgras").
-  // Prioritaire sur l'EAN : garantit un match exact et élimine tout débordement entre
-  // sous-catégories, même si la RPC par EAN ferait la même chose en interne.
-  const catalogCategory = identityQuery.data?.category ?? null
-  const identityResolving = !directEan && identityQuery.isLoading && identityKey.length >= 3
+  // Signaux de catégorie, unifiés pour les deux points d'entrée.
+  const catalogCategory = directEan
+    ? directRowQuery.data?.category ?? null
+    : identityQuery.data?.category ?? null
+  const nameSignal = directEan ? directRowQuery.data?.name ?? null : productName ?? null
+  const identityResolving = !directEan
+    ? identityQuery.isLoading && identityKey.length >= 3
+    : directRowQuery.isLoading
 
-  // Repli par catégorie : quand aucun EAN ni catégorie catalogue n'est disponible
-  // (produit internet absent du catalogue).
-  const catParam =
-    !ean && !catalogCategory && !identityResolving && (category?.trim().length ?? 0) >= 3
-      ? (category as string).trim()
-      : null
+  // Résolution ROBUSTE (cf. lib/catalog/productTypeCategory.ts) :
+  //   1. catégorie catalogue SI slug spécifique (≥ 2 niveaux) → match EXACT ;
+  //   2. product_type → préfixe de taxonomie (LIKE) ;
+  //   3. nom du produit → préfixe (mot-clé fort) ;
+  //   4. sinon → null (abstention : aucune alternative plutôt qu'une reco hors-sujet).
+  // `category` (prop, ex. produit internet) sert de repli catalogue supplémentaire.
+  const altQuery = useMemo(() => {
+    if (identityResolving) return null
+    return resolveAlternativesQuery({
+      catalogCategory: catalogCategory ?? category ?? null,
+      productType,
+      productName: nameSignal,
+    })
+  }, [identityResolving, catalogCategory, category, productType, nameSignal])
 
-  // Clé d'alternatives — ordre de priorité :
-  //   1. Catégorie exacte catalogue  → cosme_check_alternatives_by_category_exact (match exact)
-  //   2. EAN direct (barcode/catalog) → cosme_check_get_alternatives (même catégorie via DB)
-  //   3. Catégorie de l'analyse       → cosme_check_alternatives_by_category_exact (match exact)
-  const altKey = catalogCategory
-    ? `cat:${catalogCategory}`
-    : ean ?? (catParam ? `cat:${catParam}` : null)
+  const altKey = altQuery
+    ? altQuery.kind === 'prefix'
+      ? `prefix:${altQuery.value}`
+      : `exact:${altQuery.value}`
+    : null
 
   // 2. Familles → noms INCI membres (caché 1h).
   const familySlugs = useMemo(

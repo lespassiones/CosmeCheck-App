@@ -22,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { GlassCard } from '@/components/design/GlassCard'
+import { PressableScale } from '@/components/design/motion'
 import { Reveal } from '@/components/design/Reveal'
 import { VerdictGlobalCard } from '@/components/promesses/VerdictGlobalCard'
 import { PromisesList } from '@/components/promesses/PromisesList'
@@ -162,12 +163,14 @@ const PromesseDetailScreen: FC = () => {
         </View>
       ) : (
         <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.intro}>
-            <Text style={styles.h1}>Promesses vs formule réelle</Text>
-            <Text style={styles.introSub}>
-              Nous comparons les promesses de <Text style={styles.introStrong}>{state.productName}</Text> à sa formule réelle.
-            </Text>
-          </View>
+          <Reveal>
+            <View style={styles.intro}>
+              <Text style={styles.h1}>Promesses vs formule réelle</Text>
+              <Text style={styles.introSub}>
+                Nous comparons les promesses de <Text style={styles.introStrong}>{state.productName}</Text> à sa formule réelle.
+              </Text>
+            </View>
+          </Reveal>
 
           <Reveal stagger={70} duration={400} style={styles.cards}>
             {[
@@ -183,15 +186,15 @@ const PromesseDetailScreen: FC = () => {
           </Reveal>
 
           {!showMore ? (
-            <Pressable
+            <PressableScale
               onPress={() => setShowMore(true)}
-              style={({ pressed }) => [styles.showMoreBtn, pressed && styles.btnPressed]}
+              style={styles.showMoreBtn}
               accessibilityRole="button"
               accessibilityLabel="Voir plus d'analyse"
             >
               <Text style={styles.showMoreText}>Voir plus d&apos;analyse</Text>
               <Ionicons name="chevron-down" size={18} color={colors.accent} />
-            </Pressable>
+            </PressableScale>
           ) : (
             <>
               <Reveal stagger={70} duration={400} style={styles.cards}>
@@ -211,15 +214,15 @@ const PromesseDetailScreen: FC = () => {
                 ].filter(Boolean)}
               </Reveal>
 
-              <Pressable
+              <PressableScale
                 onPress={() => setShowMore(false)}
-                style={({ pressed }) => [styles.showMoreBtn, pressed && styles.btnPressed]}
+                style={styles.showMoreBtn}
                 accessibilityRole="button"
                 accessibilityLabel="Voir moins"
               >
                 <Text style={styles.showMoreText}>Voir moins</Text>
                 <Ionicons name="chevron-up" size={18} color={colors.accent} />
-              </Pressable>
+              </PressableScale>
             </>
           )}
         </ScrollView>

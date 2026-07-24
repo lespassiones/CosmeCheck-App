@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useQuery } from '@tanstack/react-query'
 
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
+import { PressableScale } from '@/components/design/motion'
 import { Reveal } from '@/components/design/Reveal'
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
@@ -132,19 +133,21 @@ const ChoisirPromesseScreen: FC = () => {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={styles.intro}>
-          <Text style={styles.h1}>Quelle promesse veux-tu vérifier ?</Text>
-          <Text style={styles.introSub}>
-            Choisis comment identifier le produit dont tu veux confronter la promesse à sa formule réelle.
-          </Text>
-        </View>
+        <Reveal>
+          <View style={styles.intro}>
+            <Text style={styles.h1}>Quelle promesse veux-tu vérifier ?</Text>
+            <Text style={styles.introSub}>
+              Choisis comment identifier le produit dont tu veux confronter la promesse à sa formule réelle.
+            </Text>
+          </View>
+        </Reveal>
 
         <Reveal stagger={70} duration={400} style={styles.list}>
           {choices.map((c) => (
-            <Pressable
+            <PressableScale
               key={c.key}
               onPress={c.onPress}
-              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+              style={styles.row}
               accessibilityRole="button"
               accessibilityLabel={c.title}
             >
@@ -156,7 +159,7 @@ const ChoisirPromesseScreen: FC = () => {
                 <Text style={styles.rowSub}>{c.subtitle}</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color={colors.inkLight} />
-            </Pressable>
+            </PressableScale>
           ))}
         </Reveal>
       </ScrollView>
@@ -199,7 +202,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  rowPressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
   iconWrap: { width: 44, height: 44, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
   rowMain: { flex: 1, minWidth: 0 },
   rowTitle: { fontFamily: fontFamilies.semiBold, fontSize: 15, color: colors.ink },

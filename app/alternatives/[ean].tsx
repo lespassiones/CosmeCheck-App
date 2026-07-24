@@ -25,6 +25,7 @@ import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
+import { PressableScale, StaggerItem } from '@/components/design/motion'
 import { ProcessingOverlay } from '@/components/shared/ProcessingOverlay'
 import { CatalogPastille } from '@/components/shared/CatalogPastille'
 import { useAlternatives } from '@/hooks/useAlternatives'
@@ -48,10 +49,10 @@ const GridCard: FC<{
   const displayLabel =
     displayScore != null ? scoreLabelFromScore(displayScore) : product.scoreLabel
   return (
-  <Pressable
+  <PressableScale
     onPress={onPress}
     disabled={disabled}
-    style={({ pressed }) => [styles.card, pressed && !disabled && styles.cardPressed]}
+    style={styles.card}
     accessibilityRole="button"
     accessibilityLabel={`${product.name ?? 'Produit'}${product.brand ? `, ${product.brand}` : ''}`}
   >
@@ -84,7 +85,7 @@ const GridCard: FC<{
         </Text>
       ) : null}
     </View>
-  </Pressable>
+  </PressableScale>
   )
 }
 
@@ -129,15 +130,17 @@ const AlternativesScreen: FC = () => {
           numColumns={2}
           columnWrapperStyle={styles.column}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <GridCard product={item} disabled={isAnalyzing} onPress={() => void analyze(item)} />
+          renderItem={({ item, index }) => (
+            <StaggerItem index={index} style={styles.cell}>
+              <GridCard product={item} disabled={isAnalyzing} onPress={() => void analyze(item)} />
+            </StaggerItem>
           )}
           ListFooterComponent={
             hasMore ? (
-              <Pressable
+              <PressableScale
                 onPress={loadMore}
                 disabled={isLoadingMore}
-                style={({ pressed }) => [styles.moreBtn, pressed && styles.moreBtnPressed]}
+                style={styles.moreBtn}
                 accessibilityRole="button"
                 accessibilityLabel="Voir plus d'alternatives"
               >
@@ -146,7 +149,7 @@ const AlternativesScreen: FC = () => {
                 ) : (
                   <Text style={styles.moreText}>Voir plus</Text>
                 )}
-              </Pressable>
+              </PressableScale>
             ) : null
           }
         />
@@ -184,6 +187,8 @@ const styles = StyleSheet.create({
   emptyText: { ...typography.body, color: colors.inkMuted, textAlign: 'center' },
   listContent: { paddingHorizontal: spacing.base, paddingBottom: spacing.xl, gap: spacing.md },
   column: { gap: spacing.md },
+  // Cellule de grille : le wrapper animé doit garder le flex de la carte.
+  cell: { flex: 1 },
   card: {
     flex: 1,
     backgroundColor: colors.surface,
@@ -193,7 +198,6 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     gap: 4,
   },
-  cardPressed: { opacity: 0.7 },
   imageWrap: {
     height: 130,
     borderRadius: radius.md,
@@ -220,7 +224,6 @@ const styles = StyleSheet.create({
     minWidth: 160,
     alignItems: 'center',
   },
-  moreBtnPressed: { opacity: 0.7 },
   moreText: { ...typography.smallSemiBold, color: colors.roseDeep },
 })
 

@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useQuery } from '@tanstack/react-query'
 
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
+import { Reveal } from '@/components/design/Reveal'
 import { CoherenceWizard, type AnalysisOption } from '@/components/promesses/CoherenceWizard'
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
@@ -101,12 +102,14 @@ const NouvellePromesseScreen: FC = () => {
         <View style={styles.backBtn} />
       </View>
 
-      <View style={styles.intro}>
-        <Text style={styles.h1}>Nouvelle analyse de cohérence</Text>
-        <Text style={styles.introSub}>
-          On compare ce qui est promis sur l&apos;emballage avec ce qui est vraiment dans la liste INCI.
-        </Text>
-      </View>
+      <Reveal>
+        <View style={styles.intro}>
+          <Text style={styles.h1}>Nouvelle analyse de cohérence</Text>
+          <Text style={styles.introSub}>
+            On compare ce qui est promis sur l&apos;emballage avec ce qui est vraiment dans la liste INCI.
+          </Text>
+        </View>
+      </Reveal>
 
       {isLoading ? (
         <View style={styles.center}>

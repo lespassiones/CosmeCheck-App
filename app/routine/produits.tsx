@@ -30,6 +30,8 @@ import { useAppConfig } from '@/hooks/useAppConfig'
 import { useAlternativesDeck } from '@/hooks/useAlternativesDeck'
 import type { BlobCounts } from '@/components/design/IngredientBlob'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
+import { StaggerItem } from '@/components/design/motion'
+import { Reveal } from '@/components/design/Reveal'
 import { AddProductModal } from '@/components/routine/AddProductModal'
 import { RoutineProductCard, ROUTINE_CARD_GAP } from '@/components/routine/RoutineProductCard'
 import { SuggestionsDeck } from '@/components/routine/SuggestionsDeck'
@@ -106,15 +108,17 @@ const ProduitsScreen: FC = () => {
             contentContainerStyle={[styles.content, { paddingBottom: spacing.xl }]}
             showsVerticalScrollIndicator={false}
           >
-            <Pressable
-              style={styles.addBtn}
-              onPress={() => setAddOpen(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Ajouter un produit"
-            >
-              <Ionicons name="add" size={16} color="#FFFFFF" />
-              <Text style={styles.addBtnText}>Ajouter un produit</Text>
-            </Pressable>
+            <Reveal>
+              <Pressable
+                style={styles.addBtn}
+                onPress={() => setAddOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Ajouter un produit"
+              >
+                <Ionicons name="add" size={16} color="#FFFFFF" />
+                <Text style={styles.addBtnText}>Ajouter un produit</Text>
+              </Pressable>
+            </Reveal>
 
             {routineItems.length === 0 ? (
               <View style={styles.emptyWrap}>
@@ -125,21 +129,22 @@ const ProduitsScreen: FC = () => {
               </View>
             ) : (
               <View style={styles.list}>
-                {routineItems.map((item) => (
-                  <RoutineProductCard
-                    key={item.id}
-                    itemId={item.id}
-                    analysisId={item.analysis_id}
-                    displayIndex={0}
-                    name={titleFor(item)}
-                    brand={item.analysis?.brand ?? null}
-                    ean={item.analysis?.ean ?? null}
-                    fallbackImageUrl={fallbackImage(item)}
-                    counts={countsOf(item)}
-                    onPress={(itemId) =>
-                      router.push({ pathname: '/routine/item/[id]', params: { id: itemId } })
-                    }
-                  />
+                {routineItems.map((item, index) => (
+                  <StaggerItem key={item.id} index={index}>
+                    <RoutineProductCard
+                      itemId={item.id}
+                      analysisId={item.analysis_id}
+                      displayIndex={0}
+                      name={titleFor(item)}
+                      brand={item.analysis?.brand ?? null}
+                      ean={item.analysis?.ean ?? null}
+                      fallbackImageUrl={fallbackImage(item)}
+                      counts={countsOf(item)}
+                      onPress={(itemId) =>
+                        router.push({ pathname: '/routine/item/[id]', params: { id: itemId } })
+                      }
+                    />
+                  </StaggerItem>
                 ))}
               </View>
             )}

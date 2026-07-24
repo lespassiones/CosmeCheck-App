@@ -20,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 
 import { WhiteCard } from '@/components/design/WhiteCard'
+import { AnimatedGaugeFill, useCountUp } from '@/components/design/motion'
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
@@ -68,12 +69,20 @@ function shortLabel(item: CoverageItem): string {
 // ── Ligne jauge (dépliable) ────────────────────────────────────────────────
 // Repliée : libellé court + barre + %. Au tap → se déroule : nom COMPLET de
 // l'objectif en haut, barre de progression + % en dessous.
-const GaugeRow: FC<{ item: CoverageItem }> = ({ item }) => {
+const GaugeRow: FC<{ item: CoverageItem; index?: number; animateKey?: number }> = ({
+  item,
+  index = 0,
+  animateKey = 0,
+}) => {
   const color = TONE_COLOR[item.tone] ?? colors.rating.rouge.DEFAULT
   const [open, setOpen] = useState(false)
+  // Remplissage animé + count-up du %, échelonnés par ligne. `animateKey`
+  // change à chaque refresh → tout se re-remplit, même à valeurs identiques.
+  const delay = 80 + Math.min(index, 10) * 60
+  const shownPct = useCountUp(item.percent, animateKey, 700, delay)
   const fill = (
     <View style={styles.track}>
-      <View style={[styles.fill, { width: `${Math.max(2, item.percent)}%`, backgroundColor: color }]} />
+      <AnimatedGaugeFill percent={item.percent} color={color} animateKey={animateKey} delay={delay} />
     </View>
   )
   return (
@@ -91,7 +100,7 @@ const GaugeRow: FC<{ item: CoverageItem }> = ({ item }) => {
         {/* Barre de niveau + % EN DESSOUS de l'objectif. */}
         <View style={styles.gaugeBarRow}>
           {fill}
-          <Text style={[styles.percent, { color }]}>{item.percent}%</Text>
+          <Text style={[styles.percent, { color }]}>{shownPct}%</Text>
         </View>
       </Animated.View>
     </Pressable>
@@ -114,6 +123,9 @@ export const GoalsCoverageCard: FC = () => {
   // déplié au tap, replié tout seul après 8 s (animation d'enroulement), mais le
   // minuteur se met en pause dès qu'on touche la zone dépliée.
   const [expanded, setExpanded] = useState(false)
+  // Incrémenté à chaque tap sur « recharger » → les jauges se re-remplissent
+  // depuis 0 (feedback visuel de recalcul), même si les valeurs sont les mêmes.
+  const [refreshTick, setRefreshTick] = useState(0)
   const collapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const clearTimer = useCallback(() => {
     if (collapseTimer.current) {
@@ -143,7 +155,10 @@ export const GoalsCoverageCard: FC = () => {
               // Toujours actif : recharge sans forcer. Le serveur recalcule (3
               // crédits) SEULEMENT si la routine a changé (ou si la version du
               // calcul a bougé) ; sinon renvoie le cache en quelques ms, 0 crédit.
-              if (!isEvaluating) void evaluate(false)
+              if (!isEvaluating) {
+                setRefreshTick((t) => t + 1)
+                void evaluate(false)
+              }
             }}
             disabled={isEvaluating}
             hitSlop={8}
@@ -240,8 +255,8 @@ export const GoalsCoverageCard: FC = () => {
       const hasExtra = extra.length > 0
       return (
         <Animated.View style={styles.gaugeList} layout={LinearTransition.duration(280)}>
-          {base.map((item) => (
-            <GaugeRow key={item.key} item={item} />
+          {base.map((item, i) => (
+            <GaugeRow key={item.key} item={item} index={i} animateKey={refreshTick} />
           ))}
           {hasExtra && expanded && (
             <Animated.View
@@ -250,8 +265,8 @@ export const GoalsCoverageCard: FC = () => {
               style={styles.gaugeList}
               onTouchStart={scheduleCollapse}
             >
-              {extra.map((item) => (
-                <GaugeRow key={item.key} item={item} />
+              {extra.map((item, i) => (
+                <GaugeRow key={item.key} item={item} index={i} animateKey={refreshTick} />
               ))}
             </Animated.View>
           )}
@@ -346,7 +361,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gray200,
     overflow: 'hidden',
   },
-  fill: { height: '100%', borderRadius: radius.full },
   percent: {
     fontFamily: fontFamilies.semiBold,
     fontSize: 12.5,

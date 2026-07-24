@@ -14,6 +14,7 @@ import { colors } from '@/constants/colors'
 import { spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 import { WhiteCard } from '@/components/design/WhiteCard'
+import { useCountUp } from '@/components/design/motion'
 import { IngredientBlob, type BlobCounts } from '@/components/design/IngredientBlob'
 import type { RoutineMetrics } from '@/lib/routine/engine'
 
@@ -52,6 +53,8 @@ export const ExposureSummaryCard: FC<Props> = ({
   style,
 }) => {
   const fg = exposureColor(exposureLabel)
+  // Le score « compte » de 0 vers sa valeur à l'apparition de la carte.
+  const shownScore = useCountUp(exposureScore, 0, 900, 200, 1)
   return (
     <WhiteCard padding={spacing.lg} onPress={onPress} style={style}>
       <View style={styles.row}>
@@ -68,7 +71,7 @@ export const ExposureSummaryCard: FC<Props> = ({
           ) : (
             <>
               <View style={styles.scoreLine}>
-                <Text style={[styles.scoreBig, { color: fg }]}>{exposureScore.toFixed(1)}</Text>
+                <Text style={[styles.scoreBig, { color: fg }]}>{shownScore.toFixed(1)}</Text>
                 <Text style={styles.scoreUnit}>/20</Text>
               </View>
               <Text style={[styles.exposureLabel, { color: fg }]}>{exposureLabel}</Text>

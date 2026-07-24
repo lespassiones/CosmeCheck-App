@@ -19,6 +19,7 @@ import { typography } from '@/constants/typography'
 import type { SkinProfile } from '@/lib/skin/profile'
 import { useProfile } from '@/hooks/useProfile'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
+import { Reveal } from '@/components/design/Reveal'
 import { Step3Goals } from '@/components/onboarding/Step3Goals'
 
 const ObjectivesScreen: FC = () => {
@@ -73,7 +74,10 @@ const ObjectivesScreen: FC = () => {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <Step3Goals value={draft} onChange={onChange} />
+          {/* Entrée douce du sélecteur d'objectifs. */}
+          <Reveal>
+            <Step3Goals value={draft} onChange={onChange} />
+          </Reveal>
         </ScrollView>
 
         {/* CTA sticky en bas */}

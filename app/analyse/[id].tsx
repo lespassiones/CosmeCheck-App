@@ -550,6 +550,7 @@ const AnalyseDetailScreen: FC = () => {
             penalizingCount={penalizingCount}
             productEan={state.ean ?? catalogEan}
             category={catalogCategorySlug ?? state.categoryPrecise ?? state.categoryText}
+            productType={state.productType}
           />
         </ScrollView>
       )}

@@ -1,9 +1,9 @@
 /**
  * DashboardScreen (Tab Accueil) — TWIN du web `HomeDashboard.tsx`.
  *
- * Salutation STATIQUE « Bonjour {firstName} 👋 » + filet (#c5ccd6) + sous-titre
- * « Décrypte tes cosmétiques en un clin d'œil » avec soulignement ondulé (SVG)
- * sous « en un clin d'œil ». Puis TipCarousel, et une GRILLE 2×2 de 4 tuiles
+ * Salutation STATIQUE « Bonjour {firstName} 👋 » + filet (#c5ccd6) + une BARRE
+ * DE RECHERCHE à placeholder animé « machine à écrire » (noms de produits qui
+ * s'écrivent/s'effacent). Puis TipCarousel, et une GRILLE 2×2 de 4 tuiles
  * (Dernière analyse · Ta routine · Beauty Advisor · Promesses vs Formule) —
  * chacune = titre + icône/illustration + chevron, sans texte de données.
  *
@@ -14,15 +14,12 @@
 import { type FC, useCallback, useMemo, useRef, useState } from 'react'
 import {
   Image,
-  type LayoutChangeEvent,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native'
-import Svg, { Path } from 'react-native-svg'
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
@@ -30,7 +27,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
-import { fontFamilies, typography } from '@/constants/typography'
+import { fontFamilies } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { db } from '@/lib/supabase/client'
 import type { AnalysisRow } from '@/lib/supabase/types'
@@ -39,8 +36,10 @@ import { tipsForCarousel } from '@/lib/tips'
 import type { BlobCounts } from '@/components/design/IngredientBlob'
 import { IngredientBlob } from '@/components/design/IngredientBlob'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
+import { PressableScale } from '@/components/design/motion'
 import { Reveal } from '@/components/design/Reveal'
 import { ScreenHeader } from '@/components/shared/ScreenHeader'
+import { SearchPromptBar } from '@/components/home/SearchPromptBar'
 import { TipCarousel } from '@/components/home/TipCarousel'
 import { DailyPicksCard } from '@/components/home/DailyPicksCard'
 import { WeeklyPicksCard } from '@/components/home/WeeklyPicksCard'
@@ -73,23 +72,6 @@ function countsFromResultJson(json: unknown): BlobCounts | null {
   }
 }
 
-// ─── Soulignement ondulé (SVG) ────────────────────────────────────────────────
-
-const WavyUnderline: FC<{ width: number }> = ({ width }) => {
-  if (width <= 0) return null
-  return (
-    <Svg
-      width={width}
-      height={10}
-      viewBox="0 -3 200 17"
-      preserveAspectRatio="none"
-      style={styles.wavy}
-    >
-      <Path d="M5,11 Q100,-3 195,11 Q100,7 5,11 Z" fill={colors.accent} />
-    </Svg>
-  )
-}
-
 // ─── Tuile générique de la grille ─────────────────────────────────────────────
 
 type TileTheme = {
@@ -113,8 +95,9 @@ const DashboardTile: FC<{
 }> = ({ theme, title, onPress, children }) => {
   const t = THEMES[theme]
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
+      scaleTo={0.96}
       accessibilityRole="button"
       accessibilityLabel={title.replace(/\n/g, ' ')}
       style={[styles.tile, { backgroundColor: t.bg }]}
@@ -126,7 +109,7 @@ const DashboardTile: FC<{
         </View>
       </View>
       <View style={styles.tileArt}>{children}</View>
-    </Pressable>
+    </PressableScale>
   )
 }
 
@@ -142,8 +125,6 @@ const DashboardScreen: FC = () => {
   const userId = user?.id ?? null
 
   const [refreshing, setRefreshing] = useState(false)
-  const [underlineWidth, setUnderlineWidth] = useState(0)
-  const underlineMeasured = useRef(false)
 
   const tips = useMemo(() => tipsForCarousel(12), [])
 
@@ -178,12 +159,6 @@ const DashboardScreen: FC = () => {
     }
   }, [queryClient, userId])
 
-  const onUnderlineLayout = useCallback((e: LayoutChangeEvent) => {
-    if (underlineMeasured.current) return
-    underlineMeasured.current = true
-    setUnderlineWidth(e.nativeEvent.layout.width)
-  }, [])
-
   const scrollRef = useRef<ScrollView>(null)
   const lastAnalysis = lastAnalysisQuery.data ?? null
   const lastCounts = useMemo<BlobCounts>(
@@ -213,20 +188,13 @@ const DashboardScreen: FC = () => {
         }
       >
         <Reveal stagger={70}>
-          {/* Sous-titre + soulignement ondulé */}
-          <Text style={styles.subtitle}>
-            Décrypte tes cosmétiques{' '}
-            <Text style={styles.subtitleStrong} onLayout={onUnderlineLayout}>
-              en un clin d&apos;œil
-            </Text>
-            .
-          </Text>
-          {/* Le SVG ondulé est posé en absolu sous le mot mesuré. */}
-          {underlineWidth > 0 && (
-            <View style={styles.wavyAnchor} pointerEvents="none">
-              <WavyUnderline width={underlineWidth} />
-            </View>
-          )}
+          {/* Barre de recherche à placeholder animé (noms de produits qui
+              s'écrivent/s'effacent). Au tap → recherche produit dédiée. */}
+          <SearchPromptBar
+            onPress={() =>
+              router.push({ pathname: ROUTES.TABS.SCAN, params: { mode: 'search' } })
+            }
+          />
 
           {/* Astuce du jour (carrousel) */}
           <TipCarousel tips={tips} />
@@ -317,26 +285,11 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.base,
   },
-  subtitle: {
-    ...typography.small,
-    color: colors.inkMuted,
-    marginTop: spacing.md,
-  },
   dailyPicksWrap: {
     marginTop: spacing.base,
   },
   weeklyPicksWrap: {
     marginTop: spacing.base,
-  },
-  subtitleStrong: {
-    fontFamily: fontFamilies.medium,
-    color: '#111111',
-  },
-  wavyAnchor: {
-    height: 0,
-  },
-  wavy: {
-    marginTop: -2,
   },
   // Grille 2×2
   tilesGrid: {

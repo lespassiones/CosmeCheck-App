@@ -47,6 +47,7 @@ import { categoryLabel, type ProductCategory } from '@/lib/categoryLabel'
 import { decodeHtml } from '@/lib/decodeHtml'
 import { useAuth } from '@/hooks/useAuth'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
+import { StaggerItem } from '@/components/design/motion'
 import { ScreenHeader } from '@/components/shared/ScreenHeader'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { HistoryRowCard, type HistoryItemView } from '@/components/history/HistoryRowCard'
@@ -345,17 +346,19 @@ const HistoryScreen: FC = () => {
 
   // ── Rendu ──────────────────────────────────────────────────────────────────
   const renderItem = useCallback(
-    ({ item }: { item: HistoryItem }) => (
-      <HistoryRowCard
-        item={item}
-        selectMode={selectMode}
-        selected={selected.includes(item.id)}
-        onPress={() => router.push(ROUTES.ANALYSE.DETAIL(item.id))}
-        onToggleSelect={() => toggleSelect(item.id)}
-        onOpenActions={() => setActionsFor(item)}
-        onAnalysePromesse={() => goToPromesse(item)}
-        onToggleFavori={() => toggleFavori(item)}
-      />
+    ({ item, index }: { item: HistoryItem; index: number }) => (
+      <StaggerItem index={index}>
+        <HistoryRowCard
+          item={item}
+          selectMode={selectMode}
+          selected={selected.includes(item.id)}
+          onPress={() => router.push(ROUTES.ANALYSE.DETAIL(item.id))}
+          onToggleSelect={() => toggleSelect(item.id)}
+          onOpenActions={() => setActionsFor(item)}
+          onAnalysePromesse={() => goToPromesse(item)}
+          onToggleFavori={() => toggleFavori(item)}
+        />
+      </StaggerItem>
     ),
     [selectMode, selected, toggleSelect, goToPromesse, toggleFavori],
   )

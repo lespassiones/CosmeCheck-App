@@ -25,6 +25,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { NeuCard } from '@/components/design/NeuCard'
+import { Reveal } from '@/components/design/Reveal'
+import { PressableScale } from '@/components/design/motion'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { supabase } from '@/lib/supabase/client'
 import { SkinProfileCard } from '@/components/profile/SkinProfileCard'
@@ -202,7 +204,8 @@ const ProfileScreen: FC = () => {
               isSaving={isSaving}
             />
           ) : (
-            <>
+            /* Entrée douce : chaque bloc apparaît en fondu échelonné. */
+            <Reveal stagger={70} style={styles.revealStack}>
               <View style={styles.identity}>
                 <View style={styles.avatar}>
                   <Text style={styles.avatarText}>{initial}</Text>
@@ -229,15 +232,16 @@ const ProfileScreen: FC = () => {
 
               <NeuCard padding={0} interactive={false} style={styles.linksCard}>
                 {links.map((link, i) => (
-                  <Pressable
+                  <PressableScale
                     key={link.label}
                     onPress={link.onPress}
+                    scaleTo={0.98}
                     style={[styles.linkRow, i > 0 && styles.linkRowBorder]}
                   >
                     <Ionicons name={link.icon} size={20} color={colors.accent} />
                     <Text style={styles.linkLabel}>{link.label}</Text>
                     <Ionicons name="chevron-forward" size={18} color={colors.inkLight} />
-                  </Pressable>
+                  </PressableScale>
                 ))}
               </NeuCard>
 
@@ -247,9 +251,10 @@ const ProfileScreen: FC = () => {
               <Text style={styles.sectionKicker}>Informations légales</Text>
               <NeuCard padding={0} interactive={false} style={styles.linksCard}>
                 {legalLinks.map((link, i) => (
-                  <Pressable
+                  <PressableScale
                     key={link.label}
                     onPress={link.onPress}
+                    scaleTo={0.98}
                     style={[styles.linkRow, i > 0 && styles.linkRowBorder]}
                     accessibilityRole="link"
                     accessibilityLabel={link.label}
@@ -257,7 +262,7 @@ const ProfileScreen: FC = () => {
                     <Ionicons name={link.icon} size={20} color={colors.inkMuted} />
                     <Text style={styles.linkLabel}>{link.label}</Text>
                     <Ionicons name="chevron-forward" size={18} color={colors.inkLight} />
-                  </Pressable>
+                  </PressableScale>
                 ))}
               </NeuCard>
 
@@ -305,7 +310,7 @@ const ProfileScreen: FC = () => {
               >
                 <Text style={styles.deleteText}>Supprimer mon compte</Text>
               </Pressable>
-            </>
+            </Reveal>
           )}
         </ScrollView>
       </SafeAreaView>
@@ -356,6 +361,8 @@ const styles = StyleSheet.create({
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { ...typography.h4, color: colors.ink },
   content: { paddingHorizontal: spacing.xl, paddingTop: spacing.base, gap: spacing.lg },
+  // Reveal devient l'unique enfant du ScrollView : on y reporte le gap.
+  revealStack: { gap: spacing.lg },
   identity: { alignItems: 'center', gap: spacing.sm },
   avatar: {
     width: 80,

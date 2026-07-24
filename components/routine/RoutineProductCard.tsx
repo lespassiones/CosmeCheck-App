@@ -10,9 +10,11 @@
  */
 
 import { memo } from 'react'
-import { StyleSheet, Text, View, Pressable } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
+
+import { PressableScale } from '@/components/design/motion'
 
 import { colors } from '@/constants/colors'
 import { spacing, radius } from '@/constants/spacing'
@@ -56,8 +58,9 @@ export const RoutineProductCard = memo(function RoutineProductCard({
   const imageUrl = useProductImage(analysisId, ean, fallbackImageUrl)
 
   return (
-    <Pressable
+    <PressableScale
       style={styles.card}
+      scaleTo={0.98}
       onPress={() => onPress(itemId)}
       accessibilityRole="button"
       accessibilityLabel={`Ouvrir ${name}`}
@@ -100,7 +103,7 @@ export const RoutineProductCard = memo(function RoutineProductCard({
           <RoutineMiniDonut counts={counts} size={54} />
         </View>
       </View>
-    </Pressable>
+    </PressableScale>
   )
 })
 

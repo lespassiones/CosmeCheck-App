@@ -30,6 +30,7 @@ import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 
 import { GlassCard } from '@/components/design/GlassCard'
+import { Reveal } from '@/components/design/Reveal'
 import { colors } from '@/constants/colors'
 import { spacing, radius } from '@/constants/spacing'
 import { fontFamilies, typography } from '@/constants/typography'
@@ -213,7 +214,9 @@ export const CoherenceWizard: FC<{ options: AnalysisOption[] }> = ({ options }) 
     <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
       <Stepper step={step} maxStep={maxStep} onJump={jumpToStep} />
 
+      {/* Reveal : chaque étape remonte au changement de step → l'entrée rejoue. */}
       {step === 'description' ? (
+        <Reveal>
         <GlassCard style={styles.card} padding={spacing.lg}>
           <Text style={styles.stepTitle}>1. Colle la description du produit</Text>
           <Text style={styles.stepHelp}>
@@ -235,9 +238,11 @@ export const CoherenceWizard: FC<{ options: AnalysisOption[] }> = ({ options }) 
             </Text>
           </View>
         </GlassCard>
+        </Reveal>
       ) : null}
 
       {step === 'pickProduct' ? (
+        <Reveal>
         <GlassCard style={styles.card} padding={spacing.lg}>
           <Text style={styles.stepTitle}>2. Choisis le produit à comparer</Text>
           <Text style={styles.stepHelp}>
@@ -357,9 +362,11 @@ export const CoherenceWizard: FC<{ options: AnalysisOption[] }> = ({ options }) 
             </View>
           )}
         </GlassCard>
+        </Reveal>
       ) : null}
 
       {step === 'confirm' && selected ? (
+        <Reveal>
         <GlassCard style={styles.card} padding={spacing.lg}>
           <Text style={styles.stepTitle}>3. Vérifie le produit choisi</Text>
           <Text style={styles.stepHelp}>
@@ -407,9 +414,11 @@ export const CoherenceWizard: FC<{ options: AnalysisOption[] }> = ({ options }) 
             </Text>
           )}
         </GlassCard>
+        </Reveal>
       ) : null}
 
       {step === 'running' ? (
+        <Reveal>
         <GlassCard style={styles.card} padding={spacing['2xl']}>
           <View style={styles.runningWrap}>
             <ActivityIndicator size="large" color={colors.rose} />
@@ -419,6 +428,7 @@ export const CoherenceWizard: FC<{ options: AnalysisOption[] }> = ({ options }) 
             </Text>
           </View>
         </GlassCard>
+        </Reveal>
       ) : null}
 
       {error ? <Text style={styles.error}>{error}</Text> : null}

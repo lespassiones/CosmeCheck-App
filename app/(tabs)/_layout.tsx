@@ -36,7 +36,7 @@ const TabsLayout: FC = () => {
       >
         <Tabs.Screen name="index" options={{ title: 'Accueil' }} />
         <Tabs.Screen name="routine" options={{ title: 'Routine' }} />
-        <Tabs.Screen name="scan" options={{ title: 'Décode' }} />
+        <Tabs.Screen name="scan" options={{ title: 'Scan' }} />
         <Tabs.Screen name="history" options={{ title: 'Historique' }} />
         <Tabs.Screen name="promesses" options={{ title: 'Promesses' }} />
       </Tabs>

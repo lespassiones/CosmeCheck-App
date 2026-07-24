@@ -11,7 +11,7 @@
  * appui long → confirmation de suppression. CTA « + Nouvelle analyse ».
  */
 
-import { type FC, useState } from 'react'
+import { type FC, useEffect, useState } from 'react'
 import {
   ActivityIndicator,
   FlatList,
@@ -20,6 +20,14 @@ import {
   Text,
   View,
 } from 'react-native'
+import Animated, {
+  Easing,
+  ReduceMotion,
+  useAnimatedProps,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from 'react-native-reanimated'
 import Svg, { Circle } from 'react-native-svg'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
@@ -36,6 +44,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { computeMetrics } from '@/lib/coherence/engine'
 import type { CoherenceResult } from '@/lib/coherence/types'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
+import { PressableScale, StaggerItem, useCountUp } from '@/components/design/motion'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { ScreenHeader } from '@/components/shared/ScreenHeader'
 
@@ -67,10 +76,31 @@ function ringColor(pct: number): string {
   return '#F43F5E' // rouge
 }
 
-const PromesseRing: FC<{ pct: number }> = ({ pct }) => {
+const AnimatedCircle = Animated.createAnimatedComponent(Circle)
+
+const PromesseRing: FC<{ pct: number; index?: number }> = ({ pct, index = 0 }) => {
   const safePct = Math.min(100, Math.max(0, pct))
   const color = ringColor(safePct)
-  const offset = RING_CIRCUMFERENCE * (1 - safePct / 100)
+
+  // Remplissage animé de l'anneau (0 → pct) + count-up du % au centre,
+  // échelonné selon la position de la carte dans la liste.
+  const delay = 180 + Math.min(index, 8) * 70
+  const progress = useSharedValue(0)
+  useEffect(() => {
+    progress.value = 0
+    progress.value = withDelay(
+      delay,
+      withTiming(1, {
+        duration: 900,
+        easing: Easing.out(Easing.cubic),
+        reduceMotion: ReduceMotion.System,
+      }),
+    )
+  }, [safePct, delay, progress])
+  const animatedProps = useAnimatedProps(() => ({
+    strokeDashoffset: RING_CIRCUMFERENCE * (1 - (safePct / 100) * progress.value),
+  }))
+  const shownPct = useCountUp(safePct, index, 900, delay)
 
   return (
     <View style={styles.ring}>
@@ -83,7 +113,7 @@ const PromesseRing: FC<{ pct: number }> = ({ pct }) => {
           strokeWidth={RING_STROKE}
           fill="none"
         />
-        <Circle
+        <AnimatedCircle
           cx={RING_SIZE / 2}
           cy={RING_SIZE / 2}
           r={RING_RADIUS}
@@ -92,12 +122,12 @@ const PromesseRing: FC<{ pct: number }> = ({ pct }) => {
           fill="none"
           strokeLinecap="round"
           strokeDasharray={`${RING_CIRCUMFERENCE} ${RING_CIRCUMFERENCE}`}
-          strokeDashoffset={offset}
+          animatedProps={animatedProps}
           transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
         />
       </Svg>
       <View style={styles.ringTextRow}>
-        <Text style={styles.ringPct}>{safePct}</Text>
+        <Text style={styles.ringPct}>{shownPct}</Text>
         <Text style={styles.ringUnit}>%</Text>
       </View>
     </View>
@@ -148,7 +178,7 @@ const PromessesScreen: FC = () => {
     },
   })
 
-  const renderItem = ({ item }: { item: CoherenceRow }) => {
+  const renderItem = ({ item, index }: { item: CoherenceRow; index: number }) => {
     const productName =
       item.analyses?.product_label?.trim() ||
       item.analyses?.name?.trim() ||
@@ -159,44 +189,44 @@ const PromessesScreen: FC = () => {
     const supported = metrics.tenueCount + metrics.partielleCount
 
     return (
-      <Pressable
-        onPress={() => router.push(ROUTES.PROMESSES.DETAIL(item.id))}
-        onPressIn={() => {
-          Haptics.selectionAsync().catch(() => {})
-        }}
-        onLongPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {})
-          setPendingDelete(item)
-        }}
-        delayLongPress={350}
-        style={({ pressed }) => [
-          styles.card,
-          pressed && styles.cardPressed,
-        ]}
-      >
-        <PromesseRing pct={metrics.tenuePct} />
+      <StaggerItem index={index}>
+        <PressableScale
+          onPress={() => router.push(ROUTES.PROMESSES.DETAIL(item.id))}
+          onPressIn={() => {
+            Haptics.selectionAsync().catch(() => {})
+          }}
+          onLongPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {})
+            setPendingDelete(item)
+          }}
+          delayLongPress={350}
+          scaleTo={0.98}
+          style={styles.card}
+        >
+          <PromesseRing pct={metrics.tenuePct} index={index} />
 
-        <View style={styles.itemMain}>
-          <Text style={styles.itemTitle} numberOfLines={1}>
-            {productName}
-          </Text>
-          {brand ? (
-            <Text style={styles.itemBrand} numberOfLines={1}>
-              {brand}
+          <View style={styles.itemMain}>
+            <Text style={styles.itemTitle} numberOfLines={1}>
+              {productName}
             </Text>
-          ) : null}
-          <Text
-            style={[styles.itemMetaPrimary, { color: ringColor(metrics.tenuePct) }]}
-            numberOfLines={1}
-          >
-            {supported}/{metrics.totalPromises} promesse
-            {metrics.totalPromises > 1 ? 's' : ''} soutenue
-            {supported > 1 ? 's' : ''}
-          </Text>
-        </View>
+            {brand ? (
+              <Text style={styles.itemBrand} numberOfLines={1}>
+                {brand}
+              </Text>
+            ) : null}
+            <Text
+              style={[styles.itemMetaPrimary, { color: ringColor(metrics.tenuePct) }]}
+              numberOfLines={1}
+            >
+              {supported}/{metrics.totalPromises} promesse
+              {metrics.totalPromises > 1 ? 's' : ''} soutenue
+              {supported > 1 ? 's' : ''}
+            </Text>
+          </View>
 
-        <Ionicons name="chevron-forward" size={18} color={colors.inkLight} />
-      </Pressable>
+          <Ionicons name="chevron-forward" size={18} color={colors.inkLight} />
+        </PressableScale>
+      </StaggerItem>
     )
   }
 
@@ -325,11 +355,6 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 4,
   },
-  cardPressed: {
-    opacity: 0.96,
-    transform: [{ scale: 0.99 }],
-  },
-
   // ── Anneau ──
   ring: {
     width: RING_SIZE,
