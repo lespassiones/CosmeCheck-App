@@ -19,7 +19,7 @@
  */
 import { handleOptions, jsonResponse } from "../_shared/cors.ts";
 import { gate } from "../_shared/gate.ts";
-import { getCached, setCached, sha256Hex } from "../_shared/aiClient.ts";
+import { getCached, setCached, sha256Hex, hasMistral, mistralChat, logAI } from "../_shared/aiClient.ts";
 import { sanitizePromptValue } from "../_shared/sanitizePrompt.ts";
 import { extractJsonBlock, webSearchComplete } from "./lib.ts";
 
@@ -181,78 +181,107 @@ ${
   }
 Réponds en JSON strict, sans markdown.`;
 
+  // Primaire : OpenAI web-search. FALLBACK Mistral (fix 27 juil 2026) quand OpenAI
+  // est indisponible / quota 429 / timeout : Mistral n'a PAS de recherche web, il
+  // identifie depuis ses connaissances (dégradé — souvent notFound faute d'URL
+  // vérifiable, ce qui bascule proprement l'UI sur la saisie manuelle), mais ça
+  // évite le hard-crash « Erreur lors de la recherche » quand un seul fournisseur
+  // est à sec.
+  let text: string;
+  let citations: { url: string; title: string | null }[] = [];
   try {
-    const { text, citations } = await webSearchComplete(system, userMsg, {
-      timeoutMs: 35_000,
-    });
-    const parsed = parseIdentify(text);
-
-    if (!parsed) {
-      return jsonResponse({
-        candidates: [],
-        notFound: true,
-        reason: "format_inattendu",
-      } satisfies IdentifyResponse);
-    }
-
-    if (
-      parsed.notFound === true ||
-      !Array.isArray(parsed.candidates) ||
-      parsed.candidates.length === 0
-    ) {
-      return jsonResponse({
-        candidates: [],
-        notFound: true,
-        reason: parsed.reason ?? "aucun_match",
-      } satisfies IdentifyResponse);
-    }
-
-    const seen = new Set<string>();
-    const candidates: IdentifyCandidate[] = [];
-    for (const c of parsed.candidates) {
-      const name = (c.name ?? "").trim().slice(0, 200);
-      const url = (c.sourceUrl ?? "").trim();
-      const conf = typeof c.confidence === "number" ? c.confidence : 0;
-      if (!name || !url || !/^https?:\/\//i.test(url) || conf < 0.4) continue;
-      const key = `${name.toLowerCase()}|${(c.brand ?? "").toLowerCase()}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      candidates.push({
-        name,
-        brand: c.brand ? c.brand.trim().slice(0, 120) : null,
-        productType: c.productType ? c.productType.trim().slice(0, 120) : null,
-        sourceUrl: url,
-        confidence: Math.min(1, Math.max(0, conf)),
-      });
-      if (candidates.length >= 3) break;
-    }
-
-    if (candidates.length === 0) {
-      return jsonResponse({
-        candidates: [],
-        notFound: true,
-        reason: "aucun_match_credible",
-      } satisfies IdentifyResponse);
-    }
-
-    void citations;
-
-    const response: IdentifyResponse = { candidates, notFound: false };
-    // Cache only successful identifications (misses are not cached so a retry
-    // can pick up newly-indexed data).
-    void setCached(cacheKey, response);
-    return jsonResponse(response);
+    const r = await webSearchComplete(system, userMsg, { timeoutMs: 35_000 });
+    text = r.text;
+    citations = r.citations;
   } catch (err) {
     const msg = (err as Error).message ?? "unknown";
-    if (msg.includes("openai_unavailable")) {
-      return jsonResponse({ error: "Recherche IA indisponible." }, { status: 503 });
+    let fb: string | null = null;
+    if (hasMistral()) {
+      try {
+        fb = await mistralChat({
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: userMsg },
+          ],
+          responseFormat: { type: "json_object" },
+          temperature: 0,
+          maxTokens: 900,
+        });
+        logAI({ feature: "product_search", provider: "mistral", status: "fallback" });
+      } catch {
+        fb = null;
+      }
     }
-    if (msg.includes("timeout")) {
-      return jsonResponse(
-        { error: "La recherche a pris trop de temps. Réessaie." },
-        { status: 504 },
-      );
+    if (fb == null) {
+      if (msg.includes("openai_unavailable")) {
+        return jsonResponse({ error: "Recherche IA indisponible." }, { status: 503 });
+      }
+      if (msg.includes("timeout")) {
+        return jsonResponse(
+          { error: "La recherche a pris trop de temps. Réessaie." },
+          { status: 504 },
+        );
+      }
+      return jsonResponse({ error: "Erreur lors de la recherche." }, { status: 500 });
     }
-    return jsonResponse({ error: "Erreur lors de la recherche." }, { status: 500 });
+    text = fb;
   }
+
+  const parsed = parseIdentify(text);
+
+  if (!parsed) {
+    return jsonResponse({
+      candidates: [],
+      notFound: true,
+      reason: "format_inattendu",
+    } satisfies IdentifyResponse);
+  }
+
+  if (
+    parsed.notFound === true ||
+    !Array.isArray(parsed.candidates) ||
+    parsed.candidates.length === 0
+  ) {
+    return jsonResponse({
+      candidates: [],
+      notFound: true,
+      reason: parsed.reason ?? "aucun_match",
+    } satisfies IdentifyResponse);
+  }
+
+  const seen = new Set<string>();
+  const candidates: IdentifyCandidate[] = [];
+  for (const c of parsed.candidates) {
+    const name = (c.name ?? "").trim().slice(0, 200);
+    const url = (c.sourceUrl ?? "").trim();
+    const conf = typeof c.confidence === "number" ? c.confidence : 0;
+    if (!name || !url || !/^https?:\/\//i.test(url) || conf < 0.4) continue;
+    const key = `${name.toLowerCase()}|${(c.brand ?? "").toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push({
+      name,
+      brand: c.brand ? c.brand.trim().slice(0, 120) : null,
+      productType: c.productType ? c.productType.trim().slice(0, 120) : null,
+      sourceUrl: url,
+      confidence: Math.min(1, Math.max(0, conf)),
+    });
+    if (candidates.length >= 3) break;
+  }
+
+  if (candidates.length === 0) {
+    return jsonResponse({
+      candidates: [],
+      notFound: true,
+      reason: "aucun_match_credible",
+    } satisfies IdentifyResponse);
+  }
+
+  void citations;
+
+  const response: IdentifyResponse = { candidates, notFound: false };
+  // Cache only successful identifications (misses are not cached so a retry
+  // can pick up newly-indexed data).
+  void setCached(cacheKey, response);
+  return jsonResponse(response);
 });

@@ -431,7 +431,10 @@ export async function generatePersonalBlocks(input: PersonalInput): Promise<Pers
           const p = parsePersonal(s.value.choices?.[0]?.message?.content ?? null);
           if (p) runs.push(p);
         }
-        if (!runs.length) return { value: null, tokensIn, tokensOut };
+        // Tous les appels OpenAI ont échoué (ex. quota 429) → on THROW pour que
+        // callWithFallback bascule sur le FALLBACK MISTRAL. Auparavant on renvoyait
+        // `null` (une « réussite » vide) → le fallback était shunté → 503. (fix 27 juil 2026)
+        if (!runs.length) throw new Error("openai_all_failed");
         const compats = runs.map((r) => r.compat).filter((c): c is RawCompat => c !== null);
         const compat: RawCompat | null = compats.length
           ? {
