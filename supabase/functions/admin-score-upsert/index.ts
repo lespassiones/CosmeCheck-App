@@ -69,7 +69,21 @@ Deno.serve(async (req) => {
     color: r.color_rating,
     position: (r.position_idx ?? 0) + 1,
   }));
-  const pastille = pastilleTone(matches, tokens.length, false);
+  // Gate ACTIVÉ (fix 27 juil 2026) : un INCI dont < 50 % des ingrédients sont
+  // reconnus (OCR-charabia, langue étrangère, préfixe « Effective ingredients: »,
+  // séparateurs points/tirets) ne DOIT PAS recevoir de score. Sinon « rien de
+  // pénalisant reconnu » ⇒ faux « Très bien » vert au catalogue (cf. incident
+  // Corinne de Farme : filtres UV mutilés → non comptés → 20/20). On REFUSE
+  // l'upsert plutôt que d'injecter une note gonflée. Un produit sain à liste
+  // courte (mono-ingrédient : « GLYCERIN ») reste identifié à 100 % → passe.
+  const pastille = pastilleTone(matches, tokens.length, true);
+  if (pastille.tone === "unknown") {
+    return jsonResponse({
+      ok: false,
+      ean,
+      reason: "INCI illisible : moins de 50 % des ingrédients reconnus — non noté (aucune note injectée au catalogue).",
+    });
+  }
   const score = synthScore(pastille) ?? 0;
   let countOrange = 0, countRouge = 0;
   for (const m of matches) {
