@@ -29,6 +29,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated'
 import Svg, { Circle } from 'react-native-svg'
+import { promiseRingColor } from '@/components/promesses/tone'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -68,19 +69,11 @@ const RING_STROKE = 6
 const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
 
-/** Couleur de l'anneau selon le verdict %. */
-function ringColor(pct: number): string {
-  if (pct >= 80) return '#16A34A' // vert
-  if (pct >= 60) return '#FBBF24' // jaune
-  if (pct >= 35) return '#F97316' // orange
-  return '#F43F5E' // rouge
-}
-
 const AnimatedCircle = Animated.createAnimatedComponent(Circle)
 
 const PromesseRing: FC<{ pct: number; index?: number }> = ({ pct, index = 0 }) => {
   const safePct = Math.min(100, Math.max(0, pct))
-  const color = ringColor(safePct)
+  const color = promiseRingColor(safePct)
 
   // Remplissage animé de l'anneau (0 → pct) + count-up du % au centre,
   // échelonné selon la position de la carte dans la liste.
@@ -215,7 +208,7 @@ const PromessesScreen: FC = () => {
               </Text>
             ) : null}
             <Text
-              style={[styles.itemMetaPrimary, { color: ringColor(metrics.tenuePct) }]}
+              style={[styles.itemMetaPrimary, { color: promiseRingColor(metrics.tenuePct) }]}
               numberOfLines={1}
             >
               {supported}/{metrics.totalPromises} promesse

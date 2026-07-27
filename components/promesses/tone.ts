@@ -99,6 +99,19 @@ export function ratingDotColor(rating: 'Vert' | 'Jaune' | 'Orange' | 'Rouge' | n
   }
 }
 
+/**
+ * Couleur de l'anneau de synthèse « promesses tenues » selon le %.
+ * SOURCE UNIQUE partagée entre le hero (VerdictGlobalCard) et la liste onglet
+ * (/promesses) → la couleur est IDENTIQUE liste ↔ détail pour un même produit.
+ * Seuils : ≥80 vert · ≥60 jaune · ≥35 orange · <35 rouge.
+ */
+export function promiseRingColor(pct: number): string {
+  if (pct >= 80) return '#16A34A' // vert
+  if (pct >= 60) return '#FBBF24' // jaune
+  if (pct >= 35) return '#F97316' // orange
+  return '#F43F5E' // rouge
+}
+
 /** Libellé FR convivial pour la raison d'une mention non vérifiable. */
 export const UNVERIFIABLE_REASON_LABEL: Record<string, string> = {
   composition: 'composition',

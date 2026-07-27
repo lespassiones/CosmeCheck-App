@@ -20,7 +20,7 @@ import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 import type { CoherenceResult, CoherenceVerdict } from '@/lib/coherence/types'
-import { VERDICT_TONE, verdictChipLabel } from './tone'
+import { VERDICT_TONE, verdictChipLabel, promiseRingColor } from './tone'
 
 const SIZE = 150
 const STROKE = 14
@@ -85,7 +85,7 @@ export const VerdictGlobalCard: FC<{ metrics: CoherenceResult['metrics'] }> = ({
               cy={SIZE / 2}
               r={R}
               fill="none"
-              stroke={colors.verdict.tenue.DEFAULT}
+              stroke={promiseRingColor(pct)}
               strokeWidth={STROKE}
               strokeLinecap="round"
               strokeDasharray={`${C}`}
