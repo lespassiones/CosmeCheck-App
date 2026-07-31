@@ -147,6 +147,26 @@ describe('parseInciList — comportement de parsing', () => {
     expect(toks[0].normalized).toBe('PEG-10/PPG-10 DIMETHICONE')
   });
 
+  it('préserve "CETYL PEG/PPG-10/1 DIMETHICONE" (slash AVANT les chiffres) — régression 31 juil 2026', () => {
+    // Bug historique : le slash PEG/PPG précède le bloc chiffré, donc l'ancien
+    // garde-fou (?!\s+[A-Za-z]) échouait et fragmentait en "CETYL PEG" + "PPG-10/1
+    // DIMETHICONE" → l'orange pénalisant (le PEG) disparaissait → score gonflé.
+    const toks = parseInciList('Pentylene Glycol, Cetyl PEG/PPG-10/1 Dimethicone, Hexyl Laurate')
+    expect(toks.map((t) => t.normalized)).toEqual([
+      'PENTYLENE GLYCOL',
+      'CETYL PEG/PPG-10/1 DIMETHICONE',
+      'HEXYL LAURATE',
+    ])
+  });
+
+  it('préserve les copolymères à slash (Acrylates/C10-30, VP/VA, Styrene/Acrylates)', () => {
+    expect(parseInciList('Acrylates/C10-30 Alkyl Acrylate Crosspolymer')[0].normalized)
+      .toBe('ACRYLATES/C10-30 ALKYL ACRYLATE CROSSPOLYMER')
+    expect(parseInciList('VP/VA Copolymer')[0].normalized).toBe('VP/VA COPOLYMER')
+    expect(parseInciList('Styrene/Acrylates Copolymer')[0].normalized)
+      .toBe('STYRENE/ACRYLATES COPOLYMER')
+  });
+
   it('découpe "Aqua/Water" (mots simples slashés sans espace)', () => {
     const toks = parseInciList('Aqua/Water, Glycerin')
     expect(toks.map((t) => t.normalized)).toEqual(['AQUA', 'WATER', 'GLYCERIN'])

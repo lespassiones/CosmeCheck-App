@@ -120,7 +120,11 @@ export function parseInciList(text: string): ParsedToken[] {
   work = work.replace(/(?<=[A-Za-z)])\.\s+(?=[A-Z])/g, ", ");
   work = work.replace(/\.+$/g, " ");
   work = work.replace(/\s+\/\s+/g, ", ");
-  work = work.replace(/([A-Za-z][A-Za-z-]*)\/([A-Za-z][A-Za-z-]*)(?!\s+[A-Za-z])/g, "$1, $2");
+  // Le lookahead regarde PAR-DELÀ un suffixe numérique/alkyl (?![A-Za-z0-9/-]*\s+[A-Za-z])
+  // pour préserver les noms de copolymères dont le slash précède un bloc chiffré,
+  // ex. "CETYL PEG/PPG-10/1 DIMETHICONE", "ACRYLATES/C10-30 ALKYL ACRYLATE CROSSPOLYMER",
+  // "VP/VA COPOLYMER" (un mot après le suffixe = slash interne au nom → on ne coupe pas).
+  work = work.replace(/([A-Za-z][A-Za-z-]*)\/([A-Za-z][A-Za-z-]*)(?![A-Za-z0-9/-]*\s+[A-Za-z])/g, "$1, $2");
   work = work.replace(/(?<=\w)(?:\s+-+\s*|\s*-+\s+)(?=\w)/g, ", ");
   work = work.replace(/(?<=\w)\s*[•·●◆▪]\s*(?=\w)/g, ", ");
   work = work.replace(/\s*[•·●◆▪]\s*/g, ", ");
