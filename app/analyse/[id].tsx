@@ -29,6 +29,7 @@ import { router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnalysisResultPanel } from '@/components/analysis/AnalysisResultPanel'
+import { SubmitProductPhotosSheet } from '@/components/analysis/SubmitProductPhotosSheet'
 import { Star3D } from '@/components/analysis/Star3D'
 import { STARS_BY_TONE, STAR_PALETTE_BY_TONE, STAR_EMPTY_PALETTE } from '@/lib/analysis/qualityStars'
 import { PromesseFlowModal } from '@/components/promesses/PromesseFlowModal'
@@ -113,6 +114,9 @@ const AnalyseDetailScreen: FC = () => {
   const { addToRoutine, isInRoutine } = useRoutine()
   const { config: appConfig } = useAppConfig()
   const [routinePending, setRoutinePending] = useState(false)
+  // Ouverture de la modale « Ajouter une photo » depuis le placeholder image du
+  // haut (même sheet que l'outil « Ajouter une photo de ce produit » du bas).
+  const [photoSheetOpen, setPhotoSheetOpen] = useState(false)
 
   // Champs stables extraits de l'état « ready » : les deux effets de résolution
   // catalogue ci-dessous en dépendent au lieu de l'objet `state` entier (qui
@@ -404,9 +408,22 @@ const AnalyseDetailScreen: FC = () => {
                     accessibilityIgnoresInvertColors
                   />
                 ) : (
-                  <View style={styles.titleImagePlaceholder}>
-                    <Ionicons name="image-outline" size={28} color={colors.inkLight} />
-                  </View>
+                  // Pas d'image : le placeholder devient un bouton « Ajouter une
+                  // photo » (ouvre la MÊME sheet que l'outil du bas). Cliquable
+                  // UNIQUEMENT ici — dès qu'une image existe, la branche <Image>
+                  // ci-dessus s'affiche et la zone n'est plus cliquable.
+                  <Pressable
+                    onPress={() => setPhotoSheetOpen(true)}
+                    style={({ pressed }) => [
+                      styles.titleImagePlaceholder,
+                      pressed && styles.btnPressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Ajouter une photo de ce produit"
+                  >
+                    <Ionicons name="camera-outline" size={26} color={colors.inkLight} />
+                    <Text style={styles.addPhotoHint}>Ajouter{'\n'}une photo</Text>
+                  </Pressable>
                 )}
               </View>
               {/* Colonne droite : titre, puis marque + sous-catégorie SOUS le
@@ -567,6 +584,20 @@ const AnalyseDetailScreen: FC = () => {
           analysisId={id ?? null}
         />
       ) : null}
+
+      {/* Modale « Ajouter une photo » — ouverte depuis le placeholder image du
+          haut. Mêmes props que l'outil « Ajouter une photo » du bas
+          (ProductToolsSection) → comportement identique. */}
+      {state.status === 'ready' ? (
+        <SubmitProductPhotosSheet
+          visible={photoSheetOpen}
+          onClose={() => setPhotoSheetOpen(false)}
+          productEan={state.ean ?? catalogEan}
+          brand={state.brand}
+          productName={state.productLabel}
+          category={catalogCategorySlug ?? state.categoryPrecise ?? state.categoryText}
+        />
+      ) : null}
     </SafeAreaView>
   )
 }
@@ -657,6 +688,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gray100,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 4,
+  },
+  addPhotoHint: {
+    fontFamily: fontFamilies.medium,
+    fontSize: 11,
+    lineHeight: 14,
+    color: colors.inkLight,
+    textAlign: 'center',
   },
   // Colonne droite : titre + (sous-cat / marque) empilés sous le titre.
   titleTextCol: {

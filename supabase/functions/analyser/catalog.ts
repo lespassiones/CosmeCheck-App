@@ -20,6 +20,7 @@ export async function getCatalogScore(
       .from("catalog")
       .select("score")
       .eq("ean", ean)
+      .eq("is_active", true)
       .maybeSingle();
     const s = (data as { score: number | null } | null)?.score;
     return typeof s === "number" ? s : null;
@@ -46,6 +47,7 @@ export async function getCatalogInfo(
       .from("catalog")
       .select("score, category, ingredients_text")
       .eq("ean", ean)
+      .eq("is_active", true)
       .maybeSingle();
     if (!data) return null;
     const row = data as { score: number | null; category: string | null; ingredients_text: string | null };

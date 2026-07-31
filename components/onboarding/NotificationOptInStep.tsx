@@ -34,7 +34,7 @@ export const NotificationOptInStep: FC<Props> = ({ checked, onToggle }) => {
       <View style={styles.heroWrap}>
         <View style={styles.heroRing}>
           <View style={styles.heroInner}>
-            <Ionicons name="notifications" size={34} color={colors.rose} />
+            <Ionicons name="notifications" size={34} color={colors.accent} />
           </View>
         </View>
       </View>
@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
     width: 92,
     height: 92,
     borderRadius: 46,
-    backgroundColor: colors.rating.rouge.bg,
+    backgroundColor: colors.accentSoft,
     opacity: 0.9,
     alignItems: 'center',
     justifyContent: 'center',
@@ -121,8 +121,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   checkRowOn: {
-    borderColor: colors.rose,
-    backgroundColor: colors.rating.rouge.bg,
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSoft,
   },
   checkbox: {
     width: 24,
@@ -135,8 +135,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   checkboxOn: {
-    borderColor: colors.rose,
-    backgroundColor: colors.rose,
+    borderColor: colors.accent,
+    backgroundColor: colors.accent,
   },
   checkLabel: {
     fontFamily: fontFamilies.semiBold,
@@ -144,6 +144,6 @@ const styles = StyleSheet.create({
     color: colors.inkMuted,
   },
   checkLabelOn: {
-    color: colors.roseDeep,
+    color: colors.accentDeep,
   },
 })

@@ -6,7 +6,7 @@
  *   - Bloc « Ta peau » (violet)        : visage, corps, état des cheveux
  *   - Bloc « Tes préoccupations » (rose): peau, cheveux, autre
  *   - Bloc « Tes objectifs » (vert)    : visage, corps, cheveux, routine, autre
- *   - Bloc « Notifications » (rose)    : opt-in explicite (case + bouton final
+ *   - Bloc « Notifications » (violet)  : opt-in explicite (case + bouton final
  *     bloqué tant que non cochée ; le dialogue système n'apparaît qu'après)
  *
  * Chrome : barre de progression globale animée + pastilles numérotées de
@@ -102,6 +102,8 @@ interface StepDef {
   blocLabel: string
   tone: ToneKey
   title: string
+  /** Sous-titre optionnel affiché sous le titre (valorise les étapes texte libre). */
+  subtitle?: string
   /** Auto-avance après sélection (choix unique uniquement). */
   autoAdvance?: boolean
   render: (p: SkinProfile, onChange: ChangeFn, onAdvance: () => void) => ReactNode
@@ -143,7 +145,7 @@ const STEPS: StepDef[] = [
         }
         other={{
           value: p.otherSkinTypeFace,
-          placeholder: 'Décris ta peau du visage',
+          placeholder: "Ta peau du visage comme tu la ressens, on l'analyse vraiment",
           onToggle: (open) =>
             onChange(
               open
@@ -175,7 +177,7 @@ const STEPS: StepDef[] = [
         }
         other={{
           value: p.otherSkinTypeBody,
-          placeholder: 'Décris la peau de ton corps',
+          placeholder: 'Ce qui rend la peau de ton corps particulière',
           onToggle: (open) =>
             onChange(
               open
@@ -203,7 +205,7 @@ const STEPS: StepDef[] = [
         }
         other={{
           value: p.otherHair,
-          placeholder: "Décris l'état de tes cheveux",
+          placeholder: "L'état réel de tes cheveux, sans filtre",
           onToggle: (open) =>
             onChange(open ? {} : { otherHair: undefined }),
           onChange: (t) => onChange({ otherHair: t }),
@@ -246,7 +248,7 @@ const STEPS: StepDef[] = [
         }
         other={{
           value: p.otherHairConcerns,
-          placeholder: 'Décris ton souci cheveux',
+          placeholder: "Ton souci cheveux, même s'il n'est pas dans la liste",
           onToggle: (open) => onChange(open ? {} : { otherHairConcerns: undefined }),
           onChange: (t) => onChange({ otherHairConcerns: t }),
         }}
@@ -258,7 +260,9 @@ const STEPS: StepDef[] = [
     bloc: 2,
     blocLabel: 'Tes préoccupations',
     tone: 'rose',
-    title: 'Autre chose à signaler ?',
+    title: "Ce que les cases n'ont pas dit",
+    subtitle:
+      "Écris-le avec tes mots, ça compte autant que le reste et ça affine ton analyse.",
     render: (p, onChange) => (
       <FreeTextStep
         value={p.otherConcerns}
@@ -283,7 +287,7 @@ const STEPS: StepDef[] = [
         onToggle={(key) => onChange({ goals: toggleIn(p.goals, key as ProfileGoal) })}
         other={{
           value: p.otherGoalsFace,
-          placeholder: 'Décris ton objectif visage',
+          placeholder: 'Ton objectif à toi, on le prend en compte',
           onToggle: (open) => onChange(open ? {} : { otherGoalsFace: undefined }),
           onChange: (t) => onChange({ otherGoalsFace: t }),
         }}
@@ -304,7 +308,7 @@ const STEPS: StepDef[] = [
         onToggle={(key) => onChange({ goals: toggleIn(p.goals, key as ProfileGoal) })}
         other={{
           value: p.otherGoalsBody,
-          placeholder: 'Décris ton objectif corps',
+          placeholder: 'Ton objectif à toi, on le prend en compte',
           onToggle: (open) => onChange(open ? {} : { otherGoalsBody: undefined }),
           onChange: (t) => onChange({ otherGoalsBody: t }),
         }}
@@ -325,7 +329,7 @@ const STEPS: StepDef[] = [
         onToggle={(key) => onChange({ goals: toggleIn(p.goals, key as ProfileGoal) })}
         other={{
           value: p.otherGoalsHair,
-          placeholder: 'Décris ton objectif cheveux',
+          placeholder: 'Ton objectif à toi, on le prend en compte',
           onToggle: (open) => onChange(open ? {} : { otherGoalsHair: undefined }),
           onChange: (t) => onChange({ otherGoalsHair: t }),
         }}
@@ -346,7 +350,7 @@ const STEPS: StepDef[] = [
         onToggle={(key) => onChange({ goals: toggleIn(p.goals, key as ProfileGoal) })}
         other={{
           value: p.otherGoalsRoutine,
-          placeholder: 'Décris ton objectif routine',
+          placeholder: 'Ton objectif à toi, on le prend en compte',
           onToggle: (open) => onChange(open ? {} : { otherGoalsRoutine: undefined }),
           onChange: (t) => onChange({ otherGoalsRoutine: t }),
         }}
@@ -358,17 +362,18 @@ const STEPS: StepDef[] = [
     bloc: 3,
     blocLabel: 'Tes objectifs',
     tone: 'vert',
-    title: 'Un autre objectif en tête ?',
+    title: 'Ton objectif à toi, en une phrase',
+    subtitle: "Même s'il n'est pas dans nos listes, on le prend en compte.",
     render: (p, onChange) => (
       <FreeTextStep
         value={p.otherGoals}
-        placeholder="Un objectif qui n'est pas dans la liste ?"
+        placeholder="ex : peau plus nette, cheveux plus forts, routine plus simple…"
         onChange={(t) => onChange({ otherGoals: t })}
       />
     ),
   },
 
-  // ── Bloc 4 : Notifications (rose) ─────────────────────────────────────
+  // ── Bloc 4 : Notifications (violet) ───────────────────────────────────
   // Rendu spécial dans le corps du wizard (état checkbox local, pas dans
   // SkinProfile). Le bouton final reste bloqué tant que la case n'est pas
   // cochée ; « Passer » (haut droite) saute sans activer.
@@ -376,7 +381,7 @@ const STEPS: StepDef[] = [
     id: 'notifications',
     bloc: 4,
     blocLabel: 'Notifications',
-    tone: 'rose',
+    tone: 'violet',
     title: 'Ta peau a des choses à te dire',
     render: () => null,
   },
@@ -637,7 +642,12 @@ export const OnboardingWizard: FC<Props> = ({ onStepChange }) => {
         showsVerticalScrollIndicator={false}
       >
         <Animated.View key={step.id} entering={enterAnim.duration(280)}>
-          <Text style={styles.title}>{step.title}</Text>
+          <Text style={[styles.title, step.subtitle ? styles.titleTight : null]}>
+            {step.title}
+          </Text>
+          {step.subtitle ? (
+            <Text style={styles.subtitle}>{step.subtitle}</Text>
+          ) : null}
           <View style={styles.stepBody}>
             {step.id === 'notifications' ? (
               <NotificationOptInStep checked={notifOptIn} onToggle={setNotifOptIn} />
@@ -758,6 +768,14 @@ const styles = StyleSheet.create({
   title: {
     ...typography.h2,
     color: colors.ink,
+    marginBottom: spacing.xl,
+  },
+  titleTight: {
+    marginBottom: spacing.sm,
+  },
+  subtitle: {
+    ...typography.body,
+    color: colors.inkMuted,
     marginBottom: spacing.xl,
   },
   stepBody: {

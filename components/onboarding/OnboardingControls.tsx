@@ -180,7 +180,7 @@ export const SingleSelectStep: FC<SingleSelectProps> = ({
       {other ? (
         <OptionCard
           key="__other__"
-          label="Autre"
+          label="Autre, dis-nous en plus"
           selected={otherOpen}
           tone={tone}
           onPress={toggleOther}
@@ -237,7 +237,7 @@ export const MultiSelectStep: FC<MultiSelectProps> = ({
       {other ? (
         <OptionCard
           key="__other__"
-          label="Autre"
+          label="Autre, dis-nous en plus"
           selected={otherOpen}
           tone={tone}
           multi
