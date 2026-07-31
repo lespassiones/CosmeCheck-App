@@ -66,3 +66,7 @@ fcm-*.json
 # Clé APNs iOS (SECRET)
 *.p8
 scripts/.backfill_checkpoint.json
+
+# Export catalogue : fichier de donnees volumineux (~348 Mo), regenerable via
+# les scripts d'export. Depasse la limite GitHub (100 Mo) -> jamais dans le repo.
+/catalog.csv
