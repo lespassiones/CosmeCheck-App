@@ -27,7 +27,7 @@ import { serviceClient } from "../_shared/auth.ts";
 import { getCatalogInfo } from "./catalog.ts";
 import { dedupeKey } from "../_shared/dedupeKey.ts";
 import { sha256Hex } from "../_shared/aiClient.ts";
-import { type ColorRating, pastilleTone, type ScoreTone, scoreLabel, synthScore } from "./score.ts";
+import { type ColorRating, pastilleTone, reconcileScore, type ScoreTone, scoreLabel, synthScore } from "./score.ts";
 import { isCleanInciInput, parseInciList } from "./parse.ts";
 import {
   buildAnalysisCore,
@@ -242,8 +242,27 @@ Deno.serve(async (req: Request) => {
           cachedResult.catalogCategory = catalogInfo.category;
         }
         if (catScore != null) {
-          const { label, tone } = scoreLabel(catScore);
-          cachedResult.score = catScore;
+          // Réconciliation : le score catalogue peut avoir été calculé avec un
+          // coloriage différent. On recalcule le score live depuis les couleurs
+          // des items cachés (celles affichées) ; s'il tombe dans une bande
+          // différente, on sert le live (note = couleurs vues). Garde >=50%.
+          const past = pastilleTone(
+            cachedItems.map((it) => ({
+              color: (it as { colorRating?: ColorRating | null }).colorRating ?? null,
+              position: Number((it as { position?: number }).position ?? 0),
+            })),
+            cachedItems.length,
+            false,
+          );
+          const cnts = cachedResult.counts as { total?: number; matched?: number } | undefined;
+          const chosen = reconcileScore(
+            catScore,
+            synthScore(past),
+            cnts?.matched ?? 0,
+            cnts?.total ?? cachedItems.length,
+          );
+          const { label, tone } = scoreLabel(chosen);
+          cachedResult.score = chosen;
           cachedResult.scoreLabel = label;
           cachedResult.scoreTone = tone;
         } else if (typeof cachedResult.score !== "number") {
@@ -447,7 +466,10 @@ Deno.serve(async (req: Request) => {
   const catalogScore = catalogInfo?.score ?? null;
   const catalogCategorySlug = catalogInfo?.category ?? null;
   if (catalogScore != null) {
-    score = catalogScore;
+    // Réconciliation : on garde le score catalogue SAUF s'il tombe dans une
+    // bande de qualité différente des couleurs live affichées (score déjà dans
+    // `score` = core.score) → dans ce cas on sert le live (note = couleurs vues).
+    score = reconcileScore(catalogScore, score, matched, core.countsPayload.total);
     const lab = scoreLabel(score);
     scoreLabelText = lab.label;
     scoreTone = lab.tone;

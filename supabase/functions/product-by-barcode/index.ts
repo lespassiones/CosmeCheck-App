@@ -36,13 +36,17 @@ const REGISTERED = {
 
 type RequestBody = { barcode?: string; hp?: string };
 
-// INCI lists have many short comma-separated tokens. Marketing text has few
-// commas and very long sentences. Threshold: ≥5 tokens, average length ≤80 chars.
-// 80 is generous enough for long botanical INCI names like
-// "Hippophae Rhamnoides (Sea Buckthorn) Seed Oil" (46 chars) while still
-// blocking marketing paragraphs (typically >100 chars per comma-separated phrase).
+// INCI lists have many short tokens. Marketing text has few separators and very
+// long sentences. Threshold: ≥5 tokens, average length ≤80 chars. 80 is generous
+// enough for long botanical INCI names like "Hippophae Rhamnoides (Sea Buckthorn)
+// Seed Oil" (46 chars) while still blocking marketing paragraphs (typically >100
+// chars per phrase). On découpe aussi sur les PUCES (• · ● ◆ ▪) : ~110 produits
+// réels (Bourjois palettes, Jonzac...) ont un INCI à puces qui, splité sur les
+// seules virgules, donnait 1 token → faux "pas encore référencé" au scan alors
+// qu'ils ont une fiche + un score complets. Le charabia multilingue reste bloqué
+// par la longueur moyenne (avg > 80).
 function looksLikeInci(text: string): boolean {
-  const tokens = text.split(/[,;]/).map((t) => t.trim()).filter(Boolean);
+  const tokens = text.split(/[,;•·●◆▪]/).map((t) => t.trim()).filter(Boolean);
   if (tokens.length < 5) return false;
   const avgLen = tokens.reduce((s, t) => s + t.length, 0) / tokens.length;
   return avgLen <= 80;

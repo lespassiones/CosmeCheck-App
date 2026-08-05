@@ -19,6 +19,11 @@ const MISTRAL_API_KEY = Deno.env.get("MISTRAL_API_KEY");
 export const AI_MODEL = "gpt-4o-mini";
 export const AI_MODEL_SEARCH = "gpt-4o-mini-search-preview";
 export const MISTRAL_MODEL = "mistral-small-latest";
+// Modèle dédié à l'analyse de cohérence "Promesses vs Formule" (2 passes :
+// extraction + critique). gpt-4o-mini n'est pas assez fiable sur l'anti-
+// invention et le mapping INCI ; gpt-4.1 suit les consignes bien mieux.
+// Basculer sur "gpt-4o" si l'account n'a pas accès à gpt-4.1.
+export const AI_MODEL_COHERENCE = "gpt-4.1";
 
 export const MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions";
 
@@ -42,6 +47,7 @@ export type AIFeature =
   | "ocr"
   | "typo"
   | "categorize"
+  | "coherence"
   | "validate"
   | "product_search"
   | "explain"

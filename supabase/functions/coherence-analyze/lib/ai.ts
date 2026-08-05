@@ -8,6 +8,7 @@
 
 import {
   AI_MODEL,
+  AI_MODEL_COHERENCE,
   callWithFallback,
   hasMistral,
   hasOpenAI,
@@ -1010,26 +1011,68 @@ const COHERENCE_SCHEMA = {
   },
 } as const;
 
-const COHERENCE_SYSTEM = `Tu es chimiste cosmétique. On te donne la DESCRIPTION marketing d'un produit et sa liste INCI réelle (slug, nom, fonction). Tu extrais les PROMESSES du texte VÉRIFIABLES par la composition et tu dis si la formule les soutient.
+const COHERENCE_SYSTEM = `Tu es chimiste cosmétique. On te donne la DESCRIPTION marketing d'un produit et sa liste INCI réelle (slug, nom, fonction). Objectif : extraire les VRAIES promesses du texte et dire, pour chacune, si la formule la soutient.
 
-RÈGLES
-1. Ne garde QUE les promesses qu'un ingrédient peut confirmer ou infirmer (un effet sur la zone d'application, ou la présence/absence d'un ingrédient). Écarte tout le reste dans "unverifiable" (reason: sensoriel/composition/certification/marketing_general) : saveur, odeur, fraîcheur, sensation, TEXTURE ("fondante", "légère"), VITESSE DE PÉNÉTRATION ("pénètre vite", "non gras"), FACILITÉ D'USAGE ("facile à appliquer", "sans rinçage"), PUBLIC/PÉRIMÈTRE sans actif précis ("adapté aux bébés/nourrissons", "soin corps & mains", "convient à tous types de peau"), TOLÉRANCE ("non comédogène", "hypoallergénique", "testé dermatologiquement"), "expérience", marketing vague ("efficace", "innovant", "longue durée" seul), certifications, % naturel.
-2. Déduis la CATÉGORIE du produit (product_type) et raisonne pour CETTE catégorie. N'attends que des ingrédients qui ont un sens pour ce type. Ex : un dentifrice → fluor/anti-caries, désensibilisants (nitrate de potassium, arginine, fluorure stanneux), xylitol, abrasifs ; JAMAIS des actifs de soin de la peau (aloe, calendula, panthénol) pour une allégation dentaire.
-3. Pour chaque promesse gardée, cite dans found_slugs les slugs — UNIQUEMENT des slugs présents dans la liste fournie — des ingrédients qui la soutiennent réellement. Interdit d'inventer un slug.
-   verdict :
-   - "tenue" : au moins un ingrédient pertinent (et pas seulement en toute fin de liste) soutient la promesse.
-   - "partielle" : soutien faible (un seul actif secondaire, ou en trace).
-   - "non_demontree" : RÉSERVÉ à une promesse d'EFFET qui DEVRAIT correspondre à un type d'actif connu mais qu'aucun ingrédient ne soutient → found_slugs vide, mets 1 à 3 actifs attendus dans "missing". Si la promesse ne se rattache à AUCUN type d'ingrédient (texture, pénétration, facilité d'usage, public visé) → ce n'est PAS non_demontree, mets-la en "unverifiable". Pas de "manque" farfelu pour justifier un non_demontree.
-   - "contredite" : promesse "sans X" alors que X est présent dans la liste.
-3bis. ACTIF NOMMÉ (breveté, botanique, vitamine) : AVANT de conclure à l'absence, traduis-le en INCI et cherche-le dans la liste. Ex : vigne/raisin → "Vitis Vinifera" ou "Grapevine" (PALMITOYL GRAPEVINE SHOOT EXTRACT = Viniférine) ; vitamine B3 → Niacinamide ; vitamine C → Ascorbyl/Ascorbic ; acide hyaluronique → Sodium Hyaluronate ; provitamine B5 → Panthenol ; "huile/beurre de X" → "<Genre espèce> Oil/Butter" en latin (karité → Butyrospermum Parkii). S'il est présent sous l'un de ces noms → "tenue" en citant le slug réel, PAS non_demontree.
-4. "Sans X" (promesse d'absence d'un INGRÉDIENT précis : "sans sulfate", "sans parfum", "0 % silicone") : mets is_absence=true, found_slugs=[]. Ne l'extrais QUE si "sans"/"0 %"/"sans ajout de" est LITTÉRALEMENT écrit. Une absence n'est JAMAIS "non_demontree" : "tenue" (X absent de la liste) ou "contredite" (X présent). N'invente jamais un "sans X".
-   ⚠️ NE SONT PAS des promesses d'absence ni vérifiables (is_absence=false → mets-les en "unverifiable") : "non comédogène", "non photosensibilisant", "non gras", "non irritant", "testé dermatologiquement", "recommandé pour adultes/enfants/toute la famille". Ce sont des tolérances/publics, pas des ingrédients.
-   (Toutes les autres promesses : is_absence=false.)
-5. N'invente jamais une promesse : n'extrais que ce qui est réellement écrit.
-6. score 0-100 = couverture par la formule (tenue ~70-100, partielle ~30-55, non_demontree = 0).
-7. excerpt = fragment VERBATIM du texte (max 80 caractères).
+DEUX PRINCIPES ABSOLUS :
+A. NE JAMAIS INVENTER. Tu n'extrais QUE ce qui est écrit noir sur blanc dans la description. Tu n'ajoutes jamais une promesse "probable" pour la marque, même si la formule s'y prête.
+B. CHERCHER HONNÊTEMENT. Pour chaque vraie promesse d'effet, tu cherches réellement dans la liste INCI l'ingrédient qui la soutient (en traduisant les noms courants / botaniques / brevetés en INCI) AVANT de conclure qu'il n'y en a pas.
+
+═══ CE QUI EST UNE PROMESSE (dans "promises") ═══
+Une phrase VÉRIFIABLE par un ingrédient : soit un EFFET sur la zone d'application (peau, cheveux, lèvres, ongles, dents, cuir chevelu…), soit la PRÉSENCE ou l'ABSENCE d'un ingrédient précis.
+Ex : "hydrate 24h", "apaise les rougeurs", "nourrit", "raffermit", "anti-frisottis", "enrichi en niacinamide" (présence), "sans sulfate" (absence). Sois EXHAUSTIF : n'en oublie aucune, ne les fusionne pas à tort (voir doublons).
+
+═══ CE QUI N'EST PAS UNE PROMESSE (dans "unverifiable") ═══
+Tout ce qu'AUCUN ingrédient ne peut confirmer ni infirmer :
+- PÉRIMÈTRE / OÙ l'appliquer : "utilisable sur le visage et le corps", "s'utilise sur le corps, le visage et les cheveux", "soin corps & mains". (La formule ne prouve pas OÙ on applique.)
+- PUBLIC : "convient à toute la famille", "dès 3 ans", "convient à tous types de peau".
+- TEXTURE / SENSORIEL : "texture fondante", "fini non gras et non collant", "parfum frais", "odeur de vanille", "sensation de fraîcheur".
+- USAGE : "appliquer matin et soir", "laisser poser 5 min", "masser jusqu'à pénétration".
+- TOLÉRANCE : "non comédogène", "non photosensibilisant", "hypoallergénique", "testé dermatologiquement".
+- CERTIF / MARKETING VAGUE : "vegan", "bio", "99 % d'origine naturelle", "efficacité prouvée", "innovant", "longue durée" seul.
+reason ∈ {sensoriel, composition, certification, marketing_general, autre}. Ces claims NE SONT NI des promesses ratées NI "non_demontree" : ils vont en "unverifiable" et n'ont jamais d'"actif manquant".
+
+═══ ANTI-INVENTION DES ABSENCES ("sans X") ═══
+Une absence (is_absence=true) ne s'extrait QUE si un marqueur de négation est LITTÉRALEMENT collé à l'ingrédient : "sans", "0 %", "exempt de", "sans ajout de", "free of".
+CONTRE-EXEMPLE OBLIGATOIRE : si le texte dit « son parfum frais et délicat » ou « parfumé », le produit A un parfum → tu n'extrais JAMAIS "sans parfum". Une mention POSITIVE d'un parfum n'est PAS une absence. De même "100 % d'origine naturelle" ne signifie PAS "sans X".
+Une absence n'est jamais "non_demontree" : "tenue" (X vraiment absent de l'INCI) ou "contredite" (X présent dans l'INCI).
+
+═══ NE PAS DÉDOUBLER ═══
+Le même effet formulé plusieurs fois = UNE seule promesse. Une version chiffrée/clinique et une version simple du MÊME effet sont la même promesse.
+CONTRE-EXEMPLE : "hydrate intensément" et "effet hydratant mesuré par cornéométrie : +36,8 %" = UNE promesse d'hydratation (garde la mieux soutenue), surtout PAS une "tenue" + une "non_demontree".
+
+═══ VERDICT (chaque promesse mesurable) ═══
+found_slugs = UNIQUEMENT des slugs présents dans la liste fournie (jamais inventés).
+- "tenue" : ≥1 ingrédient pertinent (pas seulement en toute fin de liste) soutient la promesse.
+- "partielle" : soutien faible (un seul actif secondaire, ou en trace).
+- "non_demontree" : vraie promesse d'EFFET qui devrait correspondre à un type d'actif connu mais qu'AUCUN ingrédient ne soutient → found_slugs vide + 1 à 3 actifs attendus dans "missing".
+- "contredite" : "sans X" alors que X est présent dans la liste.
+score 0-100 = couverture (tenue 70-100, partielle 30-55, non_demontree 0).
+
+═══ RETROUVER L'INGRÉDIENT (avant tout non_demontree) ═══
+Traduis en INCI puis cherche : vitamine B3→Niacinamide ; vitamine C→Ascorbic/Ascorbyl ; acide hyaluronique→Sodium Hyaluronate ; provitamine B5→Panthenol ; "huile/beurre de X"→"<Genre espèce> Oil/Butter" (karité→Butyrospermum Parkii) ; actif breveté→sa source (algue rouge→Gelidium/Chondrus/rhodophyta ; Viniférine→Vitis Vinifera/Grapevine).
+CONTRE-EXEMPLE : promesse "grâce à l'extrait d'algue rouge" + la liste contient "gelidium-sesquipedale-extract" → "tenue" en citant CE slug, PAS non_demontree.
+
+Raisonne pour le TYPE de produit (product_type) : n'attends que des ingrédients qui ont un sens pour ce type (un dentifrice → fluor, xylitol… ; jamais aloe/calendula pour une allégation dentaire). MAQUILLAGE (fond de teint, blush, rouge à lèvres, mascara, poudre…) : la COULEUR, la COUVRANCE et la PIGMENTATION revendiquées SONT des promesses vérifiables par les pigments de l'INCI (oxydes de fer CI 77491/77492/77499, titanium dioxide CI 77891, mica, autres CI…) → tenue si ces pigments sont présents ; ne classe JAMAIS la couleur/couvrance d'un maquillage en sensoriel/marketing.
+excerpt = fragment VERBATIM du texte (max 80 caractères).
 ${NO_LONG_DASHES_RULE}
 Retourne UNIQUEMENT le JSON.`;
+
+// Passe 2 — CRITIQUE IA (le garde-fou demandé, fait par l'IA et non par une
+// regex figée). Un second appel relit la passe 1 : a-t-elle inventé ? oublié
+// de vraies promesses ? chaque promesse est-elle bien MESURABLE par un
+// ingrédient ? le mapping/verdict est-il correct ? Renvoie la version corrigée.
+const COHERENCE_REVIEW_SYSTEM = `Tu es un chimiste cosmétique SENIOR qui RELIT le travail d'un collègue. On te donne : la DESCRIPTION marketing, la liste INCI réelle, et une PREMIÈRE analyse (promesses + verdicts + unverifiable). Corrige-la et renvoie la version FINALE, dans le MÊME format JSON.
+
+Vérifie dans l'ordre :
+1. INVENTION : chaque promesse doit correspondre à une phrase RÉELLE de la description (excerpt quasi-verbatim). Toute promesse absente du texte → SUPPRIME-la. Une absence "sans X" n'est valide que si "sans / 0 % / exempt de / sans ajout de" est écrit près de X ; sinon supprime (ex : le texte dit « son parfum frais » → il y a un parfum → PAS de "sans parfum" ; si la 1re analyse l'a mise en "contredite", c'est une INVENTION → supprime).
+2. OUBLIS : relis toute la description. Toute VRAIE promesse d'effet ou d'absence ratée par la 1re analyse → AJOUTE-la avec le bon verdict et les bons found_slugs.
+3. MESURABLE : chaque entrée de "promises" doit être vérifiable par un ingrédient (effet sur la zone d'application, ou présence/absence d'un ingrédient). Sinon (PÉRIMÈTRE "utilisable sur le visage et le corps", PUBLIC "toute la famille", TEXTURE, SENSORIEL, USAGE, TOLÉRANCE "non comédogène/hypoallergénique", CERTIFICATION, MARKETING vague) → DÉPLACE-la dans "unverifiable". Ce n'est PAS une promesse ratée : ne lui laisse jamais un verdict "non_demontree" ni un "actif manquant". EXCEPTION MAQUILLAGE : la couleur, la couvrance et la pigmentation d'un maquillage SONT mesurables via les pigments CI de l'INCI → garde-les en "promises" (tenue), ne les déplace PAS en unverifiable.
+4. MAPPING : pour chaque promesse mesurable, re-vérifie found_slugs (uniquement des slugs de la liste) et le verdict. Traduis les noms courants/botaniques/brevetés en INCI et cherche VRAIMENT avant de conclure à l'absence (ex : "algue rouge" → un slug gelidium/chondrus dans la liste → tenue). Corrige un "non_demontree" injustifié en "tenue/partielle" en citant le slug réel ; corrige un "tenue" sans aucun ingrédient réel en "non_demontree".
+5. DOUBLONS : fusionne les promesses qui expriment le MÊME effet (y compris une version chiffrée/clinique et une version simple), en gardant la mieux soutenue.
+
+RÈGLE D'OR : en cas de doute, GARDE la promesse (ne réduis pas l'analyse). Tu ne supprimes QUE l'inventé, tu ne déplaces en "unverifiable" QUE le vraiment-non-mesurable, et tu n'inventes JAMAIS rien.
+${NO_LONG_DASHES_RULE}
+Retourne UNIQUEMENT le JSON (product_type, promises[...], unverifiable[...]).`;
 
 function itemsBlock(items: FormulaItemForLlm[]): string {
   return items
@@ -1120,26 +1163,28 @@ async function mistralAnalyze(
   }
 }
 
-/** Analyse en une passe : description + INCI → promesses vérifiées. */
-export async function analyzeCoherence(
+function coherenceUserMsg(description: string, items: FormulaItemForLlm[]): string {
+  return `DESCRIPTION :\n"""\n${description.trim().slice(0, 6000)}\n"""\n\nINGRÉDIENTS (slug — nom — fonction) :\n${itemsBlock(items)}\n\nRetourne le JSON.`;
+}
+
+/** Passe 1 : extraction + mapping (OpenAI gpt-4.1, fallback Mistral). */
+async function runExtractionPass(
   description: string,
   items: FormulaItemForLlm[],
+  knownSlugs: Set<string>,
   userId?: string | null,
-): Promise<CoherenceAnalysis> {
-  const empty: CoherenceAnalysis = { productType: "autre", promises: [], unverifiable: [] };
-  if (!hasOpenAI() && !hasMistral()) return empty;
-  const knownSlugs = new Set(items.map((it) => it.slug));
-  const user = `DESCRIPTION :\n"""\n${description.trim().slice(0, 6000)}\n"""\n\nINGRÉDIENTS (slug — nom — fonction) :\n${itemsBlock(items)}\n\nRetourne le JSON.`;
-
+): Promise<CoherenceAnalysis | null> {
+  const user = coherenceUserMsg(description, items);
   try {
-    const result = await callWithFallback<CoherenceAnalysis | null>({
+    return await callWithFallback<CoherenceAnalysis | null>({
       feature: "coherence",
       userId: userId ?? null,
+      model: AI_MODEL_COHERENCE,
       timeoutMs: 30_000,
       primary: async () => {
         if (!hasOpenAI()) throw new Error("openai disabled");
         const resp = await openai().chat.completions.create({
-          model: AI_MODEL,
+          model: AI_MODEL_COHERENCE,
           temperature: 0.1,
           max_tokens: 2000,
           messages: [
@@ -1160,8 +1205,83 @@ export async function analyzeCoherence(
         provider: "mistral",
       }),
     });
-    return result ?? empty;
   } catch {
-    return empty;
+    return null;
   }
+}
+
+/** Passe 2 : critique IA. Relit la passe 1 et renvoie la version corrigée. */
+async function reviewCoherencePass(
+  description: string,
+  items: FormulaItemForLlm[],
+  pass1: CoherenceAnalysis,
+  knownSlugs: Set<string>,
+  userId?: string | null,
+): Promise<CoherenceAnalysis | null> {
+  const priorJson = JSON.stringify({
+    product_type: pass1.productType,
+    promises: pass1.promises.map((p) => ({
+      label: p.label,
+      excerpt: p.excerpt,
+      verdict: p.verdict,
+      score: p.score,
+      found_slugs: p.foundSlugs,
+      missing: p.missing,
+      is_absence: p.isAbsence,
+    })),
+    unverifiable: pass1.unverifiable,
+  });
+  const user = `${coherenceUserMsg(description, items)}\n\nPREMIÈRE ANALYSE À RELIRE ET CORRIGER :\n${priorJson}`;
+  try {
+    return await callWithFallback<CoherenceAnalysis | null>({
+      feature: "coherence",
+      userId: userId ?? null,
+      model: AI_MODEL_COHERENCE,
+      timeoutMs: 25_000,
+      primary: async () => {
+        if (!hasOpenAI()) throw new Error("openai disabled");
+        const resp = await openai().chat.completions.create({
+          model: AI_MODEL_COHERENCE,
+          temperature: 0,
+          max_tokens: 2000,
+          messages: [
+            { role: "system", content: COHERENCE_REVIEW_SYSTEM },
+            { role: "user", content: user },
+          ],
+          response_format: { type: "json_schema", json_schema: COHERENCE_SCHEMA },
+        });
+        const raw = resp.choices?.[0]?.message?.content ?? null;
+        return {
+          value: raw ? safeParseCoherence(raw, knownSlugs) : null,
+          tokensIn: resp.usage?.prompt_tokens,
+          tokensOut: resp.usage?.completion_tokens,
+        };
+      },
+    });
+  } catch {
+    // OpenAI KO sur la critique → l'appelant garde la passe 1 (`?? pass1`).
+    return null;
+  }
+}
+
+/**
+ * Analyse en DEUX passes IA : extraction+mapping (passe 1) puis CRITIQUE qui
+ * relit et corrige (passe 2). Le tout sur AI_MODEL_COHERENCE (gpt-4.1). La
+ * critique est best-effort : si elle échoue, on garde la passe 1.
+ */
+export async function analyzeCoherence(
+  description: string,
+  items: FormulaItemForLlm[],
+  userId?: string | null,
+): Promise<CoherenceAnalysis> {
+  const empty: CoherenceAnalysis = { productType: "autre", promises: [], unverifiable: [] };
+  if (!hasOpenAI() && !hasMistral()) return empty;
+  const knownSlugs = new Set(items.map((it) => it.slug));
+
+  const pass1 = await runExtractionPass(description, items, knownSlugs, userId);
+  if (!pass1) return empty;
+
+  if (!hasOpenAI()) return pass1; // critique OpenAI only
+  const reviewed = await reviewCoherencePass(description, items, pass1, knownSlugs, userId);
+  return reviewed ?? pass1;
 }

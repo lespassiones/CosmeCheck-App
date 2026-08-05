@@ -63,7 +63,12 @@ type Body = {
 // LLM cite les vrais ingrédients et écarte les claims non vérifiables). Remplace
 // détection type + extraction + exploration + moteur déterministe d'actifs
 // attendus (qui produisait de faux « non démontré » avec des actifs hors-sujet).
-const ALGO_VERSION = "v10";
+// v11 = passe LLM montée en gpt-4.1 + AJOUT d'une 2e passe CRITIQUE IA (relit
+// l'extraction : anti-invention "sans X", promesses réellement mesurables,
+// mapping INCI honnête, dédup). SUPPRESSION du filet déterministe NOISE (regex
+// figée qui rabotait l'analyse) : c'est désormais la critique IA qui reclasse
+// le non-mesurable. Bump invalide coherence_cache v10 (verdicts différents).
+const ALGO_VERSION = "v11";
 
 // ─── Idempotence (port de CosmetWiki/lib/idempotency.ts, Deno) ──────────────
 const IDEM_TTL_MS = 24 * 60 * 60 * 1000;
@@ -305,18 +310,12 @@ Deno.serve(async (req: Request) => {
       // Le LLM ne cite que des slugs de la formule réelle : on les rattache aux
       // items (position/inTrace) pour l'affichage et le positionSnapshot.
       const bySlug = new Map(parent.items.map((it) => [it.slug, it] as const));
-      // Filet déterministe : phrases de TOLÉRANCE / PUBLIC / USAGE qui ne se
-      // vérifient pas par un ingrédient. Quel que soit le verdict du LLM, on les
-      // reclasse en « unverifiable » (jamais un vert « tenu » ni un rouge trompeur).
-      const NOISE =
-        /(non\s+com[eé]dog|non\s+photosensibilis|non\s+gras|non\s+irritant|hypoallerg|test[eé].{0,18}dermatolog|recommand[eé]\s+pour|d[eé]conseill|facile\s+[aà]\s+appliquer|convient\s+[aà]\s+tous|sans\s+enfants|enfants?\s+de\s+\d|\d\s*ans\s+et\s+moins|toute\s+la\s+famille)/i;
-      const noiseUnver: UnverifiableClaim[] = [];
+      // Plus de filet déterministe NOISE : la 2e passe CRITIQUE IA
+      // (analyzeCoherence, reviewCoherencePass) reclasse elle-même le
+      // non-mesurable (périmètre, public, tolérance…) en "unverifiable". On ne
+      // rabote plus l'analyse avec une regex figée.
       const built: CoherencePromise[] = [];
       for (const p of analysis.promises) {
-        if (NOISE.test(`${p.label} ${p.excerpt}`)) {
-          noiseUnver.push({ excerpt: p.excerpt.slice(0, 200), reason: "composition" });
-          continue;
-        }
         const foundActives = p.foundSlugs.flatMap((slug) => {
           const it = bySlug.get(slug);
           if (!it) return [];
@@ -368,7 +367,7 @@ Deno.serve(async (req: Request) => {
         });
       }
       promises = built;
-      unverifiable = [...analysis.unverifiable, ...noiseUnver];
+      unverifiable = analysis.unverifiable;
       outOfScope = [];
     }
 
