@@ -1277,11 +1277,13 @@ export async function analyzeCoherence(
   const empty: CoherenceAnalysis = { productType: "autre", promises: [], unverifiable: [] };
   if (!hasOpenAI() && !hasMistral()) return empty;
   const knownSlugs = new Set(items.map((it) => it.slug));
-
+  // PASSE UNIQUE gpt-4.1. La 2e passe critique a été RETIRÉE : elle doublait la
+  // latence (jusqu'à 25 s), ce qui faisait sauter la limite de 25 s de la route
+  // web /api/coherence → 504. Et l'éval sur 20 produits a montré qu'elle ne
+  // changeait rien vs la passe 1 (gpt-4.1 est déjà fiable). Toutes les règles
+  // (anti-invention, mesurable, dédup, mapping honnête) sont dans le prompt de
+  // la passe 1. reviewCoherencePass/COHERENCE_REVIEW_SYSTEM restent définis mais
+  // ne sont plus appelés (réactivables si un jour on veut un check rapide).
   const pass1 = await runExtractionPass(description, items, knownSlugs, userId);
-  if (!pass1) return empty;
-
-  if (!hasOpenAI()) return pass1; // critique OpenAI only
-  const reviewed = await reviewCoherencePass(description, items, pass1, knownSlugs, userId);
-  return reviewed ?? pass1;
+  return pass1 ?? empty;
 }
