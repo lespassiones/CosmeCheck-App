@@ -124,8 +124,9 @@ jours à faire.
 
 | # | Qui | Quoi | Débloque |
 |---|---|---|---|
-| **1** | Toi | **Contrat Applications payantes** + coordonnées bancaires + formulaires fiscaux (`W-8BEN` en entrepreneur individuel français) dans App Store Connect > Entreprise | ⚠️ **Aucun achat, pas même en bac à sable, ne fonctionne sans ce contrat actif.** C'est le point le plus lent du plan, à lancer en premier même si tout le reste attend |
-| **2** | Toi | **DAC7**, dans la même section. Réponse à « l'une de vos apps fournit-elle des services personnels ? » : **Non**. La directive vise les plateformes qui mettent en relation un prestataire et un client. CosmeCheck vend sa propre production logicielle, il n'y a aucun tiers vendeur à déclarer | la soumission d'une nouvelle app, qu'Apple refuse sans ça |
+| **1** | ~~Toi~~ | ✅ **Déjà actif, constaté le 20/08/2026 dans Business.** Contrat applications payantes **Actif** (19 août 2026 au 19 août 2027), contrat applications gratuites **Actif**, compte bancaire `BIENDOU BRIAN (4044)` **Actif** (France, EUR, redevances USD), `U.S. Form W-8BEN` **Actif** et `U.S. Certificate of Foreign Status` **Actif**, les deux envoyés le 19 août. Numéro de vendeur **94728527**, 175 pays ou régions. ⚠️ **Ces lignes sont au niveau du COMPTE, pas de l'app** : elles ont été remplies pour RevealChat et couvrent CosmeCheck sans un geste de plus. C'était le point le plus lent du plan, il est derrière nous | les achats, y compris en bac à sable, sur **toutes** les apps du compte |
+| **2** | ~~Toi~~ | ✅ **DAC7 Actif le 20/08/2026** (« Directive relative à la coopération administrative, 7e révision », 27 pays). La réponse donnée à « services personnels » était **Non**, et c'est la bonne : la directive vise les plateformes qui mettent en relation un prestataire et un client, alors que nous vendons notre propre production logicielle | la soumission d'une app neuve, qu'Apple refuse sans ça |
+| **2b** | Apple | ⚠️ **« La législation sur les services numériques » est En cours de vérification** depuis le 19/08/2026 (27 pays). C'est le DSA, et c'est Apple qui valide l'identification de commerçant. **Rien à faire**, et rien à relancer. Ce qu'il faut savoir : tant que ce n'est pas validé, la **distribution dans l'Union** peut être retenue, même si la soumission passe. Même état que sur RevealChat, donc c'est la file d'attente d'Apple et pas un dossier incomplet | la distribution en Europe |
 | **3** | Toi | **Identifiant d'app** `com.cosmecheck.app` dans le portail Apple (Certificates, Identifiers & Profiles), avec les capacités **Sign in with Apple** et **Push Notifications** | les habilitations natives au build. Sans elles, Xcode refuse de signer |
 | **4** | Toi | **Fiche App Store Connect** : nom « Cosme Check » (30 caractères max), sous-titre, langue par défaut français, catégorie principale **Style de vie**. ⚠️ **Pas Médecine, pas Santé et forme** : la catégorie médicale déclenche une revue bien plus dure sur les affirmations produit | tout ce qui suit, et l'`ascAppId` dont EAS a besoin |
 | **5** | Toi | **Clé d'API App Store Connect**, rôle **Admin**, dans Utilisateurs et accès > Intégrations. C'est l'équivalent Apple du compte de service Google Play : elle remplace ton mot de passe et laisse EAS créer les certificats, les profils, et déposer les binaires sans intervention. ⚠️ Rôle Admin et non App Manager : c'est lui qui autorise la gestion complète des certificats, et un rôle trop étroit échoue **au milieu** d'un build avec un message qui ne parle pas de droits | tous les builds iOS, sans exception |
@@ -336,7 +337,7 @@ Rien n'est parallélisable au début : le bloc A conditionne tout, et Apple est 
 
 | Jour | Toi | Claude |
 |---|---|---|
-| **J0, aujourd'hui** | 5.1 : sauvegarder la clé de signature, hors du poste. Puis lancer le contrat Applications payantes, les formulaires fiscaux et DAC7 (étapes 1 et 2), qui vont mûrir tout seuls | connexion Apple (section 2), et commit d'`app.json` |
+| **J0, aujourd'hui** | ✅ 5.1 clé de signature sauvegardée. ✅ étapes 1 et 2 constatées **déjà actives**, le calendrier gagne les jours qui étaient réservés au contrat. Reste à trancher le type d'entité (annexe B §6) avant de créer la fiche | ✅ commit d'`app.json`. Puis connexion Apple (section 2) |
 | **J1** | étapes 3, 4, 5 : identifiant d'app, fiche App Store Connect, clé d'API | `eas.json`, alignement des versions, préparation des captures depuis l'API Play |
 | **J2** | étapes 6, 7, 8, 9 : APNs, clé Achat intégré, les deux abonnements, RevenueCat iOS | clé `appl_` dans le `.env` et chez EAS, notes de revue, étiquette de confidentialité |
 | **J3** | étape 15 : premier build iOS en interactif. Puis TestFlight | audit de secrets sur l'`.ipa` |
@@ -495,6 +496,14 @@ Termine par ce bloc, valeurs complètes, rien après.
 
 ## Annexe B, le bloc A champ par champ : contrat, W-8BEN, DAC7
 
+> ✅ **Périmé le 20/08/2026, et gardé exprès.** Tout ce qui suit était **déjà fait** sur ce
+> compte, rempli pour RevealChat les 19 et 20 août : contrats, banque, W-8BEN, certificat
+> de statut étranger, DAC7, tous **Actifs**. Ces lignes vivent au niveau du **compte** et
+> pas de l'app, donc elles ne se refont jamais. Cette annexe reste ici pour deux raisons :
+> savoir ce qui a été déclaré et sous quel régime le jour où l'administration le demande,
+> et refaire ce parcours sans le réapprendre si un second compte développeur existe un
+> jour.
+
 **Où :** `appstoreconnect.apple.com`, onglet **Business** (celui de la capture).
 
 ⚠️ **Se connecter avec l'Apple ID titulaire du compte** (Account Holder). Un rôle Admin
@@ -586,14 +595,21 @@ raison qui ressemble à un défaut de code, et on cherche dans le code.
 
 ### 6. ⚠️ Une décision à prendre dans la même session, parce qu'elle est lente à défaire
 
-Membership details : le **type d'entité** du compte Apple. S'il est **Individual**, le nom
-de vendeur affiché sur la page App Store est ton **nom civil**, pas « Cosme Check » ni
-« Origma ». Passer en **Organization** exige un numéro **D-U-N-S** et une nouvelle
-vérification d'identité, et ça ne se fait pas confortablement après la soumission.
+**Ce n'est plus une hypothèse, c'est mesuré le 20/08/2026 :**
 
-Le compte Google Play, lui, est déjà en organisation. L'asymétrie n'a aucune conséquence
-technique, seulement une conséquence d'image sur la fiche : à trancher maintenant, pas au
-moment de soumettre.
+| Magasin | Nom qui s'affiche au public |
+|---|---|
+| Google Play | **Biendou Enterprises** (`play.google.com/store/apps/developer?id=Biendou+Enterprises`) |
+| App Store | **Brian Biendou**, l'entité du compte Business étant `BRIAN BIENDOU`, personne physique |
+
+Le compte Apple est donc **Individual**, et sur une fiche App Store le vendeur affiché est
+le **nom civil**, pas « Cosme Check » ni « Origma ». Passer en **Organization** exige un
+numéro **D-U-N-S**, une nouvelle vérification d'identité, et un passage par l'assistance
+Apple : ça ne se fait pas confortablement, et surtout pas après la soumission.
+
+L'asymétrie n'a **aucune conséquence technique**, seulement une conséquence d'image : la
+même app portera deux éditeurs différents selon le téléphone. À trancher **avant** de
+créer la fiche, parce que la conversion pendant une revue est le pire moment possible.
 
 ---
 
