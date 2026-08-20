@@ -121,23 +121,28 @@ vérificateur qui ne peut pas passer cet écran rejette pour app incomplète (r�
 | Champ | Valeur |
 |---|---|
 | Nom d'utilisateur | `review@cosme-check.com` |
-| Mot de passe | celui déclaré dans Play Console, section **Accès à l'application** |
+| Mot de passe | `0106-Apple` |
 
 Ce compte existe depuis le 11/07/2026, il est **déjà `tier = premium`**, et sa dernière
 connexion réussie date du 08/08/2026. C'est le même que pour la revue Google : un seul
 compte à maintenir, les deux magasins posent la même question.
 
-⚠️ **Le mot de passe n'est récupérable nulle part ailleurs.** Supabase n'en garde qu'une
-empreinte bcrypt, et il n'est ni dans le dépôt ni dans le `.env`. La seule copie en clair
-est celle saisie dans Play Console. S'il est perdu, il faut le réinitialiser par l'API
-admin de Supabase **et** mettre à jour les deux consoles, sinon la revue suivante de Google
-échoue sur des identifiants morts.
+✅ **Mot de passe posé le 20/08/2026** par l'API admin de Supabase, et **éprouvé par une
+vraie connexion** (`grant_type=password` a rendu un jeton), pas seulement écrit.
 
-⚠️ **Son plafond de crédits est de 5 par jour**, comme un compte gratuit, malgré
-`tier = premium` (relevé dans `user_credits` le 20/08/2026). Cinq analyses suffisent
-largement à une revue, et si le vérificateur les épuise il tombe sur l'écran d'abonnement,
-ce qui est un état légitime de l'app et non un défaut. À monter seulement si on veut lui
-laisser plus de marge.
+⚠️ **Play Console déclare l'ancien mot de passe.** Il faut le mettre à jour là-bas aussi,
+section **Accès à l'application**, sinon la prochaine revue de Google échoue sur des
+identifiants morts, avec un motif qui ne parle pas de mot de passe.
+
+✅ **Crédits vérifiés, et ma première lecture était fausse.** Le plafond ne vient pas de
+`user_credits.daily_limit` mais de `credit_tiers` : premium donne **150 crédits par mois**,
+pas 5 par jour. Un bonus de **500 crédits valable un an** a été ajouté en plus
+(`credit_grants`, expire le 20/08/2027), donc le compte affiche **650 crédits** et le
+vérificateur ne peut pas tomber sur un mur.
+
+⚠️ **« Abonnement annuel » ne correspond à rien dans le schéma** : `user_profiles.tier` est
+un drapeau sans date d'expiration. Le compte est premium tant que personne ne le change,
+donc il n'y a pas de date à poser. C'est le bonus de crédits qui porte la limite d'un an.
 
 ### Remarques
 
