@@ -185,6 +185,32 @@ reste passe par les notifications push), mais l'inscription à la lettre d'infor
 | **13** | ~~Claude~~ | ✅ **Aligné le 20/08/2026** : la fiche est en `1.0.0`, relu par l'API (`PREPARE_FOR_SUBMISSION`, sortie `MANUAL`). Le piège évité, pour mémoire : ⚠️ **Aligner le numéro de version.** App Store Connect crée la fiche en `1.0` par défaut et exige que le build porte **exactement** le numéro de la version soumise. `app.json` dit `1.0.0` : ce sont deux chaînes différentes. Poser la fiche en `1.0.0`, et non l'inverse, pour rester aligné avec Android. Sinon on attend devant un encart Build vide en croyant que le traitement n'est pas fini | la sélection du binaire dans la fiche |
 | **14** | Claude | `ios.buildNumber` : décider **maintenant** entre l'incrément manuel dans `app.json` (cohérent avec `appVersionSource: "local"`) et `autoIncrement` côté EAS. ⚠️ Un numéro de build iOS ne se téléverse qu'**une fois**, comme un versionCode Android : le second envoi du même numéro est refusé | des livraisons qui s'enchaînent sans blocage |
 
+> ✅ **Blocs A, B, C et E terminés le 20/08/2026, relus par l'API et non sur des captures.**
+>
+> ```
+> contrats, banque, W-8BEN, DAC7 ....... Actifs
+> App ID + capacites .................. Sign in with Apple, Push
+> cle d'API ASC ....................... V8UJ847B48, eprouvee par un vrai appel
+> fiche ............................... id 6803527040, version 1.0.0, sortie MANUAL
+> categories .......................... LIFESTYLE + UTILITIES
+> tarification ........................ gratuite, 175 territoires
+> droits sur le contenu ............... USES_THIRD_PARTY_CONTENT
+> confidentialite ..................... 12 types, PUBLIEE
+> classification age .................. declaree, 4+ international
+> description / mots-cles / promo ..... 2 641 / 91 / posee
+> compte de revue ..................... reviewer@cosme-check.com, premium, 650 credits
+> remarques de revue .................. 1 642 car.
+> abonnements ......................... prix, essai 3j, langues, niveaux, 175 territoires
+> notifications serveur Apple ......... production ET sandbox
+> RevenueCat .......................... app iOS, cle IAP, 4 produits, 2 packages
+> cle appl_ ........................... dans le .env ET chez EAS
+> ```
+>
+> **Ce qui manque ne peut plus venir que du binaire** : les deux captures de vérification
+> des abonnements, la preuve que la connexion Apple s'ouvre, et un achat en bac à sable.
+> Reste hors chemin : la clé APNs chez EAS, qui ne bloque pas le build mais sans laquelle
+> aucune notification iOS ne partira.
+
 ### Bloc D, le binaire
 
 | # | Qui | Quoi | Débloque |
