@@ -493,7 +493,111 @@ Termine par ce bloc, valeurs complètes, rien après.
 
 ---
 
-## Annexe B, les commandes
+## Annexe B, le bloc A champ par champ : contrat, W-8BEN, DAC7
+
+**Où :** `appstoreconnect.apple.com`, onglet **Business** (celui de la capture).
+
+⚠️ **Se connecter avec l'Apple ID titulaire du compte** (Account Holder). Un rôle Admin
+voit la section mais **ne peut ni signer un contrat ni saisir des coordonnées bancaires**.
+À vérifier dans Utilisateurs et accès si un doute existe : c'est la cause la plus banale
+d'un bouton grisé qu'on croit cassé.
+
+### Les valeurs à avoir sous la main avant de commencer
+
+| Donnée | Valeur |
+|---|---|
+| Entité | Brian-Clarky BIENDOU, entrepreneur individuel |
+| Adresse | 5 Bis rue Vestrepain, 31100 Toulouse (adresse physique, jamais une boîte postale) |
+| SIREN | 919 153 189 |
+| SIRET | 919 153 189 00015 |
+| TVA intracommunautaire | FR33919153189 |
+| Numéro fiscal personnel | **13 chiffres**, sur ton avis d'impôt. ⚠️ Ce n'est **pas** le SIRET |
+| IBAN + BIC | le compte qui recevra les versements |
+| Date de naissance | exigée par DAC7 pour une personne physique |
+
+### 1. Le contrat Applications payantes
+
+Business > Accords. La ligne **Applications payantes** porte un bouton *Demander* ou
+*Accepter les conditions*. Statut visé : **Actif**.
+
+⚠️ **C'est lui qui fait apparaître les sections bancaire et fiscale.** Tant qu'il n'est
+pas signé, il n'y a rien à remplir en dessous, et **aucun achat ne fonctionne, pas même
+en bac à sable**.
+
+### 2. Les coordonnées bancaires
+
+Business > Informations bancaires > Ajouter un compte bancaire. IBAN, BIC, devise **EUR**,
+adresse de la banque.
+
+⚠️ **Le nom du titulaire du compte doit correspondre à l'entité du compte développeur.**
+Un écart, même une abréviation, se solde par un rejet qui arrive plusieurs jours plus
+tard, sans explication détaillée.
+
+### 3. Les formulaires fiscaux
+
+Business > Informations fiscales. Trois blocs, tous ne s'affichent pas toujours.
+
+**a. États-Unis, formulaire W-8BEN** (le formulaire des personnes physiques ; une société
+remplirait un W-8BEN-E) :
+
+| Champ | Ce qu'on met |
+|---|---|
+| Nom, pays de citoyenneté | nom civil, **France** |
+| Adresse de résidence permanente | l'adresse ci-dessus, telle quelle |
+| **Foreign TIN (FTIN)** | le **numéro fiscal à 13 chiffres**. ⚠️ Pas le SIRET, pas la TVA |
+| Avantages conventionnels | **cocher**, pays **France**, **article 12 (Redevances)**, taux **0 %** |
+| Signature | signature électronique, date, capacité « soi-même » |
+
+⚠️ **Le paragraphe des avantages conventionnels n'est pas décoratif.** Sans lui, les États-Unis
+retiennent **30 %** à la source sur les ventes réalisées là-bas. La convention
+France-États-Unis ramène ce taux à zéro, mais seulement si la case est cochée.
+
+**b. Certificat de statut étranger**, s'il est demandé : mêmes informations, autre
+formulaire.
+
+**c. Autres juridictions** : Apple demande parfois la TVA pour l'Union, et des
+déclarations pour le Japon, l'Australie ou le Canada. Pour la France, c'est
+`FR33919153189`.
+
+### 4. DAC7
+
+Section ou bandeau propre dans Business. Apple est tenu de collecter, pour l'Union : nom
+légal, adresse, **date de naissance**, numéro fiscal, numéro de TVA, identifiant
+d'entreprise (SIREN ou SIRET) et État membre de résidence.
+
+**La question qui compte :** « l'une de vos apps fournit-elle des services personnels ? »
+Réponse : **Non**. La directive vise les plateformes qui mettent en relation un prestataire
+et un client (location, transport, vente de biens, travail à la tâche). CosmeCheck vend sa
+propre production logicielle : aucun tiers vendeur à déclarer, donc rien à reporter
+trimestriellement.
+
+⚠️ **Sans DAC7 validé, Apple refuse la soumission d'une app neuve** et peut bloquer les
+versements. C'est un motif de refus qui ne parle jamais de DAC7.
+
+### 5. Le statut visé, et ce qu'on ne peut pas accélérer
+
+Toutes les lignes de Business doivent afficher **Actif** : le contrat, le compte bancaire,
+chaque formulaire fiscal, DAC7. Compter **plusieurs jours**, et il n'y a rien à faire
+pendant ce délai à part avancer les étapes 3 à 5 du bloc A, qui n'en dépendent pas.
+
+⚠️ **Aucun achat n'est éprouvable avant.** Ni un achat de production, ni un achat en bac à
+sable, ni un achat depuis TestFlight. Un test de paiement lancé trop tôt échoue pour une
+raison qui ressemble à un défaut de code, et on cherche dans le code.
+
+### 6. ⚠️ Une décision à prendre dans la même session, parce qu'elle est lente à défaire
+
+Membership details : le **type d'entité** du compte Apple. S'il est **Individual**, le nom
+de vendeur affiché sur la page App Store est ton **nom civil**, pas « Cosme Check » ni
+« Origma ». Passer en **Organization** exige un numéro **D-U-N-S** et une nouvelle
+vérification d'identité, et ça ne se fait pas confortablement après la soumission.
+
+Le compte Google Play, lui, est déjà en organisation. L'asymétrie n'a aucune conséquence
+technique, seulement une conséquence d'image sur la fiche : à trancher maintenant, pas au
+moment de soumettre.
+
+---
+
+## Annexe C, les commandes
 
 ```bash
 npx tsc --noEmit                                   # doit être 0 erreur
