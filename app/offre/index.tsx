@@ -1,10 +1,13 @@
 /**
- * OffreScreen — paywall Premium de Cosme Check (RevenueCat).
+ * OffreScreen : paywall Premium de Cosme Check (RevenueCat).
  *
  * Vue PLANS (mockup validé) : jauge de notation en hero, titre « Débloque ton
  * analyse personnalisée », 5 bénéfices tous personnalisés « pour toi », bandeau
- * de réassurance, deux plans côte à côte (Annuel 49,99 € mis en avant /
- * Mensuel 9,99 €), CTA rose « Commencer l'essai gratuit », mentions légales.
+ * de réassurance, deux plans côte à côte (Annuel mis en avant / Mensuel), CTA
+ * rose « Commencer l'essai gratuit », mentions légales.
+ *
+ * ⚠️ Les prix ne sont JAMAIS écrits ici : ils viennent du magasin via
+ * `lib/paywall/prices.ts`. Voir la note du 20/08/2026 dans ce module.
  *
  * S'affiche : après onboarding (paywall skippable, Apple §3.1.1), quand les
  * crédits sont épuisés, depuis la sidebar et depuis le profil.
@@ -30,7 +33,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import Purchases, { PACKAGE_TYPE, type PurchasesPackage } from 'react-native-purchases'
+import Purchases, { type PurchasesPackage } from 'react-native-purchases'
 
 import { PressableScale } from '@/components/design/motion'
 import { Reveal } from '@/components/design/Reveal'
@@ -42,9 +45,19 @@ import { typography } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { usePurchases } from '@/hooks/usePurchases'
 import { useProfile } from '@/hooks/useProfile'
+import {
+  annualPerMonthLabel,
+  findPlanPackage,
+  planPriceLabel,
+  renewLine,
+  savingsPercent,
+  type PlanId,
+} from '@/lib/paywall/prices'
 
-type PlanId = 'monthly' | 'yearly'
 type Tab = 'plans' | 'subscription'
+
+/** Affiché tant que le magasin n'a pas répondu : jamais un prix inventé. */
+const PRIX_INCONNU = '…'
 
 const GAUGE = require('@/assets/images/paywall-gauge.webp')
 
@@ -81,10 +94,23 @@ const OffreScreen: FC = () => {
     else router.back()
   }
 
+  // ── Prix : ils viennent du MAGASIN, jamais du code ────────────────────
+  // Le paywall affichait 7,99 € et 49,99 € en dur pendant que Google Play
+  // encaissait 9,49 € et 59,99 €. Un prix affiché est une promesse : une seule
+  // source, celle qui débite. Les deux magasins n'ont pas les mêmes paliers.
+  const packages: PurchasesPackage[] = offerings?.current?.availablePackages ?? []
+  const monthlyPkg = findPlanPackage(packages, 'monthly')
+  const yearlyPkg = findPlanPackage(packages, 'yearly')
+  const selectedPkg = selected === 'yearly' ? yearlyPkg : monthlyPkg
+
+  const monthlyPrice = planPriceLabel(monthlyPkg)
+  const yearlyPrice = planPriceLabel(yearlyPkg)
+  const yearlyPerMonth = annualPerMonthLabel(yearlyPkg)
+  const savePercent = savingsPercent(monthlyPkg, yearlyPkg)
+  const priceLine = renewLine(selected, selectedPkg)
+
   const handlePurchase = async () => {
-    const current = offerings?.current
-    const pkgs: PurchasesPackage[] = current?.availablePackages ?? []
-    if (!current || pkgs.length === 0) {
+    if (packages.length === 0) {
       Alert.alert(
         'Offre indisponible',
         "Les abonnements ne se chargent pas pour le moment. Vérifie ta connexion et réessaie.",
@@ -92,17 +118,9 @@ const OffreScreen: FC = () => {
       return
     }
 
-    // Sélection ROBUSTE par type de package (ANNUAL / MONTHLY). RevenueCat les
-    // nomme `$rc_annual` / `$rc_monthly` : on ne se fie PAS à l'identifiant exact.
-    const wantAnnual = selected === 'yearly'
-    const pkg =
-      pkgs.find((p) => p.packageType === (wantAnnual ? PACKAGE_TYPE.ANNUAL : PACKAGE_TYPE.MONTHLY)) ??
-      pkgs.find((p) =>
-        p.identifier.toLowerCase().includes(wantAnnual ? 'annual' : 'month') ||
-        p.identifier.toLowerCase().includes(wantAnnual ? 'year' : 'month'),
-      ) ??
-      pkgs[0]
-
+    // Le même package que celui dont on a affiché le prix, sans repli sur
+    // `packages[0]` : mieux vaut refuser que débiter pour un plan non montré.
+    const pkg = selectedPkg
     if (!pkg) {
       Alert.alert('Plan introuvable', "Ce plan n'est pas configuré dans la boutique pour le moment.")
       return
@@ -159,11 +177,9 @@ const OffreScreen: FC = () => {
     )
   }
 
-  const priceLine = selected === 'yearly' ? 'Puis 49,99 €/an.' : 'Puis 7,99 €/mois.'
-
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      {/* Header — croix de fermeture (gauche) + logo (centré). */}
+      {/* Header : croix de fermeture (gauche) + logo (centré). */}
       <View style={styles.header}>
         <Pressable
           onPress={handleClose}
@@ -228,7 +244,7 @@ const OffreScreen: FC = () => {
         ) : (
           // ═══ PLANS (paywall) ═══
           <Reveal stagger={60}>
-            {/* Hero — jauge de notation (aiguille vers le vert). */}
+            {/* Hero : jauge de notation (aiguille vers le vert). */}
             <Image source={GAUGE} style={styles.gauge} resizeMode="contain" />
 
             <Text style={styles.title}>
@@ -239,7 +255,7 @@ const OffreScreen: FC = () => {
               Chaque produit, chaque conseil, chaque alternative : pensés pour toi, ta peau et ton profil.
             </Text>
 
-            {/* Bénéfices — tous personnalisés « pour toi » — juste après l'accroche. */}
+            {/* Bénéfices, tous personnalisés « pour toi », juste après l'accroche. */}
             <WhiteCard padding={spacing.lg}>
               <BenefitRow>
                 Analyse de chaque produit <Text style={styles.benefitBold}>personnalisée</Text> à ton profil
@@ -261,18 +277,22 @@ const OffreScreen: FC = () => {
               </BenefitRow>
             </WhiteCard>
 
-            {/* Plans côte à côte — en bas, juste avant la réassurance. */}
+            {/* Plans côte à côte, en bas, juste avant la réassurance. */}
             <View style={[styles.plansRow, styles.plansRowBelow]}>
               <PressableScale
                 onPress={() => setSelected('yearly')}
                 style={[styles.planCol, selected === 'yearly' && styles.planColActive]}
               >
-                <View style={styles.saveBadge}>
-                  <Text style={styles.saveBadgeText}>ÉCONOMISE 48%</Text>
-                </View>
+                {savePercent !== null && (
+                  <View style={styles.saveBadge}>
+                    <Text style={styles.saveBadgeText}>ÉCONOMISE {savePercent}%</Text>
+                  </View>
+                )}
                 <Text style={styles.planName}>Annuel</Text>
-                <Text style={[styles.planBigPrice, selected === 'yearly' && styles.planBigPriceActive]}>49,99 €</Text>
-                <Text style={styles.planSub}>~4,17 €/mois</Text>
+                <Text style={[styles.planBigPrice, selected === 'yearly' && styles.planBigPriceActive]}>
+                  {yearlyPrice ?? PRIX_INCONNU}
+                </Text>
+                <Text style={styles.planSub}>{yearlyPerMonth ? `~${yearlyPerMonth}/mois` : 'par an'}</Text>
                 <Ionicons
                   name={selected === 'yearly' ? 'radio-button-on' : 'radio-button-off'}
                   size={22}
@@ -286,7 +306,9 @@ const OffreScreen: FC = () => {
                 style={[styles.planCol, selected === 'monthly' && styles.planColActive]}
               >
                 <Text style={styles.planName}>Mensuel</Text>
-                <Text style={[styles.planBigPrice, selected === 'monthly' && styles.planBigPriceActive]}>7,99 €</Text>
+                <Text style={[styles.planBigPrice, selected === 'monthly' && styles.planBigPriceActive]}>
+                  {monthlyPrice ?? PRIX_INCONNU}
+                </Text>
                 <Text style={styles.planSub}>/mois</Text>
                 <Ionicons
                   name={selected === 'monthly' ? 'radio-button-on' : 'radio-button-off'}
@@ -328,7 +350,7 @@ const OffreScreen: FC = () => {
         )}
       </ScrollView>
 
-      {/* Footer CTA — toujours visible, ne scrolle pas. */}
+      {/* Footer CTA : toujours visible, ne scrolle pas. */}
       <View style={styles.footer}>
         {isPremium && activeTab === 'subscription' ? (
           <>
@@ -362,7 +384,9 @@ const OffreScreen: FC = () => {
                 )}
               </View>
             </PressableScale>
-            <Text style={styles.ctaHint}>{priceLine} Annule quand tu veux.</Text>
+            <Text style={styles.ctaHint}>
+              {priceLine ? `${priceLine} ` : ''}Annule quand tu veux.
+            </Text>
             {fromOnboarding && (
               <Pressable onPress={() => void dismissOnboardingPaywall()} hitSlop={8} style={styles.laterBtn}>
                 <Text style={styles.laterText}>Plus tard</Text>
