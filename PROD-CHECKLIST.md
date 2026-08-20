@@ -157,7 +157,7 @@ jours à faire.
 |---|---|---|---|
 | **6** | Toi | **Clé APNs** (.p8), environnement **Sandbox & Production**, portée équipe. ⚠️ Ces deux réglages ne sont **pas modifiables après coup** et le compte n'autorise que deux clés vivantes. « Production seul » interdirait tout test de notification sur un build de développement, en silence | les notifications iOS, que `push-dispatch` envoie déjà côté Android |
 | **7** | Toi | **Clé Achat intégré** (.p8), un **autre type de clé** que celle du point 5. ⚠️ Elle n'est pas optionnelle : l'app est sur `react-native-purchases` v10, donc StoreKit 2, où une transaction **ne s'enregistre pas du tout** sans cette clé. L'utilisateur paierait sans rien recevoir. ⚠️ Ne pas remplir le « secret partagé » à la place, il est marqué *Legacy* chez RevenueCat et les deux se contredisent | l'encaissement iOS |
-| **8** | Toi | ⚠️ **Le premier abonnement ne se soumet PAS seul** : App Store Connect exige qu'il parte **avec une version de l'app**, donc dans la même soumission que le build. Les deux abonnements doivent exister avant l'envoi, pas après. **Les deux abonnements dans App Store Connect**, identifiants **identiques à Google Play** : `premium_monthly` et `premium_yearly`, dans un **même groupe d'abonnement** (sinon on ne peut pas passer de mensuel à annuel sans résilier), prix alignés sur **9,49 €/mois et 59,99 €/an** (relevés par l'API Google Play le 20/08/2026, et **non** sur la copie de l'app, voir 5.7), essai gratuit **3 jours** en offre d'introduction (Play : offre `free-trial`, `P3D`, sur les deux plans). ⚠️ Les deux dans le **même groupe** et au **même niveau** : un changement mensuel vers annuel devient alors un crossgrade immédiat au prorata, au lieu d'exiger une résiliation. ⚠️ **Un identifiant qui diverge encaisse un paiement sans rien créditer.** C'est la doctrine : un identifiant unique du magasin jusqu'à la base. ⚠️ Vérifier que les paliers de prix Apple contiennent exactement 7,99 et 49,99, sinon **ne pas choisir un voisin de ta propre initiative**, me le dire | la revue des produits, qui exige aussi une capture par produit |
+| **8** | ~~Toi~~ | ✅ **Fait le 20/08/2026, relu par l'API.** Groupe `Cosme Check Premium` (id 22322585), langue fr-FR posée sur le groupe **et** sur les deux produits, `premium_yearly` (id 6803535930, niveau 1, 1 an, **59,99 €**) et `premium_monthly` (id 6803536078, niveau 2, 1 mois, **9,99 €**), 175 territoires chacun, essai **3 jours sans date de fin**, partage familial **désactivé**. Il ne manque plus que les **captures de vérification**, qui attendent le build TestFlight (voir 5.8). ⚠️ **Le premier abonnement ne se soumet PAS seul** : App Store Connect exige qu'il parte **avec une version de l'app**, donc dans la même soumission que le build. Les deux abonnements doivent exister avant l'envoi, pas après. **Les deux abonnements dans App Store Connect**, identifiants **identiques à Google Play** : `premium_monthly` et `premium_yearly`, dans un **même groupe d'abonnement** (sinon on ne peut pas passer de mensuel à annuel sans résilier), prix alignés sur **9,49 €/mois et 59,99 €/an** (relevés par l'API Google Play le 20/08/2026, et **non** sur la copie de l'app, voir 5.7), essai gratuit **3 jours** en offre d'introduction (Play : offre `free-trial`, `P3D`, sur les deux plans). ⚠️ Les deux dans le **même groupe** et au **même niveau** : un changement mensuel vers annuel devient alors un crossgrade immédiat au prorata, au lieu d'exiger une résiliation. ⚠️ **Un identifiant qui diverge encaisse un paiement sans rien créditer.** C'est la doctrine : un identifiant unique du magasin jusqu'à la base. ⚠️ Vérifier que les paliers de prix Apple contiennent exactement 7,99 et 49,99, sinon **ne pas choisir un voisin de ta propre initiative**, me le dire | la revue des produits, qui exige aussi une capture par produit |
 | **9** | Toi | **App iOS chez RevenueCat, dans le MÊME projet que l'Android** (pas un projet neuf, sinon l'utilisateur premium sur Android redevient gratuit sur iOS). Y déposer la clé Achat intégré du point 7, relever la clé publique `appl_…`, rattacher les deux produits à l'entitlement **`premium`** **et aux packages de l'offering `current`**. ⚠️ **Différence avec RevealChat, qui n'avait pas d'offering** : ici [app/offre/index.tsx:85-102](app/offre/index.tsx#L85-L102) lit `offerings.current.availablePackages` et choisit par `packageType` MONTHLY / ANNUAL. Sans les produits iOS dans ce même offering, le paywall iOS affiche « Ce plan n'est pas configuré dans la boutique pour le moment » et rien ne se vend (vérifier au passage que la clé de recherche est bien `premium` et pas « Cosme Check Pro », le code compare à `user_profiles.tier`), et coller l'**URL de notification du serveur App Store** en **Production ET en Sandbox** | l'octroi du premium sur iOS, et le signalement des remboursements |
 
 ⚠️ **Le bandeau « Finish Setting up Sign in with Apple » propose quatre étapes, et trois
@@ -368,6 +368,34 @@ de Google, et le prix par mois de l'annuel se calcule au lieu d'être recopié.
 
 ⚠️ Prévoir le cas où l'offering est absent (RevenueCat non joignable, clé manquante) :
 afficher un état neutre, jamais un chiffre inventé.
+
+### 5.8 Le mensuel coûte 9,99 € sur iOS et 9,49 € sur Android, et c'est voulu
+
+Décision prise le 20/08/2026, après vérification. Ce n'est pas une contrainte de grille :
+l'API Apple donne **800 paliers** pour la France, dont **9,49 €**. Le prix iOS plus élevé
+est un choix commercial, contrairement au cas `quiz_2` de RevealChat où Apple s'arrêtait
+réellement au palier inférieur.
+
+| | Apple | Google Play |
+|---|---|---|
+| `premium_yearly` | 59,99 € | 59,99 € |
+| `premium_monthly` | **9,99 €** | **9,49 €** |
+
+**Ce que ça implique, et rien de plus :**
+
+1. Le paywall affiche le prix **du magasin** depuis le correctif de 5.7, donc un iPhone
+   montre 9,99 € et un Android 9,49 €. Personne n'est trompé, et c'est précisément ce que
+   la correction rend possible.
+2. Le badge d'économie est calculé, donc il dira **50 %** sur iOS et **47 %** sur Android.
+   Deux chiffres différents pour la même offre, assumés.
+3. **Aucun écart de comptabilité**, vérifié : `revenucat-webhook` déclare bien un champ
+   `price` dans son interface mais ne l'écrit **nulle part**, et aucune table ne stocke de
+   prix. C'est ce qui distingue ce cas du `quiz_2` de RevealChat, où `app_config` gardait
+   un `price_cents` que le magasin contredisait.
+
+⚠️ **Le moment de revenir sur ce choix est maintenant, pas plus tard** : aucun abonné iOS
+n'existe. Une fois la vente ouverte, changer un prix impose de gérer les abonnements en
+cours.
 
 ### 5.6 Le reste, par ordre décroissant
 
