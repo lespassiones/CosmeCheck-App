@@ -120,36 +120,41 @@ vérificateur qui ne peut pas passer cet écran rejette pour app incomplète (r�
 
 | Champ | Valeur |
 |---|---|
-| Nom d'utilisateur | `review@cosme-check.com` |
+| Nom d'utilisateur | `reviewer@cosme-check.com` |
 | Mot de passe | `0106-Apple` |
 
-Ce compte existe depuis le 11/07/2026, il est **déjà `tier = premium`**, et sa dernière
-connexion réussie date du 08/08/2026. C'est le même que pour la revue Google : un seul
-compte à maintenir, les deux magasins posent la même question.
+**Compte créé le 20/08/2026**, distinct de `review@cosme-check.com` qui servait à la revue
+Google et qui reste intact.
 
-✅ **Mot de passe posé le 20/08/2026** par l'API admin de Supabase, et **éprouvé par une
-vraie connexion** (`grant_type=password` a rendu un jeton), pas seulement écrit.
+Ce qui a été posé, et vérifié depuis le serveur plutôt que supposé :
 
-⚠️ **Play Console déclare l'ancien mot de passe.** Il faut le mettre à jour là-bas aussi,
-section **Accès à l'application**, sinon la prochaine revue de Google échoue sur des
-identifiants morts, avec un motif qui ne parle pas de mot de passe.
-
-✅ **Crédits vérifiés, et ma première lecture était fausse.** Le plafond ne vient pas de
-`user_credits.daily_limit` mais de `credit_tiers` : premium donne **150 crédits par mois**,
-pas 5 par jour. Un bonus de **500 crédits valable un an** a été ajouté en plus
-(`credit_grants`, expire le 20/08/2027), donc le compte affiche **650 crédits** et le
-vérificateur ne peut pas tomber sur un mur.
+| | |
+|---|---|
+| Connexion | **éprouvée pour de vrai** : `grant_type=password` rend un jeton |
+| `tier` | `premium` |
+| Crédits | la RPC `cosme_check_get_credits`, appelée **en tant que ce compte**, répond `limite 150, bonus 500, disponibles 650` |
+| Bonus | 500 crédits, `credit_grants` id 66, expire le **20/08/2027** |
+| Profil peau | cloné depuis le compte de revue Google, champs libres nettoyés : peau normale, 4 préoccupations, 6 familles restreintes |
+| Onboarding | `onboardingShown` et `paywall_shown` à `true`, donc le vérificateur **arrive directement dans l'app** au lieu de traverser sept écrans de configuration |
 
 ⚠️ **« Abonnement annuel » ne correspond à rien dans le schéma** : `user_profiles.tier` est
-un drapeau sans date d'expiration. Le compte est premium tant que personne ne le change,
-donc il n'y a pas de date à poser. C'est le bonus de crédits qui porte la limite d'un an.
+un drapeau sans date d'expiration, le compte est donc premium jusqu'à ce que quelqu'un le
+change. C'est le bonus de crédits qui porte la limite d'un an.
+
+⚠️ **Play Console déclare encore l'ancien compte.** Si tu veux un seul compte pour les deux
+magasins, remplace-le là-bas par `reviewer@cosme-check.com` / `0106-Apple`, section
+**Accès à l'application**. Sinon les deux comptes coexistent, ce qui marche aussi.
+
+⚠️ **Un compte de revue reste un compte réel de la base.** Ne pas le supprimer pendant une
+revue, et penser à ce qu'il porte : ici un profil peau complet, donc de la donnée de santé
+au sens d'Apple, cohérente avec l'étiquette de confidentialité qu'on déclarera.
 
 ### Remarques
 
 ```
 L'application analyse la composition (liste INCI) des produits cosmétiques et la confronte au profil de peau de la personne.
 
-Le compte fourni est déjà abonné Premium : aucun achat n'est nécessaire pour voir l'application entière.
+Le compte fourni est déjà abonné Premium et son profil de peau est renseigné : aucun achat n'est nécessaire pour voir l'application entière.
 
 POUR ANALYSER UN PRODUIT SANS EN AVOIR UN SOUS LA MAIN
 Toucher le bouton central « Décode » de la barre du bas, puis l'une des trois méthodes :
