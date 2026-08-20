@@ -157,8 +157,8 @@ jours à faire.
 |---|---|---|---|
 | **6** | Toi | **Clé APNs** (.p8), environnement **Sandbox & Production**, portée équipe. ⚠️ Ces deux réglages ne sont **pas modifiables après coup** et le compte n'autorise que deux clés vivantes. « Production seul » interdirait tout test de notification sur un build de développement, en silence | les notifications iOS, que `push-dispatch` envoie déjà côté Android |
 | **7** | Toi | **Clé Achat intégré** (.p8), un **autre type de clé** que celle du point 5. ⚠️ Elle n'est pas optionnelle : l'app est sur `react-native-purchases` v10, donc StoreKit 2, où une transaction **ne s'enregistre pas du tout** sans cette clé. L'utilisateur paierait sans rien recevoir. ⚠️ Ne pas remplir le « secret partagé » à la place, il est marqué *Legacy* chez RevenueCat et les deux se contredisent | l'encaissement iOS |
-| **8** | Toi | ⚠️ **Le premier abonnement ne se soumet PAS seul** : App Store Connect exige qu'il parte **avec une version de l'app**, donc dans la même soumission que le build. Les deux abonnements doivent exister avant l'envoi, pas après. **Les deux abonnements dans App Store Connect**, identifiants **identiques à Google Play** : `premium_monthly` et `premium_yearly`, dans un **même groupe d'abonnement** (sinon on ne peut pas passer de mensuel à annuel sans résilier), prix alignés sur 7,99 €/mois et 49,99 €/an, essai gratuit 3 jours en offre d'introduction. ⚠️ **Un identifiant qui diverge encaisse un paiement sans rien créditer.** C'est la doctrine : un identifiant unique du magasin jusqu'à la base. ⚠️ Vérifier que les paliers de prix Apple contiennent exactement 7,99 et 49,99, sinon **ne pas choisir un voisin de ta propre initiative**, me le dire | la revue des produits, qui exige aussi une capture par produit |
-| **9** | Toi | **App iOS chez RevenueCat, dans le MÊME projet que l'Android** (pas un projet neuf, sinon l'utilisateur premium sur Android redevient gratuit sur iOS). Y déposer la clé Achat intégré du point 7, relever la clé publique `appl_…`, rattacher les deux produits à l'entitlement **`premium`** (vérifier au passage que la clé de recherche est bien `premium` et pas « Cosme Check Pro », le code compare à `user_profiles.tier`), et coller l'**URL de notification du serveur App Store** en **Production ET en Sandbox** | l'octroi du premium sur iOS, et le signalement des remboursements |
+| **8** | Toi | ⚠️ **Le premier abonnement ne se soumet PAS seul** : App Store Connect exige qu'il parte **avec une version de l'app**, donc dans la même soumission que le build. Les deux abonnements doivent exister avant l'envoi, pas après. **Les deux abonnements dans App Store Connect**, identifiants **identiques à Google Play** : `premium_monthly` et `premium_yearly`, dans un **même groupe d'abonnement** (sinon on ne peut pas passer de mensuel à annuel sans résilier), prix alignés sur **9,49 €/mois et 59,99 €/an** (relevés par l'API Google Play le 20/08/2026, et **non** sur la copie de l'app, voir 5.7), essai gratuit **3 jours** en offre d'introduction (Play : offre `free-trial`, `P3D`, sur les deux plans). ⚠️ Les deux dans le **même groupe** et au **même niveau** : un changement mensuel vers annuel devient alors un crossgrade immédiat au prorata, au lieu d'exiger une résiliation. ⚠️ **Un identifiant qui diverge encaisse un paiement sans rien créditer.** C'est la doctrine : un identifiant unique du magasin jusqu'à la base. ⚠️ Vérifier que les paliers de prix Apple contiennent exactement 7,99 et 49,99, sinon **ne pas choisir un voisin de ta propre initiative**, me le dire | la revue des produits, qui exige aussi une capture par produit |
+| **9** | Toi | **App iOS chez RevenueCat, dans le MÊME projet que l'Android** (pas un projet neuf, sinon l'utilisateur premium sur Android redevient gratuit sur iOS). Y déposer la clé Achat intégré du point 7, relever la clé publique `appl_…`, rattacher les deux produits à l'entitlement **`premium`** **et aux packages de l'offering `current`**. ⚠️ **Différence avec RevealChat, qui n'avait pas d'offering** : ici [app/offre/index.tsx:85-102](app/offre/index.tsx#L85-L102) lit `offerings.current.availablePackages` et choisit par `packageType` MONTHLY / ANNUAL. Sans les produits iOS dans ce même offering, le paywall iOS affiche « Ce plan n'est pas configuré dans la boutique pour le moment » et rien ne se vend (vérifier au passage que la clé de recherche est bien `premium` et pas « Cosme Check Pro », le code compare à `user_profiles.tier`), et coller l'**URL de notification du serveur App Store** en **Production ET en Sandbox** | l'octroi du premium sur iOS, et le signalement des remboursements |
 
 ⚠️ **Le bandeau « Finish Setting up Sign in with Apple » propose quatre étapes, et trois
 ne nous concernent pas.** *Create Service ID for Web Authentication* et *Create Key*
@@ -334,6 +334,40 @@ Ce qui vaut d'être porté depuis RevealChat, dans l'ordre du gain :
 
 ⚠️ **Un versionCode ne se téléverse qu'une fois pour toute l'application**, pas une fois
 par piste. Choisir la piste cible **avant** d'envoyer.
+
+### 5.7 🔴 Le paywall annonce des prix que les magasins n'appliquent pas
+
+Trouvé le 20/08/2026, en interrogeant l'API Google Play pour savoir quoi saisir chez
+Apple. Ce n'est pas une question de forme.
+
+| | Ce que l'app affiche | Ce que Google encaisse |
+|---|---|---|
+| Mensuel | **7,99 €** | **9,49 €** |
+| Annuel | **49,99 €**, « ~4,17 €/mois » | **59,99 €** |
+
+Les valeurs sont **écrites en dur** dans [app/offre/index.tsx:162](app/offre/index.tsx#L162),
+[274](app/offre/index.tsx#L274), [275](app/offre/index.tsx#L275) et
+[289](app/offre/index.tsx#L289), et les vrais prix viennent de la console Play (offre
+`free-trial` de 3 jours confirmée sur les deux plans, 173 régions). Quelqu'un touche
+« 7,99 € » aujourd'hui et voit 9,49 € dans la feuille de paiement de Google.
+
+**Trois raisons d'en faire un correctif et pas une ligne de plus dans la liste :**
+
+1. C'est vrai **maintenant**, sur l'app que le public a installée. Ce n'est pas un risque futur.
+2. Un prix affiché faux est un motif de rejet direct côté Apple (3.1.2), et l'app y sera
+   soumise dans les jours qui viennent. Autant ne pas expédier le défaut sur un second
+   magasin.
+3. Le badge « ÉCONOMISE 48 % » reste juste, par coïncidence (47,3 % sur les vrais prix,
+   47,9 % sur les faux). Ça n'excuse rien, ça montre juste que personne ne l'a recalculé.
+
+**Le correctif, et il est structurel :** afficher le prix **du magasin**, jamais une
+constante. `pkg.product.priceString` est déjà dans les mains du composant via
+`offerings.current.availablePackages`. C'est aussi la seule façon propre de vivre avec
+deux magasins dont les paliers de prix diffèrent : Apple n'a pas forcément le palier exact
+de Google, et le prix par mois de l'annuel se calcule au lieu d'être recopié.
+
+⚠️ Prévoir le cas où l'offering est absent (RevenueCat non joignable, clé manquante) :
+afficher un état neutre, jamais un chiffre inventé.
 
 ### 5.6 Le reste, par ordre décroissant
 
