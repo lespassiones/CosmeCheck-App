@@ -27,6 +27,13 @@
         "serviceAccountKeyPath": "./play-service-account.json",
         "track": "internal",
         "releaseStatus": "draft"
+      },
+      "ios": {
+        "ascAppId": "6803527040",
+        "appleTeamId": "7F96ZVZ4PC",
+        "ascApiKeyPath": "./AuthKey_V8UJ847B48.p8",
+        "ascApiKeyId": "V8UJ847B48",
+        "ascApiKeyIssuerId": "7ff0f8c5-16e0-4ba8-8dad-76b2a629c4e3"
       }
     }
   }
