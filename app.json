@@ -20,6 +20,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.cosmecheck.app",
       "buildNumber": "1",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSCameraUsageDescription": "CosmeCheck utilise la caméra pour scanner les codes-barres et photographier les listes d'ingrédients.",
         "NSPhotoLibraryUsageDescription": "CosmeCheck accède à vos photos pour analyser les emballages de produits.",

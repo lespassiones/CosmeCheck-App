@@ -76,7 +76,27 @@ de code-barres passe par `expo-camera`, l'OCR par `expo-image-picker`, les deux 
 
 ---
 
-## 2. Le seul blocage de code : la connexion Apple
+## 2. ✅ Le seul blocage de code : la connexion Apple, écrite le 20/08/2026
+
+> **Fait.** [lib/auth/apple.ts](lib/auth/apple.ts) (flux natif), bouton Apple à côté du
+> bouton Google dans [app/(auth)/welcome.tsx](app/(auth)/welcome.tsx), `usesAppleSignIn`
+> dans [app.json](app.json), et le fournisseur Apple activé sur Supabase
+> (`external_apple_enabled = true`, `client_id = com.cosmecheck.app`, secret vide).
+> Vérifié : **0 erreur** de typage dans le code de l'app, **929 tests / 71 suites** au
+> vert, et les deux bundles JS (Android **et** iOS) se construisent.
+>
+> ⚠️ **Ce qui n'est pas encore prouvé, et ne peut pas l'être ici** : la feuille Apple
+> elle-même. Elle exige un binaire iOS sur un iPhone réel, donc TestFlight (étape 17).
+> Windows n'offre aucun contournement.
+>
+> ⚠️ **Un risque de forme, assumé** : le bouton reprend le style maison (pastille blanche,
+> logo, libellé dessous) pour être cohérent avec Google, au lieu du bouton officiel
+> `AppleAuthenticationButton`. Les recommandations d'Apple préfèrent le leur. Si le
+> relecteur objecte, l'échange est d'une ligne dans `welcome.tsx`, et c'est le genre de
+> remarque qui se corrige en une journée, pas un rejet de fond.
+>
+> Le détail de ce qui a été écrit et pourquoi reste ci-dessous, il documente les
+> décisions.
 
 **Règle 4.8 de l'App Store : dès qu'une connexion tierce est proposée, Apple doit l'être
 aussi.** CosmeCheck propose Google, et un seul bouton dans toute l'app
@@ -144,7 +164,7 @@ jours à faire.
 
 | # | Qui | Quoi | Débloque |
 |---|---|---|---|
-| **10** | Claude | **Connexion Apple**, section 2 ci-dessus | la conformité 4.8, donc la possibilité d'être accepté |
+| **10** | ~~Claude~~ | ✅ **Connexion Apple écrite le 20/08/2026**, section 2. Flux natif, bouton iOS seulement, fournisseur activé côté Supabase. Reste à éprouver sur un iPhone (étape 17) | la conformité 4.8, donc la possibilité d'être accepté |
 | **11** | Claude | `EXPO_PUBLIC_REVENUCAT_IOS_KEY=appl_…` dans le `.env`, **et** en variable d'environnement EAS (portée projet, visibilité publique, environnement production). Le code la lit déjà | un binaire qui sait encaisser. Sans elle le build part avec une caisse muette, et le défaut ne se voit qu'au moment de payer |
 | **12** | Claude | **`eas.json`** : ajouter le profil d'envoi iOS (`appleId`, `ascAppId`, `appleTeamId`) et le bloc `ios` du profil `production`. Aujourd'hui `submit.production` ne connaît qu'Android, et `track: "internal"` + `releaseStatus: "draft"` ne correspondent plus à la réalité de production | `eas submit -p ios` |
 | **13** | Claude | ⚠️ **Aligner le numéro de version.** App Store Connect crée la fiche en `1.0` par défaut et exige que le build porte **exactement** le numéro de la version soumise. `app.json` dit `1.0.0` : ce sont deux chaînes différentes. Poser la fiche en `1.0.0`, et non l'inverse, pour rester aligné avec Android. Sinon on attend devant un encart Build vide en croyant que le traitement n'est pas fini | la sélection du binaire dans la fiche |

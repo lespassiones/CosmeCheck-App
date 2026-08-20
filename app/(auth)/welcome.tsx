@@ -1,17 +1,19 @@
 /**
- * WelcomeScreen — écran d'accueil de l'auth (point d'entrée non connecté).
+ * WelcomeScreen : écran d'accueil de l'auth (point d'entrée non connecté).
  *
  * Inspiré du pattern « landing » : marque centrée dans une pastille blanche,
- * un unique bouton Google (le seul de toute l'app — plus de doublon sur les
- * écrans connexion/inscription), puis deux CTA :
+ * la rangée des connexions tierces (Google, et Apple sur iPhone uniquement),
+ * seule de toute l'app (plus de doublon sur les écrans connexion/inscription),
+ * puis deux CTA :
  *   - « Créer un compte » (plein rose)  → /(auth)/sign-up  (nom + email + mdp)
  *   - « Connexion » (contour)           → /(auth)/sign-in  (email + mdp)
  * Le wordmark « Cosme Check » ferme l'écran en bas.
  */
 
-import { type FC, useState } from 'react'
+import { type FC, type ReactNode, useState } from 'react'
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -31,6 +33,7 @@ import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { LogoMark } from '@/components/shared/Logo'
 import { fontFamilies } from '@/constants/typography'
 import { signInWithGoogle } from '@/lib/auth/google'
+import { signInWithApple } from '@/lib/auth/apple'
 
 /** Logo Google officiel multicolore (4 couleurs). */
 const GoogleLogo: FC<{ size?: number }> = ({ size = 24 }) => (
@@ -54,47 +57,103 @@ const GoogleLogo: FC<{ size?: number }> = ({ size = 24 }) => (
   </Svg>
 )
 
+/** Logo Apple officiel, monochrome (deux tracés : la pomme et la feuille). */
+const AppleLogo: FC<{ size?: number }> = ({ size = 24 }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24">
+    <Path
+      fill={colors.ink}
+      d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09z"
+    />
+    <Path
+      fill={colors.ink}
+      d="M12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"
+    />
+  </Svg>
+)
+
+/** Un bouton de connexion tierce : pastille blanche avec le logo, label dessous. */
+const ProviderButton: FC<{
+  label: string
+  logo: ReactNode
+  loading: boolean
+  disabled: boolean
+  onPress: () => void
+}> = ({ label, logo, loading, disabled, onPress }) => (
+  <View style={styles.providerItem}>
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={({ pressed }) => [
+        styles.providerCircle,
+        pressed && !disabled && styles.providerCirclePressed,
+        disabled && styles.providerCircleDisabled,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={`Continuer avec ${label}`}
+    >
+      {loading ? <ActivityIndicator color={colors.inkMuted} size="small" /> : logo}
+    </Pressable>
+    <Text style={styles.providerLabel}>{label}</Text>
+  </View>
+)
+
 /**
- * Bouton Google circulaire (icône dans une pastille blanche + label dessous),
- * façon « Continuer avec ». Déclenche le flux OAuth PKCE ; l'annulation reste
- * silencieuse, seules les vraies erreurs s'affichent.
+ * Rangée « Continuer avec » : Google partout, Apple sur iPhone seulement.
+ *
+ * Apple n'apparaît pas sur Android : il n'y a pas de feuille native là-bas, et
+ * une porte web de plus à maintenir pour un usage que personne ne demande. Sur
+ * iOS le bouton est en revanche obligatoire, règle 4.8 de l'App Store, dès lors
+ * que Google est proposé.
+ *
+ * L'annulation reste silencieuse dans les deux cas, seules les vraies erreurs
+ * s'affichent, sous la rangée.
  */
-const GoogleCircleButton: FC = () => {
-  const [isLoading, setIsLoading] = useState(false)
+const ProviderRow: FC = () => {
+  const [busy, setBusy] = useState<'google' | 'apple' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const handlePress = async (): Promise<void> => {
+  const run = async (
+    provider: 'google' | 'apple',
+    signIn: () => Promise<{ ok: boolean; cancelled?: boolean; error?: string }>,
+    fallback: string,
+  ): Promise<void> => {
     Haptics.selectionAsync().catch(() => {})
     setError(null)
-    setIsLoading(true)
-    const result = await signInWithGoogle()
-    setIsLoading(false)
+    setBusy(provider)
+    const result = await signIn()
+    setBusy(null)
 
     if (result.ok || result.cancelled) return
-    setError(result.error ?? 'La connexion Google a échoué. Réessaie.')
+    setError(result.error ?? fallback)
   }
 
   return (
-    <View style={styles.googleWrap}>
-      <Text style={styles.googleCaption}>Continuer avec</Text>
-      <Pressable
-        onPress={() => void handlePress()}
-        disabled={isLoading}
-        style={({ pressed }) => [
-          styles.googleCircle,
-          pressed && !isLoading && styles.googleCirclePressed,
-          isLoading && styles.googleCircleDisabled,
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel="Continuer avec Google"
-      >
-        {isLoading ? (
-          <ActivityIndicator color={colors.inkMuted} size="small" />
-        ) : (
-          <GoogleLogo size={26} />
+    <View style={styles.providerWrap}>
+      <Text style={styles.providerCaption}>Continuer avec</Text>
+
+      <View style={styles.providerRow}>
+        <ProviderButton
+          label="Google"
+          logo={<GoogleLogo size={26} />}
+          loading={busy === 'google'}
+          disabled={busy !== null}
+          onPress={() =>
+            void run('google', signInWithGoogle, 'La connexion Google a échoué. Réessaie.')
+          }
+        />
+
+        {Platform.OS === 'ios' && (
+          <ProviderButton
+            label="Apple"
+            logo={<AppleLogo size={27} />}
+            loading={busy === 'apple'}
+            disabled={busy !== null}
+            onPress={() =>
+              void run('apple', signInWithApple, 'La connexion Apple a échoué. Réessaie.')
+            }
+          />
         )}
-      </Pressable>
-      <Text style={styles.googleLabel}>Google</Text>
+      </View>
 
       {error && (
         <View style={styles.errorRow}>
@@ -132,9 +191,9 @@ const WelcomeScreen: FC = () => {
             </Text>
           </View>
 
-          {/* Bouton Google (unique dans l'app) — rapproché du sous-titre */}
-          <View style={styles.googleBlock}>
-            <GoogleCircleButton />
+          {/* Connexions tierces (uniques dans l'app), rapprochées du sous-titre */}
+          <View style={styles.providerBlock}>
+            <ProviderRow />
           </View>
 
           {/* Séparateur */}
@@ -208,7 +267,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
   },
-  googleBlock: {
+  providerBlock: {
     marginTop: spacing['2xl'],
   },
   title: {
@@ -226,16 +285,25 @@ const styles = StyleSheet.create({
   spacer: {
     flex: 1,
   },
-  // ── Google ─────────────────────────────────────────────────────────
-  googleWrap: {
+  // ── Connexions tierces ─────────────────────────────────────────────
+  providerWrap: {
     alignItems: 'center',
     gap: spacing.sm,
   },
-  googleCaption: {
+  providerCaption: {
     ...typography.small,
     color: colors.inkMuted,
   },
-  googleCircle: {
+  providerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.xl,
+  },
+  providerItem: {
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  providerCircle: {
     width: 56,
     height: 56,
     borderRadius: radius.lg,
@@ -250,13 +318,13 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  googleCirclePressed: {
+  providerCirclePressed: {
     backgroundColor: colors.gray50,
   },
-  googleCircleDisabled: {
+  providerCircleDisabled: {
     opacity: 0.6,
   },
-  googleLabel: {
+  providerLabel: {
     ...typography.xsMedium,
     color: colors.inkMuted,
   },
