@@ -14,7 +14,7 @@ function isDev(): boolean {
 
 export function initSentry(): void {
   Sentry.init({
-    dsn: 'https://770577881dc05c83ca0d28d3f3fc70d0@o4511507951386624.ingest.de.sentry.io/4511507966328912',
+    dsn: 'https://10704bac96253f6579f7bc2459625abd@o4511507951386624.ingest.de.sentry.io/4511875471179856',
     // Désactivé en dev pour ne pas polluer le tableau de bord Sentry.
     enabled: !isDev(),
     tracesSampleRate: 0.1,

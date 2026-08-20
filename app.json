@@ -29,7 +29,7 @@
     "android": {
       "package": "com.cosmecheck.app",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 20,
+      "versionCode": 21,
       "minSdkVersion": 26,
       "targetSdkVersion": 36,
       "softwareKeyboardLayoutMode": "pan",
@@ -81,7 +81,7 @@
         {
           "url": "https://de.sentry.io/",
           "organization": "biendou",
-          "project": "react-native"
+          "project": "cosme-check"
         }
       ],
       [
