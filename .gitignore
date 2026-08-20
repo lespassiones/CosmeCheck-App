@@ -36,6 +36,9 @@ cosme-check-*.json
 sentry.properties
 
 # Logs / debug
+# Logs de build Gradle : volumineux, regenerables, et un log committe par
+# accident finit par embarquer des chemins locaux.
+*-build.log
 npm-debug.*
 yarn-debug.*
 yarn-error.*
