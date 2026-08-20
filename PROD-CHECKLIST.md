@@ -397,6 +397,48 @@ réellement au palier inférieur.
 n'existe. Une fois la vente ouverte, changer un prix impose de gérer les abonnements en
 cours.
 
+### 5.9 Pourquoi le correctif des prix ne s'est pas livré en OTA, et ce qui change
+
+Constaté le 20/08/2026, en cherchant à réparer 5.7 sans passer par le magasin.
+
+Le binaire en production **écoute une URL de mise à jour mais aucun canal** :
+
+```
+AndroidManifest (versionCode 21)
+  expo.modules.updates.ENABLED ................ true
+  expo.modules.updates.EXPO_UPDATE_URL ........ u.expo.dev/17bf525d-...
+  expo.modules.updates.EXPO_RUNTIME_VERSION ... 1.0.0
+  expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH ... ALWAYS
+  expo.modules.updates.EXPO_UPDATES_CHANNEL ... ABSENT
+```
+
+Sans canal, EAS ne peut pas résoudre la branche à servir : l'app interroge le serveur à
+chaque lancement et ne recevra **jamais** rien. Les canaux `production` et `preview`
+existent bien côté EAS, et **aucune mise à jour n'y a jamais été publiée**, ce qui n'avait
+donc jamais fait de bruit.
+
+**La cause est le build local.** EAS injecte le canal lui-même quand il construit dans le
+nuage, à partir du `channel` d'`eas.json`. Un `gradlew bundleRelease` sur ce poste ne passe
+pas par là.
+
+**Ce qui a été fait :**
+
+| | |
+|---|---|
+| `app.json` | `updates.requestHeaders['expo-channel-name'] = 'production'`, pour que toute régénération du dossier natif pose le canal |
+| `AndroidManifest.xml` | la ligne `EXPO_UPDATES_CHANNEL = production` ajoutée **à la main**, parce que le dossier `android/` n'est pas régénéré (c'est l'artefact local qui porte la config de signature) |
+| `versionCode` | 21 → **22** |
+
+⚠️ **Cette ligne du manifeste vit dans `android/`, qui est gitignoré.** Elle est donc dans
+la même catégorie que le bloc de signature : une régénération par `expo prebuild --clean`
+l'effacerait, et `app.json` la réapplique. C'est pour ça que les deux ont été faits.
+
+⚠️ **La version 22 est la dernière qui exige un passage par le magasin pour un correctif
+purement JS.** À partir d'elle, `eas update --branch production` atteint les appareils au
+lancement suivant. Ce qui ne se livrera jamais en OTA : tout ce qui touche au natif, une
+dépendance nouvelle, une permission, un changement de `version` (qui déplace la
+`runtimeVersion`).
+
 ### 5.6 Le reste, par ordre décroissant
 
 | Quoi | Pourquoi |

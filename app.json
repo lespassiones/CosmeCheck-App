@@ -30,7 +30,7 @@
     "android": {
       "package": "com.cosmecheck.app",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 21,
+      "versionCode": 22,
       "minSdkVersion": 26,
       "targetSdkVersion": 36,
       "softwareKeyboardLayoutMode": "pan",
@@ -109,7 +109,10 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/17bf525d-eff2-4a63-a42f-eaa886a7b8b8"
+      "url": "https://u.expo.dev/17bf525d-eff2-4a63-a42f-eaa886a7b8b8",
+      "requestHeaders": {
+        "expo-channel-name": "production"
+      }
     }
   }
 }
