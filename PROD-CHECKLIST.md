@@ -147,7 +147,7 @@ jours à faire.
 | **1** | ~~Toi~~ | ✅ **Déjà actif, constaté le 20/08/2026 dans Business.** Contrat applications payantes **Actif** (19 août 2026 au 19 août 2027), contrat applications gratuites **Actif**, compte bancaire `BIENDOU BRIAN (4044)` **Actif** (France, EUR, redevances USD), `U.S. Form W-8BEN` **Actif** et `U.S. Certificate of Foreign Status` **Actif**, les deux envoyés le 19 août. Numéro de vendeur **94728527**, 175 pays ou régions. ⚠️ **Ces lignes sont au niveau du COMPTE, pas de l'app** : elles ont été remplies pour RevealChat et couvrent CosmeCheck sans un geste de plus. C'était le point le plus lent du plan, il est derrière nous | les achats, y compris en bac à sable, sur **toutes** les apps du compte |
 | **2** | ~~Toi~~ | ✅ **DAC7 Actif le 20/08/2026** (« Directive relative à la coopération administrative, 7e révision », 27 pays). La réponse donnée à « services personnels » était **Non**, et c'est la bonne : la directive vise les plateformes qui mettent en relation un prestataire et un client, alors que nous vendons notre propre production logicielle | la soumission d'une app neuve, qu'Apple refuse sans ça |
 | **2b** | Apple | ⚠️ **« La législation sur les services numériques » est En cours de vérification** depuis le 19/08/2026 (27 pays). C'est le DSA, et c'est Apple qui valide l'identification de commerçant. **Rien à faire**, et rien à relancer. Ce qu'il faut savoir : tant que ce n'est pas validé, la **distribution dans l'Union** peut être retenue, même si la soumission passe. Même état que sur RevealChat, donc c'est la file d'attente d'Apple et pas un dossier incomplet | la distribution en Europe |
-| **3** | Toi | **Identifiant d'app** `com.cosmecheck.app` dans le portail Apple (Certificates, Identifiers & Profiles), avec les capacités **Sign in with Apple** et **Push Notifications** | les habilitations natives au build. Sans elles, Xcode refuse de signer |
+| **3** | ~~Toi~~ | ✅ **Fait le 20/08/2026.** App ID `com.cosmecheck.app` (explicit), description `Cosme Check`, capacités **Sign in with Apple** (en primary App ID) et **Push Notifications**, rien d'autre. **Team ID = `7F96ZVZ4PC`** | les habilitations natives au build. Sans elles, Xcode refuse de signer |
 | **4** | Toi | **Fiche App Store Connect** : nom « Cosme Check » (30 caractères max), sous-titre, langue par défaut français, catégorie principale **Style de vie**. ⚠️ **Pas Médecine, pas Santé et forme** : la catégorie médicale déclenche une revue bien plus dure sur les affirmations produit | tout ce qui suit, et l'`ascAppId` dont EAS a besoin |
 | **5** | Toi | **Clé d'API App Store Connect**, rôle **Admin**, dans Utilisateurs et accès > Intégrations. C'est l'équivalent Apple du compte de service Google Play : elle remplace ton mot de passe et laisse EAS créer les certificats, les profils, et déposer les binaires sans intervention. ⚠️ Rôle Admin et non App Manager : c'est lui qui autorise la gestion complète des certificats, et un rôle trop étroit échoue **au milieu** d'un build avec un message qui ne parle pas de droits | tous les builds iOS, sans exception |
 
@@ -160,13 +160,28 @@ jours à faire.
 | **8** | Toi | **Les deux abonnements dans App Store Connect**, identifiants **identiques à Google Play** : `premium_monthly` et `premium_yearly`, dans un **même groupe d'abonnement** (sinon on ne peut pas passer de mensuel à annuel sans résilier), prix alignés sur 7,99 €/mois et 49,99 €/an, essai gratuit 3 jours en offre d'introduction. ⚠️ **Un identifiant qui diverge encaisse un paiement sans rien créditer.** C'est la doctrine : un identifiant unique du magasin jusqu'à la base. ⚠️ Vérifier que les paliers de prix Apple contiennent exactement 7,99 et 49,99, sinon **ne pas choisir un voisin de ta propre initiative**, me le dire | la revue des produits, qui exige aussi une capture par produit |
 | **9** | Toi | **App iOS chez RevenueCat, dans le MÊME projet que l'Android** (pas un projet neuf, sinon l'utilisateur premium sur Android redevient gratuit sur iOS). Y déposer la clé Achat intégré du point 7, relever la clé publique `appl_…`, rattacher les deux produits à l'entitlement **`premium`** (vérifier au passage que la clé de recherche est bien `premium` et pas « Cosme Check Pro », le code compare à `user_profiles.tier`), et coller l'**URL de notification du serveur App Store** en **Production ET en Sandbox** | l'octroi du premium sur iOS, et le signalement des remboursements |
 
+⚠️ **Le bandeau « Finish Setting up Sign in with Apple » propose quatre étapes, et trois
+ne nous concernent pas.** *Create Service ID for Web Authentication* et *Create Key*
+servent au parcours **web** (Sign in with Apple JS), que nous n'utilisons pas : notre flux
+est natif, et c'est pourquoi `external_apple_secret` reste vide côté Supabase. Les créer
+ajouterait une clé à renouveler tous les six mois pour rien.
+
+⚠️ **La quatrième, *Register Email Sources for Communication*, est un vrai sujet, non
+bloquant.** Une personne qui choisit « Masquer mon adresse » reçoit une adresse
+`@privaterelay.appleid.com`, et **tout courriel envoyé à cette adresse est jeté en silence**
+tant que le domaine expéditeur n'est pas déclaré chez Apple. Ce que ça coûte aujourd'hui
+est faible (la réinitialisation de mot de passe ne concerne pas un compte Apple, et le
+reste passe par les notifications push), mais l'inscription à la lettre d'information
+(`newsletter-subscribe` via Brevo) échouerait sans rien dire. À déclarer quand le domaine
+`cosme-check.com` et les expéditeurs Brevo seront sous la main.
+
 ### Bloc C, le code
 
 | # | Qui | Quoi | Débloque |
 |---|---|---|---|
 | **10** | ~~Claude~~ | ✅ **Connexion Apple écrite le 20/08/2026**, section 2. Flux natif, bouton iOS seulement, fournisseur activé côté Supabase. Reste à éprouver sur un iPhone (étape 17) | la conformité 4.8, donc la possibilité d'être accepté |
 | **11** | Claude | `EXPO_PUBLIC_REVENUCAT_IOS_KEY=appl_…` dans le `.env`, **et** en variable d'environnement EAS (portée projet, visibilité publique, environnement production). Le code la lit déjà | un binaire qui sait encaisser. Sans elle le build part avec une caisse muette, et le défaut ne se voit qu'au moment de payer |
-| **12** | Claude | **`eas.json`** : ajouter le profil d'envoi iOS (`appleId`, `ascAppId`, `appleTeamId`) et le bloc `ios` du profil `production`. Aujourd'hui `submit.production` ne connaît qu'Android, et `track: "internal"` + `releaseStatus: "draft"` ne correspondent plus à la réalité de production | `eas submit -p ios` |
+| **12** | Claude | **`eas.json`** : ajouter le profil d'envoi iOS (`appleId`, `ascAppId`, `appleTeamId` = `7F96ZVZ4PC`) et le bloc `ios` du profil `production`. Aujourd'hui `submit.production` ne connaît qu'Android, et `track: "internal"` + `releaseStatus: "draft"` ne correspondent plus à la réalité de production | `eas submit -p ios` |
 | **13** | Claude | ⚠️ **Aligner le numéro de version.** App Store Connect crée la fiche en `1.0` par défaut et exige que le build porte **exactement** le numéro de la version soumise. `app.json` dit `1.0.0` : ce sont deux chaînes différentes. Poser la fiche en `1.0.0`, et non l'inverse, pour rester aligné avec Android. Sinon on attend devant un encart Build vide en croyant que le traitement n'est pas fini | la sélection du binaire dans la fiche |
 | **14** | Claude | `ios.buildNumber` : décider **maintenant** entre l'incrément manuel dans `app.json` (cohérent avec `appVersionSource: "local"`) et `autoIncrement` côté EAS. ⚠️ Un numéro de build iOS ne se téléverse qu'**une fois**, comme un versionCode Android : le second envoi du même numéro est refusé | des livraisons qui s'enchaînent sans blocage |
 
