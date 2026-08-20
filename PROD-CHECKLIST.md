@@ -215,6 +215,30 @@ reste passe par les notifications push), mais l'inscription à la lettre d'infor
 
 | # | Qui | Quoi | Débloque |
 |---|---|---|---|
+> **Pré-vol du premier build iOS, 20/08/2026.** Ce qui a été écarté avant de lancer, pour
+> savoir ce qu'il ne faut pas rechercher si ça échoue :
+>
+> | Contrôle | Résultat |
+> |---|---|
+> | `expo-doctor` | **18/18** après alignement de 4 paquets et nettoyage d'`app.json` |
+> | Icône App Store | 1024×1024 **RGB sans canal alpha** (sinon le téléversement échoue, pas le build) |
+> | `patch-package` | un seul patch, `whatwg-fetch+3.6.20`, appliqué sans erreur |
+> | Typage, tests | 0 erreur dans le code de l'app, **954 tests** |
+> | Bundles JS | iOS **et** Android reconstruits après l'alignement |
+> | Identifiants | certificat réutilisé de RevealChat, profil `ATUL89MCL7` créé |
+> | Variables EAS | 4 publiques + `SENTRY_AUTH_TOKEN` en secret |
+> | Compte de démo chez Apple | `reviewer@cosme-check.com` / `0106-Apple`, **relu par l'API**, connexion éprouvée |
+> | Groupe TestFlight | « Interne » existe, `hasAccessToAllBuilds`, donc le build y arrivera seul |
+>
+> ⚠️ **Ce qui reste non éprouvable d'ici** : la compilation native. Ce projet n'a jamais été
+> compilé pour iOS. Un échec viendra de l'étape *Run fastlane*, presque sûrement d'un Pod ou
+> d'une habilitation, pas du JS.
+>
+> ⚠️ **La clé APNs n'est pas encore chez EAS.** Répondre **No** à la question des
+> notifications pendant le build : la créer là demande un mot de passe Apple et
+> consommerait le dernier des deux emplacements. Elle se téléversera après, avec
+> `eas credentials`, en réutilisant `PPD7WGA986`.
+
 | **15** | Toi | **Le premier build iOS**, en interactif une seule fois, pour accepter la création du certificat de distribution : `eas build -p ios --profile production`. ⚠️ Aucun Mac n'est nécessaire, EAS construit dans le nuage. Le seul coût est la file d'attente du plan gratuit, mesurée à plus de quinze minutes sur RevealChat | tous les builds iOS suivants, non interactifs |
 | **16** | Claude | **Audit de secrets sur l'`.ipa` réellement livré** : aucune clé Mistral, OpenAI, `service_role`, Brevo ou Sentry dans le bundle, aucun appel direct à `api.mistral.ai` ni `api.openai.com`, et la clé RevenueCat **iOS** présente. ⚠️ Le nom du bundle change de plateforme : `index.android.bundle` devient `main.jsbundle`. Un contrôle qui échoue pour la mauvaise raison apprend à passer outre | la confiance dans ce qu'on publie |
 | **17** | Toi | **TestFlight sur un iPhone réel** : connexion Apple, scan d'un code-barres, OCR d'une photo de dos de produit, un abonnement acheté de bout en bout en bac à sable, une notification reçue, la suppression du compte. ⚠️ **Aucun contournement sous Windows** : le simulateur demande un Mac, un `.ipa` ne s'installe pas ailleurs. Sans iPhone, ni cette vérification ni les captures ne sont possibles, et il faut alors emprunter un appareil | la soumission, et la seule preuve que les chemins natifs marchent |
