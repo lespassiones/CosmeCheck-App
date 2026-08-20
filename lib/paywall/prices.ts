@@ -15,6 +15,15 @@
 
 export type PlanId = 'monthly' | 'yearly'
 
+/** Offre d'introduction telle que le magasin la décrit. */
+export interface IntroPriceLike {
+  /** 0 quand l'offre est un essai gratuit. */
+  price: number
+  /** `DAY`, `WEEK`, `MONTH`, `YEAR`. */
+  periodUnit: string
+  periodNumberOfUnits: number
+}
+
 /** Sous-ensemble de `PurchasesStoreProduct` dont l'affichage a besoin. */
 export interface ProductLike {
   /** Prix numérique dans la devise du magasin. */
@@ -26,6 +35,8 @@ export interface ProductLike {
   /** Prix mensualisé numérique. Repli si la chaîne manque. */
   pricePerMonth?: number | null
   currencyCode?: string
+  /** `null` quand la personne n'y a pas droit, par exemple un ancien abonné. */
+  introPrice?: IntroPriceLike | null
 }
 
 /** Sous-ensemble de `PurchasesPackage`. */
@@ -134,6 +145,34 @@ export function savingsPercent(
 }
 
 /**
+ * Durée de l'essai gratuit, telle que le magasin l'annonce (« 3 jours »).
+ *
+ * ⚠️ Ne jamais écrire cette durée en dur : `introPrice` vaut `null` quand la
+ * personne n'y a **pas droit** (ancien abonné, essai déjà consommé). Promettre
+ * un essai à qui ne l'aura pas est un mensonge, et le genre de détail qu'un
+ * vérificateur d'Apple teste avec un compte ayant déjà souscrit.
+ *
+ * `null` s'il n'y a pas d'essai, ou si l'offre d'introduction est payante (une
+ * remise de lancement n'est pas un essai).
+ */
+export function trialLabel(pkg: PackageLike | null | undefined): string | null {
+  const intro = pkg?.product?.introPrice
+  if (!intro || intro.price !== 0) return null
+
+  const n = intro.periodNumberOfUnits
+  if (!Number.isFinite(n) || n <= 0) return null
+
+  const unite = {
+    DAY: n > 1 ? 'jours' : 'jour',
+    WEEK: n > 1 ? 'semaines' : 'semaine',
+    MONTH: 'mois',
+    YEAR: n > 1 ? 'ans' : 'an',
+  }[intro.periodUnit?.toUpperCase() ?? '']
+
+  return unite ? `${n} ${unite}` : null
+}
+
+/**
  * Ligne sous le bouton : « Puis 59,99 €/an. »
  *
  * `null` quand le prix est inconnu, pour que l'appelant n'affiche rien plutôt
@@ -143,4 +182,34 @@ export function renewLine(plan: PlanId, pkg: PackageLike | null | undefined): st
   const price = planPriceLabel(pkg)
   if (!price) return null
   return plan === 'yearly' ? `Puis ${price}/an.` : `Puis ${price}/mois.`
+}
+
+/**
+ * Mention légale de l'abonnement, exigée **dans l'app** et pas seulement dans la
+ * fiche du magasin.
+ *
+ * La règle 3.1.2 d'Apple demande que soient lisibles avant l'achat : le **nom**
+ * de l'abonnement, sa **durée**, son **prix**, et un lien fonctionnel vers les
+ * conditions d'utilisation et vers la politique de confidentialité. Les deux
+ * liens vivent dans le JSX ; cette fonction produit les trois premiers, plus la
+ * phrase de renouvellement.
+ *
+ * ⚠️ Le nom du magasin est passé par l'appelant, jamais écrit ici : une app iOS
+ * qui parle de Google Play se fait remarquer, et l'inverse aussi.
+ */
+export function legalDisclosure(
+  plan: PlanId,
+  pkg: PackageLike | null | undefined,
+  store: string,
+): string {
+  const duree = plan === 'yearly' ? 'abonnement annuel' : 'abonnement mensuel'
+  const price = planPriceLabel(pkg)
+  const tarif = price ? ` à ${price}` : ''
+
+  return (
+    `Cosme Check Premium, ${duree}${tarif}. Le paiement est prélevé sur ton compte ${store} ` +
+    'à la confirmation de l\'achat. Renouvellement automatique au même tarif sauf annulation ' +
+    'au moins 24 h avant la fin de la période en cours. Gérable et résiliable à tout moment ' +
+    `dans les réglages de ton compte ${store}.`
+  )
 }

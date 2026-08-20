@@ -9,9 +9,11 @@
 import {
   annualPerMonthLabel,
   findPlanPackage,
+  legalDisclosure,
   planPriceLabel,
   renewLine,
   savingsPercent,
+  trialLabel,
   type PackageLike,
 } from '@/lib/paywall/prices'
 
@@ -150,6 +152,73 @@ describe('savingsPercent', () => {
     expect(savingsPercent(zero, yearly)).toBeNull()
     const nan = { ...monthly, product: { ...monthly.product, price: Number.NaN } }
     expect(savingsPercent(nan, yearly)).toBeNull()
+  })
+})
+
+describe('trialLabel', () => {
+  const avecEssai = (intro: unknown): PackageLike => ({
+    ...yearly,
+    product: { ...yearly.product, introPrice: intro as never },
+  })
+
+  it('lit la duree annoncee par le magasin', () => {
+    expect(trialLabel(avecEssai({ price: 0, periodUnit: 'DAY', periodNumberOfUnits: 3 }))).toBe(
+      '3 jours',
+    )
+    expect(trialLabel(avecEssai({ price: 0, periodUnit: 'DAY', periodNumberOfUnits: 1 }))).toBe(
+      '1 jour',
+    )
+    expect(trialLabel(avecEssai({ price: 0, periodUnit: 'WEEK', periodNumberOfUnits: 2 }))).toBe(
+      '2 semaines',
+    )
+    expect(trialLabel(avecEssai({ price: 0, periodUnit: 'MONTH', periodNumberOfUnits: 1 }))).toBe(
+      '1 mois',
+    )
+  })
+
+  it('rend null quand la personne n a PAS droit a l essai', () => {
+    // Le coeur de l'affaire : un ancien abonne ne doit pas lire une promesse
+    // d'essai gratuit qu'il n'obtiendra pas.
+    expect(trialLabel(avecEssai(null))).toBeNull()
+    expect(trialLabel(yearly)).toBeNull()
+    expect(trialLabel(null)).toBeNull()
+  })
+
+  it('rend null si l offre d introduction est payante', () => {
+    // Une remise de lancement n'est pas un essai gratuit.
+    expect(
+      trialLabel(avecEssai({ price: 2.99, periodUnit: 'MONTH', periodNumberOfUnits: 1 })),
+    ).toBeNull()
+  })
+
+  it('rend null sur une unite inconnue ou une duree absurde', () => {
+    expect(
+      trialLabel(avecEssai({ price: 0, periodUnit: 'FORTNIGHT', periodNumberOfUnits: 1 })),
+    ).toBeNull()
+    expect(trialLabel(avecEssai({ price: 0, periodUnit: 'DAY', periodNumberOfUnits: 0 }))).toBeNull()
+  })
+})
+
+describe('legalDisclosure', () => {
+  it('nomme l abonnement, sa duree, son prix et le magasin', () => {
+    const t = legalDisclosure('yearly', yearly, 'App Store')
+    expect(t).toContain('Cosme Check Premium')
+    expect(t).toContain('abonnement annuel')
+    expect(t).toContain('59,99 €')
+    expect(t).toContain('24 h')
+    expect(t.match(/App Store/g)).toHaveLength(2)
+    expect(t).not.toContain('Google Play')
+  })
+
+  it('parle du bon magasin selon la plateforme', () => {
+    expect(legalDisclosure('monthly', monthly, 'Google Play')).not.toContain('App Store')
+  })
+
+  it('reste une phrase valide quand le prix est inconnu', () => {
+    const t = legalDisclosure('monthly', null, 'App Store')
+    expect(t).toContain('abonnement mensuel.')
+    expect(t).not.toContain('undefined')
+    expect(t).not.toContain('à .')
   })
 })
 

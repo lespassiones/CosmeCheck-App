@@ -48,13 +48,18 @@ import { useProfile } from '@/hooks/useProfile'
 import {
   annualPerMonthLabel,
   findPlanPackage,
+  legalDisclosure,
   planPriceLabel,
   renewLine,
   savingsPercent,
+  trialLabel,
   type PlanId,
 } from '@/lib/paywall/prices'
 
 type Tab = 'plans' | 'subscription'
+
+/** Le magasin qui encaisse. Une app iOS qui parle de Google Play se fait remarquer. */
+const STORE_NAME = Platform.OS === 'ios' ? 'App Store' : 'Google Play'
 
 /** Affiché tant que le magasin n'a pas répondu : jamais un prix inventé. */
 const PRIX_INCONNU = '…'
@@ -108,6 +113,10 @@ const OffreScreen: FC = () => {
   const yearlyPerMonth = annualPerMonthLabel(yearlyPkg)
   const savePercent = savingsPercent(monthlyPkg, yearlyPkg)
   const priceLine = renewLine(selected, selectedPkg)
+  // Essai : lu dans l'offre du magasin, donc absent si la personne n'y a pas
+  // droit. On ne promet jamais un essai que quelqu'un n'obtiendra pas.
+  const trial = trialLabel(selectedPkg)
+  const legal = legalDisclosure(selected, selectedPkg, STORE_NAME)
 
   const handlePurchase = async () => {
     if (packages.length === 0) {
@@ -130,9 +139,12 @@ const OffreScreen: FC = () => {
       const ok = await purchase(pkg)
       if (ok && fromOnboarding) await dismissOnboardingPaywall()
     } catch {
+      // Message destiné à la personne, pas au développeur : l'ancien texte
+      // expliquait les builds signés et les émulateurs, ce qu'un utilisateur
+      // n'a pas à lire, et citait l'autre magasin au passage.
       Alert.alert(
         'Achat impossible',
-        "L'achat n'a pas pu aboutir. Les achats in-app nécessitent un build signé publié en test (Play Store / App Store) ; ils ne fonctionnent pas dans l'émulateur de développement.",
+        `L'achat n'a pas pu aboutir. Réessaie dans un instant, ou vérifie ton compte ${STORE_NAME}.`,
       )
     }
   }
@@ -322,15 +334,16 @@ const OffreScreen: FC = () => {
             {/* Réassurance */}
             <View style={styles.reassure}>
               <Ionicons name="lock-closed" size={14} color={colors.inkMuted} />
-              <Text style={styles.reassureText}>Sans engagement · Annulable en 1 tap · Essai gratuit 3 jours</Text>
+              <Text style={styles.reassureText}>
+                Sans engagement · Annulable en 1 tap
+                {trial ? ` · Essai gratuit ${trial}` : ''}
+              </Text>
               <Ionicons name="shield-checkmark" size={16} color="#16A34A" />
             </View>
 
-            {/* Légal */}
-            <Text style={styles.legal}>
-              Renouvellement automatique via Google Play / App Store sauf annulation 24 h avant la fin de période.
-              Gérable dans les réglages du compte.
-            </Text>
+            {/* Mention légale exigée avant l'achat (Apple 3.1.2) : nom, durée,
+                prix, renouvellement, et les deux liens juste en dessous. */}
+            <Text style={styles.legal}>{legal}</Text>
 
             {/* Liens */}
             <View style={styles.linksRow}>
@@ -380,7 +393,9 @@ const OffreScreen: FC = () => {
                 {isLoading ? (
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
-                  <Text style={styles.ctaText}>Commencer l'essai gratuit</Text>
+                  <Text style={styles.ctaText}>
+                    {trial ? "Commencer l'essai gratuit" : "S'abonner"}
+                  </Text>
                 )}
               </View>
             </PressableScale>
