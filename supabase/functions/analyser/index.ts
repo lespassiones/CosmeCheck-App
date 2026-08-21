@@ -31,11 +31,13 @@ import { type ColorRating, pastilleTone, reconcileScore, type ScoreTone, scoreLa
 import { isCleanInciInput, parseInciList } from "./parse.ts";
 import {
   buildAnalysisCore,
+  cacheMatchesInci,
   type MatchRow,
   recomputeThresholdContext,
   type ThresholdItem,
 } from "./core.ts";
 import {
+  guardHairCategory,
   normalizeProductTypeToCategory,
   type ProductCategory,
 } from "./engine.ts";
@@ -189,8 +191,15 @@ Deno.serve(async (req: Request) => {
       // tronquées (souvent 1 seul item) alors que l'INCI réel en compte bien plus.
       // Si le cache a nettement moins d'ingrédients que la liste de référence, on
       // l'IGNORE et on recalcule depuis le bon INCI (re-cache propre ensuite).
-      const inputTokenCount = parseInciList(effectiveText).length;
-      const cacheTrustworthy = inputTokenCount < 5 || cachedItems.length >= inputTokenCount * 0.5;
+      const freshTokens = parseInciList(effectiveText);
+      const inputTokenCount = freshTokens.length;
+      // Deux conditions CUMULATIVES : assez d'items (anti-troncature) ET les bons
+      // items (anti-cache-d'un-autre-produit, cf. inciKey/cacheMatchesInci).
+      // Un cache rejeté n'est pas perdu : la branche live recalcule et réécrit la
+      // ligne via upsertProductAnalysis → la table se répare d'elle-même.
+      const cacheTrustworthy =
+        (inputTokenCount < 5 || cachedItems.length >= inputTokenCount * 0.5) &&
+        cacheMatchesInci(cachedItems, freshTokens.map((t) => t.raw));
       if (cachedResult && cacheTrustworthy) {
         cachedResult.items = recomputeThresholdContext(cachedItems);
         cachedResult.synthesis = null;
@@ -557,8 +566,15 @@ Deno.serve(async (req: Request) => {
         categoryPromise.then((c) => (c && c !== "autre" ? c : null)),
         new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
       ]);
+  // Nom servant les gardes déterministes de catégorie (marque + libellé + type).
+  const productNameForGuard = [body.brand, body.productLabel, body.productType]
+    .filter(Boolean)
+    .join(" ");
+  // Le slug catalogue reste intouché (curation = source de vérité) ; seule la
+  // catégorie DÉDUITE (LLM 1,5 s / mappage productType) passe le garde capillaire.
+  const deducedCategory = llmCategory ?? normalizeProductTypeToCategory(body.productType) ?? null;
   const resolvedCategory: string | null =
-    catalogCategorySlug ?? llmCategory ?? normalizeProductTypeToCategory(body.productType) ?? null;
+    catalogCategorySlug ?? guardHairCategory(deducedCategory, productNameForGuard) ?? null;
 
   const responsePayload = {
     counts: core.countsPayload,
@@ -618,11 +634,15 @@ Deno.serve(async (req: Request) => {
         const categorizeId = insertedId;
         void categoryPromise
           .then(async (cat) => {
-            if (!cat || cat === resolvedCategory) return;
+            // MÊME garde que la résolution synchrone : sans lui, le patch tardif
+            // réécrivait la catégorie LLM brute (ex. `creme_corps` sur une crème
+            // capillaire) et annulait le garde appliqué juste au-dessus.
+            const guarded = guardHairCategory(cat ?? null, productNameForGuard);
+            if (!guarded || guarded === resolvedCategory) return;
             await sbAuth
               .schema("cosme_check")
               .from("analyses")
-              .update({ category: cat })
+              .update({ category: guarded })
               .eq("id", categorizeId);
           })
           .catch(() => undefined);

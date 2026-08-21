@@ -444,3 +444,51 @@ export function buildAnalysisCore(input: { tokens: ParsedToken[]; rows: MatchRow
     categoryTop5Names,
   };
 }
+
+// ─── Garde-fou d'IDENTITÉ du cache EAN (incident 21 août 2026) ──────────────
+// `product_analyses` est keyé par EAN. Quand l'INCI catalogue change, la ligne
+// décrit encore l'ANCIEN contenu : l'EAN 3770035517084 (shampoing Vagance, INCI
+// naturel) servait l'analyse d'une eau micellaire (POLOXAMER 184 orange en 4e
+// position) → étoiles issues de catalog.score, mais liste d'ingrédients,
+// restrictions et compatibilité d'un AUTRE produit. Le garde-fou de QUANTITÉ
+// (nombre d'items) est aveugle à ce cas, d'où cette vérification de CONTENU.
+
+/** Clé de comparaison d'un nom d'ingrédient : majuscules, sans accent ni
+ *  ponctuation. Absorbe espaces, tirets et virgules résiduels. */
+export function inciKey(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
+/**
+ * Les items cachés décrivent-ils bien l'INCI qu'on s'apprête à analyser ?
+ *
+ * Comparaison raw↔raw : le champ `input` d'un item EST le `raw` du parser, donc
+ * il s'aligne sur `ParsedToken.raw` du MÊME parser. Se comparer au texte INCI
+ * brut produirait de faux désaccords, car le parser retire les alias
+ * parenthésés (« Vitis Vinifera (Grape) Seed Oil » → « Vitis Vinifera Seed
+ * Oil ») et les astérisques Ecocert.
+ *
+ * Seuil 0,6 calibré sur la prod (264 639 lignes) : lignes saines ≥ 0,83,
+ * réellement périmées ≤ 0,47.
+ */
+export function cacheMatchesInci(
+  cachedItems: ReadonlyArray<{ input?: string }>,
+  freshRaws: readonly string[],
+): boolean {
+  if (cachedItems.length === 0 || freshRaws.length === 0) return false;
+  const fresh = new Set(freshRaws.map(inciKey).filter((k) => k.length > 2));
+  if (fresh.size === 0) return false;
+  let checked = 0;
+  let hits = 0;
+  for (const it of cachedItems) {
+    const key = inciKey(String(it.input ?? ""));
+    if (key.length <= 2) continue;
+    checked++;
+    if (fresh.has(key)) hits++;
+  }
+  return checked > 0 && hits / checked >= 0.6;
+}

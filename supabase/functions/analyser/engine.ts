@@ -57,3 +57,70 @@ export function normalizeProductTypeToCategory(
   }
   return null;
 }
+
+/** Marqueurs capillaires NON ambigus dans un nom de produit. */
+const HAIR_NAME_MARKERS: string[] = [
+  "capillaire", "cheveux", "shampoing", "shampooing", "shampoo", "conditioner",
+  "cuir chevelu", "scalp", "demelant", "antipelliculaire", "anti-pelliculaire",
+  "pellicules", "coiffant", "coiffage", "revitalisant",
+];
+
+/** Catégories « peau » : incompatibles avec un produit manifestement capillaire.
+ *  `parfum` en est VOLONTAIREMENT absent : une brume parfumée reste un parfum,
+ *  la ranger en soin capillaire serait une erreur symétrique. */
+const SKIN_CATEGORIES: ReadonlySet<ProductCategory> = new Set<ProductCategory>([
+  "creme_visage", "creme_corps", "nettoyant_visage", "solaire", "maquillage",
+]);
+
+/** Marqueurs corps/visage. Un produit qui en porte EN MÊME TEMPS qu'un marqueur
+ *  capillaire est multi-zone (« Brume Corps & Cheveux », « crème 3 en 1 ») : le
+ *  forcer en capillaire serait aussi faux que le laisser en peau. */
+const MULTI_ZONE_MARKERS: string[] = [
+  "corps", "visage", "mains", "pieds", "3 en 1", "3en1", "2 en 1", "2en1",
+  "multi-usage", "multiusage", "universel",
+];
+
+export function hasHairMarker(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const needle = deburr(text);
+  return HAIR_NAME_MARKERS.some((m) => needle.includes(deburr(m)));
+}
+
+function isMultiZone(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const needle = deburr(text);
+  return MULTI_ZONE_MARKERS.some((m) => needle.includes(deburr(m)));
+}
+
+/**
+ * Garde-fou de catégorie CAPILLAIRE (incident 21 août 2026).
+ *
+ * Hors catalogue, la catégorie vient de la course LLM 1,5 s (ou du mappage
+ * `productType`), sans aucun filet déterministe : « Crème Capillaire Koni » est
+ * repartie en `creme_corps`. Or `personal-insights/relevance.ts` déduit l'AXE du
+ * profil (peau vs cheveux) de cette catégorie via `categoryToAxis` → le LLM a
+ * reçu « produit peau » et a écrit « adoucir ta peau du corps » pour un soin
+ * cheveux, en appliquant en plus les malus peau (huile de coco vs peau grasse).
+ *
+ * Règle : un nom qui porte un marqueur capillaire non ambigu ne peut PAS être
+ * rangé en catégorie peau. On ne touche jamais un slug catalogue (curation =
+ * source de vérité), uniquement la catégorie déduite.
+ */
+export function guardHairCategory(
+  category: ProductCategory | null,
+  productName: string | null | undefined,
+): ProductCategory | null {
+  if (!hasHairMarker(productName)) return category;
+  // Produit multi-zone (corps ET cheveux) : on ne tranche pas, on laisse tel quel.
+  if (isMultiZone(productName)) return category;
+  if (category !== null && !SKIN_CATEGORIES.has(category)) return category;
+  const needle = deburr(productName ?? "");
+  // « après-shampooing » avant « shampooing » : le second est sous-chaîne du premier.
+  if (/(apres)[ -]?shampo/.test(needle) || needle.includes("conditioner")) {
+    return "apres_shampooing";
+  }
+  if (needle.includes("shampo")) return "shampooing";
+  // Autres soins cheveux (crème/masque/huile capillaire) : `apres_shampooing` est
+  // le seau capillaire non-lavant de cette taxonomie (cf. PRODUCT_TYPE_PATTERNS).
+  return "apres_shampooing";
+}

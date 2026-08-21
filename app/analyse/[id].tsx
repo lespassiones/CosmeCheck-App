@@ -43,7 +43,7 @@ import { fontFamilies, typography } from '@/constants/typography'
 import { applyRestrictions, getAnalysisById } from '@/lib/analysis/analyser'
 import { decodeHtml } from '@/lib/decodeHtml'
 import { parseAnalyseResponse, type AnalyseResponse } from '@/lib/analysis/types'
-import { applyColorCap } from '@/lib/analysis/scoreCap'
+import { applyColorCap, reconcileScore } from '@/lib/analysis/scoreCap'
 import { db } from '@/lib/supabase/client'
 import { isProductCategory } from '@/lib/ai/categorize'
 import { categoryLabel } from '@/lib/categoryLabel'
@@ -278,7 +278,21 @@ const AnalyseDetailScreen: FC = () => {
     if (state.status !== 'ready') return { effectiveVerdictScore: null as number | null, penalizingCount: 0 }
     const nOrange = state.result.counts.orange ?? 0
     const nRouge = state.result.counts.rouge ?? 0
-    const baseScore = catalogScore ?? state.result.score
+    // Le score de result_json est DÉJÀ la décision de l'Edge Function, qui a
+    // arbitré entre catalog.score et le score live (reconcileScore). On ne
+    // ré-impose donc pas catalog.score aveuglément — sinon on annule cet arbitrage
+    // et les étoiles contredisent les couleurs affichées (cas Yepoda : 3 ambres
+    // ici vs 4 vertes sur le web pour la même analyse). On rejoue la MÊME règle :
+    // le catalogue gagne s'il est dans la même bande, sinon on garde le servi.
+    const baseScore =
+      catalogScore == null
+        ? state.result.score
+        : reconcileScore(
+            catalogScore,
+            state.result.score,
+            state.result.counts.matched ?? 0,
+            state.result.counts.total ?? 0,
+          )
     const effectiveVerdictScore = baseScore == null ? null : applyColorCap(baseScore, nOrange, nRouge)
     return { effectiveVerdictScore, penalizingCount: nOrange + nRouge }
   }, [state, catalogScore])

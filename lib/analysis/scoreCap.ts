@@ -33,3 +33,44 @@ export function scoreLabelFromScore(score: number): string {
   if (score >= 9) return 'Moyen'
   return 'Faible'
 }
+
+/** Tonalité de la bande de qualité. Miroir exact de `analyser/score.ts` scoreLabel
+ *  (« Très bien » et « Bien » partagent la bande verte). */
+export type ScoreBandTone = 'green' | 'amber' | 'orange' | 'rose'
+export function scoreToneFromScore(score: number): ScoreBandTone {
+  if (score >= 13) return 'green'
+  if (score >= 9) return 'amber'
+  if (score >= 5) return 'orange'
+  return 'rose'
+}
+
+/**
+ * Réconciliation score catalogue ↔ couleurs AFFICHÉES — miroir client de
+ * `analyser/score.ts` reconcileScore (et du web `lib/inciParser.ts`).
+ *
+ * Pourquoi côté client aussi : l'Edge Function applique déjà cette règle et
+ * persiste sa décision dans `result_json.score`. Mais l'écran d'analyse
+ * re-résolvait `catalog.score` à l'affichage et l'imposait aux étoiles, ce qui
+ * ANNULAIT la décision serveur. Cas vu en bêta (Yepoda The Calm Balm) : analyse
+ * servie 16,55 « Bien » avec un top5 tout vert, catalogue 12,9 → le mobile
+ * affichait 3 étoiles ambres quand le web en affichait 4 vertes, et les étoiles
+ * contredisaient les couleurs juste en dessous.
+ *
+ * On sert le score catalogue (curation = source de vérité) UNIQUEMENT s'il tombe
+ * dans la même bande que le score servi ; sinon on garde ce dernier, pour que la
+ * note corresponde toujours aux couleurs affichées. Garde : ≥50 % d'ingrédients
+ * identifiés, sinon le coloriage n'est pas fiable et le catalogue reste maître.
+ */
+export function reconcileScore(
+  catalogScore: number,
+  servedScore: number | null | undefined,
+  matched: number,
+  total: number,
+): number {
+  if (servedScore == null || Number.isNaN(servedScore)) return catalogScore
+  const identRatio = total > 0 ? matched / total : 0
+  if (identRatio < 0.5) return catalogScore
+  return scoreToneFromScore(catalogScore) === scoreToneFromScore(servedScore)
+    ? catalogScore
+    : servedScore
+}
