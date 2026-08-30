@@ -4,6 +4,8 @@ import Purchases, {
 } from 'react-native-purchases'
 import { Platform } from 'react-native'
 
+import { isUserCancelled } from '@/lib/paywall/purchaseError'
+
 // Clés publiques RevenueCat PAR PLATEFORME. Google Play exige la clé Android
 // (`goog_…`), distincte de la clé iOS (`appl_…`). On lit d'abord la clé
 // spécifique à la plateforme, avec repli sur l'ancienne clé générique
@@ -74,14 +76,23 @@ export async function getOfferings(): Promise<any> {
   }
 }
 
+/**
+ * Lance l'achat. Renvoie `null` quand la personne a annulé (fermeture de la
+ * feuille de paiement, retour arrière) : ce n'est pas une erreur et l'appelant
+ * ne doit rien afficher. Toute autre erreur est relancée telle quelle, pour que
+ * l'écran la classe via `lib/paywall/purchaseError`.
+ *
+ * L'ancienne détection cherchait « PurchaseCancelled » dans le message ; le SDK
+ * n'y met pas ce texte, donc chaque annulation remontait comme un échec et
+ * l'app affichait « Achat impossible » à quelqu'un qui avait simplement changé
+ * d'avis.
+ */
 export async function purchasePackage(pkg: PurchasesPackage): Promise<CustomerInfo | null> {
   try {
     const result = await Purchases.purchasePackage(pkg)
     return result.customerInfo
   } catch (err) {
-    if (err instanceof Error && err.message.includes('PurchaseCancelled')) {
-      return null
-    }
+    if (isUserCancelled(err)) return null
     console.error('[RevenueCat] purchase failed:', err)
     throw err
   }

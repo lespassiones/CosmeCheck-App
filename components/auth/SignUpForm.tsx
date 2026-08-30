@@ -128,7 +128,10 @@ export const SignUpForm: FC = () => {
       // du JWT. Ne bloque pas la navigation vers l'onboarding.
       void setNewsletterConsent(true, 'signup_email')
     }
-    router.replace(ROUTES.ONBOARDING.INDEX)
+    // Le consentement précède le questionnaire : les questions sur la peau sont
+    // des données de santé. Viser directement l'onboarding ferait afficher son
+    // écran de chargement avant que le guard ne corrige vers le consentement.
+    router.replace(ROUTES.CONSENT.INDEX as never)
   })
 
   return (

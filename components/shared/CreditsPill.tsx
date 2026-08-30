@@ -22,6 +22,7 @@ import { ROUTES } from '@/constants/routes'
 import { GlassCard } from '@/components/design/GlassCard'
 import { useAuth } from '@/hooks/useAuth'
 import { useCredits } from '@/hooks/useCredits'
+import { useProfile } from '@/hooks/useProfile'
 
 /** Seuil d'alerte : moins de 10 % du quota restant. */
 const LOW_RATIO = 0.1
@@ -30,6 +31,8 @@ export const CreditsPill: FC = () => {
   const router = useRouter()
   const { isAuthenticated } = useAuth()
   const { credits, remaining, limit, error } = useCredits()
+  const { profile } = useProfile()
+  const isPremium = profile?.tier === 'premium'
 
   // Masqué tant que non authentifié ou que la RPC n'a rien renvoyé.
   if (!isAuthenticated || !credits) return null
@@ -39,8 +42,12 @@ export const CreditsPill: FC = () => {
 
   const isLow = limit > 0 ? remaining / limit < LOW_RATIO : remaining <= 0
 
-  const tint = isLow ? colors.rose : colors.accent
-  const fill = isLow ? colors.roseSoft : colors.accentSoft
+  // Or pour les membres Premium : c'est le seul endroit de l'app où le statut
+  // se voit en permanence, alors autant qu'il se voie. L'alerte de solde bas
+  // reste prioritaire sur la couleur du statut, sinon on masquerait une
+  // information utile derrière une décoration.
+  const tint = isLow ? colors.rose : isPremium ? colors.gold : colors.accent
+  const fill = isLow ? colors.roseSoft : isPremium ? colors.goldSoft : colors.accentSoft
 
   const goToOffre = () => {
     Haptics.selectionAsync().catch(() => {})
@@ -51,7 +58,7 @@ export const CreditsPill: FC = () => {
     <GlassCard
       padding={2}
       borderRadius={radius.full}
-      style={styles.card}
+      style={[styles.card, isPremium && !isLow ? styles.cardPremium : null]}
       contentStyle={styles.content}
     >
       <Pressable
@@ -61,7 +68,7 @@ export const CreditsPill: FC = () => {
         hitSlop={6}
         style={({ pressed }) => [styles.label, pressed && styles.plusPressed]}
       >
-        <Ionicons name="star" size={11} color={tint} />
+        <Ionicons name={isPremium ? 'diamond' : 'star'} size={11} color={tint} />
         <Text style={[styles.count, { color: tint }]} allowFontScaling={false}>
           {remaining} {remaining === 1 ? 'crédit' : 'crédits'}
         </Text>
@@ -87,6 +94,11 @@ export const CreditsPill: FC = () => {
 const styles = StyleSheet.create({
   card: {
     alignSelf: 'flex-start',
+  },
+  cardPremium: {
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    borderRadius: radius.full,
   },
   content: {
     flexDirection: 'row',

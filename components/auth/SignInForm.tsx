@@ -65,7 +65,10 @@ export const SignInForm: FC = () => {
       setGlobalError(result.error ?? 'Connexion impossible. Réessaie.')
       return
     }
-    router.replace(ROUTES.TABS.HOME)
+    // Compte de démonstration d'Apple : le parcours vient d'être remis à zéro,
+    // on l'y envoie directement plutôt que de faire clignoter l'accueil avant
+    // que le guard ne corrige.
+    router.replace(result.replayed ? (ROUTES.CONSENT.INDEX as never) : ROUTES.TABS.HOME)
   })
 
   return (

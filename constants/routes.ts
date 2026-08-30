@@ -13,19 +13,19 @@ export const ROUTES = {
     RESET_PASSWORD: '/(auth)/reset-password',
   },
 
-  // ── Pré-onboarding (carrousel 1er lancement, device-level) ──────
+  // ── Pré-onboarding (carrousel montré à toute personne non connectée) ──
   PREONBOARDING: {
     INDEX: '/(preonboarding)',
+  },
+
+  // ── Consentement données de profil (RGPD art. 9, avant le questionnaire) ──
+  CONSENT: {
+    INDEX: '/consent',
   },
 
   // ── Onboarding ──────────────────────────────────────────────────
   ONBOARDING: {
     INDEX: '/(onboarding)',
-  },
-
-  // ── Paywall ──────────────────────────────────────────────────────
-  PAYWALL: {
-    INDEX: '/(paywall)',
   },
 
   // ── Tabs ────────────────────────────────────────────────────────
@@ -90,6 +90,11 @@ export const ROUTES = {
   // ── Offre ────────────────────────────────────────────────────────
   OFFRE: {
     INDEX: '/offre',
+  },
+
+  // ── Bienvenue Premium (après un achat réussi) ────────────────────
+  PREMIUM: {
+    WELCOME: '/premium',
   },
 
   // ── Mentions légales / RGPD / CGU / À propos ──────────────────────

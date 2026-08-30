@@ -9,6 +9,7 @@
 
 import { Component, type ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
+import * as SplashScreen from 'expo-splash-screen'
 
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
@@ -31,6 +32,11 @@ export class AppErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: { componentStack: string }): void {
+    // Le splash natif est retenu au démarrage et n'est masqué qu'au montage de
+    // l'overlay de lancement. Si l'erreur survient AVANT ce montage, l'écran de
+    // repli s'afficherait derrière un splash toujours visible : de l'extérieur,
+    // une app figée sur son écran de lancement. On le retire donc ici aussi.
+    void SplashScreen.hideAsync().catch(() => {})
     reportError(error, { componentStack: info.componentStack })
   }
 

@@ -22,7 +22,10 @@ import { Linking, Platform } from 'react-native'
 type StoreReviewModule = any // eslint-disable-line @typescript-eslint/no-explicit-any
 
 const ANDROID_PACKAGE = 'com.cosmecheck.app'
-const IOS_APP_STORE_URL = 'https://apps.apple.com/app/id0000000000' // TODO: remplacer par l'Apple ID reel apres publication.
+// Apple ID de la fiche « Cosme Check: scan cosmetique » (App Store Connect).
+// C'etait un id0000000000 de remplissage : le repli ouvrait une page vide chez
+// quelqu'un a qui on venait de demander une note.
+const IOS_APP_STORE_URL = 'https://apps.apple.com/app/id6803527040'
 const PLAY_STORE_URL = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE}`
 
 let cached: StoreReviewModule | null | undefined

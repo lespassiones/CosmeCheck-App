@@ -1,0 +1,98 @@
+CAPTURES D'ECRAN 6,9 POUCES - APP STORE
+=======================================
+Regenere le 28/08/2026 depuis les NOUVELLES maquettes iPhone
+(ChatGPT Image 28 aout 2026, 13_24_59 a 13_25_26).
+
+Les deux dossiers ont ete vides avant regeneration : ils ne contiennent plus
+rien de l'ancien lot Android.
+
+DEUX JEUX, AU CHOIX
+-------------------
+  iPhone 6.9 pouces - 1320x2868   <- a prendre (iPhone 16/17 Pro Max natif)
+  iPhone 6.9 pouces - 1290x2796   <- egalement accepte
+
+Un seul des deux suffit.
+
+METHODE
+-------
+Mise a la largeur du canevas, sans aucune deformation, puis :
+  - 01 : marges blanches de 261 px en haut et en bas (source au ratio 0,563)
+  - 02 a 09 : recadrage centre de 5 a 13 px (sources deja au ratio iPhone)
+
+ORDRE
+-----
+L'ordre de la fiche actuellement en ligne est conserve : l'accroche
+« Est-il vraiment fait pour toi ? » reste en premiere position. En ordre
+alphabetique de fichier source elle serait passee deuxieme.
+
+  01  Est-il vraiment fait pour toi        (source 13_25_02)
+  02  Tout pour decrypter tes cosmetiques  (source 13_24_59)
+  03  Analyse un produit en 3 secondes     (source 13_25_05)
+  04  Tient-il vraiment ses promesses      (source 13_25_08)
+  05  Le meilleur choix pour ta peau       (source 13_25_12)
+  06  Atteins tes objectifs beaute         (source 13_25_15)
+  07  Toute ta routine, notee              (source 13_25_18)
+  08  Ce a quoi ta peau est exposee        (source 13_25_22)
+  09  On verifie chaque promesse           (source 13_25_26)
+
+CONTROLE DES BARRES D'ETAT (regle Apple 2.3.3)
+----------------------------------------------
+Le chassis est bien un iPhone partout, avec Dynamic Island. En revanche le
+CONTENU de la barre d'etat n'a pas ete refait partout.
+
+Le signe qui ne trompe pas est la batterie :
+  - iOS  = rectangle avec contour
+  - Android = pastille pleine avec le pourcentage a l'interieur
+
+  01  A REFAIRE   batterie en pastille « 26 », icones WhatsApp et Bluetooth
+                  a gauche, icone silencieux Samsung a droite
+  04  A REFAIRE   batterie en pastille « 31 », icones Gmail et contacts
+  09  A REFAIRE   batterie de charge en pastille, icone silencieux Samsung
+
+  02  OK          heure seule a gauche, batterie rectangulaire
+  05  OK          heure et fleche de localisation, batterie rectangulaire
+
+  03  ACCEPTABLE  batterie iOS, mais icone silencieux a gauche
+  06  ACCEPTABLE  batterie iOS « 100 », mais Bluetooth et Gmail a gauche
+  07  ACCEPTABLE  batterie iOS « 100 », mais texte parasite « 1Pro Max »
+                  incruste dans la barre d'etat
+  08  ACCEPTABLE  batterie iOS, mais icones de notification a gauche
+
+Sur un vrai iPhone, la gauche de la barre d'etat ne montre QUE l'heure (plus
+eventuellement une fleche de localisation ou une pastille d'appel). Aucune
+icone de notification n'y figure jamais.
+
+A FAIRE
+-------
+Au minimum refaire 01, 04 et 09 : leur batterie en pastille est le detail
+qu'un verificateur repere immediatement.
+
+Le plus sur reste de recapturer les ecrans depuis le simulateur iOS, ce qui
+donne une barre d'etat authentique, puis de les reinjecter dans les memes
+maquettes.
+
+
+=====================================================================
+QUELLE TAILLE POUR QUEL EMPLACEMENT (mise a jour 28/08, 14h)
+=====================================================================
+
+App Store Connect ouvre par defaut l'emplacement « iPhone - Ecran de
+6,5 pouces », qui n'accepte QUE ces dimensions :
+
+    1242 x 2688   ou   1284 x 2778   (et leurs versions paysage)
+
+Les fichiers 6,9 pouces (1320x2868 / 1290x2796) y sont donc REFUSES.
+C'est l'erreur rouge « Les dimensions d'au moins une capture d'ecran
+sont incorrectes ».
+
+  -> Pour l'emplacement affiche a l'ecran, prendre :
+       iPhone 6.5-6.7 pouces - 1284x2778     (le plus defini)
+     ou a defaut :
+       iPhone 6.5 pouces - 1242x2688
+
+  -> Les dossiers 6,9 pouces ne servent QUE si vous ouvrez
+     « Afficher toutes les tailles dans le gestionnaire des visuels »
+     et que vous y trouvez un emplacement 6,9 pouces.
+
+Un seul emplacement rempli suffit : Apple decline la fiche sur les
+autres tailles automatiquement.

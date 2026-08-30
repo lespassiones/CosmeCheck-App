@@ -6,16 +6,18 @@
  * Vide :
  *   - le cache mémoire React Query (`queryClient.clear()`),
  *   - toutes les clés AsyncStorage préfixées `cosmecheck:` (analyses, ai-cache,
- *     image produit, react-query persisté, INCI en attente, last analysis…),
- * SAUF le flag device-level du pré-onboarding (ne dépend pas du compte).
+ *     image produit, react-query persisté, INCI en attente, last analysis…).
+ *
+ * Plus aucune exception : `cosmecheck:preonboarding_done` était préservée pour
+ * ne pas re-montrer le carrousel, mais ce flag n'est plus persisté du tout (il
+ * vit en mémoire, le temps d'un lancement, cf. `lib/storage/preOnboarding.ts`).
+ * Le purger ici nettoie au passage les appareils qui portent encore l'ancienne
+ * clé.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import { queryClient } from '@/lib/storage/queryClient'
-
-/** Clés à CONSERVER (device-level, non liées au compte). */
-const PRESERVE = new Set<string>(['cosmecheck:preonboarding_done'])
 
 export async function clearUserScopedCaches(): Promise<void> {
   try {
@@ -25,9 +27,7 @@ export async function clearUserScopedCaches(): Promise<void> {
   }
   try {
     const keys = await AsyncStorage.getAllKeys()
-    const toRemove = keys.filter(
-      (k) => k.startsWith('cosmecheck:') && !PRESERVE.has(k),
-    )
+    const toRemove = keys.filter((k) => k.startsWith('cosmecheck:'))
     if (toRemove.length > 0) await AsyncStorage.multiRemove(toRemove)
   } catch {
     // best-effort : ne jamais bloquer la déconnexion.

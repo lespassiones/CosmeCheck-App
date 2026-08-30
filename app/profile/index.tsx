@@ -68,7 +68,7 @@ const ProfileScreen: FC = () => {
       },
       {
         icon: 'diamond-outline',
-        label: 'Passer Premium',
+        label: isPremium ? 'Mon abonnement' : 'Passer Premium',
         onPress: () => router.push(ROUTES.OFFRE.INDEX),
       },
       {
@@ -82,7 +82,10 @@ const ProfileScreen: FC = () => {
         onPress: () => setReportOpen(true),
       },
     ],
-    [],
+    // `isPremium` change le libellé de la ligne abonnement : sans lui dans les
+    // dépendances, quelqu'un qui vient de s'abonner se verrait encore proposer
+    // « Passer Premium » jusqu'au prochain montage de l'écran.
+    [isPremium],
   )
 
   /** Bloc « Informations légales » — exigé par Apple §3.1.2 et Play Policy §4.8. */
@@ -118,10 +121,11 @@ const ProfileScreen: FC = () => {
     // Le guard racine redirige vers l'authentification.
   }, [signOut])
 
-  // DEV uniquement : réinitialise le flag du pré-onboarding puis déconnecte, pour
-  // pouvoir revoir le carrousel de présentation (sinon invisible après 1er lancement).
+  // DEV uniquement : rearme le carrousel puis déconnecte. `signOut` le rearme
+  // déjà (toute déconnexion ramène à la présentation) ; on le fait ici aussi
+  // pour que le bouton reste explicite sur son intention.
   const handleReplayPreOnboarding = useCallback(async () => {
-    await resetPreOnboarding()
+    resetPreOnboarding()
     await signOut()
   }, [signOut])
 
@@ -221,7 +225,7 @@ const ProfileScreen: FC = () => {
                       isPremium ? styles.tierTextPremium : styles.tierTextFree,
                     ]}
                   >
-                    {isPremium ? 'Premium' : 'Lancement'}
+                    {isPremium ? 'Premium' : 'Gratuit'}
                   </Text>
                 </View>
               </View>
@@ -381,11 +385,17 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     borderRadius: radius.full,
   },
-  tierPremium: { backgroundColor: colors.roseSoft },
-  tierFree: { backgroundColor: colors.accentSoft },
+  // Or = Premium, partout dans l'app. Le badge disait « Lancement », un mot
+  // interne qui ne renseignait personne sur ce à quoi il avait droit.
+  tierPremium: {
+    backgroundColor: colors.goldSoft,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+  },
+  tierFree: { backgroundColor: colors.gray100 },
   tierText: { ...typography.xsSemiBold },
-  tierTextPremium: { color: colors.roseDeep },
-  tierTextFree: { color: colors.accent },
+  tierTextPremium: { color: colors.gold },
+  tierTextFree: { color: colors.inkMuted },
   linksCard: { borderRadius: radius.lg, overflow: 'hidden' },
   linkRow: {
     flexDirection: 'row',

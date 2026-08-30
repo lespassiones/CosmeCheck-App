@@ -15,12 +15,20 @@ import { phCapture } from '@/lib/analytics/posthog'
 
 import { supabase } from '@/lib/supabase/client'
 import { APP_SCHEME, DEEP_LINKS } from '@/constants/routes'
+import { replayOnboardingIfReviewAccount } from '@/lib/auth/reviewReplayApply'
+import { withSignInPending } from '@/lib/auth/signInPending'
 
 // ── Types ───────────────────────────────────────────────────────────
 
 export interface AuthActionResult {
   ok: boolean
   error?: string
+  /**
+   * Le parcours d'accueil vient d'être remis à zéro pour le compte de
+   * démonstration d'Apple. L'appelant doit router vers le consentement, pas
+   * vers l'accueil. Voir `lib/auth/reviewReplay.ts`.
+   */
+  replayed?: boolean
 }
 
 export interface PasswordChecks {
@@ -122,16 +130,29 @@ function buildResetRedirect(): string {
 // ── Actions ─────────────────────────────────────────────────────────
 
 export async function signIn(email: string, password: string): Promise<AuthActionResult> {
+  // Encadré : `signInWithPassword` ouvre la session avant qu'on ait fini, et
+  // l'AuthGuard routerait sur un profil encore périmé. Voir `signInPending.ts`.
+  return withSignInPending(async () => {
   try {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
       password,
     })
     if (error) return { ok: false, error: mapAuthError(error) }
-    return { ok: true }
+
+    // Compte de démonstration remis à Apple : on efface les traces du parcours
+    // d'accueil pour qu'il soit rejoué en entier. Sans ça le vérificateur
+    // atterrit sur l'accueil et ne voit jamais l'écran de consentement ni le
+    // questionnaire. Sans effet sur tous les autres comptes, et volontairement
+    // AVANT le retour : le guard doit lire le profil déjà remis à zéro.
+    // Voir `lib/auth/reviewReplay.ts`.
+    const replayed = await replayOnboardingIfReviewAccount(data.user?.id)
+
+    return { ok: true, replayed }
   } catch (err) {
     return { ok: false, error: mapAuthError(err as Error) }
   }
+  })
 }
 
 export async function signUp(

@@ -4,6 +4,7 @@
  * de la publication et l'hébergeur (Supabase / AWS eu-west-1).
  */
 import { LegalScreen } from '@/components/legal/LegalScreen'
+import { STORE_ENTITY, STORE_NAME_LONG } from '@/lib/legal/store'
 
 export default function MentionsScreen() {
   return (
@@ -47,7 +48,7 @@ export default function MentionsScreen() {
         {
           title: 'Distribution',
           paragraphs: [
-            "L'application est distribuée via l'Apple App Store (Apple Distribution International Limited, Hollyhill Industrial Estate, Hollyhill, Cork, T23 YK84, Irlande) et le Google Play Store (Google Ireland Limited, Gordon House, Barrow Street, Dublin 4, Irlande).",
+            `L'application est distribuée via ${STORE_NAME_LONG} (${STORE_ENTITY}).`,
           ],
         },
         {

@@ -5,6 +5,7 @@
  * Éditeur : Brian-Clarky BIENDOU, entrepreneur individuel (Toulouse, FR).
  */
 import { LegalScreen, type LegalSection } from '@/components/legal/LegalScreen'
+import { STORE_NAME_LONG } from '@/lib/legal/store'
 
 const CGU_SECTIONS: LegalSection[] = [
         {
@@ -36,7 +37,7 @@ const CGU_SECTIONS: LegalSection[] = [
           title: '4. Crédits et abonnement Premium',
           paragraphs: [
             "L'Application est gratuite à l'usage et inclut un quota quotidien d'analyses. Au-delà du quota, l'accès aux analyses peut être limité jusqu'au renouvellement quotidien (à minuit UTC) ou via l'abonnement Premium.",
-            "L'abonnement Premium est facturé via les stores Apple App Store et Google Play. Les conditions de facturation, renouvellement automatique et remboursement sont régies par les conditions des stores respectifs.",
+            `L'abonnement Premium est facturé via ${STORE_NAME_LONG}. Les conditions de facturation, renouvellement automatique et remboursement sont régies par les conditions de ce magasin.`,
             "Pour un abonnement souscrit directement sur le site (hors stores), tu disposes d'un droit de rétractation de 14 jours. En cas de rétractation dans ce délai après avoir commencé à utiliser Premium, seul le temps d'abonnement non utilisé est remboursé.",
           ],
         },

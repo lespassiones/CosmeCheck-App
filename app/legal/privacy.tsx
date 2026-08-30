@@ -4,6 +4,7 @@
  * accessible AVANT l'inscription (lien dans /sign-up) ET depuis le profil.
  */
 import { LegalScreen, type LegalSection } from '@/components/legal/LegalScreen'
+import { STORE_NAME } from '@/lib/legal/store'
 
 const PRIVACY_SECTIONS: LegalSection[] = [
         {
@@ -73,7 +74,7 @@ const PRIVACY_SECTIONS: LegalSection[] = [
             "RevenueCat (gestion technique des abonnements) — identifiant technique d'abonnement, sans profil beauté ni contenu d'analyse.",
             "Expo (Expo Push, envoi des notifications) — uniquement si tu as activé les notifications ; un jeton technique d'appareil est transmis.",
             "Brevo (envoi des emails de service et, si tu y as consenti, de la newsletter) — hébergement dans l'Union européenne ; reçoit ton email et ton prénom.",
-            "Apple App Store / Google Play (gestion et facturation des abonnements Premium).",
+            `${STORE_NAME} (gestion et facturation des abonnements Premium).`,
           ],
         },
         {

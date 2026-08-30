@@ -45,6 +45,7 @@ function getClient(): PostHogClient | null {
 
 export type ProductEvent =
   | 'signup'
+  | 'data_consent_granted'
   | 'onboarding_completed'
   | 'scan_completed'
   | 'routine_item_added'

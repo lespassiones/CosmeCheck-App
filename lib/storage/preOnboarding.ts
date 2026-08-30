@@ -1,53 +1,70 @@
 /**
- * Pré-onboarding — flag DEVICE-level (pas user-level).
+ * Pré-onboarding : flag de SESSION (durée de vie : un lancement d'app).
  *
- * Le carrousel de pré-onboarding (4 écrans de présentation) ne doit s'afficher
- * qu'au TOUT premier lancement de l'app sur l'appareil, AVANT toute
- * authentification. On stocke donc un simple booléen dans AsyncStorage (non lié
- * à un user_id, contrairement à `onboardingShown` qui vit dans `preferences`).
+ * Règle produit, volontairement absolue : **tant que personne n'est connecté,
+ * on montre le carrousel de présentation**. À chaque démarrage à froid, et
+ * aussi après une déconnexion. C'est la première chose que voit quelqu'un qui
+ * installe l'app, et la vitrine ne doit jamais être court-circuitée par l'écran
+ * de connexion.
  *
- * Un cache module-level permet une lecture synchrone immédiate après écriture
- * (utile pour l'AuthGuard, qui ne doit jamais reboucler après le marquage).
+ * Pourquoi ce n'est plus persisté dans AsyncStorage (changement du 28/08/2026) :
+ * l'ancienne version écrivait `cosmecheck:preonboarding_done` sur l'appareil.
+ * Conséquence : au 2ᵉ lancement, une personne toujours déconnectée tombait
+ * directement sur l'écran de connexion, sans jamais revoir la présentation.
+ * Le flag ne sert donc plus qu'à UNE chose : éviter que le guard ne renvoie au
+ * carrousel la personne qui vient d'appuyer sur « Commencer » et se dirige vers
+ * l'inscription. Un booléen mémoire suffit, et il repart à `false` tout seul au
+ * prochain démarrage, ce qui EST le comportement recherché.
+ *
+ * Corollaire : plus aucune lecture asynchrone au boot, donc plus l'état `null`
+ * « lecture en cours » qui laissait passer une frame d'écran arbitraire avant
+ * que le guard ne tranche.
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage'
+/** Vrai une fois le carrousel traversé (« Commencer » ou « Passer »), ce lancement-ci. */
+let seenThisLaunch = false
 
-const KEY = 'cosmecheck:preonboarding_done'
+/**
+ * Abonnés au drapeau. Même raison que dans `lib/auth/signInPending.ts` :
+ * l'`AuthGuard` lit cette valeur dans un effet, et un booléen de module
+ * n'apparaît dans aucune liste de dépendances. Sans notification, un changement
+ * de drapeau ne provoque aucune réévaluation, et une abstention devient
+ * définitive.
+ */
+const abonnes = new Set<() => void>()
 
-let cache: boolean | null = null
-
-/** Lecture (async, met le cache à jour). `false` en cas d'erreur de lecture. */
-export async function isPreOnboardingDone(): Promise<boolean> {
-  if (cache !== null) return cache
-  try {
-    cache = (await AsyncStorage.getItem(KEY)) === 'true'
-  } catch {
-    cache = false
-  }
-  return cache
+function prevenir(): void {
+  for (const f of abonnes) f()
 }
 
-/** Marque le pré-onboarding comme vu (appelé par le CTA / « Passer »). */
-export async function markPreOnboardingDone(): Promise<void> {
-  cache = true
-  try {
-    await AsyncStorage.setItem(KEY, 'true')
-  } catch {
-    // best-effort : ne jamais bloquer la navigation.
+/** S'abonner aux changements du drapeau. Rend la fonction de désabonnement. */
+export function subscribePreOnboarding(ecouteur: () => void): () => void {
+  abonnes.add(ecouteur)
+  return () => {
+    abonnes.delete(ecouteur)
   }
 }
 
-/** Réinitialise le flag — utilisé par le bouton dev « Revoir l'onboarding ». */
-export async function resetPreOnboarding(): Promise<void> {
-  cache = false
-  try {
-    await AsyncStorage.removeItem(KEY)
-  } catch {
-    // best-effort
-  }
+/** Le carrousel a-t-il déjà été traversé pendant CE lancement de l'app ? */
+export function hasSeenPreOnboardingThisLaunch(): boolean {
+  return seenThisLaunch
 }
 
-/** Valeur en cache (synchrone) : `null` tant qu'aucune lecture n'a eu lieu. */
-export function getPreOnboardingCache(): boolean | null {
-  return cache
+/**
+ * Marque le carrousel comme traversé. Synchrone à dessein : l'AuthGuard lit la
+ * valeur dans le même tick que la navigation du carrousel, donc aucun rebond.
+ */
+export function markPreOnboardingDone(): void {
+  seenThisLaunch = true
+  prevenir()
+}
+
+/**
+ * Rearme le carrousel pour la suite de ce lancement. Appelé à la déconnexion
+ * (on redevient un visiteur, donc on revoit la vitrine) et par le bouton
+ * « Revoir la présentation » du profil.
+ */
+export function resetPreOnboarding(): void {
+  seenThisLaunch = false
+  prevenir()
 }

@@ -80,6 +80,16 @@ export const colors = {
   info: '#2563EB',
   infoSoft: '#DBEAFE',
 
+  // ── Premium (or) ─────────────────────────────────────────────────
+  // Réservé au statut Premium : pastille de crédits, badge de profil. Ne pas
+  // réutiliser ailleurs, la couleur ne doit signifier qu'une seule chose.
+  // `gold` est assombri par rapport à l'or pur pour rester lisible sur blanc
+  // (un #FFD700 sur fond clair passe sous le seuil de contraste).
+  gold: '#B8860B',
+  goldBright: '#D4A017', // Icône et accents, sur fond doré clair
+  goldSoft: '#FDF3D7', // Fond de pastille
+  goldBorder: '#EBCF8A',
+
   // ── Niveaux de gris utilitaires ──────────────────────────────────
   gray50: '#F9FAFB',
   gray100: '#F3F4F6',

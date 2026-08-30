@@ -34,6 +34,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Purchases, { type PurchasesPackage } from 'react-native-purchases'
+import { useQueryClient } from '@tanstack/react-query'
 
 import { PressableScale } from '@/components/design/motion'
 import { Reveal } from '@/components/design/Reveal'
@@ -55,6 +56,8 @@ import {
   trialLabel,
   type PlanId,
 } from '@/lib/paywall/prices'
+import { classifyPurchaseError, purchaseErrorMessage } from '@/lib/paywall/purchaseError'
+import { isReviewReplayAccount } from '@/lib/auth/reviewReplay'
 
 type Tab = 'plans' | 'subscription'
 
@@ -72,6 +75,7 @@ const OffreScreen: FC = () => {
   const [cancelling, setCancelling] = useState(false)
   const { offerings, purchase, isLoading, customerInfo } = usePurchases()
   const { profile, updateProfile } = useProfile()
+  const queryClient = useQueryClient()
   const isPremium = profile?.tier === 'premium'
 
   // `fromOnboarding=1` : paywall post-onboarding (obligatoire mais skippable,
@@ -88,11 +92,18 @@ const OffreScreen: FC = () => {
     }
   }
 
+  // Compte de démonstration remis à Apple : il doit VOIR le paywall, sinon le
+  // vérificateur ne peut pas juger de l'offre. Il est premium, donc la règle
+  // ci-dessous l'aurait fait sauter. Voir `lib/auth/reviewReplay.ts`.
+  const isReviewAccount = isReviewReplayAccount(
+    profile?.preferences as Record<string, unknown> | null | undefined,
+  )
+
   // Déjà premium pendant l'onboarding (edge) → on ne bloque pas sur le paywall.
   useEffect(() => {
-    if (fromOnboarding && isPremium) void dismissOnboardingPaywall()
+    if (fromOnboarding && isPremium && !isReviewAccount) void dismissOnboardingPaywall()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fromOnboarding, isPremium])
+  }, [fromOnboarding, isPremium, isReviewAccount])
 
   const handleClose = () => {
     if (fromOnboarding) void dismissOnboardingPaywall()
@@ -137,24 +148,50 @@ const OffreScreen: FC = () => {
 
     try {
       const ok = await purchase(pkg)
-      if (ok && fromOnboarding) await dismissOnboardingPaywall()
-    } catch {
+      // `false` = annulation : la personne a fermé la feuille de paiement.
+      // On ne dit rien, on la laisse sur le paywall.
+      if (!ok) return
+
+      // Le paywall a rempli son office : on le marque vu avant de quitter,
+      // sinon le guard le réimposerait en arrivant sur l'écran de bienvenue.
+      await updateProfile({ paywall_shown: true }).catch(() => {})
+
+      // Le tier bascule côté serveur (webhook RevenueCat) : on force le
+      // rechargement du profil et des crédits pour que l'app reflète l'achat
+      // sans attendre l'expiration du cache de 10 minutes.
+      void queryClient.invalidateQueries({ queryKey: ['profile'] })
+      void queryClient.invalidateQueries({ queryKey: ['credits'] })
+
+      // `replace` : revenir en arrière ne doit pas ramener sur le paywall.
+      router.replace(ROUTES.PREMIUM.WELCOME as any)
+    } catch (err) {
       // Message destiné à la personne, pas au développeur : l'ancien texte
       // expliquait les builds signés et les émulateurs, ce qu'un utilisateur
       // n'a pas à lire, et citait l'autre magasin au passage.
-      Alert.alert(
-        'Achat impossible',
-        `L'achat n'a pas pu aboutir. Réessaie dans un instant, ou vérifie ton compte ${STORE_NAME}.`,
-      )
+      const msg = purchaseErrorMessage(classifyPurchaseError(err), STORE_NAME)
+      if (msg) Alert.alert(msg.title, msg.body)
     }
   }
 
   const handleRestore = async () => {
     try {
-      await Purchases.restorePurchases()
-      Alert.alert('Achats restaurés', 'Tes achats ont bien été restaurés.')
-    } catch {
-      Alert.alert('Restauration impossible', "Impossible de restaurer tes achats pour le moment.")
+      const info = await Purchases.restorePurchases()
+      const restored = info.entitlements.active.premium !== undefined
+      if (!restored) {
+        // Dire « restaurés » quand il n'y avait rien à restaurer envoie
+        // chercher un abonnement qui n'apparaîtra jamais.
+        Alert.alert(
+          'Aucun achat à restaurer',
+          `Aucun abonnement actif n'est rattaché à ce compte ${STORE_NAME}.`,
+        )
+        return
+      }
+      void queryClient.invalidateQueries({ queryKey: ['profile'] })
+      void queryClient.invalidateQueries({ queryKey: ['credits'] })
+      Alert.alert('Achats restaurés', 'Ton abonnement Premium est de nouveau actif.')
+    } catch (err) {
+      const msg = purchaseErrorMessage(classifyPurchaseError(err), STORE_NAME)
+      if (msg) Alert.alert('Restauration impossible', msg.body)
     }
   }
 

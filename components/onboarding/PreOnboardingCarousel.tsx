@@ -1,13 +1,16 @@
 /**
- * PreOnboardingCarousel — carrousel de présentation au tout premier lancement.
+ * PreOnboardingCarousel : carrousel de présentation montré à toute personne
+ * non connectée : première installation, réouverture, retour après
+ * déconnexion. C'est la vitrine, et l'écran de connexion ne doit jamais la
+ * court-circuiter.
  *
  * 4 illustrations plein écran (assets/images/PreOnboarding/ecran{1..4}.webp), les
  * titres/sous-titres étant DÉJÀ intégrés dans les images. On superpose seulement
  * les contrôles de navigation en bas (pastilles + bouton « Suivant », puis CTA
  * « Commencer » sur le dernier écran) et un « Passer » en haut à droite.
  *
- * Au « Commencer » / « Passer » : on marque le pré-onboarding comme vu (flag
- * device-level) puis on route vers l'inscription. L'AuthGuard prend le relais.
+ * Au « Commencer » / « Passer » : on marque le carrousel comme traversé POUR CE
+ * LANCEMENT, puis on route vers l'inscription. L'AuthGuard prend le relais.
  */
 
 import { useCallback, useRef, useState, type FC } from 'react'
@@ -52,7 +55,9 @@ export const PreOnboardingCarousel: FC = () => {
 
   const finish = useCallback(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
-    void markPreOnboardingDone()
+    // Marquage SYNCHRONE avant la navigation : l'AuthGuard lit le flag dans le
+    // même tick et ne renvoie donc pas au carrousel qu'on vient de quitter.
+    markPreOnboardingDone()
     router.replace(ROUTES.AUTH.WELCOME)
   }, [router])
 

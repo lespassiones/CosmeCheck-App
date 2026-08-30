@@ -11,13 +11,13 @@
  *   4. AuthGuard : redirige selon session + onboarding/profil (voir docs/NAVIGATION.md).
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { Stack, useRouter, useSegments } from 'expo-router'
+import { Stack, useRootNavigationState, useRouter, useSegments } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
 import {
@@ -44,7 +44,14 @@ import {
 } from '@/lib/storage/queryPersist'
 import { clearExpiredCache } from '@/lib/storage/session'
 import { clearExpiredAiCache } from '@/lib/storage/aiCache'
-import { getPreOnboardingCache, isPreOnboardingDone } from '@/lib/storage/preOnboarding'
+import {
+  hasSeenPreOnboardingThisLaunch,
+  subscribePreOnboarding,
+} from '@/lib/storage/preOnboarding'
+import {
+  isSignInPending,
+  subscribeSignInPending,
+} from '@/lib/auth/signInPending'
 import { queryClient } from '@/lib/storage/queryClient'
 import { AppErrorBoundary } from '@/components/shared/AppErrorBoundary'
 import { AnimatedSplash } from '@/components/shared/AnimatedSplash'
@@ -53,8 +60,44 @@ import { OfflineBanner } from '@/components/shared/OfflineBanner'
 import { initSentry } from '@/lib/reporting/report'
 import { NotificationsInit } from '@/components/notifications/NotificationsInit'
 
+/**
+ * Délai au bout duquel on affiche l'app même si les polices ne sont pas prêtes.
+ *
+ * Le splash NATIF ne se masque qu'à un seul endroit de toute l'app : le montage
+ * d'`AnimatedSplash`. Or `AnimatedSplash` n'est rendu qu'une fois `useFonts`
+ * résolu. Tant que `useFonts` ne rend ni `true` ni une erreur, `RootLayout`
+ * renvoie `null`, l'overlay ne se monte pas, `hideAsync()` n'est jamais appelé,
+ * et le splash natif reste indéfiniment. C'est très exactement le motif de rejet
+ * 2.1(a) « the app is unresponsive and stays on the splash screen ».
+ *
+ * Passé ce délai on rend l'app avec la police système. Une typographie de repli
+ * pendant une seconde vaut infiniment mieux qu'un écran figé, et la vraie police
+ * s'applique d'elle-même dès qu'elle arrive.
+ */
+const FONTS_TIMEOUT_MS = 2500
+
+/**
+ * Filet de dernier recours : le splash natif est masqué au bout de ce délai,
+ * quoi qu'il arrive en amont. Il ne devrait jamais servir, puisque le rendu est
+ * déjà garanti par `FONTS_TIMEOUT_MS` ; il couvre le cas où le rendu lui-même
+ * n'aboutit pas. Un appel de trop à `hideAsync()` est sans effet.
+ */
+const SPLASH_HARD_LIMIT_MS = 5000
+
 // Garde le splash natif visible jusqu'à ce qu'on soit prêts à afficher l'app.
 void SplashScreen.preventAutoHideAsync()
+
+// Filet de dernier recours, armé DÈS L'IMPORT et non dans un effet : si un
+// composant lève pendant le rendu, React ne monte aucun effet, et un filet posé
+// dans `RootLayout` ne se déclencherait donc jamais. Ici le minuteur tourne même
+// si l'app ne rend jamais rien.
+//
+// Sans lui, `hideAsync()` n'existe qu'à un seul endroit, le montage
+// d'`AnimatedSplash`, lui-même conditionné au chargement des polices. Toute
+// panne en amont laissait le splash natif à l'écran pour toujours.
+setTimeout(() => {
+  void SplashScreen.hideAsync().catch(() => {})
+}, SPLASH_HARD_LIMIT_MS)
 
 // Sentry initialisé le plus tôt possible pour capturer les erreurs au boot.
 // try-catch : le module natif Sentry n'est pas disponible en Expo Go sans dev build.
@@ -75,41 +118,64 @@ const asyncStoragePersister = createAsyncStoragePersister({
  *
  * Règles (anti-boucle : chaque branche est conditionnée par le segment courant) :
  *   - auth en cours de chargement → on attend (splash visible) ;
- *   - pas de session et hors (auth) → /(auth)/welcome (ou /(preonboarding) au 1er lancement) ;
+ *   - PAS DE SESSION → /(preonboarding), toujours, tant que le carrousel n'a pas
+ *     été traversé pendant ce lancement (règle absolue : l'écran de connexion
+ *     n'est jamais un point d'entrée) ;
  *   - session et dans (auth) → onboarding si nécessaire, sinon /(tabs) ;
+ *   - session, onboarding requis et consentement non donné → /consent ;
  *   - session, onboarding non vu et profil incomplet, hors (onboarding)
  *     → /(onboarding) (on attend que le profil soit chargé avant de décider) ;
  *   - sinon : on laisse passer.
  */
 function AuthGuard() {
   const { isLoading: authLoading, isAuthenticated } = useAuth()
-  const { isProfileComplete, onboardingShown, paywallShown, isLoading: profileLoading } = useProfile()
+  const {
+    isProfileComplete,
+    onboardingShown,
+    paywallShown,
+    dataConsentGiven,
+    profileUnavailable,
+    isLoading: profileLoading,
+  } = useProfile()
   const segments = useSegments()
   const router = useRouter()
 
-  // Flag device-level du pré-onboarding (carrousel 1er lancement). `null` = en
-  // cours de lecture. Relu à chaque bascule d'auth (ex. déconnexion).
-  const [preOnbDone, setPreOnbDone] = useState<boolean | null>(getPreOnboardingCache())
-  useEffect(() => {
-    let mounted = true
-    void isPreOnboardingDone().then((v) => {
-      if (mounted) setPreOnbDone(v)
-    })
-    return () => {
-      mounted = false
-    }
-  }, [isAuthenticated])
+  // Les deux drapeaux MÉMOIRE que ce garde consulte. Ils étaient lus dans
+  // l'effet sans figurer dans ses dépendances : quand le guard s'abstenait à
+  // cause de l'un d'eux, rien ne le réveillait à sa retombée et son « ne bouge
+  // pas » devenait définitif. `useSyncExternalStore` les rend observables, donc
+  // toute abstention redevient une simple attente.
+  const signInPending = useSyncExternalStore(
+    subscribeSignInPending,
+    isSignInPending,
+    isSignInPending,
+  )
+  const preOnbSeen = useSyncExternalStore(
+    subscribePreOnboarding,
+    hasSeenPreOnboardingThisLaunch,
+    hasSeenPreOnboardingThisLaunch,
+  )
+
+  // Le navigateur racine est-il monté ? Une navigation émise avant l'est en
+  // pure perte : expo-router la refuse silencieusement. Comme cette clé change
+  // dès que le navigateur est prêt, elle est aussi ce qui REJOUE la décision
+  // au bon moment, au lieu de la perdre pour de bon.
+  const navKey = useRootNavigationState()?.key
 
   useEffect(() => {
+    if (!navKey) return
     // Décision déléguée à une fonction pure testée (lib/navigation/authRoute).
     const target = resolveAuthRoute({
       authLoading,
+      signInPending,
       isAuthenticated,
       profileLoading,
+      profileUnavailable,
       onboardingShown,
       isProfileComplete,
       paywallShown,
-      preOnbDone,
+      consentGiven: dataConsentGiven,
+      preOnbSeen,
       group: segments[0],
     })
     switch (target) {
@@ -118,6 +184,9 @@ function AuthGuard() {
         break
       case 'preonboarding':
         router.replace(ROUTES.PREONBOARDING.INDEX)
+        break
+      case 'consent':
+        router.replace(ROUTES.CONSENT.INDEX as any)
         break
       case 'onboarding':
         router.replace(ROUTES.ONBOARDING.INDEX)
@@ -137,13 +206,17 @@ function AuthGuard() {
         break // null → on laisse passer / on attend
     }
   }, [
+    navKey,
     authLoading,
+    signInPending,
     isAuthenticated,
     profileLoading,
+    profileUnavailable,
     onboardingShown,
     isProfileComplete,
     paywallShown,
-    preOnbDone,
+    dataConsentGiven,
+    preOnbSeen,
     segments,
     router,
   ])
@@ -196,8 +269,8 @@ function RootNavigator() {
     >
       <Stack.Screen name="(preonboarding)" options={{ animation: 'fade' }} />
       <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
+      <Stack.Screen name="consent/index" options={{ animation: 'fade', gestureEnabled: false }} />
       <Stack.Screen name="(onboarding)" />
-      <Stack.Screen name="(paywall)" options={{ presentation: 'modal' }} />
       <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
       <Stack.Screen name="advisor/index" options={{ animation: 'fade' }} />
       <Stack.Screen name="advisor/recommendations" />
@@ -217,6 +290,12 @@ function RootNavigator() {
       <Stack.Screen name="profile/credits" />
       <Stack.Screen name="ingredient/[slug]" />
       <Stack.Screen name="offre/index" options={{ presentation: 'modal' }} />
+      {/* Bienvenue Premium : plein écran, sans geste de retour. Revenir en
+          arrière ramènerait sur le paywall qu'on vient d'acheter. */}
+      <Stack.Screen
+        name="premium/index"
+        options={{ animation: 'fade', gestureEnabled: false }}
+      />
       <Stack.Screen name="legal/cgu" />
       <Stack.Screen name="legal/privacy" />
       <Stack.Screen name="legal/mentions" />
@@ -239,9 +318,17 @@ export default function RootLayout() {
   // montage et se fond dès que l'auth est résolue (voir AnimatedSplash).
   const [splashDone, setSplashDone] = useState(false)
 
-  // Tant que les polices ne sont pas prêtes (et qu'aucune erreur n'a coupé le
-  // chargement), on ne rend rien → le splash natif reste affiché.
-  if (!fontsLoaded && !fontError) {
+  // Les polices ont assez attendu : on rend avec la police système.
+  const [fontsTimedOut, setFontsTimedOut] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setFontsTimedOut(true), FONTS_TIMEOUT_MS)
+    return () => clearTimeout(t)
+  }, [])
+
+  // On ne retient l'affichage que le temps de charger les polices, et jamais
+  // au-delà de `FONTS_TIMEOUT_MS` : une app figée sur son splash est un rejet
+  // App Store (2.1(a)), une police de repli passagère ne l'est pas.
+  if (!fontsLoaded && !fontError && !fontsTimedOut) {
     return null
   }
 
@@ -258,18 +345,25 @@ export default function RootLayout() {
           }}
         >
           <StatusBar style="dark" />
-          <CacheJanitor />
-          <RevenueCatInit />
-          <NotificationsInit />
-          <AuthGuard />
+          {/* La frontière d'erreur couvre TOUT ce qui est monté à la racine, et
+              plus seulement le navigateur. `AuthGuard`, `MaintenanceGate` et
+              l'overlay de lancement interrogent le profil ou la config : si
+              l'un d'eux levait au rendu, l'app mourait sans écran de repli, ce
+              qui se voit de l'extérieur comme une app qui ne répond pas. La
+              frontière est une classe autonome, sans dépendance aux providers,
+              donc l'élargir ne coûte rien. */}
           <AppErrorBoundary>
+            <CacheJanitor />
+            <RevenueCatInit />
+            <NotificationsInit />
+            <AuthGuard />
             <RootNavigator />
             <CreditsExhaustedModal />
+            <MaintenanceGate />
+            <ToastHost />
+            <OfflineBanner />
+            {!splashDone ? <AnimatedSplash onFinish={() => setSplashDone(true)} /> : null}
           </AppErrorBoundary>
-          <MaintenanceGate />
-          <ToastHost />
-          <OfflineBanner />
-          {!splashDone ? <AnimatedSplash onFinish={() => setSplashDone(true)} /> : null}
         </PersistQueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
