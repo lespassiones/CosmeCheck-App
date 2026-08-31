@@ -18,6 +18,16 @@
  * traitants, durées, base légale). Si l'un des deux change, l'autre doit
  * changer aussi.
  *
+ * ── Le recours à l'IA est annoncé AVANT le détail (31/08/2026) ──────────────
+ *
+ * Le rôle de l'intelligence artificielle n'était expliqué qu'en troisième
+ * section, après deux écrans de défilement. Un consentement éclairé ne se
+ * juge pas à ce qui est écrit quelque part, mais à ce qui est lu avant de
+ * cocher : le destinataire des données doit apparaître d'emblée. Un encart en
+ * tête d'écran l'annonce donc en quatre lignes, la section détaillée reste en
+ * place plus bas, et la case à cocher le nomme explicitement, puisque c'est
+ * elle qui vaut consentement.
+ *
  * Le bouton reste inerte tant que la case n'est pas cochée : c'est le geste qui
  * fait le consentement, pas le fait d'avoir atteint le bas de la page.
  */
@@ -137,6 +147,42 @@ export const DataConsentScreen: FC = () => {
           voici précisément ce qu'on en fait, et ce qu'on n'en fait pas. Prends
           le temps de lire, c'est fait pour.
         </Text>
+
+        {/* L'essentiel, avant le détail : à qui vont les données et pour quoi.
+            C'est ce qui distingue un consentement éclairé d'un consentement
+            simplement documenté. */}
+        <View style={styles.aiCallout}>
+          <View style={styles.aiHead}>
+            <View style={styles.aiIcon}>
+              <Ionicons name="sparkles" size={16} color={colors.accent} />
+            </View>
+            <Text style={styles.aiTitle}>
+              Ton profil est transmis à une intelligence artificielle
+            </Text>
+          </View>
+          <Text style={styles.aiPara}>
+            Toutes les réponses <Text style={styles.aiStrong}>personnalisées</Text>{' '}
+            de l'application, les explications d'ingrédients, la compatibilité
+            avec ta peau, les conseils de routine et le conseiller beauté, sont
+            rédigées par des modèles d'intelligence artificielle (OpenAI,
+            Mistral AI). On leur transmet pour cela{' '}
+            <Text style={styles.aiStrong}>ton profil beauté</Text> et la
+            composition du produit concerné.
+          </Text>
+          <View style={styles.aiFacts}>
+            <Text style={styles.aiFact}>
+              · Jamais ton nom, ton adresse e-mail ni ton identifiant de compte.
+            </Text>
+            <Text style={styles.aiFact}>
+              · Jamais pour entraîner un modèle, c'est contractuellement exclu.
+            </Text>
+            <Text style={styles.aiFact}>
+              · La note d'un produit, elle, est calculée sans IA, et ton profil
+              ne la modifie pas.
+            </Text>
+          </View>
+          <Text style={styles.aiMore}>Tout le détail plus bas, « Le rôle de l'intelligence artificielle ».</Text>
+        </View>
 
         <Section icon="flask-outline" tint={colors.accent} title="Ce que fait Cosme Check">
           <P>
@@ -302,7 +348,7 @@ export const DataConsentScreen: FC = () => {
           onPress={toggle}
           accessibilityRole="checkbox"
           accessibilityState={{ checked }}
-          accessibilityLabel="J'accepte l'utilisation de mon profil beauté pour personnaliser mes analyses"
+          accessibilityLabel="J'accepte l'utilisation de mon profil beauté, y compris par des modèles d'intelligence artificielle, pour personnaliser mes analyses"
           style={[styles.consentBox, checked && styles.consentBoxOn]}
         >
           <View style={[styles.checkbox, checked && styles.checkboxOn]}>
@@ -311,8 +357,12 @@ export const DataConsentScreen: FC = () => {
           <Text style={styles.consentText}>
             J'ai lu ce qui précède et j'accepte que mon profil beauté, y compris
             mes sensibilités et allergies déclarées, soit utilisé pour
-            personnaliser mes analyses et mes conseils, dans les conditions
-            décrites ci-dessus.
+            personnaliser mes analyses et mes conseils,{' '}
+            <Text style={styles.consentStrong}>
+              y compris en étant transmis à des modèles d'intelligence
+              artificielle (OpenAI, Mistral AI)
+            </Text>
+            , dans les conditions décrites ci-dessus.
           </Text>
         </Pressable>
       </ScrollView>
@@ -350,13 +400,76 @@ export const DataConsentScreen: FC = () => {
   )
 }
 
+/**
+ * Largeur de lecture maximale.
+ *
+ * Sur une fenêtre large (iPad, pliable, mode compatibilité), un paragraphe
+ * étiré sur toute la largeur devient pénible à lire et c'est exactement ce que
+ * la guideline 4 d'Apple sanctionne. On borne la colonne et on la centre.
+ */
+const READING_MAX_WIDTH = 560
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
   scroll: {
+    width: '100%',
+    maxWidth: READING_MAX_WIDTH,
+    alignSelf: 'center',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.xl,
+  },
+
+  // ── Encart « l'IA lit ton profil », en tête d'écran ──────────────────
+  aiCallout: {
+    marginTop: spacing.base,
+    marginBottom: spacing.sm,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: `${colors.accent}33`,
+    gap: spacing.sm,
+  },
+  aiHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  aiIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.full,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiTitle: {
+    ...typography.bodySemiBold,
+    color: colors.ink,
+    flex: 1,
+  },
+  aiPara: {
+    ...typography.small,
+    color: colors.ink,
+    lineHeight: 20,
+  },
+  aiStrong: {
+    ...typography.smallSemiBold,
+    color: colors.ink,
+  },
+  aiFacts: {
+    gap: 4,
+  },
+  aiFact: {
+    ...typography.small,
+    color: colors.inkMuted,
+    lineHeight: 19,
+  },
+  aiMore: {
+    ...typography.xs,
+    color: colors.accentDeep,
   },
 
   heroIcon: {
@@ -478,6 +591,10 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     flex: 1,
   },
+  consentStrong: {
+    ...typography.smallSemiBold,
+    color: colors.ink,
+  },
 
   footer: {
     paddingHorizontal: spacing.lg,
@@ -488,6 +605,9 @@ const styles = StyleSheet.create({
     borderTopColor: colors.borderMuted,
   },
   cta: {
+    width: '100%',
+    maxWidth: READING_MAX_WIDTH - spacing.lg * 2,
+    alignSelf: 'center',
     height: 54,
     borderRadius: radius.full,
     backgroundColor: colors.success,
