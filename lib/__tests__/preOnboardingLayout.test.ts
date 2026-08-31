@@ -120,6 +120,15 @@ describe('le carrousel ne peut plus tronquer ni recouvrir son texte', () => {
 describe("le consentement annonce l'IA avant de la detailler", () => {
   const source = lire('components/consent/DataConsentScreen.tsx')
 
+  it('la politique de confidentialite nomme la meme technologie', () => {
+    // L'en-tete de DataConsentScreen impose que les deux textes disent la
+    // meme chose. Deux versions divergentes du meme engagement, c'est
+    // exactement ce qu'un verificateur releve.
+    const privacy = lire('app/legal/privacy.tsx')
+    expect(privacy).toMatch(/ChatGPT/)
+    expect(privacy).toMatch(/Mistral/)
+  })
+
   it("l'encart IA precede la premiere section depliee", () => {
     // Un consentement eclaire ne se juge pas a ce qui est ecrit quelque part,
     // mais a ce qui est lu avant de cocher. Le destinataire des donnees doit
@@ -139,6 +148,9 @@ describe("le consentement annonce l'IA avant de la detailler", () => {
     expect(encart).toMatch(/intelligence artificielle/i)
     expect(encart).toMatch(/OpenAI/)
     expect(encart).toMatch(/Mistral AI/)
+    // Nommer la technologie, pas seulement le fournisseur : « OpenAI » ne
+    // dit rien au grand public, « ChatGPT » si.
+    expect(encart).toMatch(/ChatGPT/)
     expect(encart).toMatch(/profil beaut/i)
     expect(encart).toMatch(/personnalis/i)
   })
@@ -159,5 +171,6 @@ describe("le consentement annonce l'IA avant de la detailler", () => {
     expect(zone).toMatch(/intelligence\s*\n?\s*artificielle/i)
     expect(zone).toMatch(/OpenAI/)
     expect(zone).toMatch(/Mistral AI/)
+    expect(zone).toMatch(/ChatGPT/)
   })
 })

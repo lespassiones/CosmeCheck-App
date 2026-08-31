@@ -164,8 +164,12 @@ export const DataConsentScreen: FC = () => {
             Toutes les réponses <Text style={styles.aiStrong}>personnalisées</Text>{' '}
             de l'application, les explications d'ingrédients, la compatibilité
             avec ta peau, les conseils de routine et le conseiller beauté, sont
-            rédigées par des modèles d'intelligence artificielle (OpenAI,
-            Mistral AI). On leur transmet pour cela{' '}
+            rédigées par une intelligence artificielle :{' '}
+            <Text style={styles.aiStrong}>
+              les modèles GPT d'OpenAI, la technologie de ChatGPT
+            </Text>
+            , et <Text style={styles.aiStrong}>Mistral AI</Text> en complément.
+            On leur transmet pour cela{' '}
             <Text style={styles.aiStrong}>ton profil beauté</Text> et la
             composition du produit concerné.
           </Text>
@@ -252,8 +256,16 @@ export const DataConsentScreen: FC = () => {
             Rédiger une explication compréhensible, comparer deux produits ou
             répondre à une question ouverte demande autre chose qu'un calcul.
             Pour ces parties précises, l'application fait appel à des modèles de
-            langage : OpenAI en principal, Mistral AI en complément et en
-            secours.
+            langage. En principal, les modèles GPT d'OpenAI, ceux qui font
+            tourner ChatGPT : GPT-4o mini et GPT-4.1 selon la demande. En
+            complément et en secours, Mistral Small, de la société française
+            Mistral AI.
+          </P>
+          <P>
+            Précision utile : l'application n'utilise pas l'application ChatGPT
+            grand public. Elle appelle directement l'interface professionnelle
+            d'OpenAI, ce qui n'est pas la même chose du point de vue de tes
+            données, comme le paragraphe suivant l'explique.
           </P>
           <P>
             Ce qui leur est transmis se limite à ce qui est nécessaire : les
@@ -348,7 +360,7 @@ export const DataConsentScreen: FC = () => {
           onPress={toggle}
           accessibilityRole="checkbox"
           accessibilityState={{ checked }}
-          accessibilityLabel="J'accepte l'utilisation de mon profil beauté, y compris par des modèles d'intelligence artificielle, pour personnaliser mes analyses"
+          accessibilityLabel="J'accepte l'utilisation de mon profil beauté, y compris sa transmission aux modèles GPT d'OpenAI, la technologie de ChatGPT, et à Mistral AI, pour personnaliser mes analyses"
           style={[styles.consentBox, checked && styles.consentBoxOn]}
         >
           <View style={[styles.checkbox, checked && styles.checkboxOn]}>
@@ -360,7 +372,8 @@ export const DataConsentScreen: FC = () => {
             personnaliser mes analyses et mes conseils,{' '}
             <Text style={styles.consentStrong}>
               y compris en étant transmis à des modèles d'intelligence
-              artificielle (OpenAI, Mistral AI)
+              artificielle : les modèles GPT d'OpenAI, la technologie de
+              ChatGPT, et Mistral AI
             </Text>
             , dans les conditions décrites ci-dessus.
           </Text>

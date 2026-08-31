@@ -67,8 +67,8 @@ const PRIVACY_SECTIONS: LegalSection[] = [
           ],
           bullets: [
             "Supabase (base de données et authentification) — serveurs Amazon Web Services en Irlande (région eu-west-1, UE). Conformité RGPD assurée par les Clauses Contractuelles Types.",
-            "OpenAI (modèles d'IA générative utilisés par l'assistant Beauty Advisor et par la personnalisation des analyses, synthèses et comparaisons) — États-Unis, transferts encadrés par les Clauses Contractuelles Types ; données API non utilisées pour l'entraînement, conservées 30 jours maximum côté fournisseur.",
-            "Mistral AI (modèles d'IA, en complément / secours d'OpenAI) — société française, hébergement principalement dans l'Union européenne.",
+            "OpenAI (modèles GPT, la technologie de ChatGPT : GPT-4o mini et GPT-4.1, utilisés par l'assistant Beauty Advisor et par la personnalisation des analyses, synthèses et comparaisons ; appels via l'API professionnelle, pas via l'application ChatGPT grand public) — États-Unis, transferts encadrés par les Clauses Contractuelles Types ; données API non utilisées pour l'entraînement, conservées 30 jours maximum côté fournisseur.",
+            "Mistral AI (modèle Mistral Small, en complément / secours d'OpenAI) — société française, hébergement principalement dans l'Union européenne.",
             "PostHog (mesure d'audience anonyme, pour comprendre l'usage global de l'app) — serveurs situés dans l'Union européenne ; aucune donnée nominative ni enregistrement d'écran.",
             "Sentry (détection des plantages et erreurs techniques) — serveurs situés dans l'Union européenne (Allemagne).",
             "RevenueCat (gestion technique des abonnements) — identifiant technique d'abonnement, sans profil beauté ni contenu d'analyse.",
@@ -80,7 +80,7 @@ const PRIVACY_SECTIONS: LegalSection[] = [
         {
           title: '7. Transferts hors UE et traitement par IA',
           paragraphs: [
-            "Pour personnaliser tes analyses, tes synthèses, tes comparaisons et les réponses de l'assistant Beauty Advisor, les informations nécessaires — y compris, le cas échéant, ton profil beauté (type de peau, sensibilités, restrictions d'ingrédients) et la composition des produits — sont transmises de façon sécurisée à nos prestataires d'intelligence artificielle (OpenAI et Mistral AI). Ce traitement n'a lieu que si tu as renseigné ces informations et repose sur ton consentement (art. 6.1.a et 9.2.a RGPD).",
+            "Pour personnaliser tes analyses, tes synthèses, tes comparaisons et les réponses de l'assistant Beauty Advisor, les informations nécessaires — y compris, le cas échéant, ton profil beauté (type de peau, sensibilités, restrictions d'ingrédients) et la composition des produits — sont transmises de façon sécurisée à nos prestataires d'intelligence artificielle : les modèles GPT d'OpenAI, la technologie de ChatGPT, et Mistral AI en complément. Ce traitement n'a lieu que si tu as renseigné ces informations et repose sur ton consentement (art. 6.1.a et 9.2.a RGPD).",
             "Les appels aux modèles OpenAI impliquent un transfert de données vers les États-Unis, encadré par les Clauses Contractuelles Types de la Commission européenne. Les données transmises via l'API ne sont pas utilisées pour entraîner les modèles et sont conservées 30 jours maximum côté fournisseur. Tu peux à tout moment retirer ton consentement en effaçant ton profil beauté depuis « Mon profil ».",
           ],
         },

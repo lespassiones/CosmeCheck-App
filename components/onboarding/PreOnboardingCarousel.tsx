@@ -40,7 +40,7 @@
  * LANCEMENT, puis on route vers l'inscription. L'AuthGuard prend le relais.
  */
 
-import { useCallback, useRef, useState, type FC } from 'react'
+import { useCallback, useEffect, useRef, useState, type FC } from 'react'
 import {
   FlatList,
   Pressable,
@@ -90,6 +90,10 @@ export const PreOnboardingCarousel: FC = () => {
   const [index, setIndex] = useState(0)
   const isLast = index === SLIDES.length - 1
 
+  // Miroir de `index` lisible sans redéclencher l'effet de recalage ci-dessous.
+  const indexRef = useRef(0)
+  indexRef.current = index
+
   // Hauteur RÉELLE de la zone d'image, mesurée après que la barre du bas a pris
   // sa place. On ne la déduit pas de la hauteur de fenêtre : ce calcul-là
   // ignorerait la barre, les encoches et l'indicateur d'accueil, et c'est
@@ -99,6 +103,22 @@ export const PreOnboardingCarousel: FC = () => {
     const h = Math.round(e.nativeEvent.layout.height)
     setAreaHeight((prev) => (prev === h ? prev : h))
   }, [])
+
+  // Recalage sur changement de taille de fenêtre.
+  //
+  // Le défilement d'une FlatList horizontale est un décalage en PIXELS. Quand
+  // la fenêtre change de largeur, ce décalage ne veut plus rien dire : on se
+  // retrouve à cheval sur deux illustrations. Ça n'arrive jamais sur un
+  // téléphone verrouillé en portrait, et tout le temps sur l'appareil qui a
+  // motivé ce refus : la fenêtre de compatibilité d'un iPad se redimensionne
+  // d'un geste, et Apple y vérifie l'app.
+  useEffect(() => {
+    if (areaHeight <= 0) return
+    listRef.current?.scrollToOffset({
+      offset: indexRef.current * width,
+      animated: false,
+    })
+  }, [width, areaHeight])
 
   const finish = useCallback(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
