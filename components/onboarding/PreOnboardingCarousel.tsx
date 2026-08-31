@@ -20,10 +20,16 @@
  *
  *   1. `contentFit="cover"` sur une image au rapport 0,472. Sur un iPhone 15
  *      Plus (0,461) le cadrage ne rogne quasi rien, d'où une mise en page qui
- *      semblait juste. Dans la fenêtre iPad (0,695), `cover` cadre sur la
- *      largeur : l'image devient 1,47 fois plus haute que la fenêtre, donc
- *      **32 % de sa hauteur est coupée, ~16 % en haut et ~16 % en bas**. Un
- *      iPhone SE (0,562) en perdait déjà 16 %.
+ *      semblait juste. Ailleurs, `cover` cadre sur la largeur et coupe le haut
+ *      comme le bas.
+ *
+ *      ⚠️ Le rapport à retenir n'est PAS celui de l'écran de l'iPad (0,695) :
+ *      une app iPhone n'y tourne pas en plein écran, mais dans une fenêtre de
+ *      compatibilité. Mesurée sur les captures d'Apple, cette fenêtre fait
+ *      environ 0,55, soit très exactement le rapport d'un **iPhone SE**
+ *      (0,562). Le rognage etait donc d'environ **15 %, ~7 % en haut et ~7 %
+ *      en bas**, et Apple a vu le defaut que vivait deja tout possesseur
+ *      d'iPhone SE. Ce n'etait pas un defaut propre a l'iPad.
  *
  *   2. Les contrôles du bas étaient posés en `position: absolute` PAR-DESSUS
  *      l'image. Tant que le cadrage ne bougeait pas, ils tombaient dans la
@@ -54,7 +60,7 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native'
 import { Image } from 'expo-image'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
@@ -86,6 +92,7 @@ const CONTROLS_MAX_WIDTH = 520
 export const PreOnboardingCarousel: FC = () => {
   const router = useRouter()
   const { width } = useWindowDimensions()
+  const insets = useSafeAreaInsets()
   const listRef = useRef<FlatList<number>>(null)
   const [index, setIndex] = useState(0)
   const isLast = index === SLIDES.length - 1
@@ -162,7 +169,11 @@ export const PreOnboardingCarousel: FC = () => {
   )
 
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
+    // Racine PLEIN ECRAN, et pas une zone sure : l'illustration n'a aucune
+    // raison de s'arreter sous la barre d'etat, elle y perdait de la hauteur
+    // donc de la taille. Seuls les elements interactifs ont besoin des marges
+    // sures : la barre du bas les prend, et « Passer » lit l'encoche.
+    <View style={styles.root}>
       <View style={styles.imageArea} onLayout={onAreaLayout}>
         {areaHeight > 0 && (
           <FlatList
@@ -186,7 +197,11 @@ export const PreOnboardingCarousel: FC = () => {
           <Pressable
             onPress={finish}
             hitSlop={10}
-            style={({ pressed }) => [styles.skip, pressed && styles.pressed]}
+            style={({ pressed }) => [
+              styles.skip,
+              { top: insets.top + spacing.md },
+              pressed && styles.pressed,
+            ]}
             accessibilityRole="button"
             accessibilityLabel="Passer l'introduction"
           >
@@ -197,23 +212,27 @@ export const PreOnboardingCarousel: FC = () => {
 
       {/* Barre du bas : DANS le flux, sous l'image. Elle occupe sa place au
           lieu de la prendre, donc elle ne peut plus recouvrir un texte. */}
-      <View style={styles.footer}>
-        <View style={styles.dots}>
-          {SLIDES.map((_, i) => (
-            <View key={i} style={[styles.dot, i === index && styles.dotActive]} />
-          ))}
+      <SafeAreaView edges={['bottom']} style={styles.footerSafe}>
+        <View style={styles.footer}>
+          <View style={styles.dots}>
+            {SLIDES.map((_, i) => (
+              <View key={i} style={[styles.dot, i === index && styles.dotActive]} />
+            ))}
+          </View>
+          <Pressable
+            onPress={goNext}
+            style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
+            accessibilityRole="button"
+            accessibilityLabel={isLast ? 'Commencer' : 'Écran suivant'}
+          >
+            <Text style={styles.ctaText}>{isLast ? 'Commencer' : 'Suivant'}</Text>
+            {!isLast && (
+              <Ionicons name="arrow-forward" size={18} color={colors.surface} />
+            )}
+          </Pressable>
         </View>
-        <Pressable
-          onPress={goNext}
-          style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
-          accessibilityRole="button"
-          accessibilityLabel={isLast ? 'Commencer' : 'Écran suivant'}
-        >
-          <Text style={styles.ctaText}>{isLast ? 'Commencer' : 'Suivant'}</Text>
-          {!isLast && <Ionicons name="arrow-forward" size={18} color={colors.surface} />}
-        </Pressable>
-      </View>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   )
 }
 
@@ -231,7 +250,8 @@ const styles = StyleSheet.create({
   },
   skip: {
     position: 'absolute',
-    top: spacing.md,
+    // `top` est fourni au rendu depuis l'encoche : en dur, la pilule passait
+    // sous la barre d'etat sur les appareils qui en ont une.
     right: spacing.md,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.base,
@@ -244,6 +264,9 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.6,
+  },
+  footerSafe: {
+    backgroundColor: colors.surface,
   },
   footer: {
     width: '100%',

@@ -53,11 +53,25 @@ function partVisible(
 /** Rapport largeur/hauteur des quatre illustrations, mesuré sur les fichiers. */
 const RATIO_ILLUSTRATION = 0.472
 
+/**
+ * Tous les formats Apple, du plus etroit au plus large.
+ *
+ * ⚠️ Le rapport a retenir pour l'iPad n'est PAS celui de son ecran (0,695) :
+ * une app iPhone n'y tourne pas en plein ecran mais dans une fenetre de
+ * compatibilite. Mesuree sur les captures d'Apple (~1080x1950 dans un ecran de
+ * 1640x2360), elle vaut ~0,55, soit le rapport d'un iPhone SE. Les deux
+ * rapports d'iPad plein ecran sont la pour le jour ou `supportsTablet`
+ * passerait a `true` : ce sont eux qui deviendraient la realite.
+ */
 const FENETRES = [
+  { nom: 'iPhone 16 Pro Max (440x956)', ratio: 440 / 956 },
   { nom: 'iPhone 15 Plus (430x932)', ratio: 430 / 932 },
+  { nom: 'iPhone 15 / 16 (393x852)', ratio: 393 / 852 },
+  { nom: 'iPhone 13 mini (375x812)', ratio: 375 / 812 },
   { nom: 'iPhone SE 3 (375x667)', ratio: 375 / 667 },
-  { nom: 'fenetre iPad des captures Apple', ratio: 1390 / 2000 },
-  { nom: 'iPad Air 11 pouces plein ecran', ratio: 820 / 1180 },
+  { nom: 'fenetre de compatibilite iPad (mesuree chez Apple)', ratio: 1080 / 1950 },
+  { nom: 'iPad Air 11 pouces portrait plein ecran', ratio: 820 / 1180 },
+  { nom: 'iPad Air 11 pouces paysage plein ecran', ratio: 1180 / 820 },
 ]
 
 describe('geometrie : pourquoi cover coupait du texte', () => {
@@ -68,14 +82,20 @@ describe('geometrie : pourquoi cover coupait du texte', () => {
     }))
     const parNom = Object.fromEntries(rognage.map((r) => [r.nom, r.perdu]))
 
-    // L'iPhone de reference est au rapport de l'illustration : le cadrage ne
+    // Les iPhone recents sont au rapport de l'illustration : le cadrage ne
     // rogne presque rien, d'ou une mise en page qui semblait juste.
     expect(parNom['iPhone 15 Plus (430x932)']).toBeLessThan(0.03)
+    expect(parNom['iPhone 15 / 16 (393x852)']).toBeLessThan(0.03)
+    expect(parNom['iPhone 16 Pro Max (440x956)']).toBeLessThan(0.03)
+    expect(parNom['iPhone 13 mini (375x812)']).toBeLessThan(0.03)
 
-    // Partout ailleurs, ca coupe, et ca coupe en haut ET en bas.
+    // Partout ailleurs ca coupe, en haut ET en bas. Et le format qu'Apple a
+    // vu, la fenetre de compatibilite, rogne autant qu'un iPhone SE : c'est
+    // le meme defaut, pas un defaut d'iPad.
     expect(parNom['iPhone SE 3 (375x667)']).toBeGreaterThan(0.1)
-    expect(parNom['fenetre iPad des captures Apple']).toBeGreaterThan(0.3)
-    expect(parNom['iPad Air 11 pouces plein ecran']).toBeGreaterThan(0.3)
+    expect(parNom['fenetre de compatibilite iPad (mesuree chez Apple)']).toBeGreaterThan(0.1)
+    expect(parNom['iPad Air 11 pouces portrait plein ecran']).toBeGreaterThan(0.3)
+    expect(parNom['iPad Air 11 pouces paysage plein ecran']).toBeGreaterThan(0.6)
   })
 
   it('contain ne rogne jamais rien, quelle que soit la fenetre', () => {
