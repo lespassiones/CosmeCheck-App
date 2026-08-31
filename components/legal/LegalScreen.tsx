@@ -67,6 +67,9 @@ export const LegalScreen: FC<Props> = ({ title, subtitle, sections, footer }) =>
   )
 }
 
+/** Largeur de lecture maximale, en points. Voir le style `content`. */
+const READING_MAX_WIDTH = 560
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   safe: { flex: 1 },
@@ -80,6 +83,18 @@ const styles = StyleSheet.create({
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { ...typography.h4, color: colors.ink, flex: 1, textAlign: 'center' },
   content: {
+    // Colonne de lecture bornee et centree.
+    //
+    // Ces quatre ecrans (CGU, confidentialite, mentions, a propos) sont les
+    // seuls a enchainer de longs paragraphes. Sur la fenetre de compatibilite
+    // d'un iPad, large d'environ 637 points, une ligne y depassait les
+    // 90 caracteres : lisible, mais au-dela du confort. La borne ne mord sur
+    // AUCUN iPhone, le plus large faisant 430 points, donc le rendu telephone
+    // est inchange au pixel. Meme valeur que l'ecran de consentement, qui
+    // enchaine le meme genre de texte.
+    width: '100%',
+    maxWidth: READING_MAX_WIDTH,
+    alignSelf: 'center',
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.base,
     gap: spacing.lg,

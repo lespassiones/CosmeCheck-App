@@ -20,17 +20,23 @@
  * parent (app/analyse/[id].tsx) au-dessus du panel.
  */
 
+/**
+ * ⚠️ `SafeAreaView` vient de `react-native-safe-area-context`, JAMAIS de
+ * `react-native`. Celui de React Native est iOS uniquement : sur Android il ne
+ * fait rien du tout, et l'en-tete de cette feuille passait donc sous la barre
+ * de notifications. Constate en production le 31/08/2026.
+ */
 import { useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react'
 import {
   Modal,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
   type LayoutChangeEvent,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 
@@ -541,7 +547,7 @@ export const AnalysisResultPanel: FC<Props> = ({
         presentationStyle="pageSheet"
         onRequestClose={() => setListModalOpen(false)}
       >
-        <SafeAreaView style={styles.modalSafe}>
+        <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Liste des ingrédients</Text>
             <Pressable

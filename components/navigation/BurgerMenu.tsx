@@ -14,12 +14,12 @@
 import { type FC, useCallback, useEffect, useState } from 'react'
 import {
   AccessibilityInfo,
-  Dimensions,
   Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native'
 import Animated, {
@@ -73,8 +73,19 @@ const NAV_ITEMS: ReadonlyArray<NavItem> = [
   { href: ROUTES.PROFILE.INDEX, matchPrefix: '/profile', label: 'Profil', Icon: UserIcon },
 ]
 
-const SCREEN_W = Dimensions.get('window').width
-const DRAWER_W = Math.min(320, SCREEN_W * 0.78)
+/**
+ * Part de la largeur de fenetre occupee par le tiroir, plafonnee.
+ *
+ * ⚠️ Ces deux valeurs etaient calculees ICI, au chargement du module, depuis
+ * `Dimensions.get('window')`. Une lecture unique pour toute la vie du
+ * processus : sur un appareil dont la fenetre change de taille, et la fenetre
+ * de compatibilite d'un iPad se redimensionne d'un geste, le tiroir gardait la
+ * largeur d'avant jusqu'au redemarrage de l'app. Meme erreur que celle qui a
+ * coute le refus guideline 4 : une valeur figee la ou il faut une valeur
+ * observee. La largeur est donc derivee de `useWindowDimensions()` au rendu.
+ */
+const DRAWER_MAX_W = 320
+const DRAWER_RATIO = 0.78
 
 export const BurgerMenu: FC = () => {
   const insets = useSafeAreaInsets()
@@ -84,12 +95,16 @@ export const BurgerMenu: FC = () => {
   const { profile } = useProfile()
   const isPremium = profile?.tier === 'premium'
 
+  // Largeur derivee de la fenetre A CHAQUE RENDU, pas une fois pour toutes.
+  const { width: screenW } = useWindowDimensions()
+  const drawerW = Math.min(DRAWER_MAX_W, screenW * DRAWER_RATIO)
+
   const [open, setOpen] = useState(false)
   // `mounted` garde la Modal montée le temps de l'animation de fermeture.
   const [mounted, setMounted] = useState(false)
   const [reduceMotion, setReduceMotion] = useState(false)
 
-  const translateX = useSharedValue(DRAWER_W)
+  const translateX = useSharedValue(drawerW)
   const backdrop = useSharedValue(0)
 
   useEffect(() => {
@@ -128,7 +143,7 @@ export const BurgerMenu: FC = () => {
   const closeDrawer = useCallback(() => {
     setOpen(false)
     backdrop.value = withTiming(0, { duration: reduceMotion ? 0 : 180, easing: Easing.out(Easing.ease) })
-    translateX.value = timing(DRAWER_W, () => setMounted(false))
+    translateX.value = timing(drawerW, () => setMounted(false))
   }, [backdrop, translateX, timing, reduceMotion])
 
   // Navigue puis ferme le drawer.
@@ -193,7 +208,7 @@ export const BurgerMenu: FC = () => {
             accessibilityViewIsModal
             style={[
               styles.drawer,
-              { width: DRAWER_W, paddingTop: insets.top },
+              { width: drawerW, paddingTop: insets.top },
               drawerStyle,
             ]}
           >

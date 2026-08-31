@@ -18,16 +18,22 @@
  * (déterministe) est TOUJOURS affichée sous le score.
  */
 
+/**
+ * ⚠️ `SafeAreaView` vient de `react-native-safe-area-context`, JAMAIS de
+ * `react-native`. Celui de React Native est iOS uniquement : sur Android il ne
+ * fait rien du tout, et l'en-tete de cette feuille passait donc sous la barre
+ * de notifications. Constate en production le 31/08/2026.
+ */
 import { type FC, useEffect, useRef, useState } from 'react'
 import {
   Modal,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import Svg, { Circle } from 'react-native-svg'
 import { Ionicons } from '@expo/vector-icons'
 import { BlurView } from 'expo-blur'
@@ -563,7 +569,7 @@ export const CompatibilityCard: FC<Props> = ({
         presentationStyle="pageSheet"
         onRequestClose={() => setModalOpen(false)}
       >
-        <SafeAreaView style={styles.modalSafe}>
+        <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Ce qu'il faut retenir</Text>
             <Pressable

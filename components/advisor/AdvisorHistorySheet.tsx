@@ -2,17 +2,23 @@
  * AdvisorHistorySheet — liste des conversations passées du Beauty Advisor.
  * Tap sur une conversation → la reprend. Icône corbeille → suppression.
  */
+/**
+ * ⚠️ `SafeAreaView` vient de `react-native-safe-area-context`, JAMAIS de
+ * `react-native`. Celui de React Native est iOS uniquement : sur Android il ne
+ * fait rien du tout, et l'en-tete de cette feuille passait donc sous la barre
+ * de notifications. Constate en production le 31/08/2026.
+ */
 import { useEffect, useState, type FC } from 'react'
 import {
   ActivityIndicator,
   Modal,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 
 import { colors } from '@/constants/colors'
@@ -67,7 +73,7 @@ export const AdvisorHistorySheet: FC<Props> = ({ visible, onClose, onSelect }) =
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <Text style={styles.title}>Mes conversations</Text>
           <Pressable

@@ -20,7 +20,14 @@
  * Vrai flou (expo-blur, `experimentalBlurMethod` requis Android).
  */
 import { type FC, useEffect, useState } from 'react'
-import { Dimensions, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
+import {
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native'
 import { BlurView } from 'expo-blur'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -66,8 +73,20 @@ interface Props {
   onOpenAlternative: (s: DeckSuggestion) => void
 }
 
-const W = Dimensions.get('window').width
-const CARD_W = Math.round(W * 0.84) // marge symétrique ⇒ ne touche pas les bords
+/**
+ * Part de la largeur de fenetre occupee par une carte.
+ *
+ * ⚠️ La largeur ET la position de la carte etaient calculees ICI, au
+ * chargement du module, depuis `Dimensions.get('window')`. Une lecture unique
+ * pour toute la vie du processus. Or `cardLayer` est en position absolue avec
+ * `left: (W - CARD_W) / 2` : sur un appareil dont la fenetre change de taille,
+ * et la fenetre de compatibilite d'un iPad se redimensionne d'un geste, les
+ * cartes gardaient la largeur ET le centrage d'avant jusqu'au redemarrage de
+ * l'app. Elles se retrouvaient donc decentrees. Meme erreur que celle qui a
+ * coute le refus guideline 4 : une valeur figee la ou il faut une valeur
+ * observee. Les deux sont desormais derivees au rendu.
+ */
+const CARD_RATIO = 0.84 // marge symétrique ⇒ ne touche pas les bords
 const LEAN = 18 // décalage de la carte de devant vers le bord libre (début/fin)
 const PEEK = 52 // débordement latéral de la 1ʳᵉ carte du fond
 const PEEK_STEP = 16 // débordement supplémentaire de la 2ᵉ carte du fond
@@ -91,6 +110,11 @@ export const SuggestionsDeck: FC<Props> = ({
   onOpenAlternative,
 }) => {
   const insets = useSafeAreaInsets()
+  // Largeur et centrage derives de la fenetre A CHAQUE RENDU (cf. CARD_RATIO).
+  const { width: screenW } = useWindowDimensions()
+  const cardW = Math.round(screenW * CARD_RATIO)
+  const cardGeom = { width: cardW, left: (screenW - cardW) / 2 }
+
   const [index, setIndex] = useState(0)
   const scroll = useSharedValue(0) // index fractionnaire
   const startScroll = useSharedValue(0)
@@ -186,7 +210,7 @@ export const SuggestionsDeck: FC<Props> = ({
     return (
       <Animated.View
         key={s.key}
-        style={[styles.cardLayer, style]}
+        style={[styles.cardLayer, cardGeom, style]}
         pointerEvents={offset === 0 ? 'auto' : 'none'}
       >
         {renderCard(s)}
@@ -251,6 +275,7 @@ const styles = StyleSheet.create({
   },
   counter: { ...typography.xs, color: 'rgba(255,255,255,0.9)', paddingHorizontal: 20, marginBottom: 28 },
   deck: { flex: 1 },
-  // Carte centrée (marge symétrique = (W - CARD_W)/2 de chaque côté).
-  cardLayer: { position: 'absolute', width: CARD_W, left: (W - CARD_W) / 2, top: 10 },
+  // Carte centrée. Largeur et décalage gauche sont fournis au rendu, pas ici :
+  // une feuille de styles est évaluée une seule fois, au chargement du module.
+  cardLayer: { position: 'absolute', top: 10 },
 })

@@ -60,7 +60,7 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native'
 import { Image } from 'expo-image'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
@@ -92,7 +92,6 @@ const CONTROLS_MAX_WIDTH = 520
 export const PreOnboardingCarousel: FC = () => {
   const router = useRouter()
   const { width } = useWindowDimensions()
-  const insets = useSafeAreaInsets()
   const listRef = useRef<FlatList<number>>(null)
   const [index, setIndex] = useState(0)
   const isLast = index === SLIDES.length - 1
@@ -169,11 +168,13 @@ export const PreOnboardingCarousel: FC = () => {
   )
 
   return (
-    // Racine PLEIN ECRAN, et pas une zone sure : l'illustration n'a aucune
-    // raison de s'arreter sous la barre d'etat, elle y perdait de la hauteur
-    // donc de la taille. Seuls les elements interactifs ont besoin des marges
-    // sures : la barre du bas les prend, et « Passer » lit l'encoche.
-    <View style={styles.root}>
+    // Zone SURE en haut comme en bas : rien de l'app ne passe sous la barre de
+    // notifications, y compris une illustration. J'avais d'abord laisse la
+    // racine en plein ecran pour gagner de la hauteur ; c'est refuse, et a
+    // raison : une illustration sous l'heure et les icones du systeme, c'est
+    // deux contenus qui se disputent les memes pixels. Le cout est faible, le
+    // rapport de l'illustration etant contraint par la hauteur ici.
+    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <View style={styles.imageArea} onLayout={onAreaLayout}>
         {areaHeight > 0 && (
           <FlatList
@@ -197,11 +198,7 @@ export const PreOnboardingCarousel: FC = () => {
           <Pressable
             onPress={finish}
             hitSlop={10}
-            style={({ pressed }) => [
-              styles.skip,
-              { top: insets.top + spacing.md },
-              pressed && styles.pressed,
-            ]}
+            style={({ pressed }) => [styles.skip, pressed && styles.pressed]}
             accessibilityRole="button"
             accessibilityLabel="Passer l'introduction"
           >
@@ -212,46 +209,47 @@ export const PreOnboardingCarousel: FC = () => {
 
       {/* Barre du bas : DANS le flux, sous l'image. Elle occupe sa place au
           lieu de la prendre, donc elle ne peut plus recouvrir un texte. */}
-      <SafeAreaView edges={['bottom']} style={styles.footerSafe}>
-        <View style={styles.footer}>
-          <View style={styles.dots}>
-            {SLIDES.map((_, i) => (
-              <View key={i} style={[styles.dot, i === index && styles.dotActive]} />
-            ))}
-          </View>
-          <Pressable
-            onPress={goNext}
-            style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
-            accessibilityRole="button"
-            accessibilityLabel={isLast ? 'Commencer' : 'Écran suivant'}
-          >
-            <Text style={styles.ctaText}>{isLast ? 'Commencer' : 'Suivant'}</Text>
-            {!isLast && (
-              <Ionicons name="arrow-forward" size={18} color={colors.surface} />
-            )}
-          </Pressable>
+      <View style={styles.footer}>
+        <View style={styles.dots}>
+          {SLIDES.map((_, i) => (
+            <View key={i} style={[styles.dot, i === index && styles.dotActive]} />
+          ))}
         </View>
-      </SafeAreaView>
-    </View>
+        <Pressable
+          onPress={goNext}
+          style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
+          accessibilityRole="button"
+          accessibilityLabel={isLast ? 'Commencer' : 'Écran suivant'}
+        >
+          <Text style={styles.ctaText}>{isLast ? 'Commencer' : 'Suivant'}</Text>
+          {!isLast && <Ionicons name="arrow-forward" size={18} color={colors.surface} />}
+        </Pressable>
+      </View>
+    </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
+  // ⚠️ `colors.bg` et PAS `colors.surface`, sur les quatre surfaces de cet
+  // écran. Le fond des illustrations est #FBFBFB, mesuré au pixel sur un rendu
+  // réel. Contre `surface` (#FFFFFF) l'écart de 4 points rendait les bandes de
+  // `contain` faiblement mais réellement visibles, et une couture horizontale
+  // apparaissait à la jonction avec la barre du bas. Contre `bg` (#FAFAFA)
+  // l'écart tombe à 1 point sur 255 : invisible.
   root: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.bg,
   },
   imageArea: {
     flex: 1,
-    // Même fond que celui des illustrations : les bandes que `contain` laisse
-    // sur une fenêtre au rapport different ne se voient donc pas.
-    backgroundColor: colors.surface,
+    backgroundColor: colors.bg,
     overflow: 'hidden',
   },
   skip: {
     position: 'absolute',
-    // `top` est fourni au rendu depuis l'encoche : en dur, la pilule passait
-    // sous la barre d'etat sur les appareils qui en ont une.
+    // La racine etant une zone sure, `top` se compte depuis le bas de la barre
+    // de notifications, pas depuis le haut de l'ecran.
+    top: spacing.md,
     right: spacing.md,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.base,
@@ -265,9 +263,6 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.6,
   },
-  footerSafe: {
-    backgroundColor: colors.surface,
-  },
   footer: {
     width: '100%',
     maxWidth: CONTROLS_MAX_WIDTH,
@@ -276,7 +271,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.base,
     paddingBottom: spacing.base,
     gap: spacing.base,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.bg,
   },
   dots: {
     flexDirection: 'row',
