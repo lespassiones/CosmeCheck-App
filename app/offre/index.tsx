@@ -9,6 +9,11 @@
  * ⚠️ Les prix ne sont JAMAIS écrits ici : ils viennent du magasin via
  * `lib/paywall/prices.ts`. Voir la note du 20/08/2026 dans ce module.
  *
+ * Quand le magasin ne répond pas, `usePurchases` sert un tarif de repli relevé
+ * dans App Store Connect (`lib/paywall/fallbackPrices.ts`). L'écran l'affiche
+ * alors comme INDICATIF et remplace le bouton d'achat par « Recharger les
+ * tarifs » : sans produit du magasin, aucun paiement n'est possible.
+ *
  * S'affiche : après onboarding (paywall skippable, Apple §3.1.1), quand les
  * crédits sont épuisés, depuis la sidebar et depuis le profil.
  *
@@ -33,7 +38,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import Purchases, { type PurchasesPackage } from 'react-native-purchases'
+import Purchases from 'react-native-purchases'
 import { useQueryClient } from '@tanstack/react-query'
 
 import { PressableScale } from '@/components/design/motion'
@@ -48,7 +53,6 @@ import { usePurchases } from '@/hooks/usePurchases'
 import { useProfile } from '@/hooks/useProfile'
 import {
   annualPerMonthLabel,
-  findPlanPackage,
   legalDisclosure,
   planPriceLabel,
   renewLine,
@@ -73,7 +77,18 @@ const OffreScreen: FC = () => {
   const [selected, setSelected] = useState<PlanId>('yearly')
   const [activeTab, setActiveTab] = useState<Tab>('plans')
   const [cancelling, setCancelling] = useState(false)
-  const { offerings, purchase, isLoading, customerInfo } = usePurchases()
+  const {
+    monthly: monthlyPkg,
+    yearly: yearlyPkg,
+    priceSource,
+    isLoadingPrices,
+    isPurchasing,
+    canPurchase,
+    purchase,
+    retry,
+    customerInfo,
+  } = usePurchases()
+  const [retrying, setRetrying] = useState(false)
   const { profile, updateProfile } = useProfile()
   const queryClient = useQueryClient()
   const isPremium = profile?.tier === 'premium'
@@ -114,10 +129,12 @@ const OffreScreen: FC = () => {
   // Le paywall affichait 7,99 € et 49,99 € en dur pendant que Google Play
   // encaissait 9,49 € et 59,99 €. Un prix affiché est une promesse : une seule
   // source, celle qui débite. Les deux magasins n'ont pas les mêmes paliers.
-  const packages: PurchasesPackage[] = offerings?.current?.availablePackages ?? []
-  const monthlyPkg = findPlanPackage(packages, 'monthly')
-  const yearlyPkg = findPlanPackage(packages, 'yearly')
+  //
+  // Depuis le 04/09/2026, `usePurchases` peut aussi servir un prix de REPLI
+  // quand le magasin ne répond pas (`priceSource === 'fallback'`). Il est alors
+  // affiché comme indicatif et l'achat est refusé : voir `isFallbackPrice`.
   const selectedPkg = selected === 'yearly' ? yearlyPkg : monthlyPkg
+  const isFallbackPrice = priceSource === 'fallback' && !isLoadingPrices
 
   const monthlyPrice = planPriceLabel(monthlyPkg)
   const yearlyPrice = planPriceLabel(yearlyPkg)
@@ -127,27 +144,43 @@ const OffreScreen: FC = () => {
   // Essai : lu dans l'offre du magasin, donc absent si la personne n'y a pas
   // droit. On ne promet jamais un essai que quelqu'un n'obtiendra pas.
   const trial = trialLabel(selectedPkg)
-  const legal = legalDisclosure(selected, selectedPkg, STORE_NAME)
+  // En repli, la mention légale ne cite AUCUN prix : elle décrirait un tarif
+  // que le magasin n'a pas confirmé. Le reste de la phrase (nom, durée,
+  // renouvellement, résiliation) garde tout son sens.
+  const legal = legalDisclosure(selected, isFallbackPrice ? null : selectedPkg, STORE_NAME)
+
+  /**
+   * Relance la cascade de récupération des prix.
+   *
+   * C'est le geste offert quand le magasin est resté muet : réessayer, plutôt
+   * qu'un bouton d'achat qui ne peut mener à rien.
+   */
+  const handleRetryPrices = async () => {
+    setRetrying(true)
+    try {
+      await retry()
+    } finally {
+      setRetrying(false)
+    }
+  }
 
   const handlePurchase = async () => {
-    if (packages.length === 0) {
-      Alert.alert(
-        'Offre indisponible',
-        "Les abonnements ne se chargent pas pour le moment. Vérifie ta connexion et réessaie.",
-      )
+    // Prix de repli : aucun produit du magasin en mémoire, donc rien à acheter.
+    // On ne fait pas semblant, on propose de recharger.
+    if (!canPurchase) {
+      void handleRetryPrices()
       return
     }
 
-    // Le même package que celui dont on a affiché le prix, sans repli sur
-    // `packages[0]` : mieux vaut refuser que débiter pour un plan non montré.
-    const pkg = selectedPkg
-    if (!pkg) {
+    // Le même plan que celui dont on a affiché le prix, sans repli sur un autre
+    // package : mieux vaut refuser que débiter pour un plan non montré.
+    if (!selectedPkg) {
       Alert.alert('Plan introuvable', "Ce plan n'est pas configuré dans la boutique pour le moment.")
       return
     }
 
     try {
-      const ok = await purchase(pkg)
+      const ok = await purchase(selected)
       // `false` = annulation : la personne a fermé la feuille de paiement.
       // On ne dit rien, on la laisse sur le paywall.
       if (!ok) return
@@ -378,6 +411,19 @@ const OffreScreen: FC = () => {
               <Ionicons name="shield-checkmark" size={16} color="#16A34A" />
             </View>
 
+            {/* Prix de repli : le dire, toujours. Un tarif affiché sans que le
+                magasin l'ait confirmé reste une estimation, et l'achat est
+                impossible tant qu'il n'a pas répondu. */}
+            {isFallbackPrice && (
+              <View style={styles.indicative}>
+                <Ionicons name="information-circle-outline" size={15} color={colors.inkMuted} />
+                <Text style={styles.indicativeText}>
+                  Prix indicatif pour ta région : {STORE_NAME} n'a pas répondu. Recharge pour voir
+                  le tarif exact et t'abonner.
+                </Text>
+              </View>
+            )}
+
             {/* Mention légale exigée avant l'achat (Apple 3.1.2) : nom, durée,
                 prix, renouvellement, et les deux liens juste en dessous. */}
             <Text style={styles.legal}>{legal}</Text>
@@ -425,10 +471,27 @@ const OffreScreen: FC = () => {
           </>
         ) : (
           <>
-            <PressableScale onPress={handlePurchase} disabled={isLoading || !offerings}>
-              <View style={[styles.cta, styles.ctaGreen, (isLoading || !offerings) && styles.ctaDisabled]}>
-                {isLoading ? (
+            {/* Le bouton n'est jamais un spinner sans issue : il attend les prix,
+                puis il achète, ou il propose de recharger si le magasin s'est
+                tu. Aucun de ces trois états ne peut durer indéfiniment. */}
+            <PressableScale
+              onPress={handlePurchase}
+              disabled={isLoadingPrices || isPurchasing || retrying}
+            >
+              <View
+                style={[
+                  styles.cta,
+                  styles.ctaGreen,
+                  (isLoadingPrices || isPurchasing || retrying) && styles.ctaDisabled,
+                ]}
+              >
+                {isLoadingPrices || isPurchasing || retrying ? (
                   <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : isFallbackPrice ? (
+                  <>
+                    <Ionicons name="refresh" size={18} color="#FFFFFF" />
+                    <Text style={styles.ctaText}>Recharger les tarifs</Text>
+                  </>
                 ) : (
                   <Text style={styles.ctaText}>
                     {trial ? "Commencer l'essai gratuit" : "S'abonner"}
@@ -437,7 +500,9 @@ const OffreScreen: FC = () => {
               </View>
             </PressableScale>
             <Text style={styles.ctaHint}>
-              {priceLine ? `${priceLine} ` : ''}Annule quand tu veux.
+              {isFallbackPrice
+                ? 'Tarif à confirmer par le magasin.'
+                : `${priceLine ? `${priceLine} ` : ''}Annule quand tu veux.`}
             </Text>
             {fromOnboarding && (
               <Pressable onPress={() => void dismissOnboardingPaywall()} hitSlop={8} style={styles.laterBtn}>
@@ -587,6 +652,22 @@ const styles = StyleSheet.create({
     ...typography.xs,
     color: colors.inkMuted,
     flexShrink: 1,
+  },
+
+  // Bandeau « prix indicatif » : discret mais lisible. Il ne doit pas ressembler
+  // à une erreur technique, seulement dire que le tarif reste à confirmer.
+  indicative: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.sm,
+  },
+  indicativeText: {
+    ...typography.xs,
+    color: colors.inkMuted,
+    flexShrink: 1,
+    lineHeight: 16,
   },
 
   // Plans côte à côte

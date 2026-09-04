@@ -1,4 +1,5 @@
 import Purchases, {
+  type PurchasesStoreProduct,
   type CustomerInfo,
   type PurchasesPackage,
 } from 'react-native-purchases'
@@ -110,4 +111,104 @@ export async function getCustomerInfo(): Promise<CustomerInfo | null> {
 export function isPremium(customerInfo: CustomerInfo | null): boolean {
   if (!customerInfo) return false
   return customerInfo.entitlements.active['premium'] !== undefined
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chemins de secours du paywall (04/09/2026)
+//
+// Un iPhone est resté sur « … » et un bouton figé : `getOfferings()` ne
+// répondait pas. Deux manques dans cet ancien code, corrigés ici :
+//   1. aucun délai maximum, donc un appel natif qui ne revient jamais laissait
+//      l'écran en chargement pour toujours, sans erreur ni moyen de réessayer ;
+//   2. un seul chemin de récupération. Si la configuration d'offering de
+//      RevenueCat est injoignable alors que StoreKit répond, l'app refusait la
+//      vente pour rien : les produits sont récupérables directement par leur
+//      identifiant.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Identifiants des abonnements, tels qu'ils existent dans les magasins.
+ *
+ * Vérifiés le 04/09/2026 via l'API App Store Connect : groupe « Cosme Check
+ * Premium », les deux à l'état APPROVED avec essai gratuit de 3 jours sur les
+ * 175 territoires. Google Play utilise les mêmes identifiants (RevenueCat
+ * impose la correspondance), la clé de service du dépôt n'ayant pas les droits
+ * pour le confirmer par API.
+ */
+export const PRODUCT_IDS = {
+  yearly: 'premium_yearly',
+  monthly: 'premium_monthly',
+} as const
+
+/**
+ * Borne le temps d'attente d'un appel natif.
+ *
+ * Rend `fallback` au lieu de rejeter : tous les appelants ici veulent
+ * « continue sans » plutôt que « propage une erreur ». Le minuteur est nettoyé
+ * dans les deux cas, sinon un timer en vol maintient le module en vie.
+ */
+export async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(fallback), ms)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+/**
+ * Récupère les produits directement par identifiant, sans passer par les
+ * offerings. Sert quand la configuration RevenueCat est muette mais que le
+ * magasin, lui, répond : les prix sont alors les VRAIS prix locaux et l'achat
+ * reste possible.
+ */
+export async function getProductsDirect(): Promise<PurchasesStoreProduct[]> {
+  try {
+    return await Purchases.getProducts(
+      [PRODUCT_IDS.yearly, PRODUCT_IDS.monthly],
+      Purchases.PRODUCT_CATEGORY.SUBSCRIPTION,
+    )
+  } catch (err) {
+    console.warn('[RevenueCat] getProducts failed:', err)
+    return []
+  }
+}
+
+/**
+ * Achat d'un produit obtenu hors offering. Même contrat que
+ * `purchasePackage` : `null` quand la personne annule.
+ */
+export async function purchaseProductDirect(
+  product: PurchasesStoreProduct,
+): Promise<CustomerInfo | null> {
+  try {
+    const result = await Purchases.purchaseStoreProduct(product)
+    return result.customerInfo
+  } catch (err) {
+    if (isUserCancelled(err)) return null
+    console.error('[RevenueCat] purchaseStoreProduct failed:', err)
+    throw err
+  }
+}
+
+/**
+ * Pays du compte magasin (« FR », « CA »).
+ *
+ * Meilleur que les réglages de l'appareil pour choisir un prix de repli : c'est
+ * la boutique qui facture, pas la langue de l'interface. Peut être `null` quand
+ * le magasin ne répond pas, cas où l'appelant retombe sur `deviceStoreContext`.
+ */
+export async function getStorefrontCountry(): Promise<string | null> {
+  try {
+    const storefront = await Purchases.getStorefront()
+    return storefront?.countryCode ?? null
+  } catch (err) {
+    console.warn('[RevenueCat] getStorefront failed:', err)
+    return null
+  }
 }
