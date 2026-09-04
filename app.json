@@ -2,7 +2,7 @@
   "expo": {
     "name": "Cosme Check",
     "slug": "cosme-check",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "scheme": "cosmecheck",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
