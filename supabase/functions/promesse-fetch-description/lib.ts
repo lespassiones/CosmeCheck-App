@@ -4,47 +4,28 @@
  * extractor (matching lib/zod/llmParse.ts behaviour, no Zod in the bundle).
  * Kept inside the function dir to avoid touching _shared (no collisions).
  */
-import { AI_MODEL_SEARCH, hasOpenAI, openai } from "../_shared/aiClient.ts";
+import { openaiWebSearch } from "../_shared/aiClient.ts";
 
 export type WebSearchResult = {
   text: string;
   citations: { url: string; title: string | null }[];
 };
 
+/**
+ * Une complétion avec recherche web, via l'API Responses + outil `web_search`
+ * (`openaiWebSearch` dans _shared/aiClient). Les anciens modèles
+ * `*-search-preview` de Chat Completions ont été retirés par OpenAI
+ * (404 model_not_found) : ce chemin les remplace, contrat identique.
+ * Jette "openai_unavailable" sans clé, "web-search timeout" au timeout —
+ * l'appelant mappe vers 503/504.
+ */
 export async function webSearchComplete(
   system: string,
   userMsg: string,
   opts: { timeoutMs?: number } = {},
 ): Promise<WebSearchResult> {
-  if (!hasOpenAI()) {
-    throw new Error("openai_unavailable");
-  }
-  const timeoutMs = opts.timeoutMs ?? 30_000;
-
-  const completion = await Promise.race([
-    openai().chat.completions.create({
-      model: AI_MODEL_SEARCH,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: userMsg },
-      ],
-      // deno-lint-ignore no-explicit-any
-      web_search_options: { search_context_size: "medium" },
-    } as any),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("web-search timeout")), timeoutMs),
-    ),
-  ]);
-
-  const choice = completion.choices?.[0];
-  const text = choice?.message?.content ?? "";
-  type Annot = { type?: string; url_citation?: { url?: string; title?: string } };
-  const annots = (choice?.message as unknown as { annotations?: Annot[] } | undefined)?.annotations ?? [];
-  const citations = annots
-    .filter((a) => a.type === "url_citation" && a.url_citation?.url)
-    .map((a) => ({ url: a.url_citation!.url as string, title: a.url_citation!.title ?? null }));
-
-  return { text, citations };
+  const r = await openaiWebSearch(system, userMsg, { timeoutMs: opts.timeoutMs });
+  return { text: r.text, citations: r.citations };
 }
 
 export function extractJsonBlock(text: string): unknown {

@@ -1,4 +1,4 @@
-// OpenAI web-search candidate collector (gpt-4o-mini-search-preview). Returns
+// OpenAI web-search candidate collector (API Responses + outil `web_search`). Returns
 // the same WebCandidate shape as DuckDuckGo so it's swappable. Port of
 // CosmetWiki lib/productSearch/openaiSearch.ts. DDG's HTML endpoint bot-walls
 // datacenter IPs in prod; OpenAI's native web search runs server-side from a

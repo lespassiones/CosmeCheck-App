@@ -17,7 +17,7 @@
 import { handleOptions, jsonResponse } from "../_shared/cors.ts";
 import { serviceClient } from "../_shared/auth.ts";
 import { isAdminCaller } from "../_shared/adminAuth.ts";
-import { AI_MODEL_SEARCH, hasOpenAI, logAI, openai } from "../_shared/aiClient.ts";
+import { AI_MODEL_SEARCH, hasOpenAI, logAI, openaiWebSearch } from "../_shared/aiClient.ts";
 import { parseInciList } from "../analyser/parse.ts";
 import { pastilleTone, scoreLabel, type ColorRating, synthScore } from "../analyser/score.ts";
 import { slugifyCategoryPath } from "../_shared/eanWebSearch.ts";
@@ -92,20 +92,9 @@ async function gptByBarcode(ean: string): Promise<Partial<Resolved> | null> {
   ].join("\n");
   const userMsg = `Code-barres EAN : ${ean}\n\nIdentifie le produit cosmétique. JSON strict.`;
   try {
-    const completion = await Promise.race([
-      // deno-lint-ignore no-explicit-any
-      openai().chat.completions.create({
-        model: AI_MODEL_SEARCH,
-        messages: [{ role: "system", content: system }, { role: "user", content: userMsg }],
-        web_search_options: { search_context_size: "medium" },
-      } as any),
-      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 25_000)),
-    ]);
-    // deno-lint-ignore no-explicit-any
-    const c = completion as any;
-    const usage = c.usage ?? {};
-    logAI({ feature: "product_search", provider: "openai", status: "success", model: AI_MODEL_SEARCH, tokens_in: usage.prompt_tokens ?? null, tokens_out: usage.completion_tokens ?? null });
-    const parsed = extractJson(c.choices?.[0]?.message?.content ?? "");
+    const r = await openaiWebSearch(system, userMsg, { timeoutMs: 25_000 });
+    logAI({ feature: "product_search", provider: "openai", status: "success", model: `${AI_MODEL_SEARCH}+web_search`, tokens_in: r.tokensIn, tokens_out: r.tokensOut });
+    const parsed = extractJson(r.text);
     if (!parsed) return null;
     const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
     return {

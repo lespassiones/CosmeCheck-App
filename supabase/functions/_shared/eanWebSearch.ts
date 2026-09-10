@@ -1,6 +1,7 @@
 /**
- * eanWebSearch — retrouve le code-barres (EAN/GTIN) d'un produit via le modèle
- * web-search d'OpenAI, en fallback de la recherche Open Beauty Facts.
+ * eanWebSearch — retrouve le code-barres (EAN/GTIN) d'un produit via la
+ * recherche web OpenAI (API Responses + outil `web_search`, cf.
+ * `openaiWebSearch`), en fallback de la recherche Open Beauty Facts.
  *
  * Garde anti-hallucination : on n'accepte un EAN que s'il passe la clé de
  * contrôle GTIN (EAN-13 / EAN-8 / UPC-A 12). Un code inventé par le LLM est
@@ -8,7 +9,7 @@
  *
  * Dépend uniquement de _shared/aiClient.ts (réutilisable par toutes les Edge).
  */
-import { AI_MODEL_SEARCH, hasOpenAI, logAI, openai } from "./aiClient.ts";
+import { AI_MODEL_SEARCH, hasOpenAI, logAI, openaiWebSearch } from "./aiClient.ts";
 
 /**
  * Valide un code-barres GTIN par sa clé de contrôle (somme pondérée 3/1 depuis
@@ -105,36 +106,17 @@ export async function identifyEanAndCategory(
   const userMsg = `Produit : """${label.slice(0, 200)}"""\n\nTrouve son code-barres EAN et sa catégorie précise. Réponds en JSON strict.`;
 
   try {
-    const completion = await Promise.race([
-      openai().chat.completions.create({
-        model: AI_MODEL_SEARCH,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: userMsg },
-        ],
-        // deno-lint-ignore no-explicit-any
-        web_search_options: { search_context_size: "medium" },
-      } as never),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("identify timeout")), timeoutMs)
-      ),
-    ]);
-
-    // deno-lint-ignore no-explicit-any
-    const usage = (completion as any).usage ?? {};
+    const r = await openaiWebSearch(system, userMsg, { timeoutMs });
     logAI({
       feature: "product_search",
       provider: "openai",
       status: "success",
-      model: AI_MODEL_SEARCH,
-      tokens_in: usage.prompt_tokens ?? null,
-      tokens_out: usage.completion_tokens ?? null,
+      model: `${AI_MODEL_SEARCH}+web_search`,
+      tokens_in: r.tokensIn,
+      tokens_out: r.tokensOut,
     });
 
-    // deno-lint-ignore no-explicit-any
-    const choice = (completion as any).choices?.[0];
-    const text: string = choice?.message?.content ?? "";
-    const parsed = extractJson(text);
+    const parsed = extractJson(r.text);
     if (!parsed) return empty;
 
     const rawEan = typeof parsed.ean === "string" ? parsed.ean.replace(/\D/g, "") : "";
@@ -196,25 +178,8 @@ export async function findEanByWebSearch(
 Trouve son code-barres EAN officiel sur le web. Réponds en JSON strict.`;
 
   try {
-    const completion = await Promise.race([
-      openai().chat.completions.create({
-        model: AI_MODEL_SEARCH,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: userMsg },
-        ],
-        // deno-lint-ignore no-explicit-any
-        web_search_options: { search_context_size: "medium" },
-      } as never),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("ean web-search timeout")), timeoutMs)
-      ),
-    ]);
-
-    // deno-lint-ignore no-explicit-any
-    const choice = (completion as any).choices?.[0];
-    const text: string = choice?.message?.content ?? "";
-    const parsed = extractJson(text);
+    const r = await openaiWebSearch(system, userMsg, { timeoutMs });
+    const parsed = extractJson(r.text);
     if (!parsed) return null;
 
     const rawEan = typeof parsed.ean === "string" ? parsed.ean.replace(/\D/g, "") : "";

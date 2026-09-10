@@ -17,7 +17,16 @@ const MISTRAL_API_KEY = Deno.env.get("MISTRAL_API_KEY");
 
 /** Modèles - inchangés vs web. */
 export const AI_MODEL = "gpt-4o-mini";
-export const AI_MODEL_SEARCH = "gpt-4o-mini-search-preview";
+/**
+ * Modèle utilisé pour les recherches web.
+ *
+ * ⚠️ Les modèles `*-search-preview` (Chat Completions + `web_search_options`)
+ * ont été RETIRÉS par OpenAI : depuis début septembre 2026 l'API répond
+ * `404 model_not_found — has been deprecated`. Tous les appels web-search
+ * passent donc désormais par l'API **Responses** avec l'outil `web_search`
+ * (`openaiWebSearch` ci-dessous), disponible sur les modèles standards.
+ */
+export const AI_MODEL_SEARCH = "gpt-4o-mini";
 export const MISTRAL_MODEL = "mistral-small-latest";
 // Modèle dédié à l'analyse de cohérence "Promesses vs Formule" (2 passes :
 // extraction + critique). gpt-4o-mini n'est pas assez fiable sur l'anti-
@@ -42,6 +51,107 @@ export function hasMistral(): boolean {
   return Boolean(MISTRAL_API_KEY);
 }
 
+export type WebSearchCitation = { url: string; title: string | null };
+
+/** Résultat brut d'un appel web-search (texte + sources + usage tokens). */
+export type WebSearchRaw = {
+  text: string;
+  citations: WebSearchCitation[];
+  tokensIn: number | null;
+  tokensOut: number | null;
+};
+
+/**
+ * Un appel de recherche web via l'API Responses d'OpenAI (`tools:[web_search]`).
+ *
+ * Remplace l'ancien `chat.completions.create({ model: "*-search-preview",
+ * web_search_options })`, mort depuis le retrait des modèles search-preview.
+ * Contrat conservé à l'identique pour les appelants : on renvoie le texte du
+ * message et les `url_citation` extraites des annotations.
+ *
+ * Jette `openai_unavailable` sans clé, `web-search timeout` au timeout, et
+ * `web-search http_<code>` sur erreur API (l'appelant mappe vers 503/504/500).
+ */
+export async function openaiWebSearch(
+  system: string,
+  userMsg: string,
+  opts: {
+    timeoutMs?: number;
+    model?: string;
+    searchContextSize?: "low" | "medium" | "high";
+    maxOutputTokens?: number;
+  } = {},
+): Promise<WebSearchRaw> {
+  if (!OPENAI_API_KEY) throw new Error("openai_unavailable");
+
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), opts.timeoutMs ?? 30_000);
+  let res: Response;
+  try {
+    res = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: opts.model ?? AI_MODEL_SEARCH,
+        instructions: system,
+        input: userMsg,
+        tools: [
+          { type: "web_search", search_context_size: opts.searchContextSize ?? "medium" },
+        ],
+        tool_choice: "auto",
+        ...(opts.maxOutputTokens ? { max_output_tokens: opts.maxOutputTokens } : {}),
+      }),
+      signal: ctl.signal,
+    });
+  } catch (err) {
+    if (ctl.signal.aborted) throw new Error("web-search timeout");
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`web-search http_${res.status}: ${detail.slice(0, 300)}`);
+  }
+
+  type OutContent = {
+    type?: string;
+    text?: string;
+    annotations?: Array<{ type?: string; url?: string; title?: string }>;
+  };
+  const json = (await res.json()) as {
+    output?: Array<{ type?: string; content?: OutContent[] }>;
+    usage?: { input_tokens?: number; output_tokens?: number };
+  };
+
+  let text = "";
+  const citations: WebSearchCitation[] = [];
+  const seen = new Set<string>();
+  for (const item of json.output ?? []) {
+    if (item.type !== "message") continue;
+    for (const part of item.content ?? []) {
+      if (part.type !== "output_text") continue;
+      text += part.text ?? "";
+      for (const a of part.annotations ?? []) {
+        if (a.type !== "url_citation" || !a.url || seen.has(a.url)) continue;
+        seen.add(a.url);
+        citations.push({ url: a.url, title: a.title ?? null });
+      }
+    }
+  }
+
+  return {
+    text,
+    citations,
+    tokensIn: json.usage?.input_tokens ?? null,
+    tokensOut: json.usage?.output_tokens ?? null,
+  };
+}
+
 export type AIFeature =
   | "synthesis"
   | "ocr"
@@ -64,7 +174,7 @@ type LogEntry = {
   feature: AIFeature;
   provider: AIProvider;
   status: "success" | "fallback" | "error";
-  /** Modèle exact (ex. "gpt-4o-mini-search-preview") → coût précis côté admin. */
+  /** Modèle exact (ex. "gpt-4o-mini+web_search") → coût précis côté admin. */
   model?: string | null;
   tokens_in?: number | null;
   tokens_out?: number | null;
