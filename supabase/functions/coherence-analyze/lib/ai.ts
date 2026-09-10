@@ -948,12 +948,19 @@ export async function generateConclusion(
 //    Remplace détection type + extraction + exploration + moteur déterministe.
 // -----------------------------------------------------------------------------
 
+/** Niveau de preuve d'un ingrédient cité pour une promesse. Réintroduit le
+ *  8 sept 2026 : il alimente le barème déterministe `gradeEffect` (un actif
+ *  supportif seul ne vaut pas un actif documenté). */
+export type LlmEvidence = "documented" | "supportive" | "marketing";
+
 export type CoherenceLlmPromise = {
   label: string;
   excerpt: string;
   verdict: CoherenceVerdict;
+  /** Score BRUT du LLM. Purement indicatif : le score affiché est recalculé
+   *  par `gradeEffect` (position + niveau de preuve). Voir index.ts. */
   score: number;
-  foundSlugs: string[];
+  found: { slug: string; evidence: LlmEvidence }[];
   missing: string[];
   /** Promesse d'absence ("sans X") : un verdict tenu SANS ingrédient cité est
    *  normal (on prouve une absence). La garde anti-hallucination l'épargne. */
@@ -987,11 +994,25 @@ const COHERENCE_SCHEMA = {
               enum: ["tenue", "partielle", "non_demontree", "contredite"],
             },
             score: { type: "number" },
-            found_slugs: { type: "array", items: { type: "string" } },
+            found: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  slug: { type: "string" },
+                  evidence: {
+                    type: "string",
+                    enum: ["documented", "supportive", "marketing"],
+                  },
+                },
+                required: ["slug", "evidence"],
+              },
+            },
             missing: { type: "array", items: { type: "string" } },
             is_absence: { type: "boolean" },
           },
-          required: ["label", "excerpt", "verdict", "score", "found_slugs", "missing", "is_absence"],
+          required: ["label", "excerpt", "verdict", "score", "found", "missing", "is_absence"],
         },
       },
       unverifiable: {
@@ -1041,12 +1062,16 @@ Le même effet formulé plusieurs fois = UNE seule promesse. Une version chiffr�
 CONTRE-EXEMPLE : "hydrate intensément" et "effet hydratant mesuré par cornéométrie : +36,8 %" = UNE promesse d'hydratation (garde la mieux soutenue), surtout PAS une "tenue" + une "non_demontree".
 
 ═══ VERDICT (chaque promesse mesurable) ═══
-found_slugs = UNIQUEMENT des slugs présents dans la liste fournie (jamais inventés).
-- "tenue" : ≥1 ingrédient pertinent (pas seulement en toute fin de liste) soutient la promesse.
-- "partielle" : soutien faible (un seul actif secondaire, ou en trace).
-- "non_demontree" : vraie promesse d'EFFET qui devrait correspondre à un type d'actif connu mais qu'AUCUN ingrédient ne soutient → found_slugs vide + 1 à 3 actifs attendus dans "missing".
+found = UNIQUEMENT des slugs présents dans la liste fournie (jamais inventés), chacun avec son NIVEAU DE PREUVE :
+- "documented" : actif biologiquement reconnu POUR CETTE promesse, aux doses cosmétiques usuelles (caféine → anti-chute, niacinamide → pores, xylitol → santé bucco-dentaire).
+- "supportive" : contribue indirectement, sans être l'actif de référence (panthénol pour le confort général, un émollient pour "nourrit").
+- "marketing" : effet visuel ou sensoriel seulement, pas biologique (silicone qui donne un toucher "lisse", pigment qui donne un "éclat" optique).
+Sois CONSERVATEUR : mieux vaut "supportive" qu'un "documented" généreux. Dans le doute, descends d'un niveau. Maximum 6 ingrédients par promesse.
+- "tenue" : ≥1 ingrédient pertinent soutient la promesse.
+- "partielle" : soutien faible (un seul actif secondaire).
+- "non_demontree" : vraie promesse d'EFFET qui devrait correspondre à un type d'actif connu mais qu'AUCUN ingrédient ne soutient → found vide + 1 à 3 actifs attendus dans "missing".
 - "contredite" : "sans X" alors que X est présent dans la liste.
-score 0-100 = couverture (tenue 70-100, partielle 30-55, non_demontree 0).
+score 0-100 : donne ton estimation, elle est INDICATIVE. Le score final est recalculé par le moteur à partir du niveau de preuve et de la POSITION réelle de chaque ingrédient dans l'INCI. Ne cherche pas à la deviner : concentre-toi sur le bon "evidence" et les bons slugs.
 
 ═══ RETROUVER L'INGRÉDIENT (avant tout non_demontree) ═══
 Traduis en INCI puis cherche : vitamine B3→Niacinamide ; vitamine C→Ascorbic/Ascorbyl ; acide hyaluronique→Sodium Hyaluronate ; provitamine B5→Panthenol ; "huile/beurre de X"→"<Genre espèce> Oil/Butter" (karité→Butyrospermum Parkii) ; actif breveté→sa source (algue rouge→Gelidium/Chondrus/rhodophyta ; Viniférine→Vitis Vinifera/Grapevine).
@@ -1065,9 +1090,9 @@ const COHERENCE_REVIEW_SYSTEM = `Tu es un chimiste cosmétique SENIOR qui RELIT 
 
 Vérifie dans l'ordre :
 1. INVENTION : chaque promesse doit correspondre à une phrase RÉELLE de la description (excerpt quasi-verbatim). Toute promesse absente du texte → SUPPRIME-la. Une absence "sans X" n'est valide que si "sans / 0 % / exempt de / sans ajout de" est écrit près de X ; sinon supprime (ex : le texte dit « son parfum frais » → il y a un parfum → PAS de "sans parfum" ; si la 1re analyse l'a mise en "contredite", c'est une INVENTION → supprime).
-2. OUBLIS : relis toute la description. Toute VRAIE promesse d'effet ou d'absence ratée par la 1re analyse → AJOUTE-la avec le bon verdict et les bons found_slugs.
+2. OUBLIS : relis toute la description. Toute VRAIE promesse d'effet ou d'absence ratée par la 1re analyse → AJOUTE-la avec le bon verdict et les bons "found".
 3. MESURABLE : chaque entrée de "promises" doit être vérifiable par un ingrédient (effet sur la zone d'application, ou présence/absence d'un ingrédient). Sinon (PÉRIMÈTRE "utilisable sur le visage et le corps", PUBLIC "toute la famille", TEXTURE, SENSORIEL, USAGE, TOLÉRANCE "non comédogène/hypoallergénique", CERTIFICATION, MARKETING vague) → DÉPLACE-la dans "unverifiable". Ce n'est PAS une promesse ratée : ne lui laisse jamais un verdict "non_demontree" ni un "actif manquant". EXCEPTION MAQUILLAGE : la couleur, la couvrance et la pigmentation d'un maquillage SONT mesurables via les pigments CI de l'INCI → garde-les en "promises" (tenue), ne les déplace PAS en unverifiable.
-4. MAPPING : pour chaque promesse mesurable, re-vérifie found_slugs (uniquement des slugs de la liste) et le verdict. Traduis les noms courants/botaniques/brevetés en INCI et cherche VRAIMENT avant de conclure à l'absence (ex : "algue rouge" → un slug gelidium/chondrus dans la liste → tenue). Corrige un "non_demontree" injustifié en "tenue/partielle" en citant le slug réel ; corrige un "tenue" sans aucun ingrédient réel en "non_demontree".
+4. MAPPING : pour chaque promesse mesurable, re-vérifie "found" (uniquement des slugs de la liste, avec leur niveau de preuve) et le verdict. Traduis les noms courants/botaniques/brevetés en INCI et cherche VRAIMENT avant de conclure à l'absence (ex : "algue rouge" → un slug gelidium/chondrus dans la liste → tenue). Corrige un "non_demontree" injustifié en "tenue/partielle" en citant le slug réel ; corrige un "tenue" sans aucun ingrédient réel en "non_demontree".
 5. DOUBLONS : fusionne les promesses qui expriment le MÊME effet (y compris une version chiffrée/clinique et une version simple), en gardant la mieux soutenue.
 
 RÈGLE D'OR : en cas de doute, GARDE la promesse (ne réduis pas l'analyse). Tu ne supprimes QUE l'inventé, tu ne déplaces en "unverifiable" QUE le vraiment-non-mesurable, et tu n'inventes JAMAIS rien.
@@ -1075,9 +1100,14 @@ ${NO_LONG_DASHES_RULE}
 Retourne UNIQUEMENT le JSON (product_type, promises[...], unverifiable[...]).`;
 
 function itemsBlock(items: FormulaItemForLlm[]): string {
+  // Numerotes : le rang dans l'INCI est un signal de dosage (ordre decroissant
+  // obligatoire au-dessus de 1 %). L'ancien prompt le donnait, le refactor de
+  // juillet 2026 l'avait perdu. Le score final ne s'appuie PAS dessus (le
+  // moteur lit la vraie position via thresholdContext), mais ca evite au LLM de
+  // citer un conservateur de fin de liste comme actif principal.
   return items
     .slice(0, 80)
-    .map((it) => `- ${it.slug} — ${it.name}${it.primaryFunction ? ` — ${it.primaryFunction}` : ""}`)
+    .map((it, i) => `${i + 1}. ${it.slug} — ${it.name}${it.primaryFunction ? ` — ${it.primaryFunction}` : ""}`)
     .join("\n");
 }
 
@@ -1105,16 +1135,30 @@ function safeParseCoherence(raw: string, knownSlugs: Set<string>): CoherenceAnal
             verdicts.includes(p.verdict as string),
         )
         .map((p) => {
-          const found = (Array.isArray(p.found_slugs) ? p.found_slugs : [])
-            .filter((s): s is string => typeof s === "string")
-            .filter((s) => knownSlugs.has(s));
+          const EVIDENCES: LlmEvidence[] = ["documented", "supportive", "marketing"];
+          const seenFound = new Set<string>();
+          const found = (Array.isArray(p.found) ? p.found : [])
+            .map((f) => f as Record<string, unknown>)
+            .flatMap((f) => {
+              const slug = typeof f.slug === "string" ? f.slug : null;
+              // Slug inconnu (halluciné) ou doublon -> ecarte, comme avant.
+              if (!slug || !knownSlugs.has(slug) || seenFound.has(slug)) return [];
+              seenFound.add(slug);
+              const ev = EVIDENCES.includes(f.evidence as LlmEvidence)
+                ? (f.evidence as LlmEvidence)
+                // Niveau absent ou hors enum -> "supportive" (prudent : on ne
+                // donne pas le credit d'un actif documente par defaut).
+                : ("supportive" as LlmEvidence);
+              return [{ slug, evidence: ev }];
+            })
+            .slice(0, 6);
           const score = typeof p.score === "number" ? Math.max(0, Math.min(100, p.score)) : 0;
           return {
             label: String(p.label).slice(0, 120),
             excerpt: String(p.excerpt).slice(0, 200),
             verdict: p.verdict as CoherenceVerdict,
             score,
-            foundSlugs: found,
+            found,
             missing: (Array.isArray(p.missing) ? p.missing : [])
               .filter((s): s is string => typeof s === "string")
               .map((s) => s.slice(0, 80))
@@ -1153,7 +1197,7 @@ async function mistralAnalyze(
         { role: "system", content: COHERENCE_SYSTEM },
         {
           role: "user",
-          content: `${user}\n\nFormat : { "product_type": "...", "promises": [{"label","excerpt","verdict","score","found_slugs":[],"missing":[],"is_absence":false}], "unverifiable": [{"excerpt","reason"}] }`,
+          content: `${user}\n\nFormat : { "product_type": "...", "promises": [{"label","excerpt","verdict","score","found":[{"slug","evidence":"documented|supportive|marketing"}],"missing":[],"is_absence":false}], "unverifiable": [{"excerpt","reason"}] }`,
         },
       ],
     });
@@ -1225,7 +1269,7 @@ async function reviewCoherencePass(
       excerpt: p.excerpt,
       verdict: p.verdict,
       score: p.score,
-      found_slugs: p.foundSlugs,
+      found: p.found,
       missing: p.missing,
       is_absence: p.isAbsence,
     })),

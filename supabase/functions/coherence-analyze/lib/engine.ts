@@ -68,7 +68,7 @@ function findItemForActive(
   return null;
 }
 
-function isInTrace(item: AnalyseItem): boolean {
+export function isInTrace(item: AnalyseItem): boolean {
   return (
     item.thresholdContext === "after_fragrance" ||
     item.thresholdContext === "after_preservative"
@@ -164,7 +164,7 @@ function unifiedScore({
  *   - uniquement effet visuel/sensoriel    → partielle (30)
  *   - rien de validé                        → non démontré (0)
  */
-function gradeEffect(c: {
+export function gradeEffect(c: {
   docWellDosed: number;
   docTrace: number;
   supWellDosed: number;

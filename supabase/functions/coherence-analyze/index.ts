@@ -31,7 +31,7 @@ import {
   generateConclusion,
   type FormulaItemForLlm,
 } from "./lib/ai.ts";
-import { buildCoherenceResult } from "./lib/engine.ts";
+import { buildCoherenceResult, gradeEffect } from "./lib/engine.ts";
 import { loadProfileAndRestrictions } from "./lib/profile.ts";
 import type {
   AnalyseResponse,
@@ -68,7 +68,16 @@ type Body = {
 // mapping INCI honnête, dédup). SUPPRESSION du filet déterministe NOISE (regex
 // figée qui rabotait l'analyse) : c'est désormais la critique IA qui reclasse
 // le non-mesurable. Bump invalide coherence_cache v10 (verdicts différents).
-const ALGO_VERSION = "v11";
+// v12 = RETOUR DU BARÈME DÉTERMINISTE (`gradeEffect`). Le score du LLM n'est
+// plus affiché : il était rendu sans connaître la POSITION des ingrédients, ce
+// qui donnait des « 100 % tenue » sur un actif en 25e place (71 promesses sur
+// 89 au-dessus de 60 alors que tous leurs actifs étaient en trace, contre 0
+// avant le refactor du 8 juil 2026). Le LLM garde ce qu'il fait bien (extraire
+// les promesses, citer les vrais slugs, qualifier le niveau de preuve) ; le
+// score et le verdict d'effet sont recalculés ici à partir du niveau de preuve
+// ET de `thresholdContext` (après parfum/conservateur = en trace, plafond 60).
+// Bump invalide coherence_cache v11.
+const ALGO_VERSION = "v12";
 
 // ─── Idempotence (port de CosmetWiki/lib/idempotency.ts, Deno) ──────────────
 const IDEM_TTL_MS = 24 * 60 * 60 * 1000;
@@ -316,36 +325,85 @@ Deno.serve(async (req: Request) => {
       // rabote plus l'analyse avec une regex figée.
       const built: CoherencePromise[] = [];
       for (const p of analysis.promises) {
-        const foundActives = p.foundSlugs.flatMap((slug) => {
-          const it = bySlug.get(slug);
+        // Chaque slug cité est rattaché à l'item réel de la formule pour
+        // récupérer sa POSITION et son état « en trace » (listé après le
+        // parfum ou le conservateur, donc sous ~1 %).
+        const resolved = p.found.flatMap((f) => {
+          const it = bySlug.get(f.slug);
           if (!it) return [];
           return [{
-            name: it.name ?? slug,
-            slug,
+            name: it.name ?? f.slug,
+            slug: f.slug,
             position: it.position,
             inTrace: (it.thresholdContext ?? "").startsWith("after"),
+            evidence: f.evidence,
           }];
         });
+        // « marketing » = effet visuel/sensoriel → cosmeticActives, comme dans
+        // le moteur d'origine (il ne peut jamais produire mieux que 35).
+        const foundActives = resolved
+          .filter((r) => r.evidence !== "marketing")
+          .map(({ name, slug, position, inTrace }) => ({ name, slug, position, inTrace }));
+        const cosmeticActives = resolved
+          .filter((r) => r.evidence === "marketing")
+          .map(({ name, slug, position, inTrace }) => ({
+            name,
+            slug,
+            position,
+            inTrace,
+            note: "effet visuel/sensoriel",
+          }));
 
         let verdict = p.verdict;
-        let score = p.score;
+        // `p.score` (l'estimation du LLM) n'est JAMAIS retenue : elle est
+        // rendue sans la position des ingrédients. Le score est décidé ci-dessous.
+        let score: number;
         let missing = p.missing;
         if (p.isAbsence) {
           // Une absence n'est jamais « non démontré » : tenue (X absent) ou
           // contredite (X présent, décidé par le LLM). On efface le « manque ».
+          // Binaire par nature : une molécule est dans l'INCI ou elle n'y est
+          // pas, la position n'a aucun sens ici.
           if (verdict !== "contredite") {
             verdict = "tenue";
-            if (!score) score = 100;
+            score = 100;
+          } else {
+            score = 0;
           }
           missing = [];
-        } else if (
-          // Anti-hallucination : un verdict positif d'EFFET sans AUCUN ingrédient
-          // réel cité retombe en « non démontré ».
-          (verdict === "tenue" || verdict === "partielle") &&
-          foundActives.length === 0
-        ) {
-          verdict = "non_demontree";
+        } else if (verdict === "contredite") {
+          // Une promesse d'effet explicitement contredite reste contredite.
           score = 0;
+        } else {
+          // BARÈME DÉTERMINISTE (v12). Le score du LLM est ignoré : il ne
+          // connaît pas la position des ingrédients. On compte les actifs par
+          // niveau de preuve × dosage, et `gradeEffect` tranche. Le cas
+          // « aucun ingrédient réel cité » retombe naturellement sur
+          // non_demontree / 0, ce qui remplace l'ancienne garde
+          // anti-hallucination explicite.
+          let docWellDosed = 0;
+          let docTrace = 0;
+          let supWellDosed = 0;
+          let supTrace = 0;
+          for (const r of resolved) {
+            if (r.evidence === "marketing") continue;
+            if (r.evidence === "documented") {
+              if (r.inTrace) docTrace++;
+              else docWellDosed++;
+            } else {
+              if (r.inTrace) supTrace++;
+              else supWellDosed++;
+            }
+          }
+          const graded = gradeEffect({
+            docWellDosed,
+            docTrace,
+            supWellDosed,
+            supTrace,
+            cosmetic: cosmeticActives.length,
+          });
+          verdict = graded.verdict;
+          score = graded.score;
         }
         const slug =
           p.label
@@ -361,7 +419,7 @@ Deno.serve(async (req: Request) => {
           verdict,
           expectedActives: [],
           foundActives,
-          cosmeticActives: [],
+          cosmeticActives,
           missingActives: missing,
           score,
         });
