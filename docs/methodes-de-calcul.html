@@ -1,0 +1,1685 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>CosmeCheck, méthodes de calcul</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
+
+  :root {
+    --vert:   #059669;
+    --jaune:  #DFA80A;
+    --orange: #E85D04;
+    --rouge:  #BE123C;
+    --vertBg:   #ECFDF5;
+    --jauneBg:  #FEFCE8;
+    --orangeBg: #FFF7ED;
+    --rougeBg:  #FFF1F2;
+    --ink:    #111827;
+    --ink2:   #334155;
+    --muted:  #64748B;
+    --line:   #E2E8F0;
+    --line2:  #F1F5F9;
+    --surface:#F8FAFC;
+    --brand:  #E11D48;
+    --neutral:#475569;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif;
+    font-size: 10.2pt;
+    line-height: 1.52;
+    color: var(--ink);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  p { margin: 0 0 7pt; }
+  strong { font-weight: 600; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- structure ---------- */
+  .page { break-after: page; }
+  .page:last-child { break-after: auto; }
+  .block { break-inside: avoid; }
+
+  h1 { font-size: 27pt; line-height: 1.14; font-weight: 700; margin: 0 0 6pt; letter-spacing: -0.4pt; }
+  h2 {
+    font-size: 15pt; font-weight: 700; margin: 0 0 10pt; letter-spacing: -0.2pt;
+    padding-bottom: 5pt; border-bottom: 2px solid var(--ink);
+  }
+  h3 { font-size: 11.4pt; font-weight: 700; margin: 14pt 0 5pt; color: var(--ink); }
+  h4 { font-size: 10.2pt; font-weight: 600; margin: 10pt 0 3pt; color: var(--ink2); }
+
+  .kicker {
+    font-size: 7.6pt; font-weight: 700; letter-spacing: 1.2pt; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 4pt;
+  }
+  .secnum {
+    display: inline-block; min-width: 20pt; height: 20pt; line-height: 20pt; text-align: center;
+    border-radius: 5pt; background: var(--ink); color: #fff; font-size: 10pt; font-weight: 700;
+    margin-right: 7pt; vertical-align: 2pt;
+  }
+  .lede { font-size: 10.6pt; color: var(--ink2); margin-bottom: 12pt; }
+
+  /* ---------- cards ---------- */
+  .card {
+    border: 1px solid var(--line); border-radius: 7pt; padding: 10pt 12pt; margin: 0 0 10pt;
+    background: #fff;
+  }
+  .card.soft { background: var(--surface); }
+  .card-title { font-weight: 700; font-size: 10.4pt; margin: 0 0 5pt; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 9pt; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 9pt; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8pt; }
+
+  .formula {
+    background: var(--surface); border-left: 3px solid var(--ink); border-radius: 0 5pt 5pt 0;
+    padding: 8pt 11pt; margin: 7pt 0 9pt; font-size: 10.4pt; line-height: 1.7;
+  }
+  .formula .eq { font-weight: 600; }
+  .formula .note { color: var(--muted); font-size: 9pt; display: block; margin-top: 3pt; }
+
+  .callout {
+    border: 1px solid var(--line); border-left: 3px solid var(--brand); border-radius: 0 5pt 5pt 0;
+    background: #fff; padding: 8pt 11pt; margin: 8pt 0; font-size: 9.6pt;
+  }
+  .callout .t { font-weight: 700; display: block; margin-bottom: 2pt; }
+
+  /* ---------- tables ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 6pt 0 10pt; font-size: 9.2pt; }
+  thead th {
+    text-align: left; font-weight: 600; font-size: 8pt; letter-spacing: 0.5pt; text-transform: uppercase;
+    color: var(--muted); background: var(--line2); padding: 5pt 6pt; border-bottom: 1px solid var(--line);
+  }
+  td { padding: 5pt 6pt; border-bottom: 1px solid var(--line2); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 1px solid var(--line); }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.c, th.c { text-align: center; }
+  tr { break-inside: avoid; }
+  .tight td, .tight th { padding: 3.6pt 6pt; }
+
+  /* ---------- pills & chips ---------- */
+  .pill {
+    display: inline-block; padding: 1pt 6pt; border-radius: 9pt; font-size: 8.4pt; font-weight: 600;
+    white-space: nowrap;
+  }
+  .p-vert   { background: var(--vertBg);   color: var(--vert);   border: 1px solid var(--vert); }
+  .p-jaune  { background: var(--jauneBg);  color: #A67908;       border: 1px solid var(--jaune); }
+  .p-orange { background: var(--orangeBg); color: var(--orange); border: 1px solid var(--orange); }
+  .p-rouge  { background: var(--rougeBg);  color: var(--rouge);  border: 1px solid var(--rouge); }
+  .p-neutre { background: var(--surface);  color: var(--neutral); border: 1px solid #CBD5E1; }
+
+  .dot { display:inline-block; width:8pt; height:8pt; border-radius:50%; vertical-align:-0.5pt; margin-right:4pt; }
+  .d-vert{background:var(--vert)} .d-jaune{background:var(--jaune)}
+  .d-orange{background:var(--orange)} .d-rouge{background:var(--rouge)}
+  .d-neutre{background:var(--neutral)}
+
+  .stars { white-space: nowrap; letter-spacing: 0.5pt; font-size: 10pt; }
+  .s-vert{color:var(--vert)} .s-jaune{color:var(--jaune)} .s-orange{color:var(--orange)} .s-rouge{color:var(--rouge)}
+  .s-off{color:#D7DDE5}
+
+  ul, ol { margin: 4pt 0 8pt; padding-left: 15pt; }
+  li { margin-bottom: 3pt; }
+  ul.tightlist li { margin-bottom: 1.5pt; }
+
+  figure { margin: 8pt 0 12pt; break-inside: avoid; }
+  h3, h4, .card-title { break-after: avoid; }
+  .formula { break-inside: avoid; }
+  thead { break-after: avoid; }
+  figcaption { font-size: 8.4pt; color: var(--muted); margin-top: 4pt; }
+  svg { display: block; width: 100%; height: auto; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 4pt 14pt; font-size: 8.6pt; color: var(--ink2); margin: 5pt 0 0; }
+  .legend span { white-space: nowrap; }
+
+  .footnote { font-size: 8.4pt; color: var(--muted); margin-top: 4pt; }
+
+  /* ---------- cover ---------- */
+  .cover { padding-top: 8mm; }
+  .cover .rule { height: 4pt; width: 62pt; background: var(--brand); border-radius: 2pt; margin-bottom: 14pt; }
+  .cover .sub { font-size: 12.4pt; color: var(--ink2); margin-bottom: 20pt; }
+  .toc { margin-top: 16pt; }
+  .toc-row { display: flex; align-items: baseline; gap: 8pt; padding: 6.5pt 0; border-bottom: 1px solid var(--line2); font-size: 10pt; }
+  .toc-row .i { width: 15pt; font-weight: 700; color: var(--brand); }
+  .toc-row .t { flex: 1; font-weight: 600; }
+  .toc-row .s { color: var(--muted); font-size: 9pt; }
+  .stat { text-align: center; padding: 8pt 4pt; border: 1px solid var(--line); border-radius: 6pt; background: #fff; }
+  .stat .v { font-size: 15pt; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .stat .l { font-size: 8pt; color: var(--muted); line-height: 1.3; margin-top: 3pt; }
+</style>
+</head>
+<body>
+
+<!-- ============================ COUVERTURE ============================ -->
+<section class="page cover">
+  <div class="rule"></div>
+  <p class="kicker">Document de référence, septembre 2026</p>
+  <h1>Comment CosmeCheck<br>calcule ses notes</h1>
+  <p class="sub">Toutes les méthodes de calcul, expliquées simplement, avec un exemple pour chaque cas.</p>
+
+  <div class="card soft block">
+    <p class="card-title">Ce document décrit le calcul réel, pas une intention</p>
+    <p style="margin-bottom:8pt">Chaque chiffre présenté ici a été obtenu en faisant tourner le moteur de calcul de l'application,
+      puis recoupé avec les données réellement produites en service. Les vérifications sont détaillées en annexe.</p>
+    <div class="grid4">
+      <div class="stat"><div class="v">1 103</div><div class="l">tests automatiques passés (81 séries)</div></div>
+      <div class="stat"><div class="v">490 428</div><div class="l">produits du catalogue contrôlés</div></div>
+      <div class="stat"><div class="v">1 649</div><div class="l">promesses réelles vérifiées</div></div>
+      <div class="stat"><div class="v">653</div><div class="l">scores de compatibilité recalculés</div></div>
+    </div>
+  </div>
+
+  <div class="toc">
+    <p class="kicker">Les six notes de l'application</p>
+    <div class="toc-row"><span class="i">1</span><span class="t">La couleur de chaque ingrédient</span><span class="s">vert, jaune, orange, rouge</span></div>
+    <div class="toc-row"><span class="i">2</span><span class="t">La note de la composition et les étoiles</span><span class="s">0 à 20, puis 1 à 5 étoiles</span></div>
+    <div class="toc-row"><span class="i">3</span><span class="t">Le score de compatibilité avec le profil</span><span class="s">0 à 100 %</span></div>
+    <div class="toc-row"><span class="i">4</span><span class="t">L'analyse de la promesse</span><span class="s">un % par promesse, un verdict global</span></div>
+    <div class="toc-row"><span class="i">5</span><span class="t">L'exposition cumulée de la routine</span><span class="s">0 à 20</span></div>
+    <div class="toc-row"><span class="i">6</span><span class="t">La couverture des objectifs</span><span class="s">0 à 100 % par objectif</span></div>
+    <div class="toc-row"><span class="i">7</span><span class="t">Les autres indicateurs</span><span class="s">exposition par famille, conflits, allergènes</span></div>
+    <div class="toc-row"><span class="i">A</span><span class="t">Annexe, comment tout ceci a été vérifié</span><span class="s">tests et données réelles</span></div>
+  </div>
+
+  <div class="callout" style="margin-top:16pt">
+    <span class="t">Deux principes valables partout</span>
+    <strong>1.</strong> Un calcul fixe, toujours identique, fait tous les chiffres. Quand une intelligence artificielle
+    intervient, elle ne donne jamais de note : elle nomme des ingrédients ou répond par un entier de 0 à 3, et le calcul
+    fixe fait le reste.<br>
+    <strong>2.</strong> L'application mobile et le site web appliquent exactement le même calcul, donc un même produit
+    donne le même résultat sur les deux.
+  </div>
+</section>
+
+<!-- ============================ VUE D'ENSEMBLE ============================ -->
+<section class="page">
+  <p class="kicker">Vue d'ensemble</p>
+  <h2>La chaîne de calcul</h2>
+  <p class="lede">Tout part de la couleur des ingrédients. Cette brique alimente la note de la composition, qui alimente
+    ensuite les quatre autres scores.</p>
+
+  <figure class="block">
+    <svg viewBox="0 0 720 348" role="img" aria-label="Schéma de la chaîne de calcul, de la liste INCI vers les cinq notes">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,1 L9,5 L0,9 z" fill="#94A3B8"/>
+        </marker>
+      </defs>
+      <style>
+        .bx { fill:#fff; stroke:#CBD5E1; stroke-width:1.2; }
+        .bxd { fill:#F8FAFC; stroke:#94A3B8; stroke-width:1.2; }
+        .tt { font: 600 12px "Segoe UI", sans-serif; fill:#111827; }
+        .ts { font: 10.5px "Segoe UI", sans-serif; fill:#64748B; }
+        .tb { font: 700 11px "Segoe UI", sans-serif; fill:#fff; }
+        .lk { stroke:#94A3B8; stroke-width:1.4; fill:none; marker-end:url(#ar); }
+        .lbl { font: 600 9.5px "Segoe UI", sans-serif; fill:#64748B; }
+      </style>
+
+      <!-- étape 1 -->
+      <rect class="bx" x="0" y="12" width="150" height="54" rx="7"/>
+      <text class="tt" x="12" y="34">Liste des ingrédients</text>
+      <text class="ts" x="12" y="51">l'étiquette du produit</text>
+
+      <!-- étape 2 -->
+      <rect class="bxd" x="188" y="12" width="150" height="54" rx="7"/>
+      <text class="tt" x="200" y="34">Une couleur par</text>
+      <text class="tt" x="200" y="50">ingrédient</text>
+      <circle cx="330" cy="26" r="5" fill="#059669"/>
+      <circle cx="330" cy="38" r="5" fill="#DFA80A"/>
+      <circle cx="330" cy="50" r="5" fill="#E85D04"/>
+      <circle cx="330" cy="62" r="5" fill="#BE123C"/>
+
+      <!-- étape 3 -->
+      <rect class="bxd" x="376" y="12" width="164" height="54" rx="7"/>
+      <text class="tt" x="388" y="34">Couleur + position</text>
+      <text class="ts" x="388" y="51">tête, corps, queue</text>
+
+      <!-- étape 4 -->
+      <rect x="578" y="12" width="142" height="54" rx="7" fill="#111827"/>
+      <text class="tb" x="592" y="33">Note sur 20</text>
+      <text x="592" y="50" font="10.5px" style="font:10.5px 'Segoe UI',sans-serif" fill="#CBD5E1">et 1 à 5 étoiles</text>
+
+      <path class="lk" d="M152 39 H184"/>
+      <path class="lk" d="M340 39 H372"/>
+      <path class="lk" d="M542 39 H574"/>
+
+      <!-- descente -->
+      <path class="lk" d="M649 68 V104"/>
+      <text class="lbl" x="658" y="92">sert de base à</text>
+
+      <!-- rangee 2 : les 4 scores -->
+      <rect class="bx" x="0" y="112" width="172" height="86" rx="7"/>
+      <text class="tt" x="12" y="133">Compatibilité</text>
+      <text class="ts" x="12" y="150">0 à 100 %</text>
+      <text class="ts" x="12" y="167">note de la formule</text>
+      <text class="ts" x="12" y="183">+ profil beauté</text>
+
+      <rect class="bx" x="184" y="112" width="172" height="86" rx="7"/>
+      <text class="tt" x="196" y="133">Promesse</text>
+      <text class="ts" x="196" y="150">un % par promesse</text>
+      <text class="ts" x="196" y="167">description du produit</text>
+      <text class="ts" x="196" y="183">+ ingrédients présents</text>
+
+      <rect class="bx" x="368" y="112" width="172" height="86" rx="7"/>
+      <text class="tt" x="380" y="133">Exposition cumulée</text>
+      <text class="ts" x="380" y="150">0 à 20</text>
+      <text class="ts" x="380" y="167">notes des produits</text>
+      <text class="ts" x="380" y="183">+ fréquence d'usage</text>
+
+      <rect class="bx" x="548" y="112" width="172" height="86" rx="7"/>
+      <text class="tt" x="560" y="133">Objectifs</text>
+      <text class="ts" x="560" y="150">0 à 100 % par objectif</text>
+      <text class="ts" x="560" y="167">étoiles + fréquence</text>
+      <text class="ts" x="560" y="183">+ utilité du produit</text>
+
+      <path class="lk" d="M614 104 H86 V108"/>
+      <path class="lk" d="M270 104 V108"/>
+      <path class="lk" d="M454 104 V108"/>
+      <path class="lk" d="M634 104 V108"/>
+
+      <!-- rangee 3 : ce qui alimente -->
+      <rect class="bxd" x="0" y="238" width="172" height="66" rx="7"/>
+      <text class="tt" x="12" y="259">Profil beauté</text>
+      <text class="ts" x="12" y="276">type de peau, soucis,</text>
+      <text class="ts" x="12" y="292">restrictions, objectifs</text>
+
+      <rect class="bxd" x="184" y="238" width="172" height="66" rx="7"/>
+      <text class="tt" x="196" y="259">Description marque</text>
+      <text class="ts" x="196" y="276">le texte marketing</text>
+      <text class="ts" x="196" y="292">du produit</text>
+
+      <rect class="bxd" x="368" y="238" width="352" height="66" rx="7"/>
+      <text class="tt" x="380" y="259">Routine de l'utilisateur</text>
+      <text class="ts" x="380" y="276">les produits ajoutés et leur fréquence d'usage</text>
+
+      <path class="lk" d="M86 234 V202"/>
+      <path class="lk" d="M270 234 V202"/>
+      <path class="lk" d="M454 234 V202"/>
+      <path class="lk" d="M634 234 V202"/>
+
+      <text class="lbl" x="0" y="332">Les cases grises sont des données d'entrée. Les cases blanches sont des résultats affichés.</text>
+    </svg>
+  </figure>
+
+  <h3>Les six notes en un coup d'œil</h3>
+  <table class="tight">
+    <thead>
+      <tr><th style="width:24%">Note</th><th style="width:14%">Échelle</th><th style="width:34%">Ce qu'elle mesure</th><th>Qui produit le chiffre</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Couleur d'un ingrédient</strong></td><td>4 niveaux</td><td>Le niveau de vigilance sur une substance</td><td>Fichier de référence réglementaire</td></tr>
+      <tr><td><strong>Note de la composition</strong></td><td>0 à 20</td><td>La qualité de la formule dans son ensemble</td><td>Calcul fixe</td></tr>
+      <tr><td><strong>Étoiles</strong></td><td>1 à 5</td><td>La même chose, en lecture rapide</td><td>Calcul fixe, déduit de la note</td></tr>
+      <tr><td><strong>Compatibilité</strong></td><td>0 à 100 %</td><td>L'adéquation du produit à une personne précise</td><td>Calcul fixe, l'IA nomme les ingrédients</td></tr>
+      <tr><td><strong>Promesse</strong></td><td>0 à 100 %</td><td>Si la formule soutient ce que la marque annonce</td><td>IA encadrée par des règles fixes</td></tr>
+      <tr><td><strong>Exposition cumulée</strong></td><td>0 à 20</td><td>Ce que la routine fait subir à la peau chaque jour</td><td>Calcul fixe</td></tr>
+      <tr><td><strong>Couverture d'un objectif</strong></td><td>0 à 100 %</td><td>Si la routine sert vraiment un objectif déclaré</td><td>Calcul fixe, l'IA note l'utilité de 0 à 3</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <span class="t">Un mot sur le vocabulaire</span>
+    <strong>Position</strong> : les ingrédients sont toujours écrits du plus présent au moins présent. Le premier de la
+    liste est donc le plus abondant, le dernier le plus rare. C'est une obligation légale, et c'est ce qui permet de tenir
+    compte de la place d'un ingrédient sans connaître les dosages exacts, que les marques ne publient pas.
+  </div>
+</section>
+
+<!-- ============================ SECTION 1 ============================ -->
+<section class="page">
+  <p class="kicker">Section 1</p>
+  <h2><span class="secnum">1</span>La couleur de chaque ingrédient</h2>
+  <p class="lede">C'est la brique de base. Tant qu'un ingrédient n'a pas de couleur, aucune note n'est possible.</p>
+
+  <div class="grid4 block">
+    <div class="card" style="border-top:3px solid var(--vert)">
+      <p style="margin:0"><span class="dot d-vert"></span><strong>Vert</strong></p>
+      <p class="footnote" style="margin-top:3pt">Rien à signaler dans nos références.</p>
+    </div>
+    <div class="card" style="border-top:3px solid var(--jaune)">
+      <p style="margin:0"><span class="dot d-jaune"></span><strong>Jaune</strong></p>
+      <p class="footnote" style="margin-top:3pt">À surveiller : précaution, allergène de parfum, risque faible.</p>
+    </div>
+    <div class="card" style="border-top:3px solid var(--orange)">
+      <p style="margin:0"><span class="dot d-orange"></span><strong>Orange</strong></p>
+      <p class="footnote" style="margin-top:3pt">Préoccupation moyenne, motif documenté.</p>
+    </div>
+    <div class="card" style="border-top:3px solid var(--rouge)">
+      <p style="margin:0"><span class="dot d-rouge"></span><strong>Rouge</strong></p>
+      <p class="footnote" style="margin-top:3pt">Interdit, ou à éviter.</p>
+    </div>
+  </div>
+
+  <h3>Sur quoi la couleur est établie</h3>
+  <p>Uniquement sur des sources publiques et officielles. Ce n'est pas repris d'un service de notation tiers.</p>
+  <table class="tight">
+    <thead><tr><th style="width:46%">Source</th><th style="width:20%">Conséquence</th><th>Exemple de lecture</th></tr></thead>
+    <tbody>
+      <tr><td>Règlement européen (CE) 1223/2009, <strong>annexe II</strong> : substances interdites</td><td><span class="pill p-rouge">Rouge</span></td><td>Interdiction pure et simple en cosmétique</td></tr>
+      <tr><td><strong>Annexe III</strong> : substances à restrictions, et les 26 allergènes de parfum</td><td><span class="pill p-jaune">Jaune</span> <span class="pill p-orange">Orange</span></td><td>Autorisé avec limites ou étiquetage obligatoire</td></tr>
+      <tr><td><strong>Annexes IV, V, VI</strong> : colorants, conservateurs, filtres UV autorisés</td><td><span class="pill p-jaune">Jaune</span> <span class="pill p-orange">Orange</span></td><td>Autorisé mais plafonné en concentration</td></tr>
+      <tr><td>Substances <strong>CMR</strong> (cancérogènes, mutagènes, reprotoxiques) et classement CLP européen</td><td><span class="pill p-orange">Orange</span> <span class="pill p-rouge">Rouge</span></td><td>Danger identifié par les agences</td></tr>
+      <tr><td><strong>Perturbateurs endocriniens</strong>, listes officielles</td><td><span class="pill p-orange">Orange</span> <span class="pill p-rouge">Rouge</span></td><td>Suspicion documentée</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Les choix de bon sens</h3>
+  <p>La couleur n'est pas attribuée par principe de méfiance. Trois exemples des règles retenues :</p>
+  <ul>
+    <li>Les ingrédients <strong>inertes très courants</strong> (silicones, épaississants, EDTA, phenoxyethanol) sont en
+      jaune et non en orange : ils sont bénins sur le plan toxicologique, seule une précaution se justifie.</li>
+    <li>La <strong>pierre d'alun</strong> est en orange, pas en rouge : elle est moins problématique que les sels
+      d'aluminium anti-transpirants, eux en rouge.</li>
+    <li>Restent en orange les <strong>vrais motifs</strong> : SLS et SLES, composés éthoxylés (trace de 1,4-dioxane),
+      paraffine et huile minérale, microplastiques, TEA, filtres UV allergènes.</li>
+  </ul>
+
+  <div class="callout">
+    <span class="t">Cas particulier : ingrédient non reconnu</span>
+    Un ingrédient absent du fichier de référence n'a pas de couleur. Il n'est ni pénalise, ni crédité : il est simplement
+    exclu du calcul, et compte seulement dans le total de la liste. Si moins de la moitié des ingrédients sont reconnus,
+    aucune note n'est affichée (voir section 2, dernier cas).
+  </div>
+</section>
+
+<!-- ============================ SECTION 2 ============================ -->
+<section class="page">
+  <p class="kicker">Section 2</p>
+  <h2><span class="secnum">2</span>La note de la composition et les étoiles</h2>
+  <p class="lede">Deux informations, et deux seulement, entrent dans ce calcul : la <strong>couleur</strong> de chaque
+    ingrédient et sa <strong>position</strong> dans la liste. Le résultat est une note sur 20, dont on déduit
+    directement le nombre et la couleur des étoiles.</p>
+
+  <h3>Étape 1, les trois zones de la liste</h3>
+  <p>Un ingrédient pénalisant en début de liste ne pèse pas comme le même ingrédient en fin de liste. La liste est donc
+    coupée en trois zones, avec un poids décroissant.</p>
+
+  <figure class="block">
+    <svg viewBox="0 0 720 168" role="img" aria-label="Les trois zones d'une liste de 20 ingrédients, tête, corps et queue">
+      <style>
+        .zt { font: 700 11px "Segoe UI", sans-serif; }
+        .zs { font: 10px "Segoe UI", sans-serif; fill:#64748B; }
+        .zn { font: 600 9px "Segoe UI", sans-serif; }
+      </style>
+      <line x1="0" y1="32" x2="720" y2="32" stroke="#E2E8F0" stroke-width="1"/>
+      <text class="zs" x="0" y="24">1er ingrédient, le plus présent</text>
+      <text class="zs" x="720" y="24" text-anchor="end">20e ingrédient, le moins présent</text>
+
+      <rect x="0"   y="44" width="176" height="30" rx="4" fill="#0F172A"/>
+      <rect x="180" y="44" width="248" height="30" rx="4" fill="#475569"/>
+      <rect x="432" y="44" width="288" height="30" rx="4" fill="#CBD5E1"/>
+
+      <text class="zt" x="12" y="64" fill="#ffffff">Tête</text>
+      <text class="zn" x="52" y="64" fill="#CBD5E1">rangs 1 à 5</text>
+      <text class="zt" x="192" y="64" fill="#ffffff">Corps</text>
+      <text class="zn" x="240" y="64" fill="#E2E8F0">rangs 6 à 12</text>
+      <text class="zt" x="444" y="64" fill="#0F172A">Queue</text>
+      <text class="zn" x="496" y="64" fill="#475569">rangs 13 à 20</text>
+
+      <text class="zt" x="12" y="98" fill="#0F172A">poids 3</text>
+      <text class="zt" x="192" y="98" fill="#0F172A">poids 2</text>
+      <text class="zt" x="444" y="98" fill="#0F172A">poids 1</text>
+      <text class="zs" x="12" y="114">le plus concentré</text>
+      <text class="zs" x="192" y="114">présence significative</text>
+      <text class="zs" x="444" y="114">souvent moins de 1 %</text>
+
+      <text class="zs" x="0" y="148">La frontière corps / queue est fixée à 60 % de la liste : pour 20 ingrédients elle tombe au rang 12,</text>
+      <text class="zs" x="0" y="162">pour 12 ingrédients au rang 8. La tête fait toujours les 5 premiers rangs.</text>
+    </svg>
+  </figure>
+
+  <h3>Étape 2, quel cas de figure</h3>
+  <p>Deux situations très différentes, donc deux chemins de calcul.</p>
+
+  <div class="grid2 block">
+    <div class="card" style="border-top:3px solid var(--vert)">
+      <p class="card-title">Cas A, aucun orange ni rouge</p>
+      <p class="footnote" style="margin-bottom:6pt">La formule est propre : la position n'a plus d'importance, seul le
+        rapport de force vert contre jaune compte.</p>
+      <table class="tight" style="margin:0">
+        <tbody>
+          <tr><td>Aucun jaune</td><td class="n"><span class="pill p-vert">Très douce</span></td></tr>
+          <tr><td>Des jaunes, mais moins que de verts</td><td class="n"><span class="pill p-vert">Saine</span></td></tr>
+          <tr><td>Plus de jaunes que de verts</td><td class="n"><span class="pill p-jaune">À surveiller</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card" style="border-top:3px solid var(--orange)">
+      <p class="card-title">Cas B, au moins un orange ou un rouge</p>
+      <p class="footnote" style="margin-bottom:6pt">Deux critères sont calculés séparément, puis <strong>le plus sévère
+        des deux</strong> est retenu.</p>
+      <ol style="margin:0; padding-left:14pt">
+        <li><strong>La position</strong> : où se trouve le pire ingrédient. Cela fixe un plafond.</li>
+        <li><strong>La composition</strong> : la proportion de vert dans toute la liste, pondérée par les zones.</li>
+      </ol>
+    </div>
+  </div>
+
+  <h4>Cas B, critère 1 : le plafond de position</h4>
+  <table class="tight">
+    <thead><tr><th style="width:34%">Ingrédient trouvé</th><th style="width:22%">Zone</th><th>Le produit ne peut pas faire mieux que</th></tr></thead>
+    <tbody>
+      <tr><td><span class="dot d-rouge"></span>un rouge</td><td>Tête</td><td><span class="pill p-rouge">À examiner</span></td></tr>
+      <tr><td><span class="dot d-rouge"></span>un rouge</td><td>Corps</td><td><span class="pill p-orange">Moyenne</span></td></tr>
+      <tr><td><span class="dot d-rouge"></span>un rouge</td><td>Queue</td><td><span class="pill p-jaune">À surveiller</span></td></tr>
+      <tr><td><span class="dot d-orange"></span>un orange</td><td>Tête ou corps</td><td><span class="pill p-jaune">À surveiller</span></td></tr>
+      <tr><td><span class="dot d-orange"></span>un orange</td><td>Queue</td><td><span class="pill p-neutre">Aucun plafond</span></td></tr>
+      <tr><td><strong>2 rouges ou plus</strong>, ou <strong>4 oranges ou plus</strong></td><td>n'importe où</td><td><span class="pill p-orange">Moyenne</span></td></tr>
+    </tbody>
+  </table>
+  <p class="footnote" style="margin-bottom:10pt">Deux garde-fous volontaires : un <strong>orange isolé en fin de liste</strong>
+    ne fait rien chuter, et <strong>sans aucun rouge</strong> un produit ne peut jamais tomber dans la pire catégorie,
+    même s'il est intégralement orange (voir l'exemple 11 plus loin).</p>
+
+  <h4>Cas B, critère 2 : la composition</h4>
+  <div class="formula">
+    <span class="eq">part de bon = (somme des poids des verts + la moitié des poids des jaunes) / somme de tous les poids</span>
+    <span class="note">Chaque ingrédient apporte le poids de sa zone : 3 en tête, 2 dans le corps, 1 en queue. Un vert
+      apporte tout son poids, un jaune la moitié, un orange et un rouge rien.</span>
+  </div>
+  <table class="tight" style="width:auto; min-width:58%">
+    <thead><tr><th>Part de bon</th><th>Verdict de composition</th></tr></thead>
+    <tbody>
+      <tr><td class="n">80 % et plus</td><td><span class="pill p-vert">Saine</span></td></tr>
+      <tr><td class="n">de 55 à 79 %</td><td><span class="pill p-jaune">À surveiller</span></td></tr>
+      <tr><td class="n">de 32 à 54 %</td><td><span class="pill p-orange">Moyenne</span></td></tr>
+      <tr><td class="n">moins de 32 %</td><td><span class="pill p-rouge">À examiner</span></td></tr>
+    </tbody>
+  </table>
+
+  <div class="card soft block">
+    <p class="card-title">Exemple détaillé du critère 2</p>
+    <p style="margin-bottom:4pt">Une liste de 20 ingrédients, tous verts sauf un orange au rang 3.</p>
+    <ul class="tightlist" style="margin-bottom:0">
+      <li>Somme de tous les poids : 5 rangs de tête à 3, 7 rangs de corps à 2, 8 rangs de queue à 1, soit
+        <strong>15 + 14 + 8 = 37</strong>.</li>
+      <li>L'orange est en tête, il perd donc 3 points de bon : <strong>37 moins 3 = 34</strong>.</li>
+      <li>Part de bon : <strong>34 / 37 = 92 %</strong>, donc composition <span class="pill p-vert">Saine</span>.</li>
+      <li>Mais le plafond de position dit <span class="pill p-jaune">À surveiller</span>, car l'orange est en tête.</li>
+      <li>Le plus sévère des deux gagne : le produit est <span class="pill p-jaune">À surveiller</span>.</li>
+    </ul>
+  </div>
+
+  <h3>Étape 3, de la catégorie à la note sur 20</h3>
+  <p>Chaque catégorie possède sa propre plage de notes. À l'intérieur de cette plage, la note est affinée par la
+    proportion de vert, ce qui permet de comparer deux produits de la même catégorie.</p>
+
+  <div class="formula">
+    <span class="eq">note sur 20 = début de la plage + largeur de la plage &times; part de vert</span>
+    <span class="note">part de vert = (nombre de verts + la moitié des jaunes) / nombre d'ingrédients reconnus,
+      cette fois sans pondération de zone.</span>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th style="width:22%">Catégorie</th><th style="width:19%">Plage de notes</th><th style="width:27%">Étoiles affichées</th><th>Libellé affiché</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="pill p-vert">Très douce</span></td><td class="n">17,00 à 20,00</td>
+        <td><span class="stars s-vert">&#9733;&#9733;&#9733;&#9733;&#9733;</span> <span class="footnote">5 vertes</span></td>
+        <td>Très bien</td>
+      </tr>
+      <tr>
+        <td><span class="pill p-vert">Saine</span></td><td class="n">13,00 à 16,90</td>
+        <td><span class="stars s-vert">&#9733;&#9733;&#9733;&#9733;</span><span class="stars s-off">&#9733;</span> <span class="footnote">4 vertes</span></td>
+        <td>Bien</td>
+      </tr>
+      <tr>
+        <td><span class="pill p-jaune">À surveiller</span></td><td class="n">9,00 à 12,90</td>
+        <td><span class="stars s-jaune">&#9733;&#9733;&#9733;</span><span class="stars s-off">&#9733;&#9733;</span> <span class="footnote">3 jaunes</span></td>
+        <td>Moyen</td>
+      </tr>
+      <tr>
+        <td><span class="pill p-orange">Moyenne</span></td><td class="n">5,00 à 8,90</td>
+        <td><span class="stars s-orange">&#9733;&#9733;</span><span class="stars s-off">&#9733;&#9733;&#9733;</span> <span class="footnote">2 oranges</span></td>
+        <td>Faible</td>
+      </tr>
+      <tr>
+        <td><span class="pill p-rouge">À examiner</span></td><td class="n">0,00 à 4,90</td>
+        <td><span class="stars s-rouge">&#9733;</span><span class="stars s-off">&#9733;&#9733;&#9733;&#9733;</span> <span class="footnote">1 rose</span></td>
+        <td>Faible</td>
+      </tr>
+      <tr>
+        <td><span class="pill p-neutre">Non déterminé</span></td><td class="n">pas de note</td>
+        <td><span class="stars s-off">&#9733;&#9733;&#9733;&#9733;&#9733;</span> <span class="footnote">aucune</span></td>
+        <td>Liste trop incomplète</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="footnote" style="margin-bottom:12pt">Le nombre d'étoiles <strong>et</strong> leur couleur portent la même
+    information, de sorte que la note reste lisible même imprimée en noir et blanc. Cas particulier : quand la catégorie
+    <span class="pill p-rouge">À examiner</span> est atteinte avec au moins deux rouges, la plage est resserrée à
+    0,00 - 2,00, ce qui distingue les situations les plus lourdes.</p>
+
+  <h3>Les 11 cas de figure, calculés pour de vrai</h3>
+  <p class="footnote" style="margin-bottom:2pt">Toutes les valeurs de ce tableau sortent d'une exécution du moteur de
+    calcul de l'application. Les listes d'exemple comptent 20 ingrédients, sauf les trois premières et la dernière.</p>
+  <table class="tight">
+    <thead>
+      <tr>
+        <th style="width:4%" class="c">#</th>
+        <th style="width:30%">Composition de l'exemple</th>
+        <th style="width:17%">Ce que dit le calcul</th>
+        <th style="width:16%">Catégorie</th>
+        <th style="width:8%" class="n">Note</th>
+        <th>Étoiles</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="c">1</td><td>8 ingrédients, tous verts</td><td>aucun jaune</td>
+        <td><span class="pill p-vert">Très douce</span></td><td class="n">20,00</td>
+        <td><span class="stars s-vert">&#9733;&#9733;&#9733;&#9733;&#9733;</span></td>
+      </tr>
+      <tr>
+        <td class="c">2</td><td>6 verts et 3 jaunes</td><td>jaunes moins nombreux</td>
+        <td><span class="pill p-vert">Saine</span></td><td class="n">16,25</td>
+        <td><span class="stars s-vert">&#9733;&#9733;&#9733;&#9733;</span><span class="stars s-off">&#9733;</span></td>
+      </tr>
+      <tr>
+        <td class="c">3</td><td>3 verts et 6 jaunes</td><td>jaunes plus nombreux</td>
+        <td><span class="pill p-jaune">À surveiller</span></td><td class="n">11,60</td>
+        <td><span class="stars s-jaune">&#9733;&#9733;&#9733;</span><span class="stars s-off">&#9733;&#9733;</span></td>
+      </tr>
+      <tr>
+        <td class="c">4</td><td>1 orange au rang 19, le reste vert</td><td>orange en queue, aucun plafond</td>
+        <td><span class="pill p-vert">Saine</span></td><td class="n">16,70</td>
+        <td><span class="stars s-vert">&#9733;&#9733;&#9733;&#9733;</span><span class="stars s-off">&#9733;</span></td>
+      </tr>
+      <tr>
+        <td class="c">5</td><td>1 orange au rang 3, le reste vert</td><td>plafond jaune, tête</td>
+        <td><span class="pill p-jaune">À surveiller</span></td><td class="n">12,71</td>
+        <td><span class="stars s-jaune">&#9733;&#9733;&#9733;</span><span class="stars s-off">&#9733;&#9733;</span></td>
+      </tr>
+      <tr>
+        <td class="c">6</td><td>1 rouge au rang 2, le reste vert</td><td>plafond rouge, tête</td>
+        <td><span class="pill p-rouge">À examiner</span></td><td class="n">4,66</td>
+        <td><span class="stars s-rouge">&#9733;</span><span class="stars s-off">&#9733;&#9733;&#9733;&#9733;</span></td>
+      </tr>
+      <tr>
+        <td class="c">7</td><td>1 rouge au rang 19, le reste vert</td><td>plafond jaune, queue</td>
+        <td><span class="pill p-jaune">À surveiller</span></td><td class="n">12,71</td>
+        <td><span class="stars s-jaune">&#9733;&#9733;&#9733;</span><span class="stars s-off">&#9733;&#9733;</span></td>
+      </tr>
+      <tr>
+        <td class="c">8</td><td>2 rouges aux rangs 18 et 19</td><td>2 rouges, plafond orange</td>
+        <td><span class="pill p-orange">Moyenne</span></td><td class="n">8,51</td>
+        <td><span class="stars s-orange">&#9733;&#9733;</span><span class="stars s-off">&#9733;&#9733;&#9733;</span></td>
+      </tr>
+      <tr>
+        <td class="c">9</td><td>2 rouges aux rangs 2 et 4</td><td>2 rouges en tête, plage resserrée</td>
+        <td><span class="pill p-rouge">À examiner</span></td><td class="n">1,80</td>
+        <td><span class="stars s-rouge">&#9733;</span><span class="stars s-off">&#9733;&#9733;&#9733;&#9733;</span></td>
+      </tr>
+      <tr>
+        <td class="c">10</td><td>4 oranges aux rangs 15 à 18</td><td>4 oranges, plafond orange</td>
+        <td><span class="pill p-orange">Moyenne</span></td><td class="n">8,12</td>
+        <td><span class="stars s-orange">&#9733;&#9733;</span><span class="stars s-off">&#9733;&#9733;&#9733;</span></td>
+      </tr>
+      <tr>
+        <td class="c">11</td><td>10 ingrédients, tous oranges</td><td>part de bon 0 %, mais aucun rouge</td>
+        <td><span class="pill p-orange">Moyenne</span></td><td class="n">5,00</td>
+        <td><span class="stars s-orange">&#9733;&#9733;</span><span class="stars s-off">&#9733;&#9733;&#9733;</span></td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="footnote">À lire de près : les exemples 4 et 5 contiennent le même unique orange, les exemples 6 et 7 le même
+    unique rouge. Seule la position change, et la note passe de 16,70 à 12,71 dans le premier couple, de 4,66 à 12,71
+    dans le second. Les exemples 8 et 9 contiennent tous deux exactement 2 rouges : en fin de liste ils laissent
+    2 étoiles, en début de liste 1 seule.</p>
+
+  <h3>Les deux filets de sécurité</h3>
+  <p>Deux vérifications s'ajoutent au moment de l'affichage, pour qu'une note ne puisse jamais contredire les couleurs
+    affichées juste en dessous d'elle.</p>
+
+  <h4>Filet 1, le plafond de cohérence</h4>
+  <p>Le calcul ne peut jamais, par construction, produire une bonne note avec des rouges. Si une note enregistrée viole
+    cette règle, par exemple une donnée ancienne ou importée, elle est rabattue à l'affichage.</p>
+  <table class="tight">
+    <thead><tr><th style="width:40%">Contenu de la formule</th><th style="width:22%">Note maximale possible</th><th>Exemple vérifié</th></tr></thead>
+    <tbody>
+      <tr><td>1 rouge</td><td class="n">12,90</td><td>une note stockée de 13,56 est ramenée à <strong>12,90</strong></td></tr>
+      <tr><td>2 rouges ou plus, ou 4 oranges ou plus</td><td class="n">8,90</td><td>une note stockée de 17,47 est ramenée à <strong>8,90</strong></td></tr>
+      <tr><td>Aucun rouge et moins de 4 oranges</td><td class="n">aucune limite</td><td>une note de 16,20 reste <strong>16,20</strong></td></tr>
+    </tbody>
+  </table>
+
+  <h4>Filet 2, l'arbitrage entre la note du catalogue et la note recalculée</h4>
+  <p>Un produit connu possède une note officielle dans le catalogue. Un produit scanné est recalculé sur place. Quand les
+    deux existent, la note du catalogue est préférée, <strong>sauf si elle ne tombe pas dans la même catégorie</strong>
+    que la note recalculée : dans ce cas la note recalculée gagne, pour rester cohérente avec les couleurs affichées.
+    Ce filet ne joue que si au moins la moitié des ingrédients sont reconnus.</p>
+  <table class="tight">
+    <thead><tr><th style="width:24%">Note catalogue</th><th style="width:24%">Note recalculée</th><th style="width:18%">Reconnus</th><th>Note servie</th></tr></thead>
+    <tbody>
+      <tr><td class="n">12,90 <span class="footnote">à surveiller</span></td><td class="n">16,55 <span class="footnote">saine</span></td><td class="n">18 sur 20</td><td><strong>16,55</strong>, catégories différentes</td></tr>
+      <tr><td class="n">14,00 <span class="footnote">saine</span></td><td class="n">16,55 <span class="footnote">saine</span></td><td class="n">18 sur 20</td><td><strong>14,00</strong>, même catégorie</td></tr>
+      <tr><td class="n">12,90</td><td class="n">16,55</td><td class="n">8 sur 20</td><td><strong>12,90</strong>, trop peu reconnu</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Dernier cas, la note impossible</h4>
+  <p>Si <strong>moins de la moitié</strong> des ingrédients de la liste sont reconnus, aucune note n'est calculée. Le
+    produit est affiché sans étoiles. C'est un choix assumé : une note fondée sur un tiers de la formule serait
+    trompeuse.</p>
+
+  <h3>Ce que cela donne sur le catalogue réel</h3>
+  <figure class="block">
+    <svg viewBox="0 0 720 212" role="img" aria-label="Répartition des 490 428 produits du catalogue par nombre d'étoiles">
+      <style>
+        .bl { font: 600 10.5px "Segoe UI", sans-serif; fill:#111827; }
+        .bv { font: 700 11px "Segoe UI", sans-serif; fill:#111827; }
+        .bp { font: 10px "Segoe UI", sans-serif; fill:#64748B; }
+      </style>
+      <line x1="150" y1="8" x2="150" y2="180" stroke="#E2E8F0" stroke-width="1"/>
+
+      <text class="bl" x="0" y="25">5 étoiles</text><text class="bp" x="76" y="25">17 et plus</text>
+      <rect x="150" y="13" width="19" height="21" rx="3" fill="#059669"/>
+      <text class="bv" x="177" y="28">6 978</text><text class="bp" x="228" y="28">1,4 %</text>
+
+      <text class="bl" x="0" y="59">4 étoiles</text><text class="bp" x="76" y="59">13 à 17</text>
+      <rect x="150" y="47" width="275" height="21" rx="3" fill="#10B981"/>
+      <text class="bv" x="433" y="62">104 263</text><text class="bp" x="497" y="62">21,3 %</text>
+
+      <text class="bl" x="0" y="93">3 étoiles</text><text class="bp" x="76" y="93">9 à 13</text>
+      <rect x="150" y="81" width="470" height="21" rx="3" fill="#DFA80A"/>
+      <text class="bv" x="628" y="96">178 164</text><text class="bp" x="628" y="110">36,3 %</text>
+
+      <text class="bl" x="0" y="127">2 étoiles</text><text class="bp" x="76" y="127">5 à 9</text>
+      <rect x="150" y="115" width="418" height="21" rx="3" fill="#E85D04"/>
+      <text class="bv" x="576" y="130">158 285</text><text class="bp" x="640" y="130">32,3 %</text>
+
+      <text class="bl" x="0" y="161">1 étoile</text><text class="bp" x="76" y="161">moins de 5</text>
+      <rect x="150" y="149" width="113" height="21" rx="3" fill="#BE123C"/>
+      <text class="bv" x="271" y="164">42 738</text><text class="bp" x="324" y="164">8,7 %</text>
+
+      <text class="bp" x="150" y="200">490 428 produits notés, au 3 septembre 2026. Note moyenne du catalogue : 10,4 sur 20.</text>
+    </svg>
+    <figcaption>Le barème est exigeant par construction : moins d'un produit sur quatre atteint 4 étoiles.</figcaption>
+  </figure>
+
+  <div class="callout">
+    <span class="t">Contrôle effectué sur ces 490 428 produits</span>
+    Aucun produit contenant un rouge n'affiche une note supérieure à 12,90, et aucun produit contenant 2 rouges ou
+    4 oranges n'affiche une note supérieure à 8,90. Zéro exception sur la totalité du catalogue.
+  </div>
+</section>
+
+<!-- ============================ SECTION 3 ============================ -->
+<section class="page">
+  <p class="kicker">Section 3</p>
+  <h2><span class="secnum">3</span>Le score de compatibilité</h2>
+  <p class="lede">Deux personnes différentes qui scannent le même produit voient la même note sur 20, mais pas le même
+    score de compatibilité. Ce score répond à une question précise : ce produit convient-il <strong>à vous</strong> ?</p>
+
+  <h3>Le point de départ, jamais un chiffre inventé</h3>
+  <p>Le score part toujours de la qualité réelle du produit, puis les bonus et les malus liés au profil s'appliquent.</p>
+  <div class="formula">
+    <span class="eq">point de départ = note sur 20 &times; 5</span>
+    <span class="note">Exemples vérifiés : 20 sur 20 donne 100, 18 sur 20 donne 90, 16,7 sur 20 donne 84,
+      14 sur 20 donne 70, 11 sur 20 donne 55, 4 sur 20 donne 20.</span>
+  </div>
+
+  <h3>Le barème complet</h3>
+  <table class="tight">
+    <thead><tr><th style="width:38%">Élément</th><th style="width:18%">Effet</th><th>Limite</th></tr></thead>
+    <tbody>
+      <tr><td>Point de départ, la qualité de la formule</td><td class="n">note &times; 5</td><td>de 0 à 100</td></tr>
+      <tr><td>Un ingrédient <strong>utile à votre profil</strong></td><td class="n" style="color:var(--vert);font-weight:600">+2</td><td>maximum +20, soit 10 ingrédients</td></tr>
+      <tr><td>Une <strong>contre-indication</strong> pour votre profil</td><td class="n" style="color:var(--rouge);font-weight:600">-5</td><td>maximum 7 contre-indications</td></tr>
+      <tr><td>Présence de 1 ou 2 ingrédients oranges</td><td class="n" style="color:var(--orange);font-weight:600">plafond 69</td><td>le score ne peut pas dépasser 69</td></tr>
+      <tr><td>Présence de 3 oranges ou plus, ou de 1 rouge</td><td class="n" style="color:var(--rouge);font-weight:600">plafond 59</td><td>le score ne peut pas dépasser 59</td></tr>
+      <tr><td>Une <strong>restriction que vous avez cochée</strong>, présente dans le produit</td><td class="n" style="color:var(--rouge);font-weight:600">-8</td><td>une fois par restriction distincte</td></tr>
+      <tr><td>Une <strong>sensibilité déduite de votre profil</strong>, présente dans le produit</td><td class="n" style="color:var(--rouge);font-weight:600">-8</td><td>seulement si elle n'est pas déjà cochée</td></tr>
+      <tr><td>Résultat</td><td class="n">arrondi</td><td>ramené entre 0 et 100</td></tr>
+    </tbody>
+  </table>
+  <p class="footnote" style="margin-bottom:12pt">Un ingrédient neutre ou purement technique, sans lien avec votre profil,
+    ne retiré aucun point : la note sur 20 pénalise déjà les jaunes, ce serait compter deux fois. Un ingrédient ne peut
+    pas non plus être à la fois crédité comme utile et compté comme contre-indication, ni pénalise deux fois comme
+    contre-indication et comme restriction.</p>
+
+  <h3>L'ordre des opérations change le résultat</h3>
+  <p>Le plafond de couleur s'applique <strong>avant</strong> les restrictions. Sinon un bonus qui dépasse 100 absorberait
+    le malus, et une restriction ne coûterait rien. Voici le cheminement complet d'un cas réel.</p>
+
+  <figure class="block">
+    <svg viewBox="0 0 720 262" role="img" aria-label="Cheminement du calcul, de 90 à 51 pour un produit noté 18 sur 20 avec un ingrédient rouge et une restriction">
+      <style>
+        .ax { font: 9.5px "Segoe UI", sans-serif; fill:#94A3B8; }
+        .st { font: 600 9.8px "Segoe UI", sans-serif; fill:#334155; }
+        .sv { font: 700 11.5px "Segoe UI", sans-serif; }
+        .gl { stroke:#F1F5F9; stroke-width:1; }
+        .cn { stroke:#94A3B8; stroke-width:1; stroke-dasharray:3 3; }
+      </style>
+      <line class="gl" x1="60" y1="20"  x2="700" y2="20"/>
+      <line class="gl" x1="60" y1="65"  x2="700" y2="65"/>
+      <line class="gl" x1="60" y1="110" x2="700" y2="110"/>
+      <line class="gl" x1="60" y1="155" x2="700" y2="155"/>
+      <line x1="60" y1="200" x2="700" y2="200" stroke="#CBD5E1" stroke-width="1"/>
+      <text class="ax" x="52" y="23" text-anchor="end">100</text>
+      <text class="ax" x="52" y="68" text-anchor="end">75</text>
+      <text class="ax" x="52" y="113" text-anchor="end">50</text>
+      <text class="ax" x="52" y="158" text-anchor="end">25</text>
+      <text class="ax" x="52" y="203" text-anchor="end">0</text>
+
+      <rect x="70"  y="38"   width="90" height="162" rx="3" fill="#475569"/>
+      <rect x="196" y="30.8" width="90" height="7.2" rx="3" fill="#059669"/>
+      <rect x="322" y="30.8" width="90" height="63"  rx="3" fill="#BE123C"/>
+      <rect x="448" y="93.8" width="90" height="14.4" rx="3" fill="#BE123C"/>
+      <rect x="574" y="108.2" width="90" height="91.8" rx="3" fill="#0F172A"/>
+
+      <line class="cn" x1="160" y1="38"    x2="196" y2="38"/>
+      <line class="cn" x1="286" y1="30.8"  x2="322" y2="30.8"/>
+      <line class="cn" x1="412" y1="93.8"  x2="448" y2="93.8"/>
+      <line class="cn" x1="538" y1="108.2" x2="574" y2="108.2"/>
+
+      <text class="sv" x="115" y="31"  text-anchor="middle" fill="#334155">90</text>
+      <text class="sv" x="241" y="24"  text-anchor="middle" fill="#059669">+4</text>
+      <text class="sv" x="367" y="24"  text-anchor="middle" fill="#BE123C">-35</text>
+      <text class="sv" x="493" y="87"  text-anchor="middle" fill="#BE123C">-8</text>
+      <text class="sv" x="619" y="101" text-anchor="middle" fill="#0F172A">51 %</text>
+
+      <text class="st" x="115" y="216" text-anchor="middle">Qualité du produit</text>
+      <text class="ax" x="115" y="229" text-anchor="middle">18 sur 20</text>
+      <text class="st" x="241" y="216" text-anchor="middle">2 actifs utiles</text>
+      <text class="ax" x="241" y="229" text-anchor="middle">2 fois +2</text>
+      <text class="st" x="367" y="216" text-anchor="middle">Plafond couleur</text>
+      <text class="ax" x="367" y="229" text-anchor="middle">1 rouge, plafond 59</text>
+      <text class="st" x="493" y="216" text-anchor="middle">1 restriction</text>
+      <text class="ax" x="493" y="229" text-anchor="middle">silicones cochées</text>
+      <text class="st" x="619" y="216" text-anchor="middle">Score final</text>
+      <text class="ax" x="619" y="229" text-anchor="middle">Moyennement adapté</text>
+
+      <text class="ax" x="60" y="252">Si le plafond ne venait pas avant la restriction, un produit déjà à 100 % afficherait encore 100 % au lieu de 92 %.</text>
+    </svg>
+    <figcaption>Le détail du calcul est affiché tel quel dans l'application, ligne par ligne.</figcaption>
+  </figure>
+
+  <h3>Les 10 paliers de vocabulaire</h3>
+  <p>Le score est traduit par un libellé fixe, par tranche de 10. En dessous de 60 le vocabulaire ne dit jamais
+    "compatible", et la phrase d'explication porte alors sur le problème, jamais sur un bénéfice.</p>
+  <div class="grid2 block">
+    <table class="tight" style="margin:0">
+      <thead><tr><th>Score</th><th>Libellé affiché</th><th>Couleur</th></tr></thead>
+      <tbody>
+        <tr><td class="n">90 à 100</td><td>Totalement compatible</td><td><span class="dot d-vert"></span>vert</td></tr>
+        <tr><td class="n">80 à 89</td><td>Très compatible</td><td><span class="dot d-vert"></span>vert</td></tr>
+        <tr><td class="n">70 à 79</td><td>Compatible</td><td><span class="dot d-vert"></span>vert</td></tr>
+        <tr><td class="n">60 à 69</td><td>Plutôt compatible</td><td><span class="dot d-jaune"></span>jaune</td></tr>
+        <tr><td class="n">50 à 59</td><td>Moyennement adapté</td><td><span class="dot d-jaune"></span>jaune</td></tr>
+      </tbody>
+    </table>
+    <table class="tight" style="margin:0">
+      <thead><tr><th>Score</th><th>Libellé affiché</th><th>Couleur</th></tr></thead>
+      <tbody>
+        <tr><td class="n">40 à 49</td><td>Peu adapté</td><td><span class="dot d-orange"></span>orange</td></tr>
+        <tr><td class="n">30 à 39</td><td>Très peu adapté</td><td><span class="dot d-orange"></span>orange</td></tr>
+        <tr><td class="n">20 à 29</td><td>Pas adapté</td><td><span class="dot d-rouge"></span>rouge</td></tr>
+        <tr><td class="n">10 à 19</td><td>À éviter pour toi</td><td><span class="dot d-rouge"></span>rouge</td></tr>
+        <tr><td class="n">0 à 9</td><td>Incompatible</td><td><span class="dot d-rouge"></span>rouge</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Les 8 cas de figure, calculés pour de vrai</h3>
+  <table class="tight">
+    <thead>
+      <tr>
+        <th style="width:4%" class="c">#</th>
+        <th style="width:36%">Situation</th>
+        <th style="width:26%">Détail du calcul</th>
+        <th style="width:8%" class="n">Score</th>
+        <th>Libellé</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="c">1</td>
+        <td>Produit noté 16,7. Formule propre, 5 ingrédients utiles au profil, aucune restriction</td>
+        <td class="n">84 + 10</td><td class="n">94 %</td><td><span class="pill p-vert">Totalement compatible</span></td>
+      </tr>
+      <tr>
+        <td class="c">2</td>
+        <td>Produit noté 14. 3 ingrédients utiles, 1 contre-indication, 1 orange dans la formule</td>
+        <td class="n">70 + 6 - 5 puis plafond 69</td><td class="n">69 %</td><td><span class="pill p-jaune">Plutôt compatible</span></td>
+      </tr>
+      <tr>
+        <td class="c">3</td>
+        <td>Produit noté 18. 2 ingrédients utiles, 1 rouge, 1 restriction cochée présente</td>
+        <td class="n">90 + 4, plafond 59, puis -8</td><td class="n">51 %</td><td><span class="pill p-jaune">Moyennement adapté</span></td>
+      </tr>
+      <tr>
+        <td class="c">4</td>
+        <td>Produit noté 11. Aucun ingrédient utile, 3 contre-indications pour ce profil</td>
+        <td class="n">55 - 15</td><td class="n">40 %</td><td><span class="pill p-orange">Peu adapté</span></td>
+      </tr>
+      <tr>
+        <td class="c">5</td>
+        <td><strong>Hors profil</strong> (dentifrice, déodorant, ou profil non rempli). Produit noté 15</td>
+        <td class="n">75, sans bonus ni malus</td><td class="n">75 %</td><td><span class="pill p-vert">Compatible</span></td>
+      </tr>
+      <tr>
+        <td class="c">6</td>
+        <td>Produit noté 20. 10 ingrédients utiles, donc +20, et 1 restriction cochée</td>
+        <td class="n">100 + 20 écrêté à 100, puis -8</td><td class="n">92 %</td><td><span class="pill p-vert">Totalement compatible</span></td>
+      </tr>
+      <tr>
+        <td class="c">7</td>
+        <td>Produit noté 13. 2 ingrédients utiles, 1 sensibilité déduite du profil présente</td>
+        <td class="n">65 + 4 - 8</td><td class="n">61 %</td><td><span class="pill p-jaune">Plutôt compatible</span></td>
+      </tr>
+      <tr>
+        <td class="c">8</td>
+        <td>Produit noté 4. 5 contre-indications, 2 restrictions cochées, 3 oranges</td>
+        <td class="n">20 - 25 - 16, ramené à 0</td><td class="n">0 %</td><td><span class="pill p-rouge">Incompatible</span></td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="footnote" style="margin-bottom:12pt">Cas 6, à noter : le bonus qui dépasse 100 est <strong>perdu</strong>, il
+    ne constitue pas une réserve. Un produit déjà au maximum ne peut pas encaisser une restriction gratuitement, il
+    descend à 92 %. Cas 2 et 3 : le plafond de couleur est affiché comme une ligne visible du calcul, pour que la somme
+    reste vérifiable à l'œil.</p>
+
+  <h3>Les trois cas particuliers</h3>
+  <div class="grid3 block">
+    <div class="card">
+      <p class="card-title">Produit hors profil</p>
+      <p class="footnote">Un dentifrice, un déodorant, un parfum, ou un profil beauté non rempli. Le score devient
+        simplement la qualité de la formule. Aucun bonus, aucun malus de profil, car il n'y a pas de profil pertinent à
+        croiser. Les qualités du produit sont alors décrites dans les trois blocs de texte, pas dans le score.</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Profil incomplet</p>
+      <p class="footnote">Si le produit concerne un axe du profil (la peau, ou les cheveux) mais que cet axe est vide,
+        aucun score n'est calculé et aucun crédit n'est consommé. L'application propose de compléter la bonne section
+        du profil.</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Score inférieur à 60</p>
+      <p class="footnote">La phrase d'explication devient obligatoirement négative, dans cet ordre : restriction
+        présente, puis sensibilité déduite, puis contre-indication, puis ingrédients à risque, puis qualité
+        insuffisante. Un score de 0 ne peut jamais être accompagné d'une phrase positive.</p>
+    </div>
+  </div>
+
+  <h3>Le partage des rôles entre le calcul et l'intelligence artificielle</h3>
+  <table class="tight">
+    <thead><tr><th style="width:50%">L'intelligence artificielle</th><th>Le calcul fixe</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Nomme les ingrédients utiles au profil et les contre-indications, sans donner aucun chiffre.</td>
+        <td>Attribue les points : +2 et -5, applique les plafonds, les restrictions, et arrondit.</td>
+      </tr>
+      <tr>
+        <td>Est interrogée <strong>3 fois en parallèle</strong>. Seuls les ingrédients cités par au moins 2 réponses
+          sur 3 sont retenus, ce qui élimine les oublis comme les inventions.</td>
+        <td>Détecte de son côté, sans IA, les cas sûrs : alcool asséchant sur peau sèche ou sensible, allergènes de
+          parfum sur peau sensible, comédogènes sur peau grasse, sulfates sur cuir chevelu sensible, allergie
+          déclarée.</td>
+      </tr>
+      <tr>
+        <td>Rédige la phrase d'explication.</td>
+        <td>Remplace cette phrase par une phrase négative si le score est inférieur à 60.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Ce que cela donne sur les scores réellement calculés</h3>
+  <figure class="block">
+    <svg viewBox="0 0 720 236" role="img" aria-label="Répartition des 653 scores de compatibilité réellement calculés, par tranche de 10">
+      <style>
+        .cv { font: 700 10px "Segoe UI", sans-serif; fill:#111827; }
+        .cx { font: 9.5px "Segoe UI", sans-serif; fill:#64748B; }
+        .cg { stroke:#F1F5F9; stroke-width:1; }
+      </style>
+      <line x1="22" y1="170" x2="708" y2="170" stroke="#CBD5E1" stroke-width="1"/>
+
+      <rect x="22"  y="145.2" width="56" height="24.8"  rx="3" fill="#BE123C"/>
+      <rect x="92"  y="155.8" width="56" height="14.2"  rx="3" fill="#BE123C"/>
+      <rect x="162" y="148.1" width="56" height="21.9"  rx="3" fill="#BE123C"/>
+      <rect x="232" y="145.9" width="56" height="24.1"  rx="3" fill="#E85D04"/>
+      <rect x="302" y="141.7" width="56" height="28.3"  rx="3" fill="#E85D04"/>
+      <rect x="372" y="121.2" width="56" height="48.8"  rx="3" fill="#DFA80A"/>
+      <rect x="442" y="138.2" width="56" height="31.8"  rx="3" fill="#DFA80A"/>
+      <rect x="512" y="117.6" width="56" height="52.4"  rx="3" fill="#059669"/>
+      <rect x="582" y="104.2" width="56" height="65.8"  rx="3" fill="#059669"/>
+      <rect x="652" y="20"    width="56" height="150"   rx="3" fill="#059669"/>
+
+      <text class="cv" x="50"  y="140" text-anchor="middle">35</text>
+      <text class="cv" x="120" y="151" text-anchor="middle">20</text>
+      <text class="cv" x="190" y="143" text-anchor="middle">31</text>
+      <text class="cv" x="260" y="141" text-anchor="middle">34</text>
+      <text class="cv" x="330" y="137" text-anchor="middle">40</text>
+      <text class="cv" x="400" y="116" text-anchor="middle">69</text>
+      <text class="cv" x="470" y="133" text-anchor="middle">45</text>
+      <text class="cv" x="540" y="113" text-anchor="middle">74</text>
+      <text class="cv" x="610" y="99"  text-anchor="middle">93</text>
+      <text class="cv" x="680" y="15"  text-anchor="middle">212</text>
+
+      <text class="cx" x="50"  y="184" text-anchor="middle">0-9</text>
+      <text class="cx" x="120" y="184" text-anchor="middle">10-19</text>
+      <text class="cx" x="190" y="184" text-anchor="middle">20-29</text>
+      <text class="cx" x="260" y="184" text-anchor="middle">30-39</text>
+      <text class="cx" x="330" y="184" text-anchor="middle">40-49</text>
+      <text class="cx" x="400" y="184" text-anchor="middle">50-59</text>
+      <text class="cx" x="470" y="184" text-anchor="middle">60-69</text>
+      <text class="cx" x="540" y="184" text-anchor="middle">70-79</text>
+      <text class="cx" x="610" y="184" text-anchor="middle">80-89</text>
+      <text class="cx" x="680" y="184" text-anchor="middle">90-100</text>
+      <text class="cx" x="365" y="200" text-anchor="middle">Score de compatibilité, en %</text>
+
+      <rect x="22"  y="214" width="9" height="9" rx="2" fill="#BE123C"/><text class="cx" x="36"  y="222">rouge, moins de 30</text>
+      <rect x="152" y="214" width="9" height="9" rx="2" fill="#E85D04"/><text class="cx" x="166" y="222">orange, 30 à 49</text>
+      <rect x="272" y="214" width="9" height="9" rx="2" fill="#DFA80A"/><text class="cx" x="286" y="222">jaune, 50 à 69</text>
+      <rect x="382" y="214" width="9" height="9" rx="2" fill="#059669"/><text class="cx" x="396" y="222">vert, 70 et plus</text>
+      <text class="cx" x="708" y="222" text-anchor="end">653 scores calculés en service</text>
+    </svg>
+    <figcaption>Les 10 libellés correspondent exactement aux 10 tranches, sans aucun chevauchement, sur les 653 scores
+      produits jusqu'ici.</figcaption>
+  </figure>
+</section>
+
+<!-- ============================ SECTION 4 ============================ -->
+<section class="page">
+  <p class="kicker">Section 4</p>
+  <h2><span class="secnum">4</span>L'analyse de la promesse</h2>
+  <p class="lede">Ici on ne juge pas la qualité du produit, on confronte <strong>ce que la marque affirme</strong> à
+    <strong>ce que la formule contient réellement</strong>. Une promesse n'est jamais validée sans qu'un ingrédient
+    précis de la liste soit nommé.</p>
+
+  <h3>Les trois étapes</h3>
+  <table class="tight">
+    <thead><tr><th style="width:6%" class="c">#</th><th style="width:30%">Étape</th><th>Ce qui se passe</th></tr></thead>
+    <tbody>
+      <tr><td class="c">1</td><td><strong>Extraction</strong></td><td>La description commerciale est lue, et seules les phrases <strong>vérifiables par un ingrédient</strong> sont retenues comme promesses. Chaque promesse conserve la citation exacte du texte d'origine.</td></tr>
+      <tr><td class="c">2</td><td><strong>Vérification</strong></td><td>Pour chaque promesse, on cherche l'ingrédient qui la soutient dans la liste réelle, en traduisant les noms courants, botaniques ou brevetés vers leur nom officiel. Vitamine B3 devient niacinamide, karité devient Butyrospermum Parkii, algue rouge devient Gelidium ou Chondrus.</td></tr>
+      <tr><td class="c">3</td><td><strong>Relecture critique</strong></td><td>Une seconde lecture indépendante corrige la première : promesse inventée, promesse oubliée, promesse non mesurable, ou mauvais rattachement d'ingrédient. Elle ne peut jamais ajouter une promesse absente du texte.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Ce qui n'est pas une promesse</h3>
+  <p>Ces mentions sont écartées et listées à part, comme "non vérifiables". Ce ne sont <strong>pas</strong> des promesses
+    ratées, et elles ne pénalisent jamais le produit.</p>
+  <div class="grid3 block">
+    <div class="card soft"><p class="card-title" style="font-size:9.6pt">Périmètre et public</p><p class="footnote">"utilisable sur le visage et le corps", "convient à toute la famille", "des 3 ans", "tous types de peau". Aucun ingrédient ne prouve où l'on applique un produit.</p></div>
+    <div class="card soft"><p class="card-title" style="font-size:9.6pt">Texture, sensoriel, usage</p><p class="footnote">"texture fondante", "fini non gras", "parfum frais", "appliquer matin et soir", "laisser poser 5 minutes".</p></div>
+    <div class="card soft"><p class="card-title" style="font-size:9.6pt">Tolérance et labels</p><p class="footnote">"non comédogène", "hypoallergénique", "testé dermatologiquement", "vegan", "bio", "99 % d'origine naturelle", "efficacité prouvée".</p></div>
+  </div>
+  <p class="footnote" style="margin-bottom:12pt">Une exception assumée : pour un maquillage, la <strong>couleur, la
+    couvrance et la pigmentation sont bien des promesses vérifiables</strong>, car les pigments figurent dans la liste
+    des ingrédients (oxydes de fer, dioxyde de titane, mica).</p>
+
+  <h3>Les quatre verdicts et le pourcentage de chaque promesse</h3>
+  <p>Chaque promesse reçoit un verdict, et un pourcentage de couverture par la formule. Le pourcentage est
+    <strong>borné par le verdict</strong> : il ne peut pas sortir de sa plage.</p>
+  <table>
+    <thead>
+      <tr><th style="width:20%">Verdict</th><th style="width:14%">Plage du %</th><th style="width:33%">Condition</th><th>Constaté sur les promesses réelles</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="pill p-vert">Tenue</span></td><td class="n">70 à 100</td>
+        <td>Au moins un ingrédient pertinent soutient la promesse, et il n'est pas relégué en toute fin de liste.</td>
+        <td class="n">1 206 promesses, de 70 à 100, moyenne 87,6</td>
+      </tr>
+      <tr>
+        <td><span class="pill p-jaune">Partielle</span></td><td class="n">30 à 55</td>
+        <td>Soutien faible : un seul actif secondaire, ou un actif présent seulement à l'état de trace.</td>
+        <td class="n">167 promesses, de 30 à 55, moyenne 41,2</td>
+      </tr>
+      <tr>
+        <td><span class="pill p-orange">Non démontrée</span></td><td class="n">0</td>
+        <td>Vraie promesse d'effet, mais aucun ingrédient de la formule ne la soutient. De 1 à 3 actifs attendus sont alors nommés.</td>
+        <td class="n">263 promesses, toutes à 0</td>
+      </tr>
+      <tr>
+        <td><span class="pill p-rouge">Contredite</span></td><td class="n">0</td>
+        <td>La marque annonce "sans X" et X figure dans la liste des ingrédients.</td>
+        <td class="n">12 promesses, toutes à 0</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="footnote" style="margin-bottom:12pt">Les valeurs de la dernière colonne proviennent de l'intégralité des
+    1 649 promesses analysées en service depuis la mise en route. Aucune n'est sortie de sa plage.</p>
+
+  <h3>Les règles fixes qui encadrent la lecture</h3>
+  <table class="tight">
+    <thead><tr><th style="width:44%">Règle</th><th>Effet</th></tr></thead>
+    <tbody>
+      <tr><td>Un ingrédient cité doit exister dans la liste réelle</td><td>Tout ingrédient qui n'y figure pas est supprimé avant tout calcul. Une promesse ne peut donc pas être validée par un ingrédient imaginaire.</td></tr>
+      <tr><td>Une promesse d'effet <strong>positive sans aucun ingrédient cité</strong></td><td>Repasse automatiquement en <span class="pill p-orange">Non démontrée</span> à 0 %.</td></tr>
+      <tr><td>Une promesse d'absence, du type "sans X"</td><td>Devient <span class="pill p-vert">Tenue</span> à 100 % si X est bien absent de la liste, ou <span class="pill p-rouge">Contredite</span> à 0 % si X y figure. Elle n'est jamais "non démontrée" : l'absence dans la liste prouve l'absence dans le produit.</td></tr>
+      <tr><td>Une absence ne peut être extraite que si la négation est écrite</td><td>Il faut littéralement "sans", "0 %", "exempt de", "sans ajout de". Une mention positive du parfum ne produit jamais une promesse "sans parfum".</td></tr>
+      <tr><td>Le pourcentage est toujours ramené entre 0 et 100</td><td>Aucune valeur hors bornes ne peut être affichée.</td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <span class="t">Contrôle sur les analyses récentes</span>
+    Sur les 415 promesses analysées depuis la dernière mise à jour du moteur, <strong>aucune promesse d'effet</strong>
+    n'a été déclarée tenue ou partielle sans qu'un ingrédient réel soit cité. Les 12 promesses validées sans ingrédient
+    cité sont toutes des promesses d'absence, du type "formule sans parfum", à 100 %.
+  </div>
+
+  <h3>Les deux chiffres de synthèse</h3>
+  <p>Une fois toutes les promesses jugées, deux pourcentages résument le produit. Ils se lisent en miroir.</p>
+
+  <div class="grid2 block">
+    <div class="card" style="border-top:3px solid var(--vert)">
+      <p class="card-title">Verdict global</p>
+      <div class="formula" style="margin:4pt 0 6pt">
+        <span class="eq">(tenues + partielles) / total des promesses</span>
+      </div>
+      <p class="footnote">La part des promesses que la formule soutient, au moins en partie.</p>
+    </div>
+    <div class="card" style="border-top:3px solid var(--rouge)">
+      <p class="card-title">Indice marketing</p>
+      <div class="formula" style="margin:4pt 0 6pt">
+        <span class="eq">(non démontrées + contredites) / total des promesses</span>
+      </div>
+      <p class="footnote">La part des promesses qu'aucun ingrédient ne vient soutenir.</p>
+    </div>
+  </div>
+  <p class="footnote" style="margin-bottom:10pt">Une promesse contredite compte dans l'indice marketing, et elle est
+    considérée comme plus grave qu'une promesse simplement non démontrée : la marque a affirmé une absence qui est
+    fausse. Les deux pourcentages sont arrondis séparément à l'entier le plus proche : leur somme fait donc 100 % dans
+    la quasi-totalité des cas, et 101 % dans les rares situations ou les deux arrondis montent, par exemple 7 promesses
+    tenues sur 8, qui donnent 88 % et 13 %.</p>
+
+  <h3>Les cinq cas de figure, calculés pour de vrai</h3>
+  <table class="tight">
+    <thead>
+      <tr><th style="width:4%" class="c">#</th><th style="width:42%">Promesses trouvées dans la description</th>
+      <th style="width:16%" class="n">Verdict global</th><th style="width:16%" class="n">Indice marketing</th><th>Libellé affiché</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="c">1</td><td>3 tenues, 1 partielle, 1 non démontrée, 1 contredite, soit 6 promesses</td><td class="n">67 %</td><td class="n">33 %</td><td>Partiellement tenu</td></tr>
+      <tr><td class="c">2</td><td>2 tenues</td><td class="n">100 %</td><td class="n">0 %</td><td>Globalement tenu</td></tr>
+      <tr><td class="c">3</td><td>1 tenue et 2 partielles</td><td class="n">100 %</td><td class="n">0 %</td><td>Globalement tenu</td></tr>
+      <tr><td class="c">4</td><td>2 non démontrées et 1 contredite</td><td class="n">0 %</td><td class="n">100 %</td><td>Non démontré</td></tr>
+      <tr><td class="c">5</td><td><strong>Aucune promesse mesurable</strong>, uniquement des mentions générales</td><td class="n">0 %</td><td class="n">100 %</td><td>Non démontré</td></tr>
+    </tbody>
+  </table>
+  <p class="footnote" style="margin-bottom:12pt">Cas 3, à noter : une promesse partielle compte comme soutenue dans le
+    verdict global, car un ingrédient pertinent est bien là, même faiblement dosé. Cas 5 : sans aucune promesse
+    mesurable, il n'y a rien à soutenir, et l'application affiche une phrase explicite plutôt que le chiffre seul.
+    Le libellé suit le verdict global : 80 % et plus donne "globalement tenu", 50 % et plus "partiellement tenu",
+    au-dessus de 0 "peu tenu", et 0 "non démontré".</p>
+
+  <h3>Ce que cela donne sur les promesses réellement analysées</h3>
+  <figure class="block">
+    <svg viewBox="0 0 720 196" role="img" aria-label="Répartition des 1 649 promesses réelles par verdict">
+      <style>
+        .pl { font: 600 10.5px "Segoe UI", sans-serif; fill:#111827; }
+        .pv { font: 700 11px "Segoe UI", sans-serif; fill:#111827; }
+        .pp { font: 10px "Segoe UI", sans-serif; fill:#64748B; }
+      </style>
+      <line x1="150" y1="8" x2="150" y2="152" stroke="#E2E8F0" stroke-width="1"/>
+
+      <text class="pl" x="0" y="26">Tenue</text>
+      <rect x="150" y="13" width="430" height="22" rx="3" fill="#059669"/>
+      <text class="pv" x="588" y="28">1 206</text><text class="pp" x="640" y="28">73,1 %</text>
+
+      <text class="pl" x="0" y="60">Partielle</text>
+      <rect x="150" y="47" width="60" height="22" rx="3" fill="#DFA80A"/>
+      <text class="pv" x="218" y="62">167</text><text class="pp" x="252" y="62">10,1 %</text>
+
+      <text class="pl" x="0" y="94">Non démontrée</text>
+      <rect x="150" y="81" width="94" height="22" rx="3" fill="#E85D04"/>
+      <text class="pv" x="252" y="96">263</text><text class="pp" x="286" y="96">15,9 %</text>
+
+      <text class="pl" x="0" y="128">Contredite</text>
+      <rect x="150" y="115" width="5" height="22" rx="2" fill="#BE123C"/>
+      <text class="pv" x="163" y="130">12</text><text class="pp" x="186" y="130">0,7 %</text>
+
+      <text class="pp" x="150" y="172">1 649 promesses extraites de descriptions réelles de produits.</text>
+      <text class="pp" x="150" y="186">Une promesse ancienne, classée selon un barème retiré depuis, complète le total.</text>
+    </svg>
+    <figcaption>Près de trois promesses sur quatre sont effectivement soutenues par la formule. Les contradictions
+      franches restent rares.</figcaption>
+  </figure>
+</section>
+
+<!-- ============================ SECTION 5 ============================ -->
+<section class="page">
+  <p class="kicker">Section 5</p>
+  <h2><span class="secnum">5</span>L'exposition cumulée de la routine</h2>
+  <p class="lede">Cette note ne juge plus un produit mais <strong>l'ensemble de la routine</strong>. Elle répond à la
+    question : au total, qu'est-ce que ma peau reçoit chaque jour ? Un mauvais produit utilisé une fois par mois ne pèse
+    pas comme un mauvais produit utilisé chaque matin.</p>
+
+  <h3>Le principe, une moyenne pondérée par la fréquence</h3>
+  <p>Ce n'est pas la moyenne des notes. Chaque produit compte à hauteur de sa fréquence d'utilisation.</p>
+  <table class="tight" style="width:auto; min-width:58%">
+    <thead><tr><th>Fréquence déclarée</th><th class="n">Poids</th><th>Lecture</th></tr></thead>
+    <tbody>
+      <tr><td>Quotidien</td><td class="n">1</td><td>référence</td></tr>
+      <tr><td>Hebdomadaire</td><td class="n">1 / 7 = 0,143</td><td>7 fois moins qu'un quotidien</td></tr>
+      <tr><td>Mensuel</td><td class="n">1 / 30 = 0,033</td><td>30 fois moins qu'un quotidien</td></tr>
+    </tbody>
+  </table>
+
+  <div class="formula">
+    <span class="eq">pénalité d'un produit = 20 moins sa note</span><br>
+    <span class="eq">exposition = 20 moins (somme des pénalités pondérées / somme des poids)</span>
+    <span class="note">La note d'exposition est donc dans le même sens que les autres notes : plus elle est haute, mieux
+      c'est. Une routine vide vaut 20.</span>
+  </div>
+
+  <h3>Exemple complet</h3>
+  <p>Une routine de trois produits, telle que l'application la calcule.</p>
+  <table class="tight">
+    <thead>
+      <tr><th style="width:26%">Produit</th><th style="width:11%" class="n">Note</th><th style="width:18%">Fréquence</th>
+      <th style="width:11%" class="n">Poids</th><th style="width:16%" class="n">Pénalité</th><th class="n">Pénalité pondérée</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Crème de jour</td><td class="n">16 / 20</td><td>quotidien</td><td class="n">1,000</td><td class="n">20 - 16 = 4</td><td class="n">4,000</td></tr>
+      <tr><td>Masque capillaire</td><td class="n">8 / 20</td><td>hebdomadaire</td><td class="n">0,143</td><td class="n">20 - 8 = 12</td><td class="n">1,714</td></tr>
+      <tr><td>Gel douche</td><td class="n">12 / 20</td><td>quotidien</td><td class="n">1,000</td><td class="n">20 - 12 = 8</td><td class="n">8,000</td></tr>
+      <tr style="background:var(--surface)"><td><strong>Total</strong></td><td></td><td></td><td class="n"><strong>2,143</strong></td><td></td><td class="n"><strong>13,714</strong></td></tr>
+    </tbody>
+  </table>
+  <div class="formula" style="margin-top:0">
+    <span class="eq">exposition = 20 moins (13,714 / 2,143) = 20 moins 6,4 = <strong>13,6 sur 20</strong></span>
+    <span class="note">Résultat renvoyé par le moteur : 13,6, libellé "Modérée". À noter que le masque, malgré sa
+      mauvaise note de 8, ne pèse que pour 1,7 point de pénalité sur 13,7, parce qu'il n'est utilisé qu'une fois par
+      semaine.</span>
+  </div>
+
+  <h3>Les quatre paliers</h3>
+  <figure class="block">
+    <svg viewBox="0 0 720 122" role="img" aria-label="Échelle de l'exposition cumulée de 0 à 20 avec les quatre paliers">
+      <style>
+        .el { font: 600 10px "Segoe UI", sans-serif; fill:#ffffff; }
+        .ek { font: 9.5px "Segoe UI", sans-serif; fill:#64748B; }
+        .em { font: 700 11px "Segoe UI", sans-serif; fill:#0F172A; }
+      </style>
+      <rect x="40"  y="34" width="286" height="28" rx="3" fill="#BE123C"/>
+      <rect x="330" y="34" width="124" height="28" rx="3" fill="#E85D04"/>
+      <rect x="458" y="34" width="124" height="28" rx="3" fill="#DFA80A"/>
+      <rect x="586" y="34" width="94"  height="28" rx="3" fill="#059669"/>
+
+      <text class="el" x="50"  y="52">Très élevée</text>
+      <text class="el" x="340" y="52">Élevée</text>
+      <text class="el" x="468" y="52">Modérée</text>
+      <text class="el" x="596" y="52">Faible</text>
+
+      <text class="ek" x="40"  y="78">0</text>
+      <text class="ek" x="326" y="78" text-anchor="middle">9</text>
+      <text class="ek" x="454" y="78" text-anchor="middle">13</text>
+      <text class="ek" x="582" y="78" text-anchor="middle">17</text>
+      <text class="ek" x="680" y="78" text-anchor="end">20</text>
+
+      <path d="M475 30 l-5 -8 h10 z" fill="#0F172A"/>
+      <text class="em" x="475" y="18" text-anchor="middle">13,6</text>
+      <text class="ek" x="475" y="98" text-anchor="middle">l'exemple ci-dessus</text>
+      <text class="ek" x="40" y="114">Le sens de lecture est le même que pour la note d'un produit : plus le chiffre est haut, moins la peau est exposée.</text>
+    </svg>
+  </figure>
+
+  <h3>Les autres cas</h3>
+  <table class="tight">
+    <thead><tr><th style="width:52%">Routine</th><th style="width:16%" class="n">Exposition</th><th>Libellé</th></tr></thead>
+    <tbody>
+      <tr><td>Routine vide</td><td class="n">20,0</td><td><span class="pill p-vert">Faible</span></td></tr>
+      <tr><td>1 seul produit noté 18, plus 1 produit noté 17 en hebdomadaire</td><td class="n">17,9</td><td><span class="pill p-vert">Faible</span></td></tr>
+      <tr><td>1 seul produit quotidien noté 16</td><td class="n">16,0</td><td><span class="pill p-jaune">Modérée</span></td></tr>
+      <tr><td>Les 3 produits de l'exemple ci-dessus</td><td class="n">13,6</td><td><span class="pill p-jaune">Modérée</span></td></tr>
+      <tr><td>1 seul produit quotidien noté 8</td><td class="n">8,0</td><td><span class="pill p-rouge">Très élevée</span></td></tr>
+    </tbody>
+  </table>
+  <p class="footnote">Avec un seul produit, l'exposition est exactement égale à sa note, quelle que soit la fréquence :
+    la pondération se simplifie. C'est logique, une routine d'un seul produit expose à ce produit.</p>
+
+  <h3>La simulation, si je retire un produit</h3>
+  <p>L'application propose de retirer <strong>au maximum deux produits</strong>, et uniquement ceux qui pénalisent
+    réellement la routine. Proposer de tout retirer en prétendant atteindre 20 sur 20 serait malhonnête.</p>
+  <table class="tight">
+    <thead><tr><th style="width:50%">Un produit est proposable au retrait si</th><th>Ordre de priorité</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>il contient au moins <strong>1 ingrédient rouge</strong>,<br>
+            ou sa propre note est <strong>inférieure à 13</strong>,<br>
+            ou il cumule <strong>5 ingrédients oranges et jaunes</strong> ou plus</td>
+        <td>d'abord le plus de rouges, puis le plus d'oranges, puis le plus de jaunes, puis la note la plus basse</td>
+      </tr>
+    </tbody>
+  </table>
+  <table class="tight">
+    <thead><tr><th style="width:50%">Sur l'exemple des trois produits</th><th style="width:16%" class="n">Exposition</th><th>Gain</th></tr></thead>
+    <tbody>
+      <tr><td>Situation actuelle</td><td class="n">13,6</td><td></td></tr>
+      <tr><td>Sans le masque capillaire, noté 8, contient un rouge</td><td class="n">14,0</td><td class="n">+0,4</td></tr>
+      <tr><td>Sans le masque et sans le gel douche, noté 12</td><td class="n">16,0</td><td class="n">+2,4</td></tr>
+    </tbody>
+  </table>
+  <p class="footnote" style="margin-bottom:12pt">Pour chaque produit proposé, l'application affiche aussi ses
+    ingrédients les plus problématiques, afin d'expliquer <strong>pourquoi</strong> le retirer change quelque chose. Ici,
+    pour le masque : BHT (rouge) et Sodium Laureth Sulfate (orange).</p>
+
+  <h3>Les deux indicateurs qui accompagnent l'exposition</h3>
+
+  <h4>Exposition par famille d'ingrédients</h4>
+  <p>Pour chaque famille, on additionne les poids de fréquence des produits qui en contiennent au moins un ingrédient.
+    Un produit ne compte qu'une fois par famille, même s'il en contient trois représentants.</p>
+  <table class="tight">
+    <thead><tr><th style="width:34%">Famille</th><th style="width:18%" class="n">Cumul</th><th>Détail du calcul sur l'exemple</th></tr></thead>
+    <tbody>
+      <tr><td>Parfums de synthèse</td><td class="n">2,14</td><td>présent dans les 3 produits : 1 + 0,143 + 1</td></tr>
+      <tr><td>Allergènes parfumants</td><td class="n">2,14</td><td>présent dans les 3 produits : 1 + 0,143 + 1</td></tr>
+      <tr><td>Sulfates</td><td class="n">1,14</td><td>masque hebdomadaire et gel douche quotidien : 0,143 + 1</td></tr>
+      <tr><td>Composés éthoxylés</td><td class="n">1,14</td><td>les mêmes deux produits</td></tr>
+      <tr><td>Conservateurs</td><td class="n">1,00</td><td>crème de jour quotidienne seulement</td></tr>
+      <tr><td>Silicones</td><td class="n">0,14</td><td>masque hebdomadaire seulement</td></tr>
+    </tbody>
+  </table>
+  <p class="footnote" style="margin-bottom:10pt">Ce cumul n'est pas un pourcentage, c'est un nombre d'expositions par
+    jour. La lecture utile est la comparaison entre familles : ici les parfums reviennent 15 fois plus souvent que les
+    silicones.</p>
+
+  <h4>Les ingrédients les plus rencontrés</h4>
+  <p>Les ingrédients verts sont exclus de ce classement, qui sert à montrer ce qui mérite attention. Chaque ingrédient
+    reçoit un poids de gravité, multiplié par la fréquence des produits qui le contiennent.</p>
+  <div class="grid2 block">
+    <table class="tight" style="margin:0">
+      <thead><tr><th>Couleur</th><th class="n">Poids de gravité</th></tr></thead>
+      <tbody>
+        <tr><td><span class="dot d-vert"></span>Vert</td><td class="n">exclu du classement</td></tr>
+        <tr><td><span class="dot d-jaune"></span>Jaune</td><td class="n">0,6</td></tr>
+        <tr><td><span class="dot d-orange"></span>Orange</td><td class="n">2,0</td></tr>
+        <tr><td><span class="dot d-rouge"></span>Rouge</td><td class="n">4,0</td></tr>
+      </tbody>
+    </table>
+    <table class="tight" style="margin:0">
+      <thead><tr><th>Ingrédient</th><th class="c">Produits</th><th class="n">Cumul</th></tr></thead>
+      <tbody>
+        <tr><td><span class="dot d-orange"></span>Sodium Laureth Sulfate</td><td class="c">2</td><td class="n">2,29</td></tr>
+        <tr><td><span class="dot d-jaune"></span>Parfum</td><td class="c">3</td><td class="n">1,29</td></tr>
+        <tr><td><span class="dot d-jaune"></span>Linalool</td><td class="c">2</td><td class="n">1,20</td></tr>
+        <tr><td><span class="dot d-jaune"></span>Phenoxyethanol</td><td class="c">1</td><td class="n">0,60</td></tr>
+        <tr><td><span class="dot d-rouge"></span>BHT</td><td class="c">1</td><td class="n">0,57</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="footnote">Lecture de ce classement : le sulfate arrive premier parce qu'il est présent dans un produit
+    <strong>quotidien</strong> (1 &times; 2,0) et dans un produit hebdomadaire (0,143 &times; 2,0), soit 2,29. Le BHT,
+    bien que rouge donc quatre fois plus lourd, arrive dernier : il n'est présent que dans le masque hebdomadaire
+    (0,143 &times; 4,0 = 0,57). C'est exactement le message de cette note : <strong>la fréquence compte autant que la
+    gravité</strong>.</p>
+
+  <div class="callout">
+    <span class="t">Allergènes de parfum partagés</span>
+    Un dernier indicateur signale les allergènes de parfum réglementaires présents dans <strong>au moins deux
+    produits</strong> de la routine, car c'est le cumul qui déclenche les réactions. Sur l'exemple : Linalool, présent
+    dans 2 produits sur 3.
+  </div>
+</section>
+
+<!-- ============================ SECTION 6 ============================ -->
+<section class="page">
+  <p class="kicker">Section 6</p>
+  <h2><span class="secnum">6</span>La couverture des objectifs</h2>
+  <p class="lede">Un pourcentage par objectif déclaré dans le profil. Il répond à la question : ma routine actuelle
+    sert-elle vraiment cet objectif ? Ici encore, l'intelligence artificielle ne calcule aucun pourcentage.</p>
+
+  <h3>Le partage des rôles</h3>
+  <div class="grid2 block">
+    <div class="card" style="border-top:3px solid var(--neutral)">
+      <p class="card-title">L'intelligence artificielle répond à une seule question</p>
+      <p style="margin-bottom:4pt">Pour chaque couple produit / objectif : <strong>ce produit aide-t-il à atteindre cet
+        objectif</strong>, uniquement d'après sa composition et sa fonction ?</p>
+      <table class="tight" style="margin:0">
+        <tbody>
+          <tr><td class="n" style="width:22%"><strong>0</strong></td><td>aucun rapport</td></tr>
+          <tr><td class="n"><strong>1</strong></td><td>contribue un peu, effet secondaire</td></tr>
+          <tr><td class="n"><strong>2</strong></td><td>contribue bien</td></tr>
+          <tr><td class="n"><strong>3</strong></td><td>contribue fortement, c'est un de ses buts principaux</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card" style="border-top:3px solid var(--ink)">
+      <p class="card-title">Le calcul fixe fait tout le reste</p>
+      <p style="margin-bottom:4pt">Il pondère cette note par la <strong>qualité</strong> du produit et par sa
+        <strong>fréquence</strong> d'usage, additionne les produits, puis convertit en pourcentage plafonné à 100.</p>
+      <p class="footnote" style="margin:0">La réponse de l'IA est demandée <strong>trois fois</strong> : un premier
+        modèle propose les notes, un second les relit et corrige les plus généreuses comme les plus sévères, et en cas
+        de désaccord de 2 points ou plus un troisième arbitrage tranche. La note finale est toujours ramenée à un
+        entier de 0 à 3.</p>
+    </div>
+  </div>
+
+  <h3>Le calcul, produit par produit</h3>
+  <div class="formula">
+    <span class="eq">points d'un produit = note de contribution &times; facteur qualité &times; facteur fréquence</span>
+    <span class="note">Les points de tous les produits pertinents sont ensuite additionnés.</span>
+  </div>
+
+  <div class="grid2 block" style="align-items:start">
+    <table class="tight" style="margin:0">
+      <thead><tr><th>Qualité du produit</th><th class="n">Facteur</th></tr></thead>
+      <tbody>
+        <tr><td><span class="stars s-vert">&#9733;&#9733;&#9733;&#9733;&#9733;</span> 17 et plus</td><td class="n">1,00</td></tr>
+        <tr><td><span class="stars s-vert">&#9733;&#9733;&#9733;&#9733;</span><span class="stars s-off">&#9733;</span> 13 à 17</td><td class="n">0,90</td></tr>
+        <tr><td><span class="stars s-jaune">&#9733;&#9733;&#9733;</span><span class="stars s-off">&#9733;&#9733;</span> 9 à 13</td><td class="n">0,72</td></tr>
+        <tr><td><span class="stars s-orange">&#9733;&#9733;</span><span class="stars s-off">&#9733;&#9733;&#9733;</span> 5 à 9</td><td class="n">0,50</td></tr>
+        <tr><td><span class="stars s-rouge">&#9733;</span><span class="stars s-off">&#9733;&#9733;&#9733;&#9733;</span> moins de 5</td><td class="n">0,30</td></tr>
+        <tr><td>note inconnue</td><td class="n">0,72 <span class="footnote">traité en 3 étoiles</span></td></tr>
+      </tbody>
+    </table>
+    <table class="tight" style="margin:0">
+      <thead><tr><th>Fréquence d'usage</th><th class="n">Facteur</th></tr></thead>
+      <tbody>
+        <tr><td>Quotidien</td><td class="n">1,00</td></tr>
+        <tr><td>Hebdomadaire</td><td class="n">0,75</td></tr>
+        <tr><td>Mensuel</td><td class="n">0,55</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="footnote" style="margin-bottom:10pt">À noter : la pondération de fréquence est ici plus douce que dans
+    l'exposition cumulée (0,75 au lieu de 0,14 pour un hebdomadaire). C'est volontaire : un soin hebdomadaire bien
+    choisi sert réellement un objectif, alors qu'un produit hebdomadaire expose bien moins la peau qu'un produit
+    quotidien.</p>
+
+  <h3>De la somme des points au pourcentage</h3>
+  <p>La somme des points n'est pas un pourcentage. Elle est convertie par une courbe <strong>saturante</strong> :
+    les premiers produits font monter le pourcentage rapidement, les suivants de moins en moins, et le total ne peut
+    jamais dépasser 100 %.</p>
+  <div class="formula">
+    <span class="eq">couverture = 100 &times; (1 &minus; e<sup>&minus;somme / 1,9</sup>)</span>
+    <span class="note">Le 1,9 est la constante de saturation. Elle est calibrée de sorte qu'un seul excellent produit
+      quotidien qui sert fortement l'objectif (3 points) atteigne environ 79 %, et non 100 %. Il reste toujours de la
+      marge pour un second produit.</span>
+  </div>
+
+  <figure class="block">
+    <svg viewBox="0 0 720 254" role="img" aria-label="Courbe de conversion des points en pourcentage de couverture">
+      <style>
+        .ga { font: 9.5px "Segoe UI", sans-serif; fill:#94A3B8; }
+        .gt { font: 600 9.8px "Segoe UI", sans-serif; fill:#334155; }
+        .gg { stroke:#F1F5F9; stroke-width:1; }
+      </style>
+      <line class="gg" x1="60" y1="20"  x2="690" y2="20"/>
+      <line class="gg" x1="60" y1="65"  x2="690" y2="65"/>
+      <line class="gg" x1="60" y1="110" x2="690" y2="110"/>
+      <line class="gg" x1="60" y1="155" x2="690" y2="155"/>
+      <line x1="60" y1="200" x2="690" y2="200" stroke="#CBD5E1" stroke-width="1"/>
+      <line x1="60" y1="20"  x2="60"  y2="200" stroke="#CBD5E1" stroke-width="1"/>
+      <text class="ga" x="52" y="23"  text-anchor="end">100 %</text>
+      <text class="ga" x="52" y="68"  text-anchor="end">75 %</text>
+      <text class="ga" x="52" y="113" text-anchor="end">50 %</text>
+      <text class="ga" x="52" y="158" text-anchor="end">25 %</text>
+      <text class="ga" x="52" y="203" text-anchor="end">0 %</text>
+
+      <path d="M60,200 L99,158 L139,126 L178,102 L210,86 L257,68 L296,57 L336,49 L375,42 L403,38 L454,33 L533,27 L611,24 L690,22"
+            fill="none" stroke="#0F172A" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+
+      <circle cx="139" cy="126" r="4.5" fill="#0F172A" stroke="#ffffff" stroke-width="2"/>
+      <circle cx="296" cy="57"  r="4.5" fill="#0F172A" stroke="#ffffff" stroke-width="2"/>
+      <circle cx="403" cy="38"  r="4.5" fill="#0F172A" stroke="#ffffff" stroke-width="2"/>
+      <circle cx="533" cy="27"  r="4.5" fill="#0F172A" stroke="#ffffff" stroke-width="2"/>
+
+      <text class="gt" x="139" y="116" text-anchor="middle">41 %</text>
+      <text class="gt" x="296" y="47"  text-anchor="middle">79 %</text>
+      <text class="gt" x="411" y="30"  text-anchor="start">90 %</text>
+      <text class="gt" x="533" y="17"  text-anchor="middle">96 %</text>
+
+      <text class="ga" x="60"  y="216" text-anchor="middle">0</text>
+      <text class="ga" x="139" y="216" text-anchor="middle">1</text>
+      <text class="ga" x="218" y="216" text-anchor="middle">2</text>
+      <text class="ga" x="296" y="216" text-anchor="middle">3</text>
+      <text class="ga" x="375" y="216" text-anchor="middle">4</text>
+      <text class="ga" x="454" y="216" text-anchor="middle">5</text>
+      <text class="ga" x="533" y="216" text-anchor="middle">6</text>
+      <text class="ga" x="611" y="216" text-anchor="middle">7</text>
+      <text class="ga" x="690" y="216" text-anchor="middle">8</text>
+      <text class="ga" x="375" y="232" text-anchor="middle">somme des points de la routine</text>
+      <text class="ga" x="60"  y="250">Les quatre points marqués sont des valeurs vérifiées en exécutant le calcul : 1 point donne 41 %, 3 points 79 %, 4,35 points 90 %, 6 points 96 %.</text>
+    </svg>
+  </figure>
+
+  <h3>Les couleurs du pourcentage</h3>
+  <table class="tight" style="width:auto; min-width:56%">
+    <thead><tr><th>Couverture</th><th>Couleur affichée</th></tr></thead>
+    <tbody>
+      <tr><td class="n">70 % et plus</td><td><span class="pill p-vert">Vert</span></td></tr>
+      <tr><td class="n">de 50 à 69 %</td><td><span class="pill p-jaune">Jaune</span></td></tr>
+      <tr><td class="n">de 30 à 49 %</td><td><span class="pill p-orange">Orange</span></td></tr>
+      <tr><td class="n">moins de 30 %</td><td><span class="pill p-rouge">Rouge</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Les huit cas de figure, calculés pour de vrai</h3>
+  <table class="tight">
+    <thead>
+      <tr><th style="width:4%" class="c">#</th><th style="width:40%">Routine et jugement de l'IA</th>
+        <th style="width:20%" class="n">Points</th><th style="width:12%" class="n">Couverture</th><th>Couleur</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="c">1</td><td>1 produit 5 étoiles, quotidien, contribution 3</td>
+        <td class="n">3 &times; 1,00 &times; 1,00 = 3,00</td><td class="n">79 %</td><td><span class="pill p-vert">Vert</span></td>
+      </tr>
+      <tr>
+        <td class="c">2</td><td>le même, plus 1 produit 4 étoiles hebdomadaire, contribution 2</td>
+        <td class="n">3,00 + 1,35 = 4,35</td><td class="n">90 %</td><td><span class="pill p-vert">Vert</span></td>
+      </tr>
+      <tr>
+        <td class="c">3</td><td>3 produits forts quotidiens, contribution 3 chacun</td>
+        <td class="n">3,00 + 3,00 + 2,70 = 8,70</td><td class="n">99 %</td><td><span class="pill p-vert">Vert</span></td>
+      </tr>
+      <tr>
+        <td class="c">4</td><td>1 produit 4 étoiles quotidien, contribution 2, sur un objectif libre</td>
+        <td class="n">2 &times; 0,90 &times; 1,00 = 1,80</td><td class="n">61 %</td><td><span class="pill p-jaune">Jaune</span></td>
+      </tr>
+      <tr>
+        <td class="c">5</td><td>1 produit 2 étoiles quotidien, contribution 2</td>
+        <td class="n">2 &times; 0,50 &times; 1,00 = 1,00</td><td class="n">41 %</td><td><span class="pill p-orange">Orange</span></td>
+      </tr>
+      <tr>
+        <td class="c">6</td><td>1 produit 3 étoiles mensuel, contribution 1</td>
+        <td class="n">1 &times; 0,72 &times; 0,55 = 0,40</td><td class="n">19 %</td><td><span class="pill p-rouge">Rouge</span></td>
+      </tr>
+      <tr>
+        <td class="c">7</td><td>1 produit excellent quotidien, mais l'IA répond <strong>0</strong> (sans rapport)</td>
+        <td class="n">0,00</td><td class="n">0 %</td><td><span class="pill p-rouge">Rouge</span></td>
+      </tr>
+      <tr>
+        <td class="c">8</td><td>1 déodorant quotidien face à un objectif <strong>de peau du visage</strong></td>
+        <td class="n">écarté avant tout calcul</td><td class="n">0 %</td><td><span class="pill p-rouge">Rouge</span></td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="footnote" style="margin-bottom:12pt">Cas 3, à noter : trois produits parfaits ne donnent pas 300 %, ni même
+    100 %. La courbe sature à 99 %. Cas 8 : un produit hors sujet contribue 0 et <strong>ne pénalise jamais</strong>
+    l'objectif. Il est écarté avant même de solliciter l'IA, ce qui évite aussi de payer une réponse inutile.</p>
+
+  <h3>Le filtre de pertinence, avant tout calcul</h3>
+  <p>Chaque objectif appartient à un axe, et chaque produit aussi. Le croisement est vérifié avant d'interroger l'IA.</p>
+  <table class="tight">
+    <thead><tr><th style="width:26%">Objectif</th><th style="width:30%">Produit</th><th>Décision</th></tr></thead>
+    <tbody>
+      <tr><td>de peau</td><td>de peau</td><td>l'IA est interrogée</td></tr>
+      <tr><td>de peau</td><td>de cheveux</td><td>0 point, sans IA</td></tr>
+      <tr><td>de cheveux</td><td>de cheveux</td><td>l'IA est interrogée</td></tr>
+      <tr><td>de peau ou de cheveux</td><td>hors profil : déodorant, parfum, dentifrice</td><td>0 point, sans IA</td></tr>
+      <tr><td>de peau ou de cheveux</td><td>catégorie inconnue</td><td>l'IA est interrogée, elle tranche elle-même</td></tr>
+      <tr><td>transversal, ou objectif libre écrit par l'utilisateur</td><td>n'importe lequel</td><td>l'IA est toujours interrogée, un dentifrice peut servir "avoir une belle dentition"</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Deux cas particuliers assumés</h3>
+  <div class="grid2 block">
+    <div class="card">
+      <p class="card-title">Un objectif calculé sans aucune IA</p>
+      <p style="margin-bottom:4pt">"Découvrir des produits plus clean" ne dépend pas d'un croisement produit par
+        produit, mais d'une propriété de la routine entière :</p>
+      <div class="formula" style="margin:4pt 0">
+        <span class="eq">part de produits à 4 étoiles ou plus</span>
+      </div>
+      <p class="footnote" style="margin:0">Exemples vérifiés : 2 produits bien notés sur 4 donnent 50 %,
+        3 sur 4 donnent 75 %.</p>
+    </div>
+    <div class="card">
+      <p class="card-title">Un objectif volontairement retiré</p>
+      <p style="margin:0">"Simplifier ma routine" reste proposable dans le profil, mais ne produit plus de jauge. Son
+        pourcentage ne reflétait que le <strong>nombre</strong> de produits, ce qui transformait à tort une routine
+        riche, souvent nécessaire quand on cumule plusieurs problèmes de peau, en échec. Un pourcentage qui ne mesure
+        pas ce qu'il annonce est retiré plutôt que corrige à la marge.</p>
+    </div>
+  </div>
+  <p class="footnote">Une dernière limite volontaire : au maximum 5 objectifs libres écrits à la main sont pris en
+    compte, pour borner le temps de calcul et le coût.</p>
+</section>
+
+<!-- ============================ SECTION 7 ============================ -->
+<section class="page">
+  <p class="kicker">Section 7</p>
+  <h2><span class="secnum">7</span>Les autres indicateurs</h2>
+  <p class="lede">Trois indicateurs complètent les six notes. Ils ne produisent pas de pourcentage, et c'est
+    volontaire.</p>
+
+  <h3>Les produits pénalisants</h3>
+  <p>Un simple comptage : le nombre de produits de la routine dont la <strong>note propre est inférieure à 13 sur 20</strong>,
+    c'est-à-dire sous le seuil des 4 étoiles. Sur l'exemple de la section 5, deux produits sur trois sont pénalisants,
+    le masque noté 8 et le gel douche noté 12.</p>
+
+  <h3>Les conflits de routine</h3>
+  <p>Il ne s'agit pas d'une note mais d'une liste de situations repérées, classées en trois niveaux. Le calcul est
+    entièrement fixe, local, et gratuit : aucune intelligence artificielle n'est nécessaire pour le produire. Une
+    analyse IA peut ensuite <strong>nuancer</strong> un niveau, jamais en inventer un.</p>
+  <table class="tight">
+    <thead><tr><th style="width:22%">Niveau</th><th style="width:30%">Compte dans le badge</th><th>Exemples de règles</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="pill p-rouge">À corriger</span></td><td>oui</td>
+        <td>un rétinoïde et un exfoliant dans le même moment de la journée, un exfoliant le matin sans protection
+          solaire, un ingrédient que vous avez déclaré éviter</td>
+      </tr>
+      <tr>
+        <td><span class="pill p-orange">À surveiller</span></td><td>oui</td>
+        <td>plusieurs exfoliants dans la routine, un alcool asséchant avec une peau sèche, des huiles essentielles avec
+          une peau sensible, le même allergène de parfum dans plusieurs produits</td>
+      </tr>
+      <tr>
+        <td><span class="pill p-neutre">Information</span></td><td>non</td>
+        <td>remarques pédagogiques, comme un rétinoïde utilisé sans protection solaire le lendemain matin</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <span class="t">Un exemple de ce que nous ne signalons pas</span>
+    L'association <strong>vitamine C et niacinamide</strong> n'est jamais signalée comme un conflit. La prétendue
+    incompatibilité provient d'études des années 1960 portant sur des formes instables et chauffées. Aux pH et aux
+    concentrations des formules modernes, la réaction ne se produit pas en conditions d'usage. La signaler nuirait à
+    la crédibilité de tous les autres avertissements. Un test automatique vérifie en permanence que ce couple ne
+    déclenche aucune alerte.
+  </div>
+
+  <h3>Les allergènes de parfum partagés</h3>
+  <p>La liste des allergènes de parfum réglementaires européens présents dans <strong>au moins deux produits</strong> de
+    la routine, avec le nombre de produits concernés. Le seuil de deux produits est le point essentiel : c'est le cumul
+    qui déclenche les réactions, pas la présence isolée.</p>
+
+  <h3>Ce que l'application ne calcule pas</h3>
+  <ul>
+    <li>Aucune note ne dépend d'un <strong>service de notation tiers</strong>. Les couleurs viennent d'un fichier de
+      référence construit sur la réglementation européenne.</li>
+    <li>Aucun calcul n'utilisé les <strong>concentrations exactes</strong> des ingrédients : les marques ne les
+      publient pas. Seule la position dans la liste est exploitée, ce qui est une information légalement fiable.</li>
+    <li>Aucune note ne constitue un <strong>avis médical</strong>, ni un diagnostic. En cas de problème de peau
+      persistant, un dermatologue reste la bonne réponse.</li>
+  </ul>
+</section>
+
+<!-- ============================ ANNEXE ============================ -->
+<section class="page">
+  <p class="kicker">Annexe</p>
+  <h2>Comment ces chiffres ont été vérifiés</h2>
+  <p class="lede">Chaque exemple de ce document a été produit en exécutant le moteur de calcul, puis recoupé avec les
+    données réellement produites en service. Voici le détail de ces contrôles.</p>
+
+  <h3>1. Les exemples ont été calculés, pas rédigés</h3>
+  <p>Les 11 exemples de la note sur 20, les 8 exemples de compatibilité, les 5 exemples de promesse, les exemples
+    d'exposition et les 8 exemples de couverture d'objectif ont été obtenus en appelant directement le moteur de calcul
+    de l'application avec les compositions décrites, puis en recopiant ses réponses. Aucune valeur de ce document n'a
+    été calculée à la main.</p>
+
+  <h3>2. La suite de tests automatiques</h3>
+  <table class="tight">
+    <thead><tr><th style="width:34%">Contrôle</th><th style="width:16%" class="n">Résultat</th><th>Portée</th></tr></thead>
+    <tbody>
+      <tr><td>Suite de tests complète</td><td class="n">1 103 tests passés</td><td>81 séries de tests, exécutées le 3 septembre 2026, aucun échec</td></tr>
+      <tr><td>Note sur 20 et plafonds</td><td class="n">vérifié</td><td>seuils, zones, plafonds de cohérence, arbitrage catalogue</td></tr>
+      <tr><td>Score de compatibilité</td><td class="n">vérifié</td><td>barème, ordre des opérations, vote majoritaire, anti-double-comptage</td></tr>
+      <tr><td>Analyse de la promesse</td><td class="n">vérifié</td><td>verdicts, plages de pourcentage, règles d'absence, valeurs de référence</td></tr>
+      <tr><td>Exposition et objectifs</td><td class="n">vérifié</td><td>pondérations, saturation, égalité du calcul entre le mobile et le serveur</td></tr>
+    </tbody>
+  </table>
+
+  <h3>3. Les contrôles sur les données réelles</h3>
+  <table class="tight">
+    <thead><tr><th style="width:40%">Ce qui a été vérifié</th><th style="width:18%" class="n">Volume</th><th>Résultat</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Aucun produit contenant un ingrédient rouge ne dépasse 12,90, et aucun produit contenant 2 rouges ou
+          4 oranges ne dépasse 8,90</td>
+        <td class="n">490 428 produits</td><td><strong>0 exception</strong></td>
+      </tr>
+      <tr>
+        <td>Le détail affiché du score de compatibilité, ligne par ligne, redonne exactement le score affiché</td>
+        <td class="n">653 scores</td><td><strong>653 sur 653 exacts</strong></td>
+      </tr>
+      <tr>
+        <td>Le verdict global d'une analyse de promesse est bien la part des promesses soutenues</td>
+        <td class="n">325 analyses</td><td><strong>325 sur 325 exacts</strong></td>
+      </tr>
+      <tr>
+        <td>Le pourcentage de chaque promesse reste dans la plage de son verdict</td>
+        <td class="n">1 649 promesses</td><td><strong>0 sortie de plage</strong></td>
+      </tr>
+      <tr>
+        <td>Aucune promesse d'effet déclarée tenue ou partielle sans qu'un ingrédient réel soit cité</td>
+        <td class="n">415 promesses récentes</td><td><strong>0 cas</strong></td>
+      </tr>
+      <tr>
+        <td>Les 10 libellés de compatibilité correspondent aux 10 tranches de 10, sans chevauchement</td>
+        <td class="n">653 scores</td><td><strong>correspondance exacte</strong></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>4. Le même calcul partout</h3>
+  <p>La note sur 20, le score de compatibilité, l'analyse de la promesse, l'exposition et la couverture des objectifs
+    existent en plusieurs copies techniques, une pour l'application mobile, une pour le site web, une pour le serveur.
+    Ces copies sont maintenues identiques et des tests dédiés comparent leurs résultats. Un même produit donne donc la
+    même note quel que soit l'écran sur lequel il est consulté.</p>
+
+  <div class="card soft block" style="margin-top:16pt">
+    <p class="card-title">Les cinq principes à retenir</p>
+    <ol style="margin-bottom:0">
+      <li>Les couleurs des ingrédients viennent de la <strong>réglementation européenne</strong>, pas d'un service de
+        notation tiers.</li>
+      <li>La <strong>position</strong> d'un ingrédient compte autant que sa couleur : le même rouge donne 1 étoile en
+        début de liste et 3 étoiles en fin de liste.</li>
+      <li>Une note ne peut jamais contredire ce qui est affiché à l'écran : des plafonds l'en empêchent, et ils ont
+        été vérifiés sur les 490 428 produits du catalogue.</li>
+      <li>L'intelligence artificielle <strong>ne donne jamais de note</strong>. Elle nomme des ingrédients, ou répond
+        de 0 à 3. Tous les chiffres sortent d'un calcul fixe, reproductible et testé.</li>
+      <li>Quand une mesure n'a pas de sens, elle est <strong>retirée</strong> plutôt que bricolée : pas de note sous
+        50 % d'ingrédients reconnus, pas de jauge pour "simplifier ma routine", pas de conflit inventé sur la vitamine C
+        et la niacinamide.</li>
+    </ol>
+  </div>
+
+  <p class="footnote" style="margin-top:16pt; text-align:center">
+    CosmeCheck, document de référence sur les méthodes de calcul, 3 septembre 2026.<br>
+    Les valeurs de volumes et de répartitions décrivent l'état du service à cette date.
+  </p>
+</section>
+
+</body>
+</html>

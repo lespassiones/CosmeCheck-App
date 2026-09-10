@@ -44,7 +44,7 @@ const TIER_POLL_TRIES = 6
 const TIER_POLL_MS = 1200
 
 // Aucun chiffre de crédits ici, volontairement. Le paywall annonce
-// « 100 crédits/mois » alors que `cosme_check.credit_tiers` en accorde 150 :
+// « 100 crédits/mois » alors que `cosme_check.credit_tiers` en accorde 50/jour :
 // tant que les deux ne disent pas la même chose, répéter un nombre à un
 // troisième endroit ne ferait qu'ajouter une version de plus à corriger.
 const PERKS = [

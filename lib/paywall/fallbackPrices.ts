@@ -48,6 +48,43 @@ export interface FallbackTier {
 }
 
 /**
+ * Devise d'un territoire, quand l'appareil ne la donne pas lui-même.
+ *
+ * Pourquoi cette table existe : `expo-localization` rend `currencyCode: null`
+ * sur une partie des iPhone — c'est un cas normal, pas une panne. Sans devise,
+ * l'ancien code passait directement au palier « reste du monde », le dollar.
+ * Un utilisateur français voyait donc **49,99 $US** alors qu'Apple lui facture
+ * 59,99 €. Le 07/09/2026, c'est exactement ce qu'affichait le paywall.
+ *
+ * `PRICES_BY_REGION` ne pouvait pas rattraper le coup : elle ne contient que
+ * les 29 territoires où Apple s'écarte du palier dominant de leur devise, et la
+ * France n'en fait pas partie. Elle répond à « ce pays a-t-il un prix à part »,
+ * pas à « quelle monnaie parle ce pays ».
+ *
+ * On ne couvre pas les 175 territoires : les marchés listés ici suffisent à
+ * éviter le pire (un prix affiché dans la mauvaise monnaie), et pour le reste
+ * le dollar reste un repli honnête — il est de toute façon marqué INDICATIF.
+ */
+const CURRENCY_BY_REGION: Readonly<Record<string, string>> = {
+  // Zone euro + territoires facturés en euros
+  AD: 'EUR', AT: 'EUR', BE: 'EUR', CY: 'EUR', DE: 'EUR', EE: 'EUR', ES: 'EUR',
+  FI: 'EUR', FR: 'EUR', GR: 'EUR', HR: 'EUR', IE: 'EUR', IT: 'EUR', LT: 'EUR',
+  LU: 'EUR', LV: 'EUR', MC: 'EUR', MT: 'EUR', NL: 'EUR', PT: 'EUR', SI: 'EUR',
+  SK: 'EUR', SM: 'EUR', VA: 'EUR', XK: 'EUR',
+  // Reste de l'Europe
+  GB: 'GBP', CH: 'CHF', SE: 'SEK', NO: 'NOK', DK: 'DKK', IS: 'DKK',
+  PL: 'PLN', CZ: 'CZK', HU: 'HUF', RO: 'RON', BG: 'BGN', TR: 'TRY',
+  // Amériques
+  US: 'USD', CA: 'CAD', MX: 'MXN', BR: 'BRL', CL: 'CLP', CO: 'COP', PE: 'PEN',
+  // Asie-Pacifique
+  AU: 'AUD', NZ: 'NZD', JP: 'JPY', KR: 'KRW', CN: 'CNY', HK: 'HKD', TW: 'TWD',
+  SG: 'SGD', MY: 'MYR', TH: 'THB', ID: 'IDR', PH: 'PHP', VN: 'VND', IN: 'INR',
+  // Afrique et Moyen-Orient
+  ZA: 'ZAR', NG: 'NGN', EG: 'EGP', MA: 'MAD', AE: 'AED', SA: 'SAR', IL: 'ILS',
+  QA: 'QAR', KW: 'KWD',
+}
+
+/**
  * Choisit le palier tarifaire.
  *
  * Ordre : la région d'abord, car c'est la seule information qui tranche entre
@@ -64,7 +101,11 @@ export function resolveFallbackTier(ctx: DeviceStoreContext): FallbackTier {
     }
   }
 
-  const currency = ctx.currencyCode?.trim().toUpperCase()
+  // La devise déclarée par l'appareil d'abord ; à défaut, celle que parle son
+  // pays. Ce second chemin est le correctif du 07/09/2026 : sans lui, un
+  // `currencyCode` nul suffisait à afficher des dollars à Toulouse.
+  const currency =
+    ctx.currencyCode?.trim().toUpperCase() || (region ? CURRENCY_BY_REGION[region] : undefined)
   if (currency) {
     const tier = PRICES_BY_CURRENCY[currency]
     if (tier) {

@@ -1,59 +1,220 @@
 import Purchases, {
+  LOG_LEVEL,
   type PurchasesStoreProduct,
   type CustomerInfo,
   type PurchasesPackage,
 } from 'react-native-purchases'
-import { Platform } from 'react-native'
+import { NativeModules, Platform } from 'react-native'
 
 import { isUserCancelled } from '@/lib/paywall/purchaseError'
 
-// Clés publiques RevenueCat PAR PLATEFORME. Google Play exige la clé Android
-// (`goog_…`), distincte de la clé iOS (`appl_…`). On lit d'abord la clé
-// spécifique à la plateforme, avec repli sur l'ancienne clé générique
-// `EXPO_PUBLIC_REVENUCAT_PUBLIC_KEY` (rétro-compat : rien ne casse si elle
-// n'est pas encore renseignée).
+// ─────────────────────────────────────────────────────────────────────────────
+// Configuration du SDK (revu le 07/09/2026)
+//
+// ⚠️ À lire avant de « simplifier » ce fichier.
+//
+// `Purchases.configure()` est SYNCHRONE — sa signature le dit :
+// `static configure(configuration: PurchasesConfiguration): void`. Il n'y a
+// donc pas de course entre l'initialisation et le paywall : l'appel part dès
+// l'exécution de l'effet de `RevenueCatInit`, monté avant `RootNavigator`. Une
+// hypothèse de course a été formulée puis ÉCARTÉE ici même ; ne pas la
+// réintroduire.
+//
+// Ce qui manquait vraiment, et que ce module apporte maintenant :
+//   1. une porte unique — `ensureConfigured()` — devant chaque appel au SDK,
+//      pour qu'aucun chemin ne puisse interroger un SDK non configuré ;
+//   2. la RAISON de l'échec, conservée et remontée jusqu'à l'écran. Toutes les
+//      pannes se ressemblaient : « le magasin n'a pas répondu ». Trois jours
+//      d'enquête pour ça, faute d'une ligne qui dise laquelle ;
+//   3. le dernier verrou d'identité avant la caisse (voir
+//      `ensurePurchaseIdentity`), repris de Reveal Chat, qui l'a appris le
+//      14/08/2026 en devant retrouver à la main un achat de 7,99 EUR encaissé
+//      sous un identifiant anonyme.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Clés publiques RevenueCat, une par magasin. **Jamais de clé de test.**
+ *
+ * ## Le repli qui a été retiré
+ *
+ * L'ancien code retombait sur `EXPO_PUBLIC_REVENUCAT_PUBLIC_KEY`, qui vaut une
+ * clé `test_…` dans le `.env`. Il suffisait que cette variable arrive un jour
+ * dans l'environnement EAS pour que la garde anti-fraude éteigne TOUS les
+ * achats en release, sans un mot. Une clé absente doit se voir, pas se faire
+ * remplacer par une clé qui ne peut rien encaisser.
+ *
+ * ## Les deux orthographes, et pourquoi elles coexistent
+ *
+ * Ce dépôt écrit historiquement `REVENUCAT` (un seul « E »), alors que Memory
+ * Pilot et Reveal Chat écrivent `REVENUECAT`. Ce n'est pas cosmétique : une
+ * variable créée un jour dans EAS avec l'orthographe correcte ne serait
+ * **jamais lue** par un code qui n'attend que l'autre, et les achats
+ * s'éteindraient sans erreur. On accepte donc les deux, l'orthographe correcte
+ * d'abord, le temps de migrer EAS.
+ *
+ * ⚠️ Ces accès doivent rester des littéraux `process.env.NOM_EXACT` : Metro les
+ * remplace par leur valeur **au moment du bundle**. Une lecture dynamique
+ * (`process.env[nom]`) rendrait `undefined` dans un build.
+ */
 const API_KEY = {
   ios:
+    process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY ||
     process.env.EXPO_PUBLIC_REVENUCAT_IOS_KEY ||
-    process.env.EXPO_PUBLIC_REVENUCAT_PUBLIC_KEY ||
     '',
   android:
+    process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY ||
     process.env.EXPO_PUBLIC_REVENUCAT_ANDROID_KEY ||
-    process.env.EXPO_PUBLIC_REVENUCAT_PUBLIC_KEY ||
     '',
 }
 
-export async function initRevenueCat(): Promise<void> {
-  try {
-    const apiKey = Platform.select({
-      ios: API_KEY.ios,
-      android: API_KEY.android,
-    }) || API_KEY.ios
+/**
+ * De quoi identifier la clé utilisée sans jamais l'écrire en entier.
+ *
+ * Sert dans le diagnostic affiché : « appl_Nsylpa…(31) » suffit à dire « c'est
+ * bien la clé iOS de production, et elle fait la bonne longueur », ce qui
+ * tranche en une seconde le doute qui a coûté le plus de temps. Une clé
+ * publique RevenueCat n'est pas un secret — elle vit dans le bundle — mais on
+ * n'en met pas plus que nécessaire sur un écran.
+ */
+function keyFingerprint(apiKey: string): string {
+  if (!apiKey) return 'aucune'
+  return `${apiKey.slice(0, 11)}…(${apiKey.length})`
+}
 
-    // GARDE ANTI-CRASH : RevenueCat ferme l'app si on configure une clé de test
-    // (`test_…`) dans un build RELEASE (protection anti-fraude). Tant qu'aucune
-    // clé publique de prod (`goog_…` / `appl_…`) n'est fournie, on n'initialise
-    // PAS le SDK en release : les achats restent inertes mais l'app ne crashe
-    // pas. En dev (Expo Go), la clé de test fonctionne normalement.
-    const isTestKey = apiKey.startsWith('test_')
-    if (!apiKey || (isTestKey && !__DEV__)) {
-      console.warn(
-        '[RevenueCat] non initialisé (clé de test en build release ou clé absente) — achats désactivés',
-      )
-      return
-    }
+/** Pourquoi le SDK n'est pas utilisable, quand il ne l'est pas. */
+export type InitDiagnostic =
+  | 'ok'
+  | 'sans-natif'
+  | 'sans-cle'
+  | 'cle-de-test-en-release'
+  | 'echec-configure'
 
-    await Purchases.configure({
-      apiKey,
-      appUserID: undefined, // Sera set par logIn() après auth
-    })
-  } catch (err) {
-    console.warn('[RevenueCat] init failed:', err)
+let diagnostic: InitDiagnostic | null = null
+let detail: string | null = null
+let initPromise: Promise<boolean> | null = null
+
+/** Le natif est-il là ? Faux dans Expo Go et dans tout ce qui n'est pas l'app. */
+export function nativeAvailable(): boolean {
+  return NativeModules.RNPurchases != null
+}
+
+/**
+ * Ce qu'on sait du dernier essai d'initialisation, pour l'afficher.
+ *
+ * `detail` porte le message brut du SDK quand il y en a un : c'est lui qui
+ * distingue une clé invalide d'une panne réseau, et c'est exactement ce qui
+ * manquait pour diagnostiquer depuis un téléphone qu'on n'a pas sous la main.
+ */
+export function initDiagnostic(): {
+  code: InitDiagnostic | null
+  detail: string | null
+  /** « appl_Nsylpa…(31) » ou « aucune ». Jamais la clé entière. */
+  key: string
+  platform: string
+} {
+  return {
+    code: diagnostic,
+    detail,
+    key: keyFingerprint(Platform.OS === 'ios' ? API_KEY.ios : API_KEY.android),
+    platform: Platform.OS,
   }
+}
+
+async function doInit(): Promise<boolean> {
+  if (!nativeAvailable()) {
+    diagnostic = 'sans-natif'
+    console.warn('[RevenueCat] module natif absent — achats indisponibles (Expo Go ?)')
+    return false
+  }
+
+  const apiKey = (Platform.OS === 'ios' ? API_KEY.ios : API_KEY.android).trim()
+
+  if (!apiKey) {
+    diagnostic = 'sans-cle'
+    console.warn(
+      `[RevenueCat] aucune clé publique pour ${Platform.OS} — achats désactivés. ` +
+        'Attendu : EXPO_PUBLIC_REVENUECAT_IOS_KEY / _ANDROID_KEY (ou l\'ancienne ' +
+        'orthographe REVENUCAT), présentes dans l\'environnement EAS du build.',
+    )
+    return false
+  }
+
+  // GARDE ANTI-CRASH : RevenueCat ferme l'app si on configure une clé de test
+  // dans un build RELEASE (protection anti-fraude).
+  if (apiKey.startsWith('test_') && !__DEV__) {
+    diagnostic = 'cle-de-test-en-release'
+    console.warn('[RevenueCat] clé de test dans un build release — achats désactivés')
+    return false
+  }
+
+  try {
+    if (await Purchases.isConfigured()) {
+      diagnostic = 'ok'
+      return true
+    }
+    // Sans journal, une panne de magasin est indiscernable d'une panne réseau.
+    Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.INFO)
+    await Purchases.configure({ apiKey })
+    diagnostic = 'ok'
+    return true
+  } catch (err) {
+    diagnostic = 'echec-configure'
+    detail = err instanceof Error ? err.message : String(err)
+    console.warn('[RevenueCat] configure a échoué :', err)
+    // Réessayable : un échec passager ne doit pas condamner la session.
+    initPromise = null
+    return false
+  }
+}
+
+/**
+ * Configure le SDK, une fois. Rend `true` quand on peut l'appeler.
+ *
+ * Idempotent et sûr en concurrence : tous les appelants attendent la même
+ * promesse, donc `configure()` ne part qu'une fois même si le paywall, le
+ * `_layout` et un rafraîchissement démarrent en même temps.
+ */
+export function initRevenueCat(): Promise<boolean> {
+  if (!initPromise) initPromise = doInit()
+  return initPromise
+}
+
+/** Le nom qu'on emploie côté appelants : « assure-toi que c'est prêt ». */
+export const ensureConfigured = initRevenueCat
+
+/**
+ * Dernière erreur venue du magasin, avec l'appel qui l'a produite.
+ *
+ * Chaque `catch` de ce module la range ici au lieu de la laisser mourir dans un
+ * `console.warn`. C'est ce qui permet à l'écran de dire « getProducts :
+ * PRODUCT_NOT_AVAILABLE_FOR_PURCHASE » plutôt que « le magasin n'a pas
+ * répondu », et de trancher en dix secondes ce qui a coûté des heures.
+ */
+let storeError: string | null = null
+
+function noteStoreError(where: string, err: unknown): void {
+  const code =
+    typeof err === 'object' && err !== null && 'code' in err
+      ? String((err as { code: unknown }).code)
+      : null
+  const message = err instanceof Error ? err.message : String(err)
+  storeError = code ? `${where} : ${code} — ${message}` : `${where} : ${message}`
+  console.warn(`[RevenueCat] ${storeError}`)
+}
+
+/** `null` quand aucun appel n'a échoué depuis le lancement. */
+export function storeDiagnostic(): string | null {
+  return storeError
+}
+
+/** Remis à zéro avant chaque nouvelle tentative, sinon on lit une vieille panne. */
+export function clearStoreDiagnostic(): void {
+  storeError = null
 }
 
 export async function loginUser(userId: string): Promise<void> {
   try {
+    if (!(await ensureConfigured())) return
     await Purchases.logIn(userId)
   } catch (err) {
     console.warn('[RevenueCat] login failed:', err)
@@ -62,6 +223,7 @@ export async function loginUser(userId: string): Promise<void> {
 
 export async function logoutUser(): Promise<void> {
   try {
+    if (!(await ensureConfigured())) return
     await Purchases.logOut()
   } catch (err) {
     console.warn('[RevenueCat] logout failed:', err)
@@ -70,10 +232,45 @@ export async function logoutUser(): Promise<void> {
 
 export async function getOfferings(): Promise<any> {
   try {
+    if (!(await ensureConfigured())) return null
     return await Purchases.getOfferings()
   } catch (err) {
-    console.warn('[RevenueCat] getOfferings failed:', err)
+    noteStoreError('getOfferings', err)
     return null
+  }
+}
+
+/**
+ * Le dernier verrou avant la caisse : RevenueCat est-il bien sur CETTE personne ?
+ *
+ * Repris de Reveal Chat, qui l'a payé pour l'apprendre. `configure()` sans
+ * identifiant fait générer à RevenueCat un `$RCAnonymousID:…` ; un achat conclu
+ * dans cette fenêtre est enregistré sous cet identifiant-là, tandis que le
+ * webhook Supabase interroge RevenueCat avec l'identifiant Supabase. Il ne
+ * trouve rien, répond 200, et n'écrit rien : quelqu'un a payé et n'a rien.
+ * Irréparable côté serveur — il faut aller chercher la transaction à la main
+ * dans le tableau de bord.
+ *
+ * Ce n'est pas théorique ici : le projet Cosme Check comptait 161 clients au
+ * 07/09/2026, dont une large part en `$RCAnonymousID`.
+ *
+ * Le coût de ce verrou est un appel local, sans réseau. Refuser un achat qui
+ * n'a pas eu lieu est un désagrément ; encaisser un achat qu'on ne saura pas
+ * rattacher est une perte sèche pour l'acheteur.
+ *
+ * Rend `false` quand on ne peut ni vérifier ni corriger : l'appelant ne doit
+ * alors PAS ouvrir la feuille de paiement.
+ */
+export async function ensurePurchaseIdentity(userId: string | null): Promise<boolean> {
+  if (!userId) return false
+  if (!(await ensureConfigured())) return false
+  try {
+    const current = await Purchases.getAppUserID()
+    if (current !== userId) await Purchases.logIn(userId)
+    return true
+  } catch (err) {
+    noteStoreError('getAppUserID', err)
+    return false
   }
 }
 
@@ -101,9 +298,10 @@ export async function purchasePackage(pkg: PurchasesPackage): Promise<CustomerIn
 
 export async function getCustomerInfo(): Promise<CustomerInfo | null> {
   try {
+    if (!(await ensureConfigured())) return null
     return await Purchases.getCustomerInfo()
   } catch (err) {
-    console.warn('[RevenueCat] getCustomerInfo failed:', err)
+    noteStoreError('getCustomerInfo', err)
     return null
   }
 }
@@ -169,12 +367,13 @@ export async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: 
  */
 export async function getProductsDirect(): Promise<PurchasesStoreProduct[]> {
   try {
+    if (!(await ensureConfigured())) return []
     return await Purchases.getProducts(
       [PRODUCT_IDS.yearly, PRODUCT_IDS.monthly],
       Purchases.PRODUCT_CATEGORY.SUBSCRIPTION,
     )
   } catch (err) {
-    console.warn('[RevenueCat] getProducts failed:', err)
+    noteStoreError('getProducts', err)
     return []
   }
 }
@@ -205,10 +404,11 @@ export async function purchaseProductDirect(
  */
 export async function getStorefrontCountry(): Promise<string | null> {
   try {
+    if (!(await ensureConfigured())) return null
     const storefront = await Purchases.getStorefront()
     return storefront?.countryCode ?? null
   } catch (err) {
-    console.warn('[RevenueCat] getStorefront failed:', err)
+    noteStoreError('getStorefront', err)
     return null
   }
 }

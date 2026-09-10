@@ -35,18 +35,25 @@ import type { CustomerInfo, PurchasesPackage, PurchasesStoreProduct } from 'reac
 
 import {
   PRODUCT_IDS,
+  clearStoreDiagnostic,
+  ensureConfigured,
+  ensurePurchaseIdentity,
   getCustomerInfo,
   getOfferings,
   getProductsDirect,
   getStorefrontCountry,
+  initDiagnostic,
   isPremium,
   purchasePackage,
   purchaseProductDirect,
+  storeDiagnostic,
   withTimeout,
 } from '@/lib/revenucat/client'
 import { buildFallbackPlans } from '@/lib/paywall/fallbackPrices'
 import { deviceStoreContext } from '@/lib/paywall/deviceStore'
 import { findPlanPackage, type PackageLike, type PlanId } from '@/lib/paywall/prices'
+import { useAuth } from '@/hooks/useAuth'
+import { reportMessage } from '@/lib/reporting/report'
 
 /** D'où viennent les prix affichés. Conditionne la possibilité d'acheter. */
 export type PriceSource = 'offerings' | 'products' | 'fallback'
@@ -58,7 +65,11 @@ export type PriceSource = 'offerings' | 'products' | 'fallback'
  */
 const OFFERINGS_TIMEOUT_MS = 8000
 const PRODUCTS_TIMEOUT_MS = 6000
-const STOREFRONT_TIMEOUT_MS = 2000
+// 6 s et non 2 : le PREMIER appel StoreKit après un démarrage à froid dépasse
+// couramment deux secondes. À 2 s on rendait `null`, et comme
+// `expo-localization` peut ne pas donner de devise, un iPhone français tombait
+// sur le palier dollar — d'où les « 49,99 $US » vus le 07/09/2026 à Toulouse.
+const STOREFRONT_TIMEOUT_MS = 6000
 
 /** Un plan prêt à afficher, et son objet natif quand l'achat est possible. */
 export interface PaywallPlan extends PackageLike {
@@ -79,6 +90,14 @@ export interface UsePurchasesState {
   customerInfo: CustomerInfo | null
   isPremium: boolean
   error: Error | null
+  /**
+   * Ce qui a empêché le magasin de répondre, en clair.
+   *
+   * `null` quand tout va bien. Sinon une phrase courte que l'écran AFFICHE :
+   * sans elle, toutes les pannes se ressemblent et se diagnostiquent à
+   * l'aveugle, ce qui a coûté trois jours en septembre 2026.
+   */
+  diagnostic: string | null
 }
 
 const INITIAL: UsePurchasesState = {
@@ -90,6 +109,7 @@ const INITIAL: UsePurchasesState = {
   customerInfo: null,
   isPremium: false,
   error: null,
+  diagnostic: null,
 }
 
 /**
@@ -108,6 +128,9 @@ function planOfProduct(product: PurchasesStoreProduct): PlanId | null {
 export function usePurchases() {
   const [state, setState] = useState<UsePurchasesState>(INITIAL)
   const mounted = useRef(true)
+  // Sert UNIQUEMENT au verrou d'identité avant l'achat : on veut savoir à qui
+  // rattacher la transaction, pas afficher quoi que ce soit.
+  const { user } = useAuth()
 
   useEffect(() => {
     mounted.current = true
@@ -123,7 +146,37 @@ export function usePurchases() {
    * chose qui varie est `priceSource`, donc la confiance à accorder aux prix.
    */
   const loadPrices = useCallback(async () => {
-    setState((prev) => ({ ...prev, isLoadingPrices: true, error: null }))
+    setState((prev) => ({ ...prev, isLoadingPrices: true, error: null, diagnostic: null }))
+    clearStoreDiagnostic()
+
+    // Niveau 0 : le SDK est-il prêt ?
+    //
+    // C'EST LE POINT QUI MANQUAIT. `initRevenueCat()` était lancé sans être
+    // attendu depuis `app/_layout.tsx` ; quand le paywall se peignait avant la
+    // fin de `configure()`, chaque appel levait « There is no singleton
+    // instance », les trois niveaux échouaient et l'écran s'interdisait la
+    // vente. On attend, une bonne fois, la même promesse que tout le monde.
+    const ready = await ensureConfigured()
+    if (!ready) {
+      if (!mounted.current) return
+      const plans = buildFallbackPlans(deviceStoreContext())
+      const { code, detail, key, platform } = initDiagnostic()
+      const raison = `SDK ${code ?? 'indisponible'} · ${platform} · clé ${key}` + (detail ? ` — ${detail}` : '')
+      // Le diagnostic part AUSSI dans Sentry : un écran que personne ne regarde
+      // ne diagnostique rien, et la panne touche des gens dont on n'a pas le
+      // téléphone sous la main.
+      reportMessage('PAYWALL_SDK_UNAVAILABLE', { raison, code, detail, key, platform })
+      setState((prev) => ({
+        ...prev,
+        monthly: plans.monthly,
+        yearly: plans.yearly,
+        priceSource: 'fallback',
+        isLoadingPrices: false,
+        error: new Error('PAYWALL_SDK_UNAVAILABLE'),
+        diagnostic: raison,
+      }))
+      return
+    }
 
     // Niveau 1 : les offerings.
     const offerings = await withTimeout(getOfferings(), OFFERINGS_TIMEOUT_MS, null)
@@ -143,6 +196,7 @@ export function usePurchases() {
           priceSource: 'offerings',
           isLoadingPrices: false,
           error: null,
+          diagnostic: null,
         }))
         return
       }
@@ -177,6 +231,7 @@ export function usePurchases() {
           priceSource: 'products',
           isLoadingPrices: false,
           error: null,
+          diagnostic: null,
         }))
         return
       }
@@ -194,6 +249,19 @@ export function usePurchases() {
       locale: device.locale,
     })
     if (!mounted.current) return
+    const packagesSeen = packages.length
+    const productsSeen = products.length
+    const raison =
+      (storeDiagnostic() ??
+        `magasin muet — offering: ${packagesSeen} package(s), produits: ${productsSeen}, storefront: ${storefront ?? 'inconnu'}`) +
+      ` · clé ${initDiagnostic().key}`
+    reportMessage('PAYWALL_STORE_UNAVAILABLE', {
+      raison,
+      packages: packagesSeen,
+      produits: productsSeen,
+      storefront,
+      erreurMagasin: storeDiagnostic(),
+    })
     setState((prev) => ({
       ...prev,
       monthly: plans.monthly,
@@ -201,6 +269,9 @@ export function usePurchases() {
       priceSource: 'fallback',
       isLoadingPrices: false,
       error: new Error('PAYWALL_STORE_UNAVAILABLE'),
+      // Trois nombres et une erreur suffisent à séparer « le magasin refuse le
+      // produit » de « l'offering est mal monté » de « rien n'est arrivé ».
+      diagnostic: raison,
     }))
   }, [])
 
@@ -212,6 +283,7 @@ export function usePurchases() {
    * alors qu'elles ne servent qu'à savoir si la personne est déjà abonnée.
    */
   const loadCustomer = useCallback(async () => {
+    if (!(await ensureConfigured())) return
     const customerInfo = await withTimeout(getCustomerInfo(), OFFERINGS_TIMEOUT_MS, null)
     if (!mounted.current || !customerInfo) return
     setState((prev) => ({
@@ -244,6 +316,14 @@ export function usePurchases() {
         throw new Error('PAYWALL_NO_STORE_PRODUCT')
       }
 
+      // Dernier verrou : RevenueCat doit être sur l'identifiant Supabase de
+      // cette personne AVANT que la feuille de paiement s'ouvre. Sinon l'achat
+      // part sous un `$RCAnonymousID`, le webhook ne le retrouve pas, et la
+      // personne a payé pour rien. Voir `ensurePurchaseIdentity`.
+      if (!(await ensurePurchaseIdentity(user?.id ?? null))) {
+        throw new Error('PAYWALL_IDENTITY_UNCONFIRMED')
+      }
+
       setState((prev) => ({ ...prev, isPurchasing: true, error: null }))
       try {
         const customerInfo = nativePackage
@@ -270,7 +350,7 @@ export function usePurchases() {
         throw error
       }
     },
-    [state.monthly, state.yearly],
+    [state.monthly, state.yearly, user?.id],
   )
 
   const refresh = useCallback(async (): Promise<void> => {

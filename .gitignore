@@ -73,3 +73,7 @@ scripts/.backfill_checkpoint.json
 # Export catalogue : fichier de donnees volumineux (~348 Mo), regenerable via
 # les scripts d'export. Depasse la limite GitHub (100 Mo) -> jamais dans le repo.
 /catalog.csv
+
+# Clés Apple/Google : jamais dans l'historique. Le dossier entier, pas seulement
+# les extensions connues — une clé oubliée sous un nom inattendu coûte une rotation.
+secrets/

@@ -28,6 +28,8 @@ export type PurchaseOutcome =
   | 'network' // hors ligne / réseau
   | 'store' // le magasin ne répond pas correctement
   | 'not_allowed' // achats interdits sur cet appareil (contrôle parental)
+  | 'no_product' // le magasin n'a fourni aucun produit : rien à acheter
+  | 'identity' // impossible de confirmer à QUI rattacher l'achat
   | 'unknown'
 
 /** Codes RevenueCat utilisés ici, en clair (`PURCHASES_ERROR_CODE`). */
@@ -66,6 +68,12 @@ export function isUserCancelled(err: unknown): boolean {
 /** Classe une erreur d'achat en un cas que l'interface sait présenter. */
 export function classifyPurchaseError(err: unknown): PurchaseOutcome {
   if (isUserCancelled(err)) return 'cancelled'
+
+  // Nos propres refus, levés avant même d'ouvrir la feuille de paiement. Ils
+  // n'ont pas de `code` RevenueCat : c'est le message qui les identifie.
+  const own = err instanceof Error ? err.message : null
+  if (own === 'PAYWALL_NO_STORE_PRODUCT') return 'no_product'
+  if (own === 'PAYWALL_IDENTITY_UNCONFIRMED') return 'identity'
 
   switch (readCode(err)) {
     case CODE.PAYMENT_PENDING:
@@ -116,6 +124,22 @@ export function purchaseErrorMessage(
       return {
         title: 'Connexion perdue',
         body: 'Vérifie ta connexion internet, puis réessaie.',
+      }
+    case 'no_product':
+      return {
+        title: 'Tarif pas encore confirmé',
+        body:
+          `${store} n'a pas encore renvoyé l'abonnement. Touche « Recharger les ` +
+          'tarifs » : tant que le tarif exact n\'est pas affiché, aucun paiement ' +
+          'ne peut être lancé.',
+      }
+    case 'identity':
+      return {
+        title: 'Compte non confirmé',
+        body:
+          'Impossible de confirmer à quel compte rattacher cet abonnement. ' +
+          'Reconnecte-toi, puis réessaie — mieux vaut ce détour qu\'un paiement ' +
+          'qui n\'arriverait pas sur ton compte.',
       }
     case 'store':
       return {

@@ -81,6 +81,7 @@ const OffreScreen: FC = () => {
     monthly: monthlyPkg,
     yearly: yearlyPkg,
     priceSource,
+    diagnostic,
     isLoadingPrices,
     isPurchasing,
     canPurchase,
@@ -424,6 +425,18 @@ const OffreScreen: FC = () => {
               </View>
             )}
 
+            {/* La raison exacte, en clair.
+                Elle a l'air technique parce qu'elle l'est : c'est la seule ligne
+                qui distingue « le SDK n'était pas prêt » de « le magasin refuse
+                le produit », et sans elle un paywall muet se diagnostique à
+                l'aveugle, un aller-retour de build à la fois. Elle ne s'affiche
+                que dans l'état de repli, qui est déjà un état d'échec. */}
+            {isFallbackPrice && diagnostic ? (
+              <Text style={styles.diagnostic} selectable>
+                {diagnostic}
+              </Text>
+            ) : null}
+
             {/* Mention légale exigée avant l'achat (Apple 3.1.2) : nom, durée,
                 prix, renouvellement, et les deux liens juste en dessous. */}
             <Text style={styles.legal}>{legal}</Text>
@@ -668,6 +681,18 @@ const styles = StyleSheet.create({
     color: colors.inkMuted,
     flexShrink: 1,
     lineHeight: 16,
+  },
+
+  // Ligne de diagnostic : lisible pour qui la cherche, invisible pour qui ne la
+  // cherche pas. Sélectionnable, parce qu'on veut pouvoir la coller dans un
+  // message plutôt que la recopier depuis une capture d'écran.
+  diagnostic: {
+    ...typography.xs,
+    fontSize: 11,
+    lineHeight: 15,
+    color: colors.inkMuted,
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.sm,
   },
 
   // Plans côte à côte
