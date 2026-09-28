@@ -8,14 +8,16 @@
  * renvoyée par `product-by-barcode` (champ `preview`). Aucun calcul lourd ici.
  */
 import { memo, useCallback } from 'react'
-import { Pressable, Share, StyleSheet, Text, View } from 'react-native'
+import { Share, StyleSheet, Text, View } from 'react-native'
 import Animated, { FadeInDown } from 'react-native-reanimated'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 
 import { Star3D } from '@/components/analysis/Star3D'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { STARS_BY_TONE, STAR_PALETTE_BY_TONE, STAR_EMPTY_PALETTE } from '@/lib/analysis/qualityStars'
 import { verdictToneFromScore, type VerdictTone } from '@/lib/essentiel/engine'
+import { applyColorCap } from '@/lib/analysis/scoreCap'
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
@@ -51,8 +53,14 @@ function subcategoryLabel(category: string | null): string | null {
 }
 
 function toneFor(preview: ScanPreview): VerdictTone {
-  if (preview.countRouge >= 2) return 'high-risk'
-  return verdictToneFromScore(preview.score)
+  // MÊME plafond couleur que la recherche, les alternatives et la fiche produit
+  // (applyColorCap sur les compteurs catalogue). L'ancienne règle maison
+  // « ≥2 rouges → high-risk » donnait 1 étoile rose ici là où tous les autres
+  // écrans affichaient 2 étoiles oranges pour le même produit.
+  if (preview.score == null) return verdictToneFromScore(preview.score)
+  return verdictToneFromScore(
+    applyColorCap(preview.score, preview.countOrange ?? 0, preview.countRouge ?? 0),
+  )
 }
 
 export const ScanPreviewCard = memo(function ScanPreviewCard({ preview, onSeeProduct, onClose }: Props) {
@@ -62,7 +70,7 @@ export const ScanPreviewCard = memo(function ScanPreviewCard({ preview, onSeePro
   const onShare = useCallback(() => {
     const title = [preview.brand, preview.name].filter(Boolean).join(' ')
     Share.share({
-      message: `${title || 'Ce produit'} — analysé sur Cosme Check`,
+      message: `${title || 'Ce produit'}, analysé sur Cosme Check`,
     }).catch(() => {})
   }, [preview.brand, preview.name])
 
@@ -126,7 +134,7 @@ export const ScanPreviewCard = memo(function ScanPreviewCard({ preview, onSeePro
           <Ionicons name="share-social-outline" size={18} color={colors.ink} />
           <Text style={styles.shareText}>Partager</Text>
         </Pressable>
-        <Pressable style={styles.seeBtn} onPress={onSeeProduct} hitSlop={6}>
+        <Pressable style={styles.seeBtn} onPress={onSeeProduct} hitSlop={6} haptic="primary">
           <Text style={styles.seeText}>Voir le produit</Text>
         </Pressable>
       </View>

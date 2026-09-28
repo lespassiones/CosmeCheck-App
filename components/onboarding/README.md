@@ -1,26 +1,28 @@
-# Onboarding Components
+# Onboarding
 
-Composants du wizard d'onboarding en 3 étapes pour CosmeCheck.
+## Parcours « Le diagnostic de Perle » (`flow/`, depuis le 28/09/2026)
 
-## Composants
+Un seul parcours, deux modes :
 
-### `OnboardingWizard.tsx`
-Orchestrateur principal du wizard. Gère la navigation entre les 3 steps,
-la barre de progression et la sauvegarde auto debounce.
+- **invité** (`app/(preonboarding)/index.tsx`) : accroche, consentement,
+  questions avec réactions de Perle, premier scan réel, alertes, montage, puis
+  écran de compte (`app/(auth)/welcome.tsx`) et paywall (`/offre?fromOnboarding=1`) ;
+- **connecté** (`app/(onboarding)/index.tsx`) : même parcours sans accroche,
+  pour un compte existant sans profil (ou le compte de démonstration Apple rejoué).
 
-### `Step1Skin.tsx`
-Première étape: sélection du type de peau (visage, corps, cheveux).
-Chips sélectionnables avec style neumorphique.
+| Fichier | Rôle |
+|---|---|
+| `flow/OnboardingFlow.tsx` | orchestrateur : étapes visibles, retour, brouillon, fin |
+| `flow/steps/*` | un fichier par famille d'écrans (accroches, questions, réactions, scan, verdict, fin) |
+| `flow/ui.tsx` | briques visuelles (en-tête, bulle de Perle, boutons, options, pastilles) |
+| `flow/OnboardingPaywall.tsx` | paywall de fin d'onboarding (A21) |
+| `flow/DraftFlusher.tsx` | écrit les réponses du parcours invité dans le profil après l'inscription |
 
-### `Step2Concerns.tsx`
-Deuxième étape: sélection des préoccupations beauté (multi-select)
-et saisie des allergies connues (texte libre).
+La logique pure (ordre des étapes, textes et réactions, verdict express,
+fusion dans `preferences`) vit dans `lib/onboarding/` et est testée dans
+`lib/__tests__/onboardingPerle.test.ts`.
 
-### `Step3Goals.tsx`
-Troisième étape: sélection des objectifs beauté (multi-select).
-Bouton "Terminer" déclenche la sauvegarde finale et la redirection.
+## Composants conservés pour l'édition du profil
 
-## Pattern de données
-
-Chaque step émet ses données via `onNext(partialData)`.
-L'état est accumulé dans `OnboardingWizard` avant d'être sauvegardé.
+`Step1Skin`, `Step2Concerns`, `Step3Goals`, `OnboardingControls`, `PackedChips` :
+utilisés par `components/profile/BeautyProfileForm.tsx` et `app/profile/*`.

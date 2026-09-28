@@ -5,7 +5,8 @@
  */
 
 import { type FC, type ReactNode } from 'react'
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Linking, StyleSheet, Text, View } from 'react-native'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { Ionicons } from '@expo/vector-icons'
 
 import { WhiteCard } from '@/components/design/WhiteCard'

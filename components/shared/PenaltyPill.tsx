@@ -6,7 +6,7 @@
  * posé sur un fond teinté arrondi (rounded-md), 4 tons possibles.
  *
  * Tons (texte / fond), repris des classes Tailwind du web :
- *   - emerald : #16A34A sur #ECFDF5  (emerald-700 / emerald-50)
+ *   - emerald : #16A34A sur #F0FDF4  (vert unique de l'app / green-50)
  *   - amber   : #CA8A04 sur #FEFCE8  (amber-700 / amber-50)
  *   - orange  : #EA580C sur #FFF7ED  (orange-700 / orange-50)
  *   - rose    : #E11D48 sur #FFF1F2  (rose-700 / rose-50)
@@ -32,7 +32,7 @@ interface Props {
 }
 
 const TONE: Record<PenaltyTone, { fg: string; bg: string }> = {
-  emerald: { fg: '#16A34A', bg: '#ECFDF5' },
+  emerald: { fg: '#16A34A', bg: '#F0FDF4' },
   amber: { fg: '#CA8A04', bg: '#FEFCE8' },
   orange: { fg: '#EA580C', bg: '#FFF7ED' },
   rose: { fg: '#E11D48', bg: '#FFF1F2' },

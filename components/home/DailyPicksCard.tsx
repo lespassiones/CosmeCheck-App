@@ -12,12 +12,13 @@
  *   - "Suivant" passe à l'item suivant. Après le 10ème : écran "Reviens demain".
  */
 
-import { type FC, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
+import { type FC, Fragment, useEffect, useRef, useState } from 'react'
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useQuery } from '@tanstack/react-query'
 
 import { WhiteCard } from '@/components/design/WhiteCard'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
 import { radius, spacing } from '@/constants/spacing'
@@ -164,7 +165,7 @@ export const DailyPicksCard: FC<Props> = ({ onReveal }) => {
     const ratio = score / total
     const palette =
       ratio >= 0.8
-        ? { bg: '#ECFDF5', fg: '#047857' }
+        ? { bg: '#F0FDF4', fg: '#15803D' }
         : ratio >= 0.5
           ? { bg: '#FFFBEB', fg: '#B45309' }
           : { bg: '#FFF1F2', fg: '#9F1239' }
@@ -250,22 +251,26 @@ export const DailyPicksCard: FC<Props> = ({ onReveal }) => {
                 ? styles.optionTextWrong
                 : styles.optionText
           return (
-            <Pressable
-              key={i}
-              disabled={showResult}
-              onPress={() => setPicked(i)}
-              style={({ pressed }) => [
-                styles.option,
-                optStyle,
-                pressed && !showResult && styles.btnPressed,
-              ]}
-            >
-              <Text style={textStyle}>
-                {showResult && isCorrect ? '✓ ' : ''}
-                {showResult && isPicked && !isCorrect ? '✗ ' : ''}
-                {opt}
-              </Text>
-            </Pressable>
+            <Fragment key={i}>
+              {/* Trait hors de la ligne : il ne s'estompe pas avec les réponses grisées. */}
+              {i > 0 ? <View style={styles.optionDivider} /> : null}
+              <Pressable
+                disabled={showResult}
+                onPress={() => setPicked(i)}
+                haptic="selection"
+                style={({ pressed }) => [
+                  styles.option,
+                  optStyle,
+                  pressed && !showResult && styles.btnPressed,
+                ]}
+              >
+                <Text style={textStyle}>
+                  {showResult && isCorrect ? '✓ ' : ''}
+                  {showResult && isPicked && !isCorrect ? '✗ ' : ''}
+                  {opt}
+                </Text>
+              </Pressable>
+            </Fragment>
           )
         })}
       </View>
@@ -277,6 +282,7 @@ export const DailyPicksCard: FC<Props> = ({ onReveal }) => {
           <Text style={styles.revealText}>{item.reveal}</Text>
           <Pressable
             onPress={() => next(picked === correctIdx)}
+            haptic="primary"
             style={({ pressed }) => [styles.nextBtn, pressed && styles.btnPressed]}
             accessibilityRole="button"
           >
@@ -348,26 +354,28 @@ const styles = StyleSheet.create({
     color: colors.ink,
     marginBottom: spacing.base,
   },
-  options: {
-    gap: spacing.sm,
-  },
+  // Réponses sans bloc de fond (28/09/2026) : de simples lignes séparées par un
+  // trait noir. Après la réponse, toute la ligne se colore : verte pour la
+  // bonne réponse, rouge pour la mauvaise si c'est celle qui a été choisie.
+  options: {},
   option: {
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    borderRadius: 10,
   },
-  optionDefault: {
-    backgroundColor: '#F3F4F6',
+  optionDivider: {
+    height: 1,
+    backgroundColor: colors.ink,
   },
+  optionDefault: {},
   optionCorrect: {
-    backgroundColor: '#ECFDF5',
+    backgroundColor: colors.rating.vert.bg,
   },
   optionWrong: {
-    backgroundColor: '#FFF1F2',
+    backgroundColor: colors.rating.rouge.bg,
   },
   optionFaded: {
-    backgroundColor: '#F3F4F6',
-    opacity: 0.55,
+    opacity: 0.45,
   },
   optionText: {
     fontFamily: fontFamilies.medium,
@@ -377,12 +385,12 @@ const styles = StyleSheet.create({
   optionTextCorrect: {
     fontFamily: fontFamilies.semiBold,
     fontSize: 14,
-    color: '#065F46',
+    color: colors.rating.vert.ink,
   },
   optionTextWrong: {
     fontFamily: fontFamilies.semiBold,
     fontSize: 14,
-    color: '#9F1239',
+    color: colors.rating.rouge.ink,
   },
   reveal: {
     marginTop: spacing.base,

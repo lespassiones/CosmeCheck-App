@@ -20,7 +20,6 @@ import {
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -29,9 +28,13 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 
 import { colors } from '@/constants/colors'
-import { radius, spacing } from '@/constants/spacing'
+import { spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 import { WhiteCard } from '@/components/design/WhiteCard'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
+
+/** Flèches : chevron noir seul, sans cercle ni fond. */
+const ARROW_INK = '#111111'
 
 const AUTO_ROTATE_MS = 10_000
 const RESUME_DELAY_MS = 2_000
@@ -157,13 +160,15 @@ export const TipCarousel: FC<Props> = ({ tips }) => {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Astuce précédente"
+            haptic="selection"
             onPress={() => {
               setPaused(true)
               goTo(index - 1)
             }}
             style={styles.arrow}
+            hitSlop={10}
           >
-            <Ionicons name="chevron-back" size={16} color={colors.accentDeep} />
+            <Ionicons name="chevron-back" size={20} color={ARROW_INK} />
           </Pressable>
 
           <View style={styles.dots}>
@@ -173,6 +178,7 @@ export const TipCarousel: FC<Props> = ({ tips }) => {
                 accessibilityRole="button"
                 accessibilityLabel={`Voir astuce ${i + 1}`}
                 hitSlop={6}
+                haptic="selection"
                 onPress={() => {
                   setPaused(true)
                   goTo(i)
@@ -186,13 +192,15 @@ export const TipCarousel: FC<Props> = ({ tips }) => {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Astuce suivante"
+            haptic="selection"
             onPress={() => {
               setPaused(true)
               goTo(index + 1)
             }}
             style={styles.arrow}
+            hitSlop={10}
           >
-            <Ionicons name="chevron-forward" size={16} color={colors.accentDeep} />
+            <Ionicons name="chevron-forward" size={20} color={ARROW_INK} />
           </Pressable>
         </View>
       )}
@@ -257,13 +265,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
+  // Flèches : chevron noir seul, sans cercle (zone de toucher élargie par hitSlop).
   arrow: {
-    width: 28,
-    height: 28,
-    borderRadius: radius.md,
+    width: 30,
+    height: 30,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.accentSoft,
   },
   dots: {
     flex: 1,

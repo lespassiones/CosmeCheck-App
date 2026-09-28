@@ -11,6 +11,7 @@
  */
 import { EU_FRAGRANCE_ALLERGENS, isEuFragranceAllergen } from "@/lib/euAllergens";
 import type { AnalyseItem, AnalyseResponse } from "@/lib/analysis/types";
+import { familyLabelForTag } from "@/lib/essentiel/engine";
 
 export type Frequency = "daily" | "weekly" | "monthly";
 
@@ -106,6 +107,12 @@ const TAG_LABELS: Record<string, string> = {
   "huile-essentielle": "Huiles essentielles",
   ogm: "OGM",
 };
+
+/** Dernier recours pour un tag inconnu : « filtre-uv » → « Filtre uv » (jamais le slug brut). */
+function humanizeTag(tag: string): string {
+  const s = tag.replace(/[-_]+/g, " ").trim();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 
 function exposureLabelFor(score: number): RoutineMetrics["exposureLabel"] {
   if (score >= 17) return "Faible";
@@ -243,7 +250,7 @@ export function computeRoutineMetrics(products: RoutineProduct[]): RoutineMetric
             .filter((s) => s.fraction > 0);
       return {
         tag,
-        label: TAG_LABELS[tag] ?? tag,
+        label: TAG_LABELS[tag] ?? familyLabelForTag(tag) ?? humanizeTag(tag),
         cumulativeCount: Number(cumulativeCount.toFixed(2)),
         colorSegments,
       };

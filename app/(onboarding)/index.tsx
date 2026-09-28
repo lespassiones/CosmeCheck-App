@@ -1,53 +1,17 @@
 /**
- * OnboardingScreen — hôte plein écran du questionnaire profil (micro-étapes).
+ * Parcours d'onboarding pour une personne DÉJÀ connectée qui n'a pas de profil
+ * (ancien compte jamais terminé, compte de démonstration Apple rejoué).
  *
- * Layout pleine hauteur : le wizard gère lui-même son header (progression +
- * titre), son corps scrollable et sa nav fixe en bas. Fond crème + glow léger,
- * SafeAreaView + KeyboardAvoidingView pour les écrans à saisie libre.
+ * Même parcours « Le diagnostic de Perle » qu'en invité, en mode `member` :
+ * pas d'accroche, pas de prénom s'il est connu, consentement seulement s'il
+ * n'a pas déjà été donné, et les réponses sont écrites directement à la fin.
+ * Le layout du groupe redirige ensuite vers le paywall.
  */
 
 import { type FC } from 'react'
-import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { colors } from '@/constants/colors'
-import { spacing } from '@/constants/spacing'
-import { BackgroundGlow } from '@/components/design/BackgroundGlow'
-import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard'
+import { OnboardingFlow } from '@/components/onboarding/flow/OnboardingFlow'
 
-const OnboardingScreen: FC = () => (
-  <View style={styles.root}>
-    <BackgroundGlow variant="minimal" />
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <View style={styles.content}>
-          <OnboardingWizard />
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  </View>
-)
+const OnboardingScreen: FC = () => <OnboardingFlow mode="member" />
 
 export default OnboardingScreen
-
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-  safe: {
-    flex: 1,
-  },
-  flex: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.base,
-  },
-})

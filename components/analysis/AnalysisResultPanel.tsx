@@ -11,7 +11,7 @@
  *   6. Observations       (tags présents / absents, dépliables)
  *   7. Allergènes UE      (chips rouges, ou état « aucun »)
  *   8. Synthèse           (result_json.synthesis ; stub gracieux si null)
- *   9. Liste complète     (ProductRow par ingrédient, filtres couleur)
+ *   9. Liste complète     (carte qui ouvre la page /analyse/ingredients/[id])
  *
  * Les primitives visuelles (IngredientBlob, VerdictGauge, IngredientSpectrum)
  * sont IMPORTÉES — non réimplémentées ici.
@@ -20,25 +20,11 @@
  * parent (app/analyse/[id].tsx) au-dessus du panel.
  */
 
-/**
- * ⚠️ `SafeAreaView` vient de `react-native-safe-area-context`, JAMAIS de
- * `react-native`. Celui de React Native est iOS uniquement : sur Android il ne
- * fait rien du tout, et l'en-tete de cette feuille passait donc sous la barre
- * de notifications. Constate en production le 31/08/2026.
- */
-import { useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react'
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  type LayoutChangeEvent,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { useCallback, useMemo, useRef, useState, type FC } from 'react'
+import { StyleSheet, Text, View } from 'react-native'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { Ionicons } from '@expo/vector-icons'
-import { useRouter } from 'expo-router'
+import { useRouter, type Href } from 'expo-router'
 
 import { WhiteCard } from '@/components/design/WhiteCard'
 import { colors } from '@/constants/colors'
@@ -54,13 +40,16 @@ import {
   type ColorRating,
 } from '@/lib/analysis/types'
 import { checkRestrictions } from '@/lib/restrictions/check'
+import { groupRestrictionMatches } from '@/lib/restrictions/group'
+import { putIngredientList } from '@/lib/analysis/ingredientListHandoff'
+import { ROUTES } from '@/constants/routes'
 
 import { BigScoreCard } from './BigScoreCard'
 import { EssentielToggleButton } from './EssentielView'
 import { IngredientSpectrum } from './IngredientSpectrum'
 import { ObservationsCard } from './ObservationsCard'
 import { PenaltySummaryStrip } from './PenaltySummaryStrip'
-import { ProductRow } from './ProductRow'
+import { RestrictionsSheet } from './RestrictionsSheet'
 import { type PersonalBlocks } from './PersonalInsightsCards'
 import { CompatibilityCard, type Compatibility } from './CompatibilityCard'
 import { ReviewPromptCard } from '@/components/review/ReviewPromptCard'
@@ -118,17 +107,6 @@ interface Props {
   productType?: string | null
 }
 
-type TabKey = 'all' | ColorRating | 'unknown'
-
-const TAB_LABELS: Record<TabKey, string> = {
-  all: 'Tous',
-  vert: 'Vert',
-  jaune: 'Jaune',
-  orange: 'Orange',
-  rouge: 'Rouge',
-  unknown: 'Non reconnu',
-}
-
 export const AnalysisResultPanel: FC<Props> = ({
   analysisId,
   result,
@@ -149,13 +127,11 @@ export const AnalysisResultPanel: FC<Props> = ({
   const router = useRouter()
   const { restrictions, profile, updateProfile } = useProfile()
   const [detailsExpanded, setDetailsExpanded] = useState(false)
-  const [filter, setFilter] = useState<TabKey>('all')
   const [showReview, setShowReview] = useState(false)
   const [showNotifPrompt, setShowNotifPrompt] = useState(false)
   const reviewCheckedRef = useRef(false)
-  const [listModalOpen, setListModalOpen] = useState(false)
-  const [familiesModalOpen, setFamiliesModalOpen] = useState(false)
-  const modalScrollRef = useRef<ScrollView>(null)
+  const [restrictionsSheetOpen, setRestrictionsSheetOpen] = useState(false)
+
 
   // ── Cartes de sollicitation au pic d'engagement ────────────────────────────
   // Déclenchées quand les 3 blocs IA viennent d'apparaître (scan réussi).
@@ -227,6 +203,18 @@ export const AnalysisResultPanel: FC<Props> = ({
   // les noms de niche (ex. « Typologie … »), ce qui laissait le carrousel vide.
   // `category` sert de repli quand le produit n'a pas d'EAN (trouvé sur internet,
   // absent du catalogue) → alternatives de la même catégorie via l'index inversé.
+  //
+  // `sourceIngredients` : noms INCI de l'analyse triés par position, pour ne
+  // proposer que des formules comparables (crème eau-première pour une crème
+  // eau-première, jamais une huile ni un savon solide à la place d'un gel).
+  const altSourceIngredients = useMemo(
+    () =>
+      [...result.items]
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+        .map((it) => it.name || it.input)
+        .filter((s): s is string => typeof s === 'string' && s.length > 0),
+    [result.items],
+  )
   const alternatives = useAlternatives({
     ean: productEan,
     brand,
@@ -236,6 +224,7 @@ export const AnalysisResultPanel: FC<Props> = ({
     // Graine = ID de l'analyse → alternatives mélangées DANS chaque tier de
     // pastille, différentes à chaque analyse mais stables pour celle-ci.
     seed: analysisId ?? null,
+    sourceIngredients: altSourceIngredients,
     initialCount: 10,
     step: 10,
   })
@@ -270,35 +259,16 @@ export const AnalysisResultPanel: FC<Props> = ({
     [result.items, restrictions, families],
   )
 
-  // Familles RÉELLEMENT présentes dans le produit (objets IngredientFamily,
-  // pour afficher le vrai nom DB, pas le slug brut).
-  const restrictedFamilies = useMemo(() => {
-    const familySlugsPresent = new Set(
-      restrictionMatches.filter((m) => m.kind === 'family').map((m) => m.slug),
-    )
-    return families
-      .filter((f) => familySlugsPresent.has(f.slug))
-      .map((f) => f.name)
-      .sort()
-  }, [restrictionMatches, families])
+  // Une ligne par restriction présente (famille + ses ingrédients, ou ingrédient
+  // restreint) pour la feuille « N de tes restrictions ».
+  const restrictionGroups = useMemo(
+    () => groupRestrictionMatches(restrictionMatches, result.items),
+    [restrictionMatches, result.items],
+  )
 
   // Compte = familles uniques + ingrédients restreints uniques présents.
   // Même formule que le web → "Contient N de tes restrictions" identique.
-  const restrictedCount = useMemo(() => {
-    const fam = new Set(
-      restrictionMatches.filter((m) => m.kind === 'family').map((m) => m.slug),
-    )
-    const ing = new Set(
-      restrictionMatches.filter((m) => m.kind === 'ingredient').map((m) => m.slug),
-    )
-    return fam.size + ing.size
-  }, [restrictionMatches])
-
-  // Positions des items restreints (pour le badge rouge dans la liste).
-  const restrictedPositions = useMemo(
-    () => new Set(restrictionMatches.map((m) => m.position)),
-    [restrictionMatches],
-  )
+  const restrictedCount = restrictionGroups.length
 
   // Map nom-d'ingrédient → slug pour les liens dans les observations.
   const slugByName = useMemo(() => {
@@ -354,43 +324,16 @@ export const AnalysisResultPanel: FC<Props> = ({
     return c
   }, [result.items, resolvedColor])
 
-  // Liste filtrée pour la section « Liste des ingrédients ».
-  const filteredItems = useMemo(() => {
-    if (filter === 'all') return result.items
-    if (filter === 'unknown') return result.items.filter((i) => resolvedColor(i) == null)
-    return result.items.filter((i) => resolvedColor(i) === filter)
-  }, [result.items, filter, resolvedColor])
-
-  // ── Scroll-to-item depuis le spectre ────────────────────────────────────
-  // On mémorise le Y de chaque ligne (relatif au panel) via onLayout, et la
-  // position Y du conteneur de la liste, pour calculer la coordonnée absolue.
-  const itemOffsets = useRef<Map<number, number>>(new Map())
-  const listTop = useRef(0)
-
-  function handleListLayout(e: LayoutChangeEvent) {
-    listTop.current = e.nativeEvent.layout.y
-  }
-
-  function registerItemOffset(position: number, y: number) {
-    itemOffsets.current.set(position, y)
-  }
-
-  function handleSpectrumPress(position: number) {
-    // Ouvre la modale "Liste des ingrédients" et scrolle vers la ligne ciblée
-    // (au prochain frame pour laisser le layout interne de la modale se faire).
-    if (!detailsExpanded) setDetailsExpanded(true)
-    setListModalOpen(true)
-    requestAnimationFrame(() => {
-      const y = itemOffsets.current.get(position)
-      if (y != null) {
-        modalScrollRef.current?.scrollTo({ y: Math.max(0, y - 24), animated: true })
-      }
-    })
+  // Page « Liste des ingrédients » (une page de la pile, pas une modale) :
+  // toucher un ingrédient pousse sa fiche, « retour » revient au tableau.
+  // Le résultat est déposé dans le relais mémoire pour un affichage immédiat.
+  const openIngredientList = (focusPosition?: number) => {
+    if (!analysisId) return
+    putIngredientList(analysisId, result)
+    router.push(ROUTES.ANALYSE.INGREDIENTS(analysisId, focusPosition) as Href)
   }
 
   const counts = result.counts
-  const tabs: TabKey[] = ['all', 'vert', 'jaune', 'orange', 'rouge']
-  if (itemCounts.unknown > 0) tabs.push('unknown')
 
   // Carrousel d'alternatives — rendu soit replié (sous le bouton), soit déplié
   // (tout en bas après la liste d'ingrédients). Une seule branche monte à la fois.
@@ -443,7 +386,7 @@ export const AnalysisResultPanel: FC<Props> = ({
         initialBlocksKey={personalBlocksKey}
         restrictedCount={restrictedCount}
         onManageRestrictions={onViewRestrictionsPress}
-        onShowRestrictedFamilies={() => setFamiliesModalOpen(true)}
+        onShowRestrictedFamilies={() => setRestrictionsSheetOpen(true)}
         onReady={handleBlocksReady}
       />
 
@@ -481,12 +424,11 @@ export const AnalysisResultPanel: FC<Props> = ({
             scoreLabel={result.scoreLabel}
             rating={rating}
             reduceMotion={reduceMotion}
+            // 4. Le verdict en chiffres, empilé à droite du demi-donut (28/09/2026).
+            aside={<PenaltySummaryStrip counts={counts} layout="column" bare />}
           />
 
           {/* 3. (Restrictions désormais affichées dans L'ESSENTIEL en haut) */}
-
-          {/* 4. Le verdict en chiffres */}
-          <PenaltySummaryStrip counts={counts} />
 
           {/* 5. (Synthèse supprimée — remplacée par les blocs IA en haut) */}
 
@@ -495,7 +437,7 @@ export const AnalysisResultPanel: FC<Props> = ({
             <IngredientSpectrum
               spectrum={result.spectrum}
               items={result.items}
-              onPositionClick={handleSpectrumPress}
+              onPositionClick={(position) => openIngredientList(position)}
             />
           ) : null}
 
@@ -509,9 +451,9 @@ export const AnalysisResultPanel: FC<Props> = ({
           {/* 8. Allergènes de contact UE */}
           <EuAllergensCard allergens={euAllergens} />
 
-          {/* 9. Liste complète — preview qui ouvre la modale dédiée */}
+          {/* 9. Liste complète — carte qui ouvre la page dédiée */}
           <Pressable
-            onPress={() => setListModalOpen(true)}
+            onPress={() => openIngredientList()}
             style={({ pressed }) => pressed && styles.previewPressed}
             accessibilityRole="button"
             accessibilityLabel="Ouvrir la liste des ingrédients"
@@ -540,130 +482,15 @@ export const AnalysisResultPanel: FC<Props> = ({
       {/* 11. Outils — tout en bas, après les alternatives (les deux états) */}
       {toolsSection}
 
-      {/* Modale plein écran : liste complète des ingrédients */}
-      <Modal
-        visible={listModalOpen}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setListModalOpen(false)}
-      >
-        <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Liste des ingrédients</Text>
-            <Pressable
-              onPress={() => setListModalOpen(false)}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel="Fermer"
-              style={styles.modalClose}
-            >
-              <Ionicons name="close" size={22} color={colors.ink} />
-            </Pressable>
-          </View>
-
-          <View style={styles.modalTabs} onLayout={handleListLayout}>
-            <View style={styles.tabs}>
-              {tabs.map((t) => {
-                const active = t === filter
-                const count = tabCount(counts, t, itemCounts)
-                return (
-                  <FilterChip
-                    key={t}
-                    label={TAB_LABELS[t]}
-                    count={count}
-                    active={active}
-                    tone={t}
-                    onPress={() => setFilter(t)}
-                  />
-                )
-              })}
-            </View>
-          </View>
-
-          <ScrollView
-            ref={modalScrollRef}
-            style={styles.modalScroll}
-            contentContainerStyle={styles.modalContent}
-          >
-            {filteredItems.length === 0 ? (
-              <Text style={styles.emptyList}>
-                Aucun ingrédient ne correspond à ce filtre.
-              </Text>
-            ) : (
-              filteredItems.map((item) => (
-                <View
-                  key={`${item.position}-${item.input}`}
-                  onLayout={(e) => registerItemOffset(item.position, e.nativeEvent.layout.y)}
-                >
-                  <ProductRow
-                    item={item}
-                    onPress={(slug) => {
-                      setListModalOpen(false)
-                      onIngredientPress(slug)
-                    }}
-                    isRestricted={restrictedPositions.has(item.position)}
-                  />
-                </View>
-              ))
-            )}
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-
-      {/* Modale : familles restreintes du produit */}
-      {restrictedFamilies.length > 0 ? (
-        <Modal
-          visible={familiesModalOpen}
-          animationType="fade"
-          transparent
-          onRequestClose={() => setFamiliesModalOpen(false)}
-        >
-          <Pressable
-            style={styles.familiesModalOverlay}
-            onPress={() => setFamiliesModalOpen(false)}
-            accessible={false}
-          >
-            <View style={styles.familiesModalContent}>
-              <View style={styles.familiesModalHeader}>
-                <Text style={styles.familiesModalTitle}>Familles restreintes</Text>
-                <Pressable
-                  onPress={() => setFamiliesModalOpen(false)}
-                  hitSlop={10}
-                  accessibilityRole="button"
-                  accessibilityLabel="Fermer"
-                >
-                  <Ionicons name="close" size={22} color={colors.ink} />
-                </Pressable>
-              </View>
-              <ScrollView style={styles.familiesListContainer}>
-                <View style={styles.familiesList}>
-                  {restrictedFamilies.map((family, i) => (
-                    <View key={i} style={styles.familyItem}>
-                      <Ionicons
-                        name="shield-half"
-                        size={16}
-                        color={colors.rating.rouge.text}
-                        style={styles.familyIcon}
-                      />
-                      <Text style={styles.familyName}>{family}</Text>
-                    </View>
-                  ))}
-                </View>
-              </ScrollView>
-              <Pressable
-                style={styles.familiesModalButton}
-                onPress={() => {
-                  setFamiliesModalOpen(false)
-                  onViewRestrictionsPress()
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Voir toutes mes familles"
-              >
-                <Text style={styles.familiesModalButtonText}>Voir toutes mes familles</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Modal>
+      {/* Feuille : restrictions présentes dans le produit (familles + ingrédients) */}
+      {restrictionGroups.length > 0 ? (
+        <RestrictionsSheet
+          visible={restrictionsSheetOpen}
+          onClose={() => setRestrictionsSheetOpen(false)}
+          groups={restrictionGroups}
+          onIngredientPress={onIngredientPress}
+          onManage={onViewRestrictionsPress}
+        />
       ) : null}
 
       {/* Overlay pendant l'analyse d'une alternative choisie */}
@@ -694,58 +521,6 @@ function EuAllergensCard({ allergens }: { allergens: { label: string; note?: str
       )}
     </WhiteCard>
   )
-}
-
-// ── Filter chip ──────────────────────────────────────────────────────────────
-
-function FilterChip({
-  label,
-  count,
-  active,
-  tone,
-  onPress,
-}: {
-  label: string
-  count: number
-  active: boolean
-  tone: TabKey
-  onPress: () => void
-}) {
-  const activeBg =
-    tone === 'all' || tone === 'unknown' ? colors.ink : colors.rating[tone].DEFAULT
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.chip,
-        active && { backgroundColor: activeBg },
-        pressed && styles.chipPressed,
-      ]}
-    >
-      <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>{label}</Text>
-      <View style={[styles.chipCount, active && styles.chipCountActive]}>
-        <Text style={[styles.chipCountText, active && styles.chipCountTextActive]}>{count}</Text>
-      </View>
-    </Pressable>
-  )
-}
-
-function tabCount(
-  counts: AnalyseResponse['counts'],
-  t: TabKey,
-  derived: { vert: number; jaune: number; orange: number; rouge: number; unknown: number },
-): number {
-  switch (t) {
-    case 'all':     return counts.total
-    // Couleurs et "non reconnu" : source dérivée (cohérente avec resolvedColor)
-    case 'vert':    return derived.vert
-    case 'jaune':   return derived.jaune
-    case 'orange':  return derived.orange
-    case 'rouge':   return derived.rouge
-    case 'unknown': return derived.unknown
-  }
 }
 
 const styles = StyleSheet.create({
@@ -783,84 +558,10 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   previewPressed: { opacity: 0.85 },
-  // Modale liste des ingrédients
-  modalSafe: { flex: 1, backgroundColor: colors.bg },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderMuted,
-  },
-  modalTitle: { fontFamily: fontFamilies.semiBold, fontSize: 18, color: colors.ink },
-  modalClose: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.gray100,
-  },
-  modalTabs: { padding: spacing.base },
-  modalScroll: { flex: 1 },
-  modalContent: { paddingBottom: spacing.xl },
   listTitle: {
     fontFamily: fontFamilies.semiBold,
     fontSize: 16,
     color: colors.ink,
-  },
-  tabs: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.gray100,
-    borderRadius: 9999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  chipPressed: {
-    opacity: 0.7,
-  },
-  chipLabel: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 12,
-    color: colors.inkMuted,
-  },
-  chipLabelActive: {
-    color: colors.surface,
-  },
-  chipCount: {
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    borderRadius: 9999,
-    paddingHorizontal: 6,
-    minWidth: 18,
-    alignItems: 'center',
-  },
-  chipCountActive: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
-  },
-  chipCountText: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 11,
-    color: colors.inkMuted,
-  },
-  chipCountTextActive: {
-    color: colors.surface,
-  },
-  emptyList: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 14,
-    color: colors.inkMuted,
-    textAlign: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: spacing.base,
   },
   allergenChips: {
     flexDirection: 'row',
@@ -884,74 +585,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.rating.vert.text,
     marginTop: spacing.sm,
-  },
-  familiesModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing.base,
-  },
-  familiesModalContent: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    width: '100%',
-    maxWidth: 340,
-    paddingTop: spacing.lg,
-    maxHeight: '70%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  familiesListContainer: {
-    maxHeight: 250,
-    marginBottom: spacing.base,
-  },
-  familiesList: {
-    paddingHorizontal: spacing.lg,
-    gap: spacing.md,
-  },
-  familiesModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.base,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  familiesModalTitle: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 16,
-    color: colors.ink,
-  },
-  familyItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  familyIcon: {
-    marginRight: 4,
-  },
-  familyName: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 14,
-    color: colors.ink,
-    flex: 1,
-  },
-  familiesModalButton: {
-    backgroundColor: colors.rating.rouge.bg,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.lg,
-    paddingVertical: spacing.base,
-    borderRadius: radius.md,
-    alignItems: 'center',
-  },
-  familiesModalButtonText: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 14,
-    color: colors.rating.rouge.text,
   },
 })

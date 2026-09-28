@@ -15,13 +15,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FC } from 'reac
 import {
   ActivityIndicator,
   Alert,
-  Pressable,
   ScrollView,
   Share,
   StyleSheet,
   Text,
   View,
 } from 'react-native'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { useReducedMotion } from 'react-native-reanimated'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
@@ -30,6 +30,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnalysisResultPanel } from '@/components/analysis/AnalysisResultPanel'
 import { SubmitProductPhotosSheet } from '@/components/analysis/SubmitProductPhotosSheet'
+import { ImageViewerModal, type ViewerRect } from '@/components/shared/ImageViewerModal'
 import { Star3D } from '@/components/analysis/Star3D'
 import { STARS_BY_TONE, STAR_PALETTE_BY_TONE, STAR_EMPTY_PALETTE } from '@/lib/analysis/qualityStars'
 import { PromesseFlowModal } from '@/components/promesses/PromesseFlowModal'
@@ -43,7 +44,8 @@ import { fontFamilies, typography } from '@/constants/typography'
 import { applyRestrictions, getAnalysisById } from '@/lib/analysis/analyser'
 import { decodeHtml } from '@/lib/decodeHtml'
 import { parseAnalyseResponse, type AnalyseResponse } from '@/lib/analysis/types'
-import { applyColorCap, reconcileScore } from '@/lib/analysis/scoreCap'
+import { applyColorCap, resolveDisplayScore } from '@/lib/analysis/scoreCap'
+import { catalogTitle, displayTitle } from '@/lib/analysis/displayTitle'
 import { db } from '@/lib/supabase/client'
 import { isProductCategory } from '@/lib/ai/categorize'
 import { categoryLabel } from '@/lib/categoryLabel'
@@ -103,6 +105,10 @@ const AnalyseDetailScreen: FC = () => {
   // résolus depuis le catalogue par marque+nom. catalog.score est la SOURCE DE VÉRITÉ
   // du score (l'écran doit l'afficher, pas le score calculé de result_json).
   const [catalogScore, setCatalogScore] = useState<number | null>(null)
+  // Compteurs pénalisants DU CATALOGUE (sidecar product_score_cap). Le plafond
+  // couleur doit être calculé sur les MÊMES compteurs que la recherche, sinon la
+  // fiche et la liste plafonnent différemment le même produit.
+  const [catalogCounts, setCatalogCounts] = useState<{ orange: number; rouge: number } | null>(null)
   const [leafCategory, setLeafCategory] = useState<string | null>(null)
   // EAN + slug de catégorie catalogue — pour la section Outils (signalement /
   // envoi de photo). Restent null si le produit n'est pas au catalogue.
@@ -117,6 +123,12 @@ const AnalyseDetailScreen: FC = () => {
   // Ouverture de la modale « Ajouter une photo » depuis le placeholder image du
   // haut (même sheet que l'outil « Ajouter une photo de ce produit » du bas).
   const [photoSheetOpen, setPhotoSheetOpen] = useState(false)
+  // Visionneuse plein écran de la photo produit : elle s'agrandit depuis la
+  // vignette (position mesurée au tap) et se zoome au pincement.
+  const imageSlotRef = useRef<View>(null)
+  const [viewerOpen, setViewerOpen] = useState(false)
+  const [viewerOrigin, setViewerOrigin] = useState<ViewerRect | null>(null)
+  const [productImageSize, setProductImageSize] = useState<{ width: number; height: number } | null>(null)
 
   // Champs stables extraits de l'état « ready » : les deux effets de résolution
   // catalogue ci-dessous en dépendent au lieu de l'objet `state` entier (qui
@@ -147,17 +159,26 @@ const AnalyseDetailScreen: FC = () => {
     }
   }, [id, isReady, productEan, productBrand, productName])
 
-  // Résout le score catalogue CosmeCheck (catalog.score) + la dernière sous-catégorie
-  // depuis le catalogue (par marque+nom). Si le produit n'est pas au catalogue
-  // (saisie manuelle / internet), catalogScore reste null - on garde le score
-  // calculé de result_json.
+  // Résout le score catalogue CosmeCheck (catalog.score) + la dernière sous-catégorie.
+  // Seule une correspondance par EAN EXACT prête sa note, ses compteurs et son
+  // EAN à la fiche. Une correspondance par nom (recherche floue, produit sans
+  // code-barres : photo, saisie, lien) peut être UN AUTRE PRODUIT : elle ne
+  // fournit plus que la sous-catégorie, et la note reste celle de l'analyse,
+  // calculée sur les ingrédients affichés (bug bêta 28 sept 2026 : « Déodorant
+  // Fa » 6,82 affichait la note 20 d'un autre déodorant).
   useEffect(() => {
     if (!isReady) return
     let cancelled = false
     void resolveCatalogIdentity(productBrand, productName, productEan).then((info) => {
       if (cancelled || !info) return
-      setCatalogScore(info.score)
       setLeafCategory(leafLabelFromCategorySlug(info.category))
+      if (info.source !== 'ean') return
+      setCatalogScore(info.score)
+      setCatalogCounts(
+        info.countOrange == null && info.countRouge == null
+          ? null
+          : { orange: info.countOrange ?? 0, rouge: info.countRouge ?? 0 },
+      )
       setCatalogEan(info.ean)
       setCatalogCategorySlug(info.category)
     })
@@ -180,7 +201,10 @@ const AnalyseDetailScreen: FC = () => {
         category,
         productType: row.product_type ?? result.productType ?? null,
       })
-      const title = decodeHtml(row.product_label?.trim() || row.name?.trim()) || 'Analyse de votre liste'
+      // Titre = le nom que l'utilisateur voit (son renommage gagne) ; `productLabel`
+      // juste en dessous reste le nom RÉEL du produit, seul utilisable pour
+      // retrouver la ligne catalogue, l'image et les alternatives.
+      const title = decodeHtml(displayTitle(row, '')) || 'Analyse de votre liste'
       const categoryText = categoryLabel(category) ?? row.product_type ?? null
       return {
         status: 'ready',
@@ -191,7 +215,7 @@ const AnalyseDetailScreen: FC = () => {
         categoryPrecise: (row as { category_precise?: string | null }).category_precise ?? null,
         favori: (row as { favori?: boolean | null }).favori ?? false,
         brand: decodeHtml(row.brand?.trim()) || null,
-        productLabel: decodeHtml(row.product_label?.trim() || row.name?.trim()) || null,
+        productLabel: decodeHtml(catalogTitle(row, '')) || null,
         productType: row.product_type ?? result.productType ?? null,
         inciText: row.input_text ?? '',
         ean: (row as { ean?: string | null }).ean ?? null,
@@ -276,26 +300,22 @@ const AnalyseDetailScreen: FC = () => {
   // ≤8,9) ; une note saine est inchangée. Aligne fiche ↔ recherche ↔ jauge.
   const { effectiveVerdictScore, penalizingCount } = useMemo(() => {
     if (state.status !== 'ready') return { effectiveVerdictScore: null as number | null, penalizingCount: 0 }
-    const nOrange = state.result.counts.orange ?? 0
-    const nRouge = state.result.counts.rouge ?? 0
-    // Le score de result_json est DÉJÀ la décision de l'Edge Function, qui a
-    // arbitré entre catalog.score et le score live (reconcileScore). On ne
-    // ré-impose donc pas catalog.score aveuglément — sinon on annule cet arbitrage
-    // et les étoiles contredisent les couleurs affichées (cas Yepoda : 3 ambres
-    // ici vs 4 vertes sur le web pour la même analyse). On rejoue la MÊME règle :
-    // le catalogue gagne s'il est dans la même bande, sinon on garde le servi.
-    const baseScore =
-      catalogScore == null
-        ? state.result.score
-        : reconcileScore(
-            catalogScore,
-            state.result.score,
-            state.result.counts.matched ?? 0,
-            state.result.counts.total ?? 0,
-          )
-    const effectiveVerdictScore = baseScore == null ? null : applyColorCap(baseScore, nOrange, nRouge)
-    return { effectiveVerdictScore, penalizingCount: nOrange + nRouge }
-  }, [state, catalogScore])
+    // Le catalogue gagne dès qu'il porte une note (resolveDisplayScore) ; le
+    // score de result_json ne sert que pour un produit hors catalogue.
+    const baseScore = resolveDisplayScore(catalogScore, state.result.score)
+    // Plafond couleur sur les compteurs de la MÊME source que la note : ceux du
+    // catalogue quand la note vient du catalogue, ceux de l'analyse sinon. C'est
+    // ce qui garantit fiche == recherche == alternatives pour un même produit.
+    const capCounts =
+      catalogScore != null && catalogCounts
+        ? catalogCounts
+        : { orange: state.result.counts.orange ?? 0, rouge: state.result.counts.rouge ?? 0 }
+    const effectiveVerdictScore =
+      baseScore == null ? null : applyColorCap(baseScore, capCounts.orange, capCounts.rouge)
+    // Le compteur affiché reste celui des couleurs RÉELLEMENT listées en dessous.
+    const penalizingCount = (state.result.counts.orange ?? 0) + (state.result.counts.rouge ?? 0)
+    return { effectiveVerdictScore, penalizingCount }
+  }, [state, catalogScore, catalogCounts])
 
   const verdictTone = useMemo(
     () => (effectiveVerdictScore == null ? 'unknown' : verdictToneFromScore(effectiveVerdictScore)),
@@ -341,7 +361,7 @@ const AnalyseDetailScreen: FC = () => {
     }
     try {
       await Share.share({
-        message: `${state.title} — analyse CosmeCheck\n${url}`,
+        message: `${state.title} : analyse CosmeCheck\n${url}`,
         url,
       })
     } catch {
@@ -383,6 +403,7 @@ const AnalyseDetailScreen: FC = () => {
             <View style={styles.errorActions}>
               <Pressable
                 onPress={() => void load()}
+                haptic="primary"
                 style={({ pressed }) => [styles.retryBtn, pressed && styles.btnPressed]}
                 accessibilityRole="button"
               >
@@ -411,21 +432,36 @@ const AnalyseDetailScreen: FC = () => {
             <WhiteCard padding={spacing.md}>
               <View style={styles.headerCardInner}>
             <View style={styles.titleRow}>
-              <View style={styles.titleImageSlot}>
+              <View ref={imageSlotRef} collapsable={false} style={styles.titleImageSlot}>
                 {productImageUrl ? (
-                  <Image
-                    source={{ uri: productImageUrl }}
-                    style={styles.titleImage}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    transition={150}
-                    accessibilityIgnoresInvertColors
-                  />
+                  // Tap sur la photo : visionneuse plein écran (agrandissement
+                  // depuis la vignette, zoom). La vignette est masquée pendant
+                  // ce temps : c'est elle qui « sort » de la carte.
+                  <Pressable
+                    onPress={() => {
+                      imageSlotRef.current?.measureInWindow((x, y, width, height) => {
+                        setViewerOrigin(width > 0 ? { x, y, width, height } : null)
+                        setViewerOpen(true)
+                      })
+                    }}
+                    style={[styles.titleImagePress, viewerOpen && styles.titleImageHidden]}
+                    accessibilityRole="imagebutton"
+                    accessibilityLabel="Agrandir la photo du produit"
+                  >
+                    <Image
+                      source={{ uri: productImageUrl }}
+                      style={styles.titleImage}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      transition={150}
+                      onLoad={(e) => setProductImageSize({ width: e.source.width, height: e.source.height })}
+                      accessibilityIgnoresInvertColors
+                    />
+                  </Pressable>
                 ) : (
                   // Pas d'image : le placeholder devient un bouton « Ajouter une
-                  // photo » (ouvre la MÊME sheet que l'outil du bas). Cliquable
-                  // UNIQUEMENT ici — dès qu'une image existe, la branche <Image>
-                  // ci-dessus s'affiche et la zone n'est plus cliquable.
+                  // photo » (ouvre la MÊME sheet que l'outil du bas). Dès qu'une
+                  // image existe, la branche ci-dessus l'agrandit au tap.
                   <Pressable
                     onPress={() => setPhotoSheetOpen(true)}
                     style={({ pressed }) => [
@@ -493,6 +529,7 @@ const AnalyseDetailScreen: FC = () => {
             <View style={styles.ctaRow}>
               <Pressable
                 onPress={handleVoirPromesse}
+                haptic="primary"
                 style={({ pressed }) => [
                   styles.ctaBtn,
                   styles.ctaBtnGreen,
@@ -508,6 +545,7 @@ const AnalyseDetailScreen: FC = () => {
 
               <Pressable
                 onPress={handleAddRoutine}
+                haptic="primary"
                 disabled={alreadyInRoutine || routinePending}
                 style={({ pressed }) => [
                   styles.ctaBtn,
@@ -612,6 +650,15 @@ const AnalyseDetailScreen: FC = () => {
           category={catalogCategorySlug ?? state.categoryPrecise ?? state.categoryText}
         />
       ) : null}
+
+      <ImageViewerModal
+        uri={productImageUrl}
+        visible={viewerOpen}
+        onClose={() => setViewerOpen(false)}
+        originRect={viewerOrigin}
+        imageSize={productImageSize}
+        originRadius={radius.md}
+      />
     </SafeAreaView>
   )
 }
@@ -689,6 +736,11 @@ const styles = StyleSheet.create({
     height: 118,
     flexShrink: 0,
   },
+  titleImagePress: {
+    width: '100%',
+    height: '100%',
+  },
+  titleImageHidden: { opacity: 0 },
   titleImage: {
     width: '100%',
     height: '100%',
@@ -807,7 +859,8 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   // Bloc « Qualité de la formule » — note en étoiles (remplace les pastilles).
-  qualityCard: {},
+  // Bas resserré (demande user) : la padding de 16 du WhiteCard laissait trop de vide.
+  qualityCard: { paddingBottom: 12 },
   qualityHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -824,7 +877,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 12,
+    marginTop: 6,
   },
   shareBtn: {
     flexDirection: 'row',

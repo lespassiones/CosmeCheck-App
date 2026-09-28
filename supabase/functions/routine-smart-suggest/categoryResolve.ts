@@ -46,17 +46,28 @@ export function normalizeType(v: string | null | undefined): string {
 /**
  * Règles ORDONNÉES product_type → préfixe de taxonomie `l1[/l2]/%`.
  *
+ * MIROIR EXACT de `lib/catalog/productTypeCategory.ts` (CATEGORY_RULES) : mêmes
+ * regex, mêmes cibles, même ordre. Resynchronisé en sept 2026 : la copie serveur
+ * avait dérivé (pas de `\bhair\b`, pas de « hair mask/oil/serum/repair », et
+ * « brume|mist » envoyait « Hair mist » en eaux thermales). Toute modification se
+ * fait dans les DEUX fichiers ; lib/__tests__/categoryResolve.test.ts compare les
+ * deux tables règle par règle.
+ *
  * L'ORDRE EST CRITIQUE : les règles les plus spécifiques d'abord, pour éviter les
  * faux positifs du fourre-tout « crème/soin ». Exemples voulus :
  *   - « Crème solaire » → solaire (avant le fourre-tout crème) ;
  *   - « Crème pour les mains » → mains (avant crème) ;
  *   - « Eau micellaire exfoliante » → nettoyant-visage (le nettoyant PRIME sur
  *     l'exfoliant : c'est une eau micellaire, pas un gommage dédié) ;
- *   - « Gommage visage » (sans mot nettoyant) → masque-et-gommage.
+ *   - « Gommage visage » (sans mot nettoyant) → masque-et-gommage ;
+ *   - « Crème sans parfum » → crème (la négation est retirée avant les règles).
  *
- * Chaque cible est un préfixe SANS le `/%` final (ajouté par le mappeur).
+ * `catchAll` : règle trop générique pour classer un NOM marketing (le client s'en
+ * sert pour la classification par nom ; ici, seul le product_type est classé).
  */
-const RULES: { re: RegExp; target: string }[] = [
+export type CategoryRule = { re: RegExp; target: string; catchAll?: boolean };
+
+export const CATEGORY_RULES: readonly CategoryRule[] = [
   // ── Hygiène dentaire ───────────────────────────────────────────────────────
   { re: /bain de bouche|mouthwash|haleine|rince bouche/, target: "hygiene-dentaire/bain-de-bouche" },
   { re: /dentifrice|toothpaste|dentaire|blanchiment dent|dents? blanches?/, target: "hygiene-dentaire/dentifrice-adulte" },
@@ -68,57 +79,69 @@ const RULES: { re: RegExp; target: string }[] = [
   // ── Déodorant ──────────────────────────────────────────────────────────────
   { re: /deodorant|anti-?transpirant|anti transpirant|antiperspirant/, target: "hygiene-du-corps/deodorant" },
 
-  // ── Parfum (AVANT cheveux : « brume parfumée corps & cheveux » = parfum) ─────
-  { re: /parfum|eau de toilette|eau de parfum|cologne|brume parfum|fragrance|body mist|brume corps/, target: "parfum" },
+  // ── Parfum STRICT (AVANT cheveux : « brume parfumée corps & cheveux » = parfum).
+  // Exclu dès qu'un mot désigne un soin ou un lavant (« lait parfumé », « gel
+  // douche parfum vanille »). Les négations (« sans parfum ») sont retirées en amont.
+  { re: /^(?!.*\b(gels?|douches?|shampo\w*|savons?|soaps?|laits?|milks?|cremes?|creams?|baumes?|balms?|huiles?|oils?|serums?|masques?|masks?|gommages?|scrubs?|lotions?|soins?|hydrat\w*|nettoyant\w*|deo\w*|dentifrice)\b).*(\bparfum\b|\bperfume\b|\bfragrance\b|\bcologne\b|eau de toilette|eau de parfum|brume parfum|body mist|brume corps)/, target: "parfum" },
 
   // ── Cheveux / coiffure ───────────────────────────────────────────────────
   { re: /coloration|teinture/, target: "coiffure/coloration-capillaire" },
-  { re: /coiffant|laque|gel coiffant|cire coiffante|mousse coiffante|spray coiffant|fixation/, target: "coiffure/produits-coiffants" },
-  // Après-shampooing / soin capillaire à laisser poser — AVANT la règle shampooing
-  // (« après-shampooing » contient « shampoo » et serait sinon pris pour un shampooing).
-  { re: /apres-?shampo|apres shampo|conditioner|conditionneur|demelant|masque capillaire|soin capillaire|leave.?in/, target: "coiffure/soin-capillaire" },
+  { re: /coiffant|laque|gel coiffant|cire coiffante|mousse coiffante|spray coiffant|fixation|hair ?spray|hair ?wax|hair ?gel|styling/, target: "coiffure/produits-coiffants" },
+  // Après-shampooing / soin à laisser poser : AVANT shampooing (« après-shampooing » contient « shampoo »).
+  { re: /apres-?shampo|apres shampo|conditioner|conditionneur|demelant|masque capillaire|masque cheveux|soin capillaire|leave.?in|hair ?mask|hair ?oil|hair ?serum|hair ?repair|hair ?cream|curl ?cream|detangl/, target: "coiffure/soin-capillaire" },
   { re: /shampo|shampoo/, target: "coiffure/shampooing" },
-  // Générique cheveux — APRÈS shampooing (« shampooing pour cheveux » = shampooing).
-  { re: /capillaire|cheveux|boucles?|sans rincage|defrisant|permanente/, target: "coiffure/soin-capillaire" },
+  // Générique cheveux : APRÈS shampooing (« shampooing pour cheveux » = shampooing).
+  { re: /capillaire|cheveux|\bhair\b|boucles?|\bcurl\w*|frisottis|crepus|\bpointes\b|cuir chevelu|\bscalp\b|sans rincage|defrisant|permanente|anti-?chute|pellicul/, target: "coiffure/soin-capillaire" },
 
   // ── Solaire ─────────────────────────────────────────────────────────────
   { re: /autobronzant|self.?tan|bronzage/, target: "produit-solaire/autobronzant" },
   { re: /apres-?soleil|apres soleil|after.?sun/, target: "produit-solaire/apres-soleil" },
-  { re: /solaire|sun.?screen|spf|protection soleil|ecran solaire/, target: "produit-solaire/creme-solaire" },
+  { re: /solaire|sun.?screen|spf|protection soleil|ecran solaire|protetor solar|protector solar/, target: "produit-solaire/creme-solaire" },
 
   // ── Rasage / épilation ───────────────────────────────────────────────────
   { re: /apres-?rasage|apres rasage|after.?shave|baume.*rasage/, target: "rasage-et-epilation/apres-rasage" },
   { re: /barbe|beard/, target: "rasage-et-epilation/soin-de-la-barbe" },
   { re: /rasage|shaving|rasoir|razor|mousse a raser|gel a raser/, target: "rasage-et-epilation/mousse-et-gel-de-rasage" },
-  { re: /epilation|cire|wax/, target: "rasage-et-epilation/epilation-et-cire" },
+  // STRICT : « cire » seule n'est pas une épilation (baume à la cire d'abeille).
+  { re: /epilat|depilat|hair removal|bandes? de cire|cire (froide|chaude|tiede|orientale|epilatoire|a epiler)|\bwaxing\b|wax strips?|sugaring/, target: "rasage-et-epilation/epilation-et-cire" },
 
   // ── Hygiène intime ─────────────────────────────────────────────────────────
-  { re: /intime|intimate/, target: "hygiene-du-corps/hygiene-intime" },
+  { re: /intime|intimate|intima/, target: "hygiene-du-corps/hygiene-intime" },
+
+  // ── Lavant VISAGE explicite (AVANT le lavant corps : « gel lavant visage »).
+  { re: /^(?=.*\b(visage|face|facial|faciale|teint)\b)(?=.*(lavant|nettoyant|cleanser|cleansing|\bwash\b|\bsavon\b|\bsoap\b|syndet|\bpain\b|mousse nettoyante|mousse lavante|gel moussant|demaquill|micellaire|limpeza|limpiador))/, target: "soin-du-corps-et-visage/nettoyant-visage" },
+  // ── Lavant CORPS explicite (AVANT le nettoyant visage : « gel nettoyant corps »).
+  { re: /^(?=.*\b(corps|body|mains?|hands?|pieds?|feet)\b)(?=.*(nettoyant|cleanser|cleansing|lavant|\bwash\b))/, target: "hygiene-du-corps/produit-de-bain" },
 
   // ── Lavant corps (AVANT nettoyant visage : « gel lavant » corps ≠ visage) ──
-  { re: /gel douche|gel-douche|shower gel|body wash|huile de douche|creme de douche|creme lavante|bain moussant|produit de bain|savon|soap|pain surgras|syndet|lavant/, target: "hygiene-du-corps/produit-de-bain" },
+  { re: /gel douche|gel-douche|shower gel|body wash|huile de douche|creme de douche|creme lavante|\bdouche\b|bain moussant|produit de bain|savon|soap|jabon|sabonete|pain surgras|syndet|lavant/, target: "hygiene-du-corps/produit-de-bain" },
 
   // ── Nettoyant visage (AVANT gommage : le nettoyant/micellaire prime) ───────
-  { re: /nettoyant|cleanser|cleansing|eau micellaire|micellaire|demaquill|makeup remover|mousse nettoyante|gelee nettoyante|gel nettoyant|nettoyant en poudre|lait nettoyant|cleansing milk/, target: "soin-du-corps-et-visage/nettoyant-visage" },
+  // Termes multilingues (juil 2026) : « limpeza/limpiador/facial cleanser » pour
+  // les produits étrangers hors catalogue (ex. CeraVe « Gel de Limpeza Facial »).
+  { re: /nettoyant|cleanser|cleansing|face wash|facial wash|eau micellaire|micellaire|micelar|demaquill|makeup remover|mousse nettoyante|gelee nettoyante|gel nettoyant|nettoyant en poudre|lait nettoyant|cleansing milk|limpeza facial|gel de limpeza|limpiador facial|nettoyant visage/, target: "soin-du-corps-et-visage/nettoyant-visage" },
 
   // ── Gommage / masque visage ────────────────────────────────────────────────
   { re: /gommage|exfoliant|exfoliating|scrub|peeling|masque|mask|argile|ghassoul|clay/, target: "soin-du-corps-et-visage/masque-et-gommage" },
 
+  // ── Maquillage des lèvres (AVANT le soin des lèvres : un rouge à lèvres n'est pas un baume).
+  { re: /rouge a levres|lipstick|lip ?gloss|\bgloss\b|encre a levres|crayon (a |pour les )?levres|lip ?liner|lip ?tint|lip ?stain/, target: "maquillage" },
+
   // ── Zones ciblées visage/corps ─────────────────────────────────────────────
   { re: /levres?|lip ?balm|baume a levres|lipbalm/, target: "soin-du-corps-et-visage/soin-des-levres" },
-  { re: /contour des yeux|contour yeux|soin des yeux|eye ?cream|eye ?contour|yeux/, target: "soin-du-corps-et-visage/soin-des-yeux" },
-  { re: /mains?|hand ?cream|hand ?balm/, target: "soin-du-corps-et-visage/soin-des-mains" },
-  { re: /pieds?|jambes?|foot|talons?/, target: "soin-du-corps-et-visage/soin-des-pieds-et-jambes" },
-  { re: /acne|imperfection|bouton|blemish|point noir/, target: "soin-du-corps-et-visage/soin-acne-et-imperfection" },
+  { re: /contour des yeux|contour yeux|soin des yeux|eye ?cream|eye ?contour|\byeux\b/, target: "soin-du-corps-et-visage/soin-des-yeux" },
+  { re: /\bmains?\b|hand ?cream|hand ?balm|\bhands?\b/, target: "soin-du-corps-et-visage/soin-des-mains" },
+  { re: /\bpieds?\b|\bjambes?\b|\bfoot\b|\bfeet\b|\btalons?\b/, target: "soin-du-corps-et-visage/soin-des-pieds-et-jambes" },
+  { re: /acne|imperfection|bouton|blemish|point noir|points noirs/, target: "soin-du-corps-et-visage/soin-acne-et-imperfection" },
   { re: /cellulite|minceur|slimming|amincissant/, target: "soin-du-corps-et-visage/soin-anti-cellulite" },
   { re: /vergeture|stretch.?mark/, target: "soin-du-corps-et-visage/soin-anti-vergetures" },
-  { re: /eau thermale|brume|thermal|mist/, target: "soin-du-corps-et-visage/eaux-thermales-brumes" },
+  { re: /eau thermale|thermal/, target: "soin-du-corps-et-visage/eaux-thermales-brumes" },
 
   // ── Soin anti-âge / sérum (AVANT le fourre-tout crème) ─────────────────────
   { re: /anti-?age|anti age|anti-?ride|anti ride|rides|serum|bakuchiol|retinol|vitamine c|firming|raffermissant|eclat|eclairciss|brightening|anti-?tache|taches?/, target: "soin-du-corps-et-visage/soin-anti-age" },
 
   // ── Corps : lait / baume / beurre corporel ─────────────────────────────────
-  { re: /corporel|corps|body ?lotion|body ?milk|body ?butter|beurre|relipidant|emollient/, target: "soin-du-corps-et-visage/creme-hydratante" },
+  { re: /corporel|corps|body ?lotion|body ?milk|body ?butter|beurre|relipidant|emollient/, target: "soin-du-corps-et-visage/creme-hydratante", catchAll: true },
 
   // ── Maquillage ─────────────────────────────────────────────────────────────
   { re: /maquillage|fond de teint|foundation|mascara|rouge a levres|lipstick|fard|eyeliner|correcteur|concealer|blush|highlighter|palette|khol|crayon/, target: "maquillage" },
@@ -127,8 +150,17 @@ const RULES: { re: RegExp; target: string }[] = [
   { re: /huile essentielle|essential oil/, target: "bien-etre/huile-essentielle" },
 
   // ── Fourre-tout hydratation visage/corps (crème, baume, sérum, gelée…) ─────
-  { re: /creme|cream|hydratant|moisturi|gel-?creme|fluide|gelee|pommade|lotion|baume|soin visage|soin du visage|face oil|huile.*visage|jour|nuit/, target: "soin-du-corps-et-visage/creme-hydratante" },
+  { re: /creme|cream|hydratant|moisturi|gel-?creme|fluide|gelee|pommade|lotion|baume|soin visage|soin du visage|face oil|huile.*visage|jour|nuit/, target: "soin-du-corps-et-visage/creme-hydratante", catchAll: true },
 ];
+
+/** Négations de parfum retirées AVANT les règles (« crème sans parfum », « fragrance-free »). */
+const NEGATED_FRAGRANCE_RE =
+  /\b(sans|without|free from|no|zero|0 ?%?)\s+(parfums?|fragrances?|perfumes?)\b|\b(parfum|fragrance|perfume)[- ]?free\b|\bnon[- ]?parfume\w*|\bunscented\b/g;
+
+/** Texte normalisé prêt pour les règles (négations de parfum retirées). */
+export function forRuleMatching(normalized: string): string {
+  return normalized.replace(NEGATED_FRAGRANCE_RE, " ").replace(/\s+/g, " ").trim();
+}
 
 /**
  * Mappe un `product_type` (texte libre de l'analyseur) vers un préfixe de
@@ -138,8 +170,9 @@ const RULES: { re: RegExp; target: string }[] = [
 export function productTypeToCategoryPrefix(productType: string | null | undefined): string | null {
   const t = normalizeType(productType);
   if (t.length < 3) return null;
-  for (const rule of RULES) {
-    if (rule.re.test(t)) return `${rule.target}/%`;
+  const m = forRuleMatching(t);
+  for (const rule of CATEGORY_RULES) {
+    if (rule.re.test(m)) return `${rule.target}/%`;
   }
   return null;
 }

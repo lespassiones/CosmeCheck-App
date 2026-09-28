@@ -296,18 +296,31 @@ const VALID_CATEGORIES = new Set<ProductCategory>([
   "maquillage", "nettoyant_visage", "deodorant", "parfum", "autre",
 ]);
 
-export async function categorizeProduct(top5: string[], userId?: string | null): Promise<ProductCategory> {
+/**
+ * Catégorie grossière d'un produit hors catalogue.
+ * `productName` (OPTIONNEL, sept 2026) : marque + libellé + type. Sans lui, le
+ * LLM ne voyait que 5 ingrédients et rangeait une « Crème Capillaire » (huiles,
+ * beurres) en `creme_corps`. Absent : comportement et clé de cache historiques.
+ */
+export async function categorizeProduct(
+  top5: string[],
+  userId?: string | null,
+  productName?: string | null,
+): Promise<ProductCategory> {
   if (top5.length === 0) return "autre";
-  const hash = (await sha256Hex(top5.map((s) => s.toUpperCase().trim()).join("|"))).slice(0, 24);
+  const name = (productName ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
+  const nameKey = name ? `|name=${name.toLowerCase()}` : "";
+  const hash = (await sha256Hex(top5.map((s) => s.toUpperCase().trim()).join("|") + nameKey)).slice(0, 24);
   const cacheKey = `categorize:${hash}`;
   const cached = await getCached<{ category: ProductCategory }>(cacheKey);
   if (cached?.category) return cached.category;
 
   if (!hasOpenAI()) return "autre";
 
-  const system =
-    "Tu es un expert cosmétique. À partir des 5 premiers ingrédients INCI d'un produit, identifie sa catégorie. Réponds en JSON strict avec une seule clé `category` dont la valeur est exactement l'une des catégories autorisées.";
-  const user = `5 premiers ingrédients : ${top5.join(", ")}.\n\nCatégories autorisées (réponds avec la valeur exacte) :\n- creme_visage\n- creme_corps\n- shampooing\n- apres_shampooing\n- solaire\n- maquillage\n- nettoyant_visage\n- deodorant\n- parfum\n- autre\n\nJSON attendu : { "category": "<valeur>" }`;
+  const system = name
+    ? "Tu es un expert cosmétique. À partir du NOM du produit et de ses 5 premiers ingrédients INCI, identifie sa catégorie. Le NOM PRIME sur les ingrédients : un produit dont le nom parle de cheveux, capillaire, shampooing, après-shampooing, masque ou huile capillaire, soin sans rinçage, boucles ou cuir chevelu est un produit CAPILLAIRE (shampooing s'il lave, sinon apres_shampooing), JAMAIS creme_corps ni creme_visage. Réponds en JSON strict avec une seule clé `category` dont la valeur est exactement l'une des catégories autorisées."
+    : "Tu es un expert cosmétique. À partir des 5 premiers ingrédients INCI d'un produit, identifie sa catégorie. Réponds en JSON strict avec une seule clé `category` dont la valeur est exactement l'une des catégories autorisées.";
+  const user = `${name ? `Nom du produit : ${name}\n` : ""}5 premiers ingrédients : ${top5.join(", ")}.\n\nCatégories autorisées (réponds avec la valeur exacte) :\n- creme_visage\n- creme_corps\n- shampooing\n- apres_shampooing${name ? " (tout soin capillaire qui ne lave pas : après-shampooing, masque, crème, huile, sérum, soin sans rinçage)" : ""}\n- solaire\n- maquillage\n- nettoyant_visage\n- deodorant\n- parfum\n- autre\n\nJSON attendu : { "category": "<valeur>" }`;
 
   const t0 = Date.now();
   try {

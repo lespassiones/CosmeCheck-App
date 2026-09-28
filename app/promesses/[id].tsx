@@ -15,7 +15,7 @@
  */
 
 import { type FC, useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -31,6 +31,7 @@ import { InferredPromisesCard } from '@/components/promesses/InferredPromisesCar
 import { IngredientsPositionChart } from '@/components/promesses/IngredientsPositionChart'
 import { DescriptionKeywordsCard } from '@/components/promesses/DescriptionKeywordsCard'
 import { MarketingIndexCard } from '@/components/promesses/MarketingIndexCard'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { ROUTES } from '@/constants/routes'
 import { radius, spacing } from '@/constants/spacing'
@@ -153,7 +154,7 @@ const PromesseDetailScreen: FC = () => {
                 <Text style={styles.retryText}>Réessayer</Text>
               </Pressable>
               <Pressable
-                onPress={() => router.replace(ROUTES.TABS.PROMESSES)}
+                onPress={() => router.replace({ pathname: ROUTES.TABS.HISTORY, params: { tab: 'promesses' } })}
                 style={({ pressed }) => [styles.homeBtn, pressed && styles.btnPressed]}
               >
                 <Text style={styles.homeText}>Promesses</Text>
@@ -188,6 +189,7 @@ const PromesseDetailScreen: FC = () => {
           {!showMore ? (
             <PressableScale
               onPress={() => setShowMore(true)}
+              haptic="secondary"
               style={styles.showMoreBtn}
               accessibilityRole="button"
               accessibilityLabel="Voir plus d'analyse"
@@ -216,6 +218,7 @@ const PromesseDetailScreen: FC = () => {
 
               <PressableScale
                 onPress={() => setShowMore(false)}
+                haptic="secondary"
                 style={styles.showMoreBtn}
                 accessibilityRole="button"
                 accessibilityLabel="Voir moins"

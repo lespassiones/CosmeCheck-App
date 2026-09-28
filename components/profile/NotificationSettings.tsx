@@ -1,5 +1,7 @@
 /**
- * NotificationSettings — section "Notifications" du profil.
+ * useNotificationToggle — logique de l'interrupteur « Notifications » du
+ * profil (28/09/2026 : l'affichage est une ligne de ProfileScreen, ce module ne
+ * garde que la logique).
  *
  * Toggle maître unique. (La ligne "Suivi produit" J+14 a été retirée : la
  * fonctionnalité n'a jamais été construite, un toggle mort fait désordre ;
@@ -14,14 +16,10 @@
  * enregistre le token push (alertes de routine).
  */
 
-import { type FC, useCallback, useEffect, useState } from 'react'
-import { Linking, StyleSheet, Switch, Text, View } from 'react-native'
+import { useCallback, useEffect, useState } from 'react'
+import { Linking } from 'react-native'
 
-import { colors } from '@/constants/colors'
-import { spacing, radius } from '@/constants/spacing'
-import { fontFamilies, typography } from '@/constants/typography'
 import { useProfile } from '@/hooks/useProfile'
-import { NeuCard } from '@/components/design/NeuCard'
 import { readNotificationPrefs } from '@/lib/notifications/prefs'
 import {
   cancelByChannel,
@@ -32,7 +30,7 @@ import {
 import { registerPushToken } from '@/lib/notifications/pushToken'
 import { setNewsletterConsent } from '@/lib/newsletter/subscribe'
 
-export const NotificationSettings: FC = () => {
+export function useNotificationToggle() {
   const { profile, updateProfile } = useProfile()
   const [status, setStatus] = useState<PermissionStatus>('undetermined')
   const [busy, setBusy] = useState(false)
@@ -92,72 +90,17 @@ export const NotificationSettings: FC = () => {
     [busy, available, prefs, updateProfile],
   )
 
-  return (
-    <NeuCard>
-      <Text style={styles.sectionTitle}>Notifications</Text>
-
-      <View style={styles.row}>
-        <Text style={styles.rowLabel}>Notifications</Text>
-        <Switch
-          value={prefs.enabled && available}
-          onValueChange={handleMasterToggle}
-          disabled={busy || !available}
-          trackColor={{ true: colors.rose, false: colors.gray300 }}
-          thumbColor="#FFFFFF"
-        />
-      </View>
-
-      {!available ? (
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>
-            Disponible apres la prochaine mise a jour de l'application.
-          </Text>
-        </View>
-      ) : null}
-
-      {available && prefs.enabled && status === 'denied' ? (
-        <Text
-          style={styles.settingsLink}
-          onPress={() => {
-            void Linking.openSettings()
-          }}
-        >
-          Autoriser dans les reglages
-        </Text>
-      ) : null}
-    </NeuCard>
-  )
+  return {
+    /** Interrupteur affiché : préférence activée ET module natif présent. */
+    enabled: prefs.enabled && available,
+    /** Module natif présent (sinon : build OTA antérieure, contrôle inerte). */
+    available,
+    busy,
+    /** Préférence ON mais permission système refusée : proposer les réglages. */
+    deniedBySystem: available && prefs.enabled && status === 'denied',
+    toggle: handleMasterToggle,
+    openSystemSettings: () => {
+      void Linking.openSettings()
+    },
+  }
 }
-
-const styles = StyleSheet.create({
-  sectionTitle: {
-    ...typography.h4,
-    color: colors.ink,
-    marginBottom: spacing.sm,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.sm,
-  },
-  rowLabel: {
-    ...typography.bodyMedium,
-    color: colors.ink,
-  },
-  banner: {
-    marginTop: spacing.sm,
-    backgroundColor: colors.infoSoft,
-    borderRadius: radius.md,
-    padding: spacing.md,
-  },
-  bannerText: {
-    ...typography.xs,
-    color: colors.info,
-  },
-  settingsLink: {
-    ...typography.smallMedium,
-    color: colors.rose,
-    marginTop: spacing.sm,
-  },
-})

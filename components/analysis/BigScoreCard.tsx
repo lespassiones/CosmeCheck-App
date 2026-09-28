@@ -9,7 +9,7 @@
  * Importe IngredientBlob et ColorBadge — ne réimplémente PAS la jauge.
  */
 
-import { memo, type FC } from 'react'
+import { memo, useState, type FC, type ReactNode } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { WhiteCard } from '@/components/design/WhiteCard'
@@ -28,6 +28,11 @@ interface Props {
   rating: ColorRating
   /** Désactive l'animation pop du blob (reduce-motion). */
   reduceMotion?: boolean
+  /**
+   * Contenu posé à DROITE du demi-donut (28/09/2026 : les 3 chiffres du
+   * verdict, empilés). Sans lui, le demi-donut reste centré.
+   */
+  aside?: ReactNode
 }
 
 const BigScoreCardBase: FC<Props> = ({
@@ -35,31 +40,62 @@ const BigScoreCardBase: FC<Props> = ({
   matched,
   total,
   reduceMotion,
+  aside,
 }) => {
+  // À côté du contenu de droite, le demi-donut prend ~60 % de la largeur utile :
+  // il est ainsi au moins aussi haut que les 3 chiffres empilés (hauteur ≈ 0,54 ×
+  // largeur), sans écraser la colonne de droite sur les petits écrans.
+  const [rowWidth, setRowWidth] = useState(0)
+  const donutWidth = aside
+    ? rowWidth > 0
+      ? Math.min(230, Math.round((rowWidth - SPLIT_GAP) * 0.6))
+      : 190
+    : 160
+  const donut = (
+    <View style={styles.donutSlot}>
+      <IngredientBlob
+        counts={counts}
+        variant="md"
+        width={donutWidth}
+        animate
+        reduceMotion={reduceMotion}
+      />
+      <Text style={styles.ratio}>
+        <Text style={styles.ratioStrong}>{matched}</Text> / {total} ingrédients reconnus
+      </Text>
+    </View>
+  )
   return (
-    <WhiteCard padding={spacing.lg}>
-      {/* Demi-donut centré (l'image produit est désormais en en-tête, à côté du titre). */}
-      <View style={styles.donutSlot}>
-        <IngredientBlob
-          counts={counts}
-          variant="md"
-          width={160}
-          animate
-          reduceMotion={reduceMotion}
-        />
-        <Text style={styles.ratio}>
-          <Text style={styles.ratioStrong}>{matched}</Text> / {total} ingrédients reconnus
-        </Text>
-      </View>
+    <WhiteCard padding={aside ? spacing.base : spacing.lg}>
+      {aside ? (
+        // Demi-donut à gauche, contenu à droite.
+        <View style={styles.split} onLayout={(e) => setRowWidth(e.nativeEvent.layout.width)}>
+          <View style={{ width: donutWidth }}>{donut}</View>
+          <View style={styles.splitAside}>{aside}</View>
+        </View>
+      ) : (
+        donut
+      )}
     </WhiteCard>
   )
 }
 
 export const BigScoreCard = memo(BigScoreCardBase)
 
+const SPLIT_GAP = 16
+
 const styles = StyleSheet.create({
   donutSlot: {
     alignItems: 'center',
+  },
+  split: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPLIT_GAP,
+  },
+  splitAside: {
+    flex: 1,
+    minWidth: 0,
   },
   ratio: {
     fontFamily: fontFamilies.regular,

@@ -43,7 +43,7 @@ export const MarketingIndexCard: FC<{ metrics: CoherenceResult['metrics'] }> = (
 
       <Text style={styles.body}>
         {total === 0
-          ? "La description ne contient aucune promesse d'effet vérifiable — uniquement des mentions générales."
+          ? "La description ne contient aucune promesse d'effet vérifiable, uniquement des mentions générales."
           : unsupportedCount === 0
             ? 'Toutes les promesses détectées ont au moins un actif documenté dans la formule pour les soutenir. C’est cohérent.'
             : `${unsupportedCount} promesse${unsupportedCount > 1 ? 's' : ''} sur ${total} n’${

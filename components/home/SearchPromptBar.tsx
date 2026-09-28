@@ -7,9 +7,10 @@
  * c'est une pilule tappable qui navigue vers l'écran de recherche dédié.
  */
 import { type FC, useEffect, useRef } from 'react'
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Animated, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
 import { radius } from '@/constants/spacing'

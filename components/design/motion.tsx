@@ -28,6 +28,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated'
 
+import { fireHaptic, type HapticLevel } from '@/lib/pressFeedback'
+
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
 
 // ── Entrée échelonnée des items de liste ──────────────────────────────────
@@ -69,6 +71,13 @@ interface PressableScaleProps extends Omit<PressableProps, 'style' | 'children'>
   style?: StyleProp<ViewStyle>
   /** Échelle à l'appui (défaut 0.97). */
   scaleTo?: number
+  /**
+   * Retour haptique à l'activation (cf. lib/pressFeedback.ts). Défaut `none` :
+   * certains écrans (onboarding, promesses) vibrent déjà eux-mêmes dans leur
+   * onPress, un défaut actif doublerait la vibration. Passer `secondary`,
+   * `primary` ou `selection` explicitement.
+   */
+  haptic?: HapticLevel
 }
 
 /**
@@ -79,6 +88,8 @@ export const PressableScale: FC<PressableScaleProps> = ({
   children,
   style,
   scaleTo = 0.97,
+  haptic = 'none',
+  onPress,
   onPressIn,
   onPressOut,
   ...rest
@@ -89,6 +100,14 @@ export const PressableScale: FC<PressableScaleProps> = ({
   return (
     <AnimatedPressable
       {...rest}
+      onPress={
+        onPress
+          ? (e) => {
+              fireHaptic(haptic)
+              onPress(e)
+            }
+          : undefined
+      }
       onPressIn={(e) => {
         scale.value = withSpring(scaleTo, PRESS_SPRING)
         onPressIn?.(e)

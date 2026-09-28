@@ -19,6 +19,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { decodeHtml } from '@/lib/decodeHtml'
 import { parseAnalyseResponse, type AnalyseResponse } from '@/lib/analysis/types'
 import type { BlobCounts } from '@/components/design/IngredientBlob'
+import { displayTitle } from '@/lib/analysis/displayTitle'
 
 export interface FavoriteItem {
   /** id de l'analyse (navigation /analyse/[id] + résolution image). */
@@ -54,7 +55,7 @@ function toFavorite(row: FavoriRow): FavoriteItem {
       : null
   return {
     id: row.id,
-    name: decodeHtml(row.product_label?.trim() || row.name?.trim()) || 'Produit',
+    name: decodeHtml(displayTitle(row, '')) || 'Produit',
     brand: decodeHtml(row.brand?.trim()) || null,
     ean: row.ean?.trim() || null,
     counts,

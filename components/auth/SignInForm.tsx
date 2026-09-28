@@ -1,21 +1,17 @@
 /**
- * SignInForm — formulaire email + mot de passe (react-hook-form + zod).
+ * SignInForm (A24) : e-mail + mot de passe (react-hook-form + zod).
  *
- * Gère sa propre logique : valide, appelle `session.signIn`, et en cas de succès
- * redirige vers les tabs (le guard racine renverra vers l'onboarding si besoin).
- * Affiche les erreurs en français (inline + bandeau global).
+ * Après une connexion réussie :
+ *   - compte de démonstration Apple rejoué → on ouvre directement le parcours
+ *     d'onboarding (il vient d'être remis à zéro) ;
+ *   - réponses du parcours invité en attente d'écriture → on ne navigue pas,
+ *     l'AuthGuard décide une fois le profil à jour ;
+ *   - sinon → l'accueil (le guard corrige vers le paywall si besoin).
  */
 
 import { type FC, useRef, useState } from 'react'
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native'
-import { useForm, Controller } from 'react-hook-form'
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useForm, Controller, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { router } from 'expo-router'
@@ -23,16 +19,15 @@ import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 
 import { colors } from '@/constants/colors'
-import { spacing, radius } from '@/constants/spacing'
-import { typography } from '@/constants/typography'
+import { fontFamilies } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { signIn } from '@/lib/auth/session'
+import { isDraftPendingFlush } from '@/lib/onboarding/draft'
+import { AuthField } from '@/components/auth/AuthProviders'
+import { PrimaryButton } from '@/components/onboarding/flow/ui'
 
 const signInSchema = z.object({
-  email: z
-    .string()
-    .min(1, "L'email est requis")
-    .email('Adresse email invalide'),
+  email: z.string().trim().min(1, "L'e-mail est requis").email('Adresse e-mail invalide'),
   password: z.string().min(1, 'Le mot de passe est requis'),
 })
 
@@ -53,217 +48,125 @@ export const SignInForm: FC = () => {
     mode: 'onBlur',
     defaultValues: { email: '', password: '' },
   })
+  const values = useWatch({ control })
+  const ready = Boolean(values.email?.trim()) && Boolean(values.password)
 
   const onSubmit = handleSubmit(async (data) => {
     setGlobalError(null)
     setIsLoading(true)
-    const result = await signIn(data.email, data.password)
-    setIsLoading(false)
-
+    const result = await signIn(data.email.trim(), data.password)
     if (!result.ok) {
+      setIsLoading(false)
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {})
       setGlobalError(result.error ?? 'Connexion impossible. Réessaie.')
       return
     }
-    // Compte de démonstration d'Apple : le parcours vient d'être remis à zéro,
-    // on l'y envoie directement plutôt que de faire clignoter l'accueil avant
-    // que le guard ne corrige.
-    router.replace(result.replayed ? (ROUTES.CONSENT.INDEX as never) : ROUTES.TABS.HOME)
+    if (result.replayed) {
+      router.replace(ROUTES.ONBOARDING.INDEX)
+      return
+    }
+    if (isDraftPendingFlush()) return
+    router.replace(ROUTES.TABS.HOME)
   })
 
   return (
     <View style={styles.container}>
-      {/* Email */}
       <View>
-        <Text style={styles.label}>Email</Text>
         <Controller
           control={control}
           name="email"
           render={({ field: { onChange, onBlur, value } }) => (
-            <View style={[styles.inputWrap, errors.email && styles.inputWrapError]}>
-              <Ionicons name="mail-outline" size={18} color={colors.inkLight} />
-              <TextInput
-                style={styles.input}
-                placeholder="ton@email.com"
-                placeholderTextColor={colors.inkLight}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="email"
-                textContentType="emailAddress"
-                returnKeyType="next"
-                value={value}
-                onChangeText={onChange}
-                onBlur={onBlur}
-                onSubmitEditing={() => passwordRef.current?.focus()}
-                editable={!isLoading}
-              />
-            </View>
+            <AuthField
+              placeholder="Adresse e-mail"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+              textContentType="emailAddress"
+              returnKeyType="next"
+              value={value}
+              onChangeText={onChange}
+              onBlur={onBlur}
+              onSubmitEditing={() => passwordRef.current?.focus()}
+              editable={!isLoading}
+              error={Boolean(errors.email)}
+              accessibilityLabel="Adresse e-mail"
+            />
           )}
         />
-        {errors.email && <Text style={styles.fieldError}>{errors.email.message}</Text>}
+        {errors.email ? <Text style={styles.fieldError}>{errors.email.message}</Text> : null}
       </View>
 
-      {/* Mot de passe */}
       <View>
-        <Text style={styles.label}>Mot de passe</Text>
         <Controller
           control={control}
           name="password"
           render={({ field: { onChange, onBlur, value } }) => (
-            <View style={[styles.inputWrap, errors.password && styles.inputWrapError]}>
-              <Ionicons name="lock-closed-outline" size={18} color={colors.inkLight} />
-              <TextInput
-                ref={passwordRef}
-                style={styles.input}
-                placeholder="••••••••"
-                placeholderTextColor={colors.inkLight}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="password"
-                textContentType="password"
-                returnKeyType="go"
-                value={value}
-                onChangeText={onChange}
-                onBlur={onBlur}
-                onSubmitEditing={() => void onSubmit()}
-                editable={!isLoading}
-              />
-              <Pressable
-                hitSlop={8}
-                onPress={() => setShowPassword((s) => !s)}
-                accessibilityLabel={
-                  showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'
-                }
-              >
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={18}
-                  color={colors.inkLight}
-                />
-              </Pressable>
-            </View>
+            <AuthField
+              ref={passwordRef}
+              placeholder="Mot de passe"
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="password"
+              textContentType="password"
+              returnKeyType="go"
+              value={value}
+              onChangeText={onChange}
+              onBlur={onBlur}
+              onSubmitEditing={() => void onSubmit()}
+              editable={!isLoading}
+              error={Boolean(errors.password)}
+              accessibilityLabel="Mot de passe"
+              right={
+                <Pressable
+                  hitSlop={10}
+                  onPress={() => setShowPassword((s) => !s)}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                >
+                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color={colors.inkLight} />
+                </Pressable>
+              }
+            />
           )}
         />
-        {errors.password && (
-          <Text style={styles.fieldError}>{errors.password.message}</Text>
-        )}
+        {errors.password ? <Text style={styles.fieldError}>{errors.password.message}</Text> : null}
       </View>
 
-      {/* Mot de passe oublié */}
       <Pressable
-        style={styles.forgotWrap}
-        hitSlop={6}
+        style={styles.forgot}
+        hitSlop={8}
         onPress={() => router.push(ROUTES.AUTH.FORGOT_PASSWORD)}
+        accessibilityRole="link"
       >
         <Text style={styles.forgotText}>Mot de passe oublié ?</Text>
       </Pressable>
 
-      {/* Erreur globale */}
-      {globalError && (
-        <View style={styles.errorBanner}>
-          <Ionicons name="alert-circle" size={18} color={colors.error} />
-          <Text style={styles.errorBannerText}>{globalError}</Text>
+      {globalError ? (
+        <View style={styles.globalError} accessibilityRole="alert">
+          <Ionicons name="alert-circle" size={17} color={colors.error} />
+          <Text style={styles.globalErrorText}>{globalError}</Text>
         </View>
-      )}
+      ) : null}
 
-      {/* Bouton */}
-      <Pressable
-        onPress={() => void onSubmit()}
-        disabled={isLoading}
-        style={({ pressed }) => [
-          styles.submit,
-          pressed && !isLoading && styles.submitPressed,
-          isLoading && styles.submitDisabled,
-        ]}
-      >
-        {isLoading ? (
-          <ActivityIndicator color={colors.surface} />
-        ) : (
-          <Text style={styles.submitText}>Se connecter</Text>
-        )}
-      </Pressable>
+      <PrimaryButton label="Me connecter" onPress={() => void onSubmit()} disabled={!ready} loading={isLoading} />
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    gap: spacing.base,
-  },
-  label: {
-    ...typography.smallMedium,
-    color: colors.ink,
-    marginBottom: spacing.sm,
-  },
-  inputWrap: {
+  container: { gap: 14 },
+  fieldError: { fontFamily: fontFamilies.regular, fontSize: 13, color: colors.error, marginTop: 6, marginLeft: 18 },
+  forgot: { alignSelf: 'flex-end', paddingVertical: 2 },
+  forgotText: { fontFamily: fontFamilies.semiBold, fontSize: 15, color: colors.rose },
+  globalError: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    height: 52,
-    paddingHorizontal: spacing.base,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  inputWrapError: {
-    borderColor: colors.error,
-  },
-  input: {
-    flex: 1,
-    ...typography.body,
-    color: colors.ink,
-    paddingVertical: 0,
-  },
-  fieldError: {
-    ...typography.xs,
-    color: colors.error,
-    marginTop: spacing.xs,
-  },
-  forgotWrap: {
-    alignSelf: 'flex-end',
-    marginTop: -spacing.sm,
-  },
-  forgotText: {
-    ...typography.smallMedium,
-    color: colors.rose,
-  },
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
+    gap: 8,
+    padding: 12,
+    borderRadius: 14,
     backgroundColor: colors.errorSoft,
-    borderRadius: radius.md,
-    padding: spacing.md,
   },
-  errorBannerText: {
-    ...typography.small,
-    color: colors.roseDeep,
-    flex: 1,
-  },
-  submit: {
-    height: 52,
-    borderRadius: radius.full,
-    backgroundColor: colors.success,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing.sm,
-    shadowColor: colors.success,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  submitPressed: {
-    backgroundColor: colors.successDeep,
-  },
-  submitDisabled: {
-    opacity: 0.6,
-  },
-  submitText: {
-    ...typography.button,
-    color: colors.surface,
-  },
+  globalErrorText: { flex: 1, fontFamily: fontFamilies.regular, fontSize: 14, color: colors.error },
 })

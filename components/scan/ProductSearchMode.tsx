@@ -22,7 +22,6 @@ import {
   ActivityIndicator,
   Animated,
   FlatList,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -44,18 +43,18 @@ import { ROUTES } from '@/constants/routes'
 import { useAndroidBack } from '@/hooks/useAndroidBack'
 import { useAppConfig } from '@/hooks/useAppConfig'
 import { CatalogPastille } from '@/components/shared/CatalogPastille'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { PressableScale, StaggerItem } from '@/components/design/motion'
+import { showCreditsExhausted } from '@/lib/credits/exhaustedStore'
 import {
   CATEGORIES,
-  CATEGORY_ICONS,
-  DEFAULT_CATEGORY_ICON,
   getChildrenAtPath,
   isLeafPath,
+  leafLabelFromCategorySlug,
   pathToSlug,
   type CategoryNode,
 } from '@/constants/categories'
-
-type IoniconName = keyof typeof Ionicons.glyphMap
+import { CategoryIcon } from '@/components/scan/CategoryIcon'
 
 // ─── Types des RPC catalogue ─────────────────────────────────────────────────
 
@@ -106,24 +105,6 @@ interface WebCandidate {
 //  no_credit → solde épuisé → upsell Premium
 //  error     → échec, retry possible
 type DeepState = 'idle' | 'running' | 'done' | 'no_credit' | 'error'
-
-// ─── Pastille catégorie : couleur stable dérivée du libellé ─────────────────
-
-const PILL_PALETTE: { bg: string; text: string }[] = [
-  { bg: colors.rating.vert.bg,    text: colors.rating.vert.text },
-  { bg: colors.rating.orange.bg,  text: colors.rating.orange.text },
-  { bg: colors.accentSoft,        text: colors.accent },
-  { bg: colors.roseSoft,          text: colors.roseDeep },
-  { bg: colors.rating.jaune.bg,   text: colors.rating.jaune.text },
-]
-
-function pillColors(label: string): { bg: string; text: string } {
-  let hash = 0
-  for (let i = 0; i < label.length; i++) {
-    hash = (hash * 31 + label.charCodeAt(i)) >>> 0
-  }
-  return PILL_PALETTE[hash % PILL_PALETTE.length]
-}
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -307,7 +288,11 @@ export const ProductSearchMode: FC<Props> = ({
       if (reqId !== webReqIdRef.current) return
       if (creditErr) { setDeepState('error'); return }
       const ok = (credit as { ok?: boolean } | null)?.ok === true
-      if (!ok) { setDeepState('no_credit'); return }
+      if (!ok) {
+        setDeepState('no_credit')
+        showCreditsExhausted()
+        return
+      }
       // Solde modifié → la pastille crédits doit se rafraîchir.
       void queryClient.invalidateQueries({ queryKey: ['credits'] })
 
@@ -526,7 +511,7 @@ export const ProductSearchMode: FC<Props> = ({
       />
       {searchLoading && <ActivityIndicator size="small" color={colors.rose} />}
       {!searchLoading && query.length > 0 && (
-        <Pressable onPress={() => setQuery('')} hitSlop={8}>
+        <Pressable onPress={() => setQuery('')} hitSlop={8} haptic="selection">
           <Ionicons name="close-circle" size={18} color={colors.inkLight} />
         </Pressable>
       )}
@@ -587,6 +572,7 @@ export const ProductSearchMode: FC<Props> = ({
                       style={[styles.deepBtn, disabled && styles.deepBtnDisabled]}
                       onPress={() => void runDeepSearch()}
                       disabled={disabled}
+                      haptic="primary"
                     >
                       <Ionicons name="globe-outline" size={16} color="#fff" />
                       <Text style={styles.deepBtnText}>Recherche approfondie sur internet</Text>
@@ -614,6 +600,7 @@ export const ProductSearchMode: FC<Props> = ({
                 <Pressable
                   style={styles.deepBtn}
                   onPress={() => router.push(ROUTES.OFFRE.INDEX)}
+                  haptic="primary"
                 >
                   <Ionicons name="sparkles" size={16} color="#fff" />
                   <Text style={styles.deepBtnText}>Découvrir Premium</Text>
@@ -628,7 +615,7 @@ export const ProductSearchMode: FC<Props> = ({
             {deepState === 'error' && (
               <>
                 <Text style={styles.emptyText}>Recherche approfondie indisponible pour le moment.</Text>
-                <Pressable style={styles.deepBtn} onPress={() => void runDeepSearch()}>
+                <Pressable style={styles.deepBtn} onPress={() => void runDeepSearch()} haptic="primary">
                   <Ionicons name="refresh" size={16} color="#fff" />
                   <Text style={styles.deepBtnText}>Réessayer</Text>
                 </Pressable>
@@ -760,11 +747,7 @@ export const ProductSearchMode: FC<Props> = ({
         {searchBar}
         <Breadcrumb path={path} onGoToLevel={goToLevel} />
         <View style={styles.catHeaderRow}>
-          <Ionicons
-            name={(CATEGORY_ICONS[path[0] ?? ''] ?? DEFAULT_CATEGORY_ICON) as IoniconName}
-            size={22}
-            color={colors.accent}
-          />
+          <CategoryIcon name={path[0]} size={24} color={colors.accent} />
           <Text style={styles.catHeaderTitle}>{currentName}</Text>
         </View>
         <FlatList
@@ -780,6 +763,7 @@ export const ProductSearchMode: FC<Props> = ({
                   style={styles.subRow}
                   onPress={() => tapNode(item)}
                   disabled={disabled}
+                  haptic="selection"
                 >
                   <Text style={styles.subName} numberOfLines={1}>{item.name}</Text>
                   <View style={styles.subRight}>
@@ -815,14 +799,11 @@ export const ProductSearchMode: FC<Props> = ({
               style={styles.catRow}
               onPress={() => tapNode(cat)}
               disabled={disabled}
+              haptic="selection"
               accessibilityRole="button"
             >
               <View style={styles.catIcon}>
-                <Ionicons
-                  name={(CATEGORY_ICONS[cat.name] ?? DEFAULT_CATEGORY_ICON) as IoniconName}
-                  size={20}
-                  color={colors.accent}
-                />
+                <CategoryIcon name={cat.name} size={22} color={colors.accent} />
               </View>
               <Text style={styles.catName}>{cat.name}</Text>
               <Ionicons name="chevron-forward" size={18} color={colors.inkLight} />
@@ -968,45 +949,41 @@ const WebCandidateRow: FC<{
 
 const ProductRow: FC<{
   item: CatalogRow | BrowseRow
-  rank?: number
   busy: boolean
   disabled: boolean
   onPress: () => void
-}> = ({ item, rank, busy, disabled, onPress }) => {
+}> = ({ item, busy, disabled, onPress }) => {
   const hasInci  = Boolean(item.ingredients_text)
-  const category = 'category' in item ? item.category : null
+  // Seule la dernière sous-catégorie, en texte simple (plus de pastille colorée).
+  const subCategory = 'category' in item ? leafLabelFromCategorySlug(item.category) : null
   return (
     <PressableScale
       style={[styles.resultRow, !hasInci && styles.resultRowDim]}
       onPress={onPress}
       disabled={disabled || (!hasInci && busy)}
+      haptic="secondary"
     >
-      {rank != null && <RankBadge rank={rank} />}
+      {/* Photo bord à bord : toute la hauteur du bloc, collée à gauche. */}
       {item.image_url ? (
         <Image
           source={{ uri: item.image_url }}
-          style={styles.thumb}
-          contentFit="contain"
+          style={styles.rowThumb}
+          contentFit="cover"
           cachePolicy="memory-disk"
           transition={150}
         />
       ) : (
-        <View style={[styles.thumb, styles.thumbPlaceholder]}>
+        <View style={[styles.rowThumb, styles.thumbPlaceholder]}>
           <Ionicons name="image-outline" size={18} color={colors.inkLight} />
         </View>
       )}
-      <View style={styles.resultMain}>
+      <View style={[styles.resultMain, styles.resultMainFlush]}>
         {item.brand ? <Text style={styles.resultBrand} numberOfLines={1}>{item.brand}</Text> : null}
         <Text style={styles.resultName} numberOfLines={3}>{item.name ?? 'Produit'}</Text>
-        {category ? (
-          <View style={[styles.categoryPill, { backgroundColor: pillColors(category).bg }]}>
-            <Text
-              style={[styles.categoryPillText, { color: pillColors(category).text }]}
-              numberOfLines={1}
-            >
-              {category}
-            </Text>
-          </View>
+        {subCategory ? (
+          <Text style={styles.resultCategory} numberOfLines={1}>
+            {subCategory}
+          </Text>
         ) : null}
         {!hasInci ? (
           <Text style={styles.resultNoInci}>Composition indisponible</Text>
@@ -1124,11 +1101,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.base,
     paddingVertical: 12,
   },
+  // Icône seule, sans pastille : la hauteur 36 garde celle des lignes.
   catIcon: {
-    width: 36,
+    width: 24,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1165,6 +1141,8 @@ const styles = StyleSheet.create({
   crumbSegment: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   crumbLink:   { ...typography.xs, color: colors.inkMuted },
   crumbActive: { ...typography.xsSemiBold, color: colors.ink, maxWidth: 160 },
+  // Pas de padding à gauche ni en haut/bas : la photo occupe tout le bord
+  // gauche du bloc (overflow hidden → elle épouse les coins arrondis).
   resultRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1173,8 +1151,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.md,
-    padding: spacing.base,
+    paddingRight: spacing.base,
+    minHeight: 88,
+    overflow: 'hidden',
   },
+  rowThumb: {
+    width: 68,
+    alignSelf: 'stretch',
+    backgroundColor: colors.gray100,
+  },
+  resultMainFlush: { paddingVertical: spacing.md },
+  resultCategory: { ...typography.caption, color: colors.inkMuted, marginTop: 4 },
   resultRowDim: { opacity: 0.65 },
   sectionGroup:       { gap: spacing.sm, marginBottom: spacing.lg },
   sectionKicker: {
@@ -1204,15 +1191,6 @@ const styles = StyleSheet.create({
   rankBadgeTop: { backgroundColor: colors.roseDeep },
   rankText: { fontFamily: fontFamilies.bold, fontSize: 12, color: '#fff' },
   rankIcon: { marginTop: -1 },
-  categoryPill: {
-    alignSelf: 'flex-start',
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    marginTop: 4,
-    maxWidth: '100%',
-  },
-  categoryPillText: { fontFamily: fontFamilies.semiBold, fontSize: 11 },
   sectionKickerRow: {
     flexDirection: 'row',
     alignItems: 'center',

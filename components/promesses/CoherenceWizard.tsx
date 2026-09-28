@@ -38,6 +38,7 @@ import { ROUTES } from '@/constants/routes'
 import { supabase } from '@/lib/supabase/client'
 import { runAnalysis } from '@/lib/analysis/analyser'
 import { useAuth } from '@/hooks/useAuth'
+import { handleNoCreditsResponse } from '@/lib/credits/exhaustedStore'
 
 export interface AnalysisOption {
   id: string
@@ -191,8 +192,10 @@ export const CoherenceWizard: FC<{ options: AnalysisOption[] }> = ({ options }) 
         body: { analysis_id: selected.id, description: description.trim() },
       })
       if (fnError) {
-        // Edge Function pas déployée / indisponible → dégradation gracieuse.
-        setUnavailable(true)
+        // Plus de crédits → feuille dédiée ; sinon Edge Function pas déployée /
+        // indisponible → dégradation gracieuse.
+        const noCredits = await handleNoCreditsResponse(fnError)
+        if (!noCredits) setUnavailable(true)
         setStep('confirm')
         return
       }
@@ -404,7 +407,7 @@ export const CoherenceWizard: FC<{ options: AnalysisOption[] }> = ({ options }) 
             <View style={styles.unavailable}>
               <Ionicons name="time-outline" size={18} color={colors.warning} />
               <Text style={styles.unavailableText}>
-                Analyse de cohérence bientôt disponible. Tes saisies sont conservées — réessaie dans un
+                Analyse de cohérence bientôt disponible. Tes saisies sont conservées, réessaie dans un
                 instant.
               </Text>
             </View>

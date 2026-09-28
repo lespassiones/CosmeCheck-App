@@ -5,13 +5,14 @@
  * Logo + message convivial + URL tentée + bouton de retour à l'accueil.
  */
 
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { router, usePathname } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { GlassCard } from '@/components/design/GlassCard'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { LogoMark } from '@/components/shared/Logo'
 import { colors } from '@/constants/colors'
 import { ROUTES } from '@/constants/routes'

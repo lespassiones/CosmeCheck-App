@@ -11,6 +11,8 @@
  *   - onSave: (patch: SkinProfile) => Promise<void> — persiste le profil complet
  *   - onCancel: () => void
  *   - isSaving: boolean — état réseau remonté par le parent
+ *   - onStatusChange?: état de l'auto-save, affiché par le parent dans son
+ *     en-tête (« Enregistré » en haut à droite, design du 28/09/2026)
  */
 
 import { type FC, useCallback, useEffect, useRef, useState } from 'react'
@@ -40,12 +42,15 @@ import { Step1Skin } from '@/components/onboarding/Step1Skin'
 import { Step2Concerns } from '@/components/onboarding/Step2Concerns'
 import { Step3Goals } from '@/components/onboarding/Step3Goals'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { FormSection } from '@/components/profile/ProfileFormKit'
 
 interface Props {
   initialSkin: SkinProfile
   onSave: (patch: SkinProfile) => Promise<void>
   onCancel: () => void
   isSaving: boolean
+  /** Remonte l'état de l'auto-save (le parent l'affiche dans son en-tête). */
+  onStatusChange?: (status: SaveStatus) => void
 }
 
 const AUTOSAVE_MS = 800
@@ -54,7 +59,7 @@ const SAVED_VISIBLE_MS = 2000
 // explicite, avant de revenir à l'état actif « Enregistrer ».
 const BTN_SAVED_MS = 1800
 
-type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 // État du bouton du bas : indépendant de l'auto-save. Toujours « ready »
 // (bouton actif « Enregistrer ») par défaut, même si le profil est déjà
 // persisté en base. Passe à « done » (animation ✓) uniquement après un tap.
@@ -67,6 +72,7 @@ export const BeautyProfileForm: FC<Props> = ({
   onSave,
   onCancel,
   isSaving,
+  onStatusChange,
 }) => {
   const [skin, setSkin] = useState<SkinProfile>(initialSkin)
   const [hasChanges, setHasChanges] = useState(false)
@@ -109,6 +115,10 @@ export const BeautyProfileForm: FC<Props> = ({
       sub.remove()
     }
   }, [])
+
+  useEffect(() => {
+    onStatusChange?.(status)
+  }, [status, onStatusChange])
 
   // Nettoyage des timers au démontage.
   useEffect(
@@ -197,32 +207,13 @@ export const BeautyProfileForm: FC<Props> = ({
 
   return (
     <View style={styles.root}>
-      <View style={styles.titleRow}>
-        <Text style={styles.title}>Mon profil beauté</Text>
-        {status === 'saved' ? (
-          <View style={styles.savedPill}>
-            <Text style={styles.savedText}>Sauvegardé ✓</Text>
-          </View>
-        ) : status === 'error' ? (
-          <View style={[styles.savedPill, styles.errorPill]}>
-            <Text style={[styles.savedText, styles.errorText]}>Échec</Text>
-          </View>
-        ) : null}
-      </View>
-
-      {/* ── Type de peau ─────────────────────────────────────── */}
-      <Text style={styles.sectionHeader}>Ta peau</Text>
+      {/* Sections à plat (design « Profil beauté ») : peau, préoccupations,
+          puis objectifs regroupés sous un seul titre. */}
       <Step1Skin value={skin} onChange={handleChange} />
-      <View style={styles.divider} />
-
-      {/* ── Préoccupations & allergies ───────────────────────── */}
-      <Text style={styles.sectionHeader}>Tes préoccupations</Text>
       <Step2Concerns value={skin} onChange={handleChange} />
-      <View style={styles.divider} />
-
-      {/* ── Objectifs ────────────────────────────────────────── */}
-      <Text style={styles.sectionHeader}>Tes objectifs</Text>
-      <Step3Goals value={skin} onChange={handleChange} />
+      <FormSection title="Tes objectifs">
+        <Step3Goals value={skin} onChange={handleChange} />
+      </FormSection>
 
       <View style={styles.actions}>
         <AnimatedPressable
@@ -281,36 +272,8 @@ export const BeautyProfileForm: FC<Props> = ({
 }
 
 const styles = StyleSheet.create({
-  root: { gap: spacing.xs },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.lg,
-  },
-  title: { ...typography.h3, color: colors.ink },
-  sectionHeader: {
-    ...typography.h3,
-    color: colors.rose,
-    textAlign: 'center',
-    marginTop: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  savedPill: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.full,
-    backgroundColor: colors.successSoft,
-  },
-  errorPill: { backgroundColor: colors.errorSoft },
-  savedText: { ...typography.xsSemiBold, color: colors.success },
-  errorText: { color: colors.error },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: spacing.lg,
-  },
-  actions: { gap: spacing.md, marginTop: spacing.lg },
+  root: { gap: spacing.xl },
+  actions: { gap: spacing.md },
   saveBtn: {
     height: 52,
     borderRadius: radius.full,

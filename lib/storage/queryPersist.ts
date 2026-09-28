@@ -36,6 +36,11 @@ function rootKey(queryKey: unknown): string | null {
  *                          ils s'accumulent 7 jours et gonflent le blob
  *                          JSON.parse au cold start pour rien (même raison que
  *                          'catalog-search').
+ *  - 'ingredientsAlpha', 'ingredientsSearch'
+ *                          : annuaire des ingrédients (une entrée par lettre de
+ *                          l'index, pages de 60 qui grossissent au scroll) et
+ *                          recherche au fil de la frappe. La RPC répond vite,
+ *                          les garder 7 jours gonflerait le blob pour rien.
  *  - 'appConfig'           — feature flags + mode maintenance ; doit toujours
  *                          repartir frais (ne jamais servir un flag/maintenance
  *                          périmé au cold start).
@@ -60,6 +65,8 @@ export function shouldPersistQueryKey(queryKey: unknown): boolean {
     'alternatives',
     'eanAnalysis',
     'productByEan',
+    'ingredientsAlpha',
+    'ingredientsSearch',
     'appConfig',
     // URLs signées de photos de visage : expirent (1h) ; ne jamais persister
     // sur disque, sinon vignettes cassées au cold start.

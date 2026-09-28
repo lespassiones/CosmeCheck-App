@@ -10,11 +10,11 @@ import { type FC } from 'react'
 import {
   ActivityIndicator,
   FlatList,
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
@@ -51,6 +51,7 @@ const GridCard: FC<{
   return (
   <PressableScale
     onPress={onPress}
+    haptic="secondary"
     disabled={disabled}
     style={styles.card}
     accessibilityRole="button"
@@ -61,7 +62,7 @@ const GridCard: FC<{
         <Image
           source={{ uri: product.imageUrl }}
           style={styles.image}
-          contentFit="contain"
+          contentFit="cover"
           cachePolicy="memory-disk"
           transition={120}
         />
@@ -69,21 +70,23 @@ const GridCard: FC<{
         <Ionicons name="image-outline" size={30} color={colors.inkLight} />
       )}
     </View>
-    <Text style={styles.name} numberOfLines={2}>
-      {product.name ?? 'Produit'}
-    </Text>
-    {product.brand ? (
-      <Text style={styles.brand} numberOfLines={1}>
-        {product.brand}
+    <View style={styles.body}>
+      <Text style={styles.name} numberOfLines={2}>
+        {product.name ?? 'Produit'}
       </Text>
-    ) : null}
-    <View style={styles.scoreRow}>
-      <CatalogPastille score={displayScore} size={18} />
-      {displayLabel ? (
-        <Text style={styles.scoreLabel} numberOfLines={1}>
-          {displayLabel}
+      {product.brand ? (
+        <Text style={styles.brand} numberOfLines={1}>
+          {product.brand}
         </Text>
       ) : null}
+      <View style={styles.scoreRow}>
+        <CatalogPastille score={displayScore} size={18} />
+        {displayLabel ? (
+          <Text style={styles.scoreLabel} numberOfLines={1}>
+            {displayLabel}
+          </Text>
+        ) : null}
+      </View>
     </View>
   </PressableScale>
   )
@@ -93,6 +96,9 @@ const AlternativesScreen: FC = () => {
   const { ean } = useLocalSearchParams<{ ean: string }>()
   const router = useRouter()
   const { analyze, isAnalyzing } = useLaunchAlternative()
+  // Pas de `sourceIngredients` ici : le hook lit `ingredients_text` de la ligne
+  // catalogue de cet EAN (déjà chargée pour la catégorie) pour le filtre de forme
+  // galénique (même formule d'abord, jamais une forme opposée).
   const { products, isInitialLoading, isLoadingMore, hasMore, isEmpty, loadMore } =
     useAlternatives({ ean, initialCount: INITIAL_COUNT, step: STEP })
 
@@ -139,6 +145,7 @@ const AlternativesScreen: FC = () => {
             hasMore ? (
               <PressableScale
                 onPress={loadMore}
+                haptic="secondary"
                 disabled={isLoadingMore}
                 style={styles.moreBtn}
                 accessibilityRole="button"
@@ -189,28 +196,35 @@ const styles = StyleSheet.create({
   column: { gap: spacing.md },
   // Cellule de grille : le wrapper animé doit garder le flex de la carte.
   cell: { flex: 1 },
+  // Carte en deux moitiés (28/09/2026) : l'image remplit toute la moitié haute,
+  // bord à bord, sans marge ; le texte est dessous, séparé par un filet.
   card: {
     flex: 1,
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.sm,
-    gap: 4,
+    overflow: 'hidden',
   },
   imageWrap: {
-    height: 130,
-    borderRadius: radius.md,
+    height: 150,
     backgroundColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
-    marginBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  // Le texte occupe toute la hauteur restante : le badge de note reste en bas.
+  body: {
+    flex: 1,
+    padding: spacing.sm,
+    gap: 4,
   },
   image: { width: '100%', height: '100%' },
   name: { ...typography.smallSemiBold, color: colors.ink },
   brand: { ...typography.xs, color: colors.inkMuted },
-  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  // `marginTop: 'auto'` : le badge et son libellé sont toujours collés au bas de la carte.
+  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 'auto', paddingTop: 2 },
   scoreLabel: { ...typography.xs, color: colors.inkMuted, flexShrink: 1 },
   moreBtn: {
     marginTop: spacing.lg,

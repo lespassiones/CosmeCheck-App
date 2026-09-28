@@ -9,7 +9,7 @@
  */
 
 import { type FC } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -22,6 +22,7 @@ import { useFavorites } from '@/hooks/useFavorites'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { StaggerItem } from '@/components/design/motion'
 import { RoutineProductCard, ROUTINE_CARD_GAP } from '@/components/routine/RoutineProductCard'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 
 const FavorisScreen: FC = () => {
   const insets = useSafeAreaInsets()

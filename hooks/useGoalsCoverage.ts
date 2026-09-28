@@ -19,6 +19,7 @@ import { db, supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
 import { useRoutine } from '@/hooks/useRoutine'
+import { handleNoCreditsResponse } from '@/lib/credits/exhaustedStore'
 import {
   type CoverageItem,
   collectGoals,
@@ -126,9 +127,9 @@ export function useGoalsCoverage(): UseGoalsCoverage {
         body: force ? { force: true } : {},
       })
       if (error) {
-        const status =
-          response?.status ?? (error as { context?: Response }).context?.status ?? null
-        if (status === 429) {
+        // Refus faute de crédits : feuille « Plus de crédits » + état verrouillé
+        // de la carte. Un rate-limit (429 sans crédits) reste une erreur simple.
+        if (await handleNoCreditsResponse(error, response)) {
           const e = new Error('no_credits') as Error & { code?: string }
           e.code = 'no_credits'
           throw e

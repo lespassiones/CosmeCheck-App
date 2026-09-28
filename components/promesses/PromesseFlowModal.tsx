@@ -24,12 +24,9 @@
  *     vers le wizard manuel `/promesses/nouvelle`.
  */
 
-import { type FC, useCallback, useEffect, useState } from 'react'
+import { type FC, useCallback, useEffect, useRef, useState } from 'react'
 import {
-  ActivityIndicator,
-  DeviceEventEmitter,
   Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -45,8 +42,9 @@ import { radius, spacing } from '@/constants/spacing'
 import { fontFamilies, typography } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { supabase } from '@/lib/supabase/client'
-import { CREDITS_EXHAUSTED_EVENT } from '@/lib/credits/exhaustedStore'
-import { ThinkingPhrases } from '@/components/shared/ThinkingPhrases'
+import { handleNoCreditsResponse } from '@/lib/credits/exhaustedStore'
+import { StepChecklist } from '@/components/shared/StepChecklist'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 
 const MIN_MANUAL_DESC = 30
 const MAX_MANUAL_DESC = 4000
@@ -62,47 +60,32 @@ async function maybeCreditsExhausted(
   error: unknown,
   response: Response | undefined,
 ): Promise<boolean> {
-  const res: Response | undefined =
-    response ?? ((error as { context?: Response })?.context as Response | undefined)
-  if (res?.status !== 429) return false
-  let used: number | undefined
-  let limit: number | undefined
-  try {
-    const body = (await res.json()) as { credits?: { used?: number; limit?: number } }
-    used = body?.credits?.used
-    limit = body?.credits?.limit
-  } catch {
-    /* corps illisible */
-  }
-  DeviceEventEmitter.emit(CREDITS_EXHAUSTED_EVENT, { used, limit })
-  return true
+  // Un 429 de rate-limit (sans `code`/`credits`) n'est PAS un épuisement.
+  return handleNoCreditsResponse(error, response)
 }
 
-/** Phrases « thinking » affichées pendant l'analyse de cohérence. */
-const COHERENCE_PHRASES = [
-  'On confronte chaque promesse à la formule…',
-  'On cherche les actifs qui tiennent la promesse…',
-  'On démêle le marketing de la réalité…',
-  'On vérifie ce que la composition permet vraiment…',
-  'On traque les promesses non tenues…',
-  'On pèse chaque ingrédient face aux allégations…',
-]
+/**
+ * Étapes cochées pendant chaque attente (28/09/2026, à la place du spinner et
+ * des phrases tournantes). Les premières se cochent au temps, la dernière à la
+ * vraie réponse du serveur (voir StepChecklist).
+ */
+const IDENTIFY_STEPS = [
+  'Lecture de la composition',
+  'Recherche du produit sur le web',
+  'Comparaison des fiches trouvées',
+] as const
 
-/** Phrases pendant la recherche du produit sur internet. */
-const IDENTIFY_PHRASES = [
-  'On parcourt le web à la recherche du produit…',
-  'On recoupe la marque et la composition…',
-  'On compare les fiches produit…',
-  'On vérifie les sources officielles…',
-]
+const FETCH_STEPS = [
+  'Ouverture de la fiche produit',
+  'Extraction des promesses marketing',
+  'Nettoyage du texte de la marque',
+] as const
 
-/** Phrases pendant la récupération de la description marketing. */
-const FETCH_PHRASES = [
-  'On lit la fiche produit…',
-  'On extrait les promesses marketing…',
-  'On isole les bénéfices revendiqués…',
-  'On nettoie le texte de la marque…',
-]
+const COHERENCE_STEPS = [
+  'Lecture des promesses',
+  'Confrontation à la formule',
+  'Calcul de la cohérence',
+] as const
 
 type Step =
   | 'identifying'
@@ -146,6 +129,19 @@ export const PromesseFlowModal: FC<Props> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [manualDescription, setManualDescription] = useState('')
   const [notFoundReason, setNotFoundReason] = useState<string | null>(null)
+  // La réponse du serveur est arrivée : la checklist coche le reste, PUIS on
+  // passe à la suite (`nextRef`), pour qu'on la voie entièrement cochée.
+  const [phaseDone, setPhaseDone] = useState(false)
+  const nextRef = useRef<(() => void) | null>(null)
+  const finishPhase = useCallback((next: () => void) => {
+    nextRef.current = next
+    setPhaseDone(true)
+  }, [])
+  const onPhaseCompleted = useCallback(() => {
+    const next = nextRef.current
+    nextRef.current = null
+    next?.()
+  }, [])
 
   // ── 3. Lancement coherence-analyze ────────────────────────────────────
   const runCoherence = useCallback(
@@ -162,6 +158,7 @@ export const PromesseFlowModal: FC<Props> = ({
         })
         return
       }
+      setPhaseDone(false)
       setStep('runningCoherence')
       setErrorMsg(null)
       try {
@@ -183,19 +180,23 @@ export const PromesseFlowModal: FC<Props> = ({
           setStep('error')
           return
         }
-        setStep('redirecting')
-        onClose()
-        router.push(ROUTES.PROMESSES.DETAIL(res.id))
+        const id = res.id
+        finishPhase(() => {
+          setStep('redirecting')
+          onClose()
+          router.push(ROUTES.PROMESSES.DETAIL(id))
+        })
       } catch {
         setErrorMsg('Connexion impossible.')
         setStep('error')
       }
     },
-    [analysisId, onClose, router],
+    [analysisId, onClose, router, finishPhase],
   )
 
   // ── 1. Identification automatique au montage ─────────────────────────
   const identify = useCallback(async () => {
+    setPhaseDone(false)
     setStep('identifying')
     setErrorMsg(null)
     try {
@@ -224,13 +225,15 @@ export const PromesseFlowModal: FC<Props> = ({
         setStep('manualPromise')
         return
       }
-      setCandidates(list)
-      setStep('pickCandidate')
+      finishPhase(() => {
+        setCandidates(list)
+        setStep('pickCandidate')
+      })
     } catch {
       setErrorMsg('Connexion impossible.')
       setStep('error')
     }
-  }, [inci, productLabel, brand, productType])
+  }, [inci, productLabel, brand, productType, finishPhase])
 
   // Réinitialise et identifie à chaque ouverture
   useEffect(() => {
@@ -245,6 +248,7 @@ export const PromesseFlowModal: FC<Props> = ({
   // ── 2. Choix d'un candidat → fetch description → coherence ────────────
   const pickCandidate = useCallback(
     async (c: Candidate) => {
+      setPhaseDone(false)
       setStep('fetchingDescription')
       setErrorMsg(null)
       try {
@@ -277,13 +281,14 @@ export const PromesseFlowModal: FC<Props> = ({
           setStep('manualPromise')
           return
         }
-        await runCoherence(res.description)
+        const description = res.description
+        finishPhase(() => void runCoherence(description))
       } catch {
         setErrorMsg('Connexion impossible pendant la récupération.')
         setStep('error')
       }
     },
-    [analysisId, runCoherence],
+    [analysisId, runCoherence, finishPhase],
   )
 
   const submitManual = useCallback(() => {
@@ -301,13 +306,17 @@ export const PromesseFlowModal: FC<Props> = ({
 
   // ── Rendus par étape ──────────────────────────────────────────────────
 
-  const renderIdentifying = () => (
+  // Une clé par phase : chaque attente repart d'une liste vierge.
+  const renderChecklist = (key: string, title: string, steps: readonly string[]) => (
     <View style={styles.centered}>
-      <ActivityIndicator size="large" color={colors.accent} />
-      <Text style={styles.loadingTitle}>Recherche du produit…</Text>
-      <ThinkingPhrases phrases={IDENTIFY_PHRASES} />
+      <Text style={styles.loadingTitle}>{title}</Text>
+      <View style={styles.checklist}>
+        <StepChecklist key={key} steps={steps} complete={phaseDone} onCompleted={onPhaseCompleted} />
+      </View>
     </View>
   )
+
+  const renderIdentifying = () => renderChecklist('identify', 'Recherche du produit', IDENTIFY_STEPS)
 
   const renderPickCandidate = () => (
     <ScrollView
@@ -327,6 +336,7 @@ export const PromesseFlowModal: FC<Props> = ({
               key={`${c.sourceUrl}-${i}`}
               style={styles.candidateRow}
               onPress={() => void pickCandidate(c)}
+              haptic="primary"
             >
               <View style={styles.candidateMain}>
                 {c.brand ? (
@@ -354,26 +364,14 @@ export const PromesseFlowModal: FC<Props> = ({
         style={styles.linkBtn}
         onPress={() => setStep('manualPromise')}
       >
-        <Text style={styles.linkText}>Aucun ne correspond — saisir la promesse</Text>
+        <Text style={styles.linkText}>Aucun ne correspond : saisir la promesse</Text>
       </Pressable>
     </ScrollView>
   )
 
-  const renderFetching = () => (
-    <View style={styles.centered}>
-      <ActivityIndicator size="large" color={colors.accent} />
-      <Text style={styles.loadingTitle}>Récupération de la description…</Text>
-      <ThinkingPhrases phrases={FETCH_PHRASES} />
-    </View>
-  )
+  const renderFetching = () => renderChecklist('fetch', 'Récupération de la promesse', FETCH_STEPS)
 
-  const renderRunning = () => (
-    <View style={styles.centered}>
-      <ActivityIndicator size="large" color={colors.accent} />
-      <Text style={styles.loadingTitle}>Analyse de cohérence…</Text>
-      <ThinkingPhrases phrases={COHERENCE_PHRASES} />
-    </View>
-  )
+  const renderRunning = () => renderChecklist('coherence', 'Analyse de cohérence', COHERENCE_STEPS)
 
   const renderManual = () => {
     const len = manualDescription.length
@@ -428,6 +426,7 @@ export const PromesseFlowModal: FC<Props> = ({
           ]}
           disabled={len < MIN_MANUAL_DESC || step === 'runningCoherence'}
           onPress={submitManual}
+          haptic="primary"
         >
           <Ionicons name="sparkles" size={16} color="#FFFFFF" />
           <Text style={styles.ctaText}>Analyser la promesse</Text>
@@ -441,7 +440,7 @@ export const PromesseFlowModal: FC<Props> = ({
       <Ionicons name="alert-circle-outline" size={44} color={colors.warning} />
       <Text style={styles.loadingTitle}>Oups</Text>
       <Text style={styles.loadingHint}>{errorMsg ?? 'Une erreur est survenue.'}</Text>
-      <Pressable style={styles.cta} onPress={() => void identify()}>
+      <Pressable style={styles.cta} onPress={() => void identify()} haptic="primary">
         <Text style={styles.ctaText}>Réessayer</Text>
       </Pressable>
       <Pressable
@@ -531,11 +530,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   loadingTitle: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 16,
+    fontFamily: fontFamilies.bold,
+    fontSize: 20,
     color: colors.ink,
-    marginTop: spacing.md,
+    textAlign: 'center',
   },
+  checklist: { width: '100%', maxWidth: 340, marginTop: spacing.xl },
   loadingHint: {
     ...typography.small,
     color: colors.inkMuted,

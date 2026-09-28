@@ -17,13 +17,13 @@ import { type FC, type ReactNode } from 'react'
 import {
   Linking,
   Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
   type DimensionValue,
 } from 'react-native'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 
@@ -284,7 +284,8 @@ const SimilarBar: FC<{ score: number; avg: number }> = ({ score, avg }) => {
     colors.rating.rouge.DEFAULT,
     colors.rating.orange.DEFAULT,
     colors.rating.jaune.DEFAULT,
-    '#A3D977',
+    // Les 2 tranches vertes (≥13, ≥17) : même vert unique, comme les pastilles.
+    colors.rating.vert.DEFAULT,
     colors.rating.vert.DEFAULT,
   ]
   return (

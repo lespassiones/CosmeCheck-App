@@ -31,6 +31,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Platform } from 'react-native'
 import type { CustomerInfo, PurchasesPackage, PurchasesStoreProduct } from 'react-native-purchases'
 
 import {
@@ -42,6 +43,7 @@ import {
   getOfferings,
   getProductsDirect,
   getStorefrontCountry,
+  getTrialEligibility,
   initDiagnostic,
   isPremium,
   purchasePackage,
@@ -51,7 +53,12 @@ import {
 } from '@/lib/revenucat/client'
 import { buildFallbackPlans } from '@/lib/paywall/fallbackPrices'
 import { deviceStoreContext } from '@/lib/paywall/deviceStore'
-import { findPlanPackage, type PackageLike, type PlanId } from '@/lib/paywall/prices'
+import {
+  applyTrialEligibility,
+  findPlanPackage,
+  type PackageLike,
+  type PlanId,
+} from '@/lib/paywall/prices'
 import { useAuth } from '@/hooks/useAuth'
 import { reportMessage } from '@/lib/reporting/report'
 
@@ -70,6 +77,8 @@ const PRODUCTS_TIMEOUT_MS = 6000
 // `expo-localization` peut ne pas donner de devise, un iPhone français tombait
 // sur le palier dollar — d'où les « 49,99 $US » vus le 07/09/2026 à Toulouse.
 const STOREFRONT_TIMEOUT_MS = 6000
+// Sans réponse dans ce délai, l'essai n'est pas promis (voir `withTrialEligibility`).
+const ELIGIBILITY_TIMEOUT_MS = 4000
 
 /** Un plan prêt à afficher, et son objet natif quand l'achat est possible. */
 export interface PaywallPlan extends PackageLike {
@@ -118,6 +127,32 @@ const INITIAL: UsePurchasesState = {
  * Le préfixe suivi de deux-points couvre Google Play, qui suffixe l'identifiant
  * du produit par celui du plan de base (`premium_yearly:annual`).
  */
+/**
+ * iOS : retire l'essai des plans auxquels la personne n'a plus droit (ancien
+ * abonné), avant tout affichage. Sans cette vérification, le paywall promettait
+ * « 3 jours offerts » à quelqu'un qu'Apple débite immédiatement. Android : les
+ * offres renvoyées par Google Play tiennent déjà compte de l'éligibilité.
+ */
+async function withTrialEligibility(
+  monthly: PaywallPlan,
+  yearly: PaywallPlan,
+): Promise<[PaywallPlan, PaywallPlan]> {
+  if (Platform.OS !== 'ios') return [monthly, yearly]
+  const idOf = (plan: PaywallPlan) =>
+    plan.nativePackage?.product.identifier ?? plan.nativeProduct?.identifier ?? plan.identifier
+  const monthlyId = idOf(monthly)
+  const yearlyId = idOf(yearly)
+  const eligibility = await withTimeout(
+    getTrialEligibility([monthlyId, yearlyId]),
+    ELIGIBILITY_TIMEOUT_MS,
+    null,
+  )
+  return [
+    applyTrialEligibility(monthly, eligibility?.[monthlyId]?.status),
+    applyTrialEligibility(yearly, eligibility?.[yearlyId]?.status),
+  ]
+}
+
 function planOfProduct(product: PurchasesStoreProduct): PlanId | null {
   const id = product.identifier
   if (id === PRODUCT_IDS.yearly || id.startsWith(PRODUCT_IDS.yearly + ':')) return 'yearly'
@@ -161,7 +196,7 @@ export function usePurchases() {
       if (!mounted.current) return
       const plans = buildFallbackPlans(deviceStoreContext())
       const { code, detail, key, platform } = initDiagnostic()
-      const raison = `SDK ${code ?? 'indisponible'} · ${platform} · clé ${key}` + (detail ? ` — ${detail}` : '')
+      const raison = `SDK ${code ?? 'indisponible'} · ${platform} · clé ${key}` + (detail ? ` : ${detail}` : '')
       // Le diagnostic part AUSSI dans Sentry : un écran que personne ne regarde
       // ne diagnostique rien, et la panne touche des gens dont on n'a pas le
       // téléphone sous la main.
@@ -188,11 +223,15 @@ export function usePurchases() {
       // prix mensualisé). Un seul plan trouvé signale un offering mal
       // configuré, et on préfère alors les produits bruts, qui portent les deux.
       if (monthlyPkg && yearlyPkg) {
+        const [monthlyPlan, yearlyPlan] = await withTrialEligibility(
+          { ...monthlyPkg, nativePackage: monthlyPkg },
+          { ...yearlyPkg, nativePackage: yearlyPkg },
+        )
         if (!mounted.current) return
         setState((prev) => ({
           ...prev,
-          monthly: { ...monthlyPkg, nativePackage: monthlyPkg },
-          yearly: { ...yearlyPkg, nativePackage: yearlyPkg },
+          monthly: monthlyPlan,
+          yearly: yearlyPlan,
           priceSource: 'offerings',
           isLoadingPrices: false,
           error: null,
@@ -213,21 +252,25 @@ export function usePurchases() {
       const monthlyProduct = found.monthly
       const yearlyProduct = found.yearly
       if (monthlyProduct && yearlyProduct) {
-        if (!mounted.current) return
-        setState((prev) => ({
-          ...prev,
-          monthly: {
+        const [monthlyPlan, yearlyPlan] = await withTrialEligibility(
+          {
             identifier: monthlyProduct.identifier,
             packageType: 'MONTHLY',
             product: monthlyProduct,
             nativeProduct: monthlyProduct,
           },
-          yearly: {
+          {
             identifier: yearlyProduct.identifier,
             packageType: 'ANNUAL',
             product: yearlyProduct,
             nativeProduct: yearlyProduct,
           },
+        )
+        if (!mounted.current) return
+        setState((prev) => ({
+          ...prev,
+          monthly: monthlyPlan,
+          yearly: yearlyPlan,
           priceSource: 'products',
           isLoadingPrices: false,
           error: null,
@@ -253,7 +296,7 @@ export function usePurchases() {
     const productsSeen = products.length
     const raison =
       (storeDiagnostic() ??
-        `magasin muet — offering: ${packagesSeen} package(s), produits: ${productsSeen}, storefront: ${storefront ?? 'inconnu'}`) +
+        `magasin muet : offering: ${packagesSeen} package(s), produits: ${productsSeen}, storefront: ${storefront ?? 'inconnu'}`) +
       ` · clé ${initDiagnostic().key}`
     reportMessage('PAYWALL_STORE_UNAVAILABLE', {
       raison,
@@ -308,7 +351,7 @@ export function usePurchases() {
    * opaque au lieu d'un message clair.
    */
   const purchase = useCallback(
-    async (plan: PlanId): Promise<boolean> => {
+    async (plan: PlanId, opts?: { allowAnonymous?: boolean }): Promise<boolean> => {
       const target = plan === 'yearly' ? state.yearly : state.monthly
       const nativePackage = target?.nativePackage
       const nativeProduct = target?.nativeProduct
@@ -320,7 +363,17 @@ export function usePurchases() {
       // cette personne AVANT que la feuille de paiement s'ouvre. Sinon l'achat
       // part sous un `$RCAnonymousID`, le webhook ne le retrouve pas, et la
       // personne a payé pour rien. Voir `ensurePurchaseIdentity`.
-      if (!(await ensurePurchaseIdentity(user?.id ?? null))) {
+      //
+      // SEULE exception (28/09/2026) : le paywall du parcours d'onboarding, vu
+      // AVANT la création du compte, comme dans MemoryPilot. L'achat part alors
+      // sous l'identifiant anonyme du SDK, et `loginUser` (app/_layout.tsx) le
+      // rattache au compte à l'inscription, qui suit immédiatement. Dès qu'une
+      // session existe, le verrou s'applique comme partout ailleurs.
+      if (user?.id || !opts?.allowAnonymous) {
+        if (!(await ensurePurchaseIdentity(user?.id ?? null))) {
+          throw new Error('PAYWALL_IDENTITY_UNCONFIRMED')
+        }
+      } else if (!(await ensureConfigured())) {
         throw new Error('PAYWALL_IDENTITY_UNCONFIRMED')
       }
 

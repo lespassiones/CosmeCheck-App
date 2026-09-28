@@ -35,6 +35,11 @@ import {
   type AlternativeProduct,
 } from '../lib/analysis/alternativesFilter.ts'
 import type { UserRestrictions } from '../lib/supabase/types.ts'
+import {
+  classifyFormulation,
+  formulationAffinity,
+  type Galenic,
+} from '../lib/inci/formulation.ts'
 
 // ── env ──────────────────────────────────────────────────────────────────────
 const env = Object.fromEntries(
@@ -238,10 +243,12 @@ const lastSeg = (c: string | null) => (c ?? '').split('/').pop() ?? ''
       // Signaux : soit via la ligne catalogue de l'EAN, soit fournis directement.
       let catalogCategory = c.catalogCategory ?? null
       let productName = c.productName ?? null
+      let sourceInci: string | null = null
       if (c.ean) {
         const row = (await rpc('cosme_check_get_product_by_ean', { p_ean: c.ean }, token))?.[0] ?? null
         catalogCategory = row?.category ?? null
         productName = row?.name ?? null
+        sourceInci = row?.ingredients_text ?? null
         info(`catégorie catalogue = ${JSON.stringify(catalogCategory)} | nom = « ${productName ?? ''} »`)
       }
 
@@ -290,6 +297,16 @@ const lastSeg = (c: string | null) => (c ?? '').split('/').pop() ?? ''
       )
       expect(withParfum.length === 0, 'le filtre restriction retire bien les produits contenant « Parfum »',
         `${raw.length - filtered.length} produit(s) retiré(s)`)
+
+      // Filtre de FORME GALÉNIQUE (sept 2026) : même forme d'abord, jamais opposée.
+      const source: Galenic = classifyFormulation(sourceInci).galenic
+      const affinities = filtered.map((p) => formulationAffinity(source, classifyFormulation(p.ingredientsText).galenic))
+      const same = affinities.filter((a) => a === 'same').length
+      const opposite = affinities.filter((a) => a === 'opposite').length
+      info(`forme source = ${source} | même forme ${same}, voisine/inconnue ${affinities.length - same - opposite}, opposée écartée ${opposite}`)
+      if (source !== 'unknown') {
+        expect(same > 0, 'au moins une alternative de MÊME forme de formule', `${same}`)
+      }
     }
 
     console.log(`\n${B}${failures === 0 ? G + 'TOUS LES TESTS PASSENT' : R + failures + ' échec(s)'}${X}\n`)

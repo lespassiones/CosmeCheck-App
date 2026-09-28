@@ -1,5 +1,5 @@
 /**
- * personal-insights/lib.ts — génère 3 encarts PERSONNALISÉS (titre + description
+ * personal-insights/lib.ts : génère 3 encarts PERSONNALISÉS (titre + description
  * + ton couleur) à partir d'une analyse INCI et du PROFIL complet de
  * l'utilisateur (objectifs, préoccupations, type de peau, allergies,
  * restrictions). Remplace l'ancienne « synthèse » par 3 blocs courts et
@@ -36,6 +36,8 @@ import {
   type CompatBreakdown,
   type CompatTone,
 } from "./compat.ts";
+import { type ZoneContextLike, zoneKey } from "./productContext.ts";
+import { againstFitsUsage, needFitsZone } from "./relevance.ts";
 
 // buildPrompt / PersonalInput / PERSONAL_PROMPT_VERSION vivent dans prompt.ts
 // (pur, sans dépendance Deno) pour être testables en Jest. Ré-exportés ici pour
@@ -73,22 +75,35 @@ type RawCompat = {
   relevance: "personal" | "product_only";
 };
 
-/** Clé de cache : ingrédients + profil + restrictions + version de prompt. */
+/**
+ * Clé de cache : ingrédients + profil + restrictions + ZONE/USAGE + catégorie +
+ * version de prompt. Sans la zone, un même INCI rangé en shampooing puis en gel
+ * douche aurait partagé les mêmes blocs (et les mêmes règles de peau).
+ */
 export async function makePersonalCacheKey(input: PersonalInput): Promise<string> {
   const list = input.enriched
     .map((r) => `${(r.name ?? r.input_raw).trim().toUpperCase()}:${r.color_rating ?? "?"}${r.restriction_reason ? ":R" : ""}`)
     .join("|");
   const profileKey = input.profileBlock ? `|prof=${(await sha256Hex(input.profileBlock)).slice(0, 12)}` : "";
   const resKey = input.restrictionsBlock ? `|res=${(await sha256Hex(input.restrictionsBlock)).slice(0, 12)}` : "";
-  const hash = (await sha256Hex(`${list}${profileKey}${resKey}|v=${PERSONAL_PROMPT_VERSION}`)).slice(0, 32);
+  const zone = `|zone=${zoneKey(input.productContext)}|cat=${(input.category ?? "").trim().toLowerCase()}|po=${input.productOnly ? 1 : 0}`;
+  const hash = (await sha256Hex(`${list}${profileKey}${resKey}${zone}|v=${PERSONAL_PROMPT_VERSION}`)).slice(0, 32);
   return `personal-insights:${hash}`;
 }
 
-/** Clé profil (persistée sur la ligne) : régénère si le profil change. */
-export async function profileSignature(profileBlock: string | null, restrictionsBlock: string | null): Promise<string> {
+/**
+ * Clé profil (persistée sur la ligne) : régénère (GRATUITEMENT, cf. index.ts) si
+ * le profil de la zone, les restrictions, la zone/l'usage résolus ou la version
+ * de prompt changent.
+ */
+export async function profileSignature(
+  profileBlock: string | null,
+  restrictionsBlock: string | null,
+  productContext?: ZoneContextLike | null,
+): Promise<string> {
   const p = profileBlock ? await sha256Hex(profileBlock) : "noprofile";
   const r = restrictionsBlock ? await sha256Hex(restrictionsBlock) : "norestr";
-  return `v${PERSONAL_PROMPT_VERSION}:${p.slice(0, 12)}:${r.slice(0, 12)}`;
+  return `v${PERSONAL_PROMPT_VERSION}:${p.slice(0, 12)}:${r.slice(0, 12)}:${zoneKey(productContext)}`;
 }
 
 const TONES: Tone[] = ["vert", "ambre", "rouge", "neutre"];
@@ -249,9 +264,18 @@ function enforceCompatibility(
     productOnly?: boolean;
     scoreOver20?: number;
     forcedAgainst?: { name: string; need: string }[];
+    /** Zone + usage du produit : filtre les lignes IA hors zone (v32). */
+    productContext?: ZoneContextLike | null;
   },
 ): Compatibility | null {
   if (!compat) return null;
+  // FILET ZONE (v32, bêta « crème cheveux analysée comme un soin visage ») :
+  // même si le LLM ignore la consigne, un « à éviter pour ta peau grasse » ne
+  // peut plus pénaliser un soin capillaire, ni un « bon pour tes boutons » le
+  // bonifier ; sur un produit rincé, comédogènes et alcool ne comptent pas.
+  const zoneCtx = ctx.productContext ?? null;
+  const fitsZone = (need: string) => !zoneCtx || needFitsZone(need, zoneCtx);
+  const fitsUsage = (ingredient: string) => !zoneCtx || againstFitsUsage(ingredient, zoneCtx);
   // ANTI-DOUBLE-COMPTAGE : un ingrédient déjà pénalisé comme RESTRICTION (-8)
   // ne peut pas être re-pénalisé en contre-indication (-5). Match par nom
   // (inclusion bidirectionnelle, insensible à la casse).
@@ -278,6 +302,7 @@ function enforceCompatibility(
   // -5/-8, trahie par le mot « restriction » dans le besoin) et les doublons d'un forced.
   const aiAgainst = compat.against
     .filter((a) => !/restriction/i.test(a.need))
+    .filter((a) => fitsZone(a.need) && fitsUsage(a.ingredient))
     .map((a) => ({ name: a.ingredient, need: a.need }))
     .filter((a) => {
       const n = a.name.toLowerCase().trim();
@@ -288,6 +313,7 @@ function enforceCompatibility(
   // ANTI-CONTRADICTION : un ingrédient « à éviter » ne peut PAS être aussi un
   // « actif utile » (vu E2E : huile de coco comptée en bonus ET comédogène acné).
   const contributors = compat.contributors
+    .filter((c) => fitsZone(c.need))
     .map((c) => ({ name: c.ingredient }))
     .filter((c) => {
       const n = c.name.toLowerCase().trim();
@@ -488,6 +514,7 @@ export async function generatePersonalBlocks(input: PersonalInput): Promise<Pers
       productOnly: input.productOnly,
       scoreOver20: input.score,
       forcedAgainst: input.forcedAgainst,
+      productContext: input.productContext ?? null,
     });
     const result: PersonalResult = { blocks, compatibility };
     void setCached(cacheKey, result);

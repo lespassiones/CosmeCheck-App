@@ -1,19 +1,22 @@
 /**
- * Edge Function `personal-insights` — 3 encarts PERSONNALISÉS (objectifs / peau /
+ * Edge Function `personal-insights` : 3 encarts PERSONNALISÉS (objectifs / peau /
  * à surveiller) pour une analyse sauvegardée, selon le profil de l'utilisateur.
  *
  * Pipeline :
  *   1. Auth Bearer (RLS via client token). 403/404 selon propriété.
- *   2. Charge le profil + restrictions (loadUserContext) → signature de profil.
+ *   2. Résout le CONTEXTE PRODUIT (zone + rincé/sans rinçage, productContext.ts),
+ *      puis charge le profil LIMITÉ à cette zone + restrictions : signature.
  *   3. COURT-CIRCUIT GRATUIT : si result_json.personalBlocks existe ET que sa clé
- *      == signature de profil courante → renvoie sans débiter (relecture).
- *   4. CRÉDIT D'ABORD : consume_credit('personal_insights'). Épuisé → 429 +
- *      payload `credits` (AUCUN appel IA, aucun coût) → le client verrouille.
+ *      == signature courante : renvoie sans débiter (relecture).
+ *   4. CRÉDIT D'ABORD (première génération seulement) : consume_credit
+ *      ('personal_insights'). Épuisé : 429 + payload `credits` (AUCUN appel IA,
+ *      aucun coût), le client verrouille.
  *   5. Génère les 3 blocs (1 appel LLM JSON), persiste dans result_json, renvoie.
  *
  * Entrée : { analysisId: string }
  * Sortie : { blocks: { goals, skin, watch } }  (ou { error } + status)
- * Crédit : 1 débité À LA GÉNÉRATION (gratuit en relecture, persisté).
+ * Crédit : 1 débité À LA GÉNÉRATION (gratuit en relecture ET en régénération
+ * d'un contenu déjà payé : nouvelle version de prompt, profil ou zone modifiés).
  */
 import { handleOptions, jsonResponse } from "../_shared/cors.ts";
 import { getBearerToken, unauthorizedResponse, userClient } from "../_shared/auth.ts";
@@ -30,7 +33,9 @@ import {
   type PersonalBlocks,
   profileSignature,
 } from "./lib.ts";
-import { detectForcedAgainst, relevanceVerdict } from "./relevance.ts";
+import { isCatalogSlug, pickCatalogSlug, resolveProductContext } from "./productContext.ts";
+import { detectForcedAgainst, inferredSensitivityApplies, relevanceVerdictForContext } from "./relevance.ts";
+import { buildZoneProfileBlock } from "./zoneProfile.ts";
 
 type Body = { analysisId?: string; compat?: boolean };
 
@@ -56,6 +61,8 @@ type StoredResultJson = {
   personalBlocksKey?: string | null;
   compatibility?: Compatibility | null;
 };
+
+type InferredItem = { label?: string; reason?: string; slug?: string | null };
 
 Deno.serve(async (req: Request): Promise<Response> => {
   const pre = handleOptions(req);
@@ -85,7 +92,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const { data: row, error: rowError } = await supabase
     .schema("cosme_check")
     .from("analyses")
-    .select("id, user_id, product_label, product_type, category, score, result_json")
+    .select("id, user_id, product_label, product_type, category, category_precise, score, result_json")
     .eq("id", analysisId)
     .single();
   if (rowError || !row) return jsonResponse({ error: "Analyse introuvable." }, { status: 404 });
@@ -95,20 +102,43 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (!resultJson || !Array.isArray(resultJson.items)) {
     return jsonResponse({ error: "Analyse invalide." }, { status: 400 });
   }
+  const items = resultJson.items as StoredItem[];
 
-  // ── Profil + restrictions → signature ───────────────────────────────────────
+  // ── Contexte produit : OÙ s'applique-t-il, et est-il rincé ? ────────────────
+  // Bêta 28 sept 2026 (« crème cheveux analysée comme un soin visage ») : avant,
+  // la catégorie était `productType || catalogCategory || …` (texte libre en
+  // premier, une seule chaîne) et visage/corps étaient fusionnés. Désormais :
+  // catalogue curé, puis nom, puis texte libre, puis catégorie LLM, puis INCI.
+  // `||` (pas `??`) : une chaîne VIDE doit retomber sur le champ suivant.
+  const storedCategories = [resultJson.category, row.category as string | null];
+  const productType = resultJson.productType || (row.product_type as string | null) || null;
+  const productContext = resolveProductContext({
+    catalogCategory: resultJson.catalogCategory ?? null,
+    categories: storedCategories,
+    productType,
+    categoryPrecise: (row.category_precise as string | null) ?? null,
+    productName: (row.product_label as string | null) ?? null,
+    items,
+  });
+  // Libellé de type montré au LLM : slug catalogue curé d'abord, puis texte libre,
+  // puis la catégorie devinée par l'analyseur SEULEMENT si c'est elle qui a
+  // tranché la zone (sinon « creme_corps » contredirait une zone « cheveux »).
+  const catalogSlug = pickCatalogSlug({ catalogCategory: resultJson.catalogCategory, categories: storedCategories });
+  const guessedCategory = storedCategories.find((c) => typeof c === "string" && c.trim() && !isCatalogSlug(c)) ?? null;
+  const category = catalogSlug || productType
+    || (productContext.source === "category" ? guessedCategory : null) || null;
+
+  // ── Profil (LIMITÉ à la zone) + restrictions : signature ─────────────────────
   const { profileBlock: rawProfileBlock, skin, restrictions } = await loadUserContext(supabase, user.id);
+  let profileBlock = buildZoneProfileBlock(skin, productContext);
 
   // Récap IA « sensibilités probables » (worker profile-restriction-inference,
   // back-end invisible) : injecté dans le BLOC PROFIL comme INDICES pour les
-  // contre-indications (-5). JAMAIS un malus restriction (-8) : seules les
-  // restrictions COCHÉES pénalisent. Inclus AVANT la signature → un récap mis à
-  // jour régénère les blocs gratuitement (self-heal), zéro appel supplémentaire
-  // au chemin d'analyse (une simple lecture d'une ligne indexée par PK).
-  let profileBlock = rawProfileBlock;
-  // Slugs de FAMILLE des sensibilités déduites (worker d'inférence). Servent au
-  // SCORING : détectés dans le produit → -8 (comme une restriction cochée),
-  // dédoublonnés vs les cochées côté enforceCompatibility.
+  // contre-indications, et détecté dans le produit : -8 (comme une restriction
+  // cochée, dédoublonné vs les cochées côté enforceCompatibility). FILTRÉ PAR
+  // ZONE : une sensibilité « peau acnéique » ne pénalise pas un shampooing.
+  // Inclus AVANT la signature : un récap mis à jour régénère les blocs
+  // gratuitement (self-heal), une simple lecture d'une ligne indexée par PK.
   const inferredFamilySlugs: string[] = [];
   if (rawProfileBlock) {
     const { data: inferredRow } = await supabase
@@ -118,37 +148,34 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .eq("user_id", user.id)
       .maybeSingle();
     const inferredItems = Array.isArray(inferredRow?.items)
-      ? (inferredRow.items as { label?: string; reason?: string; slug?: string | null }[])
-          .filter((i) => typeof i?.label === "string" && i.label.trim())
+      ? (inferredRow.items as InferredItem[])
+        .filter((i) => typeof i?.label === "string" && i.label.trim())
+        .filter((i) => inferredSensitivityApplies(i, productContext))
       : [];
     if (inferredItems.length > 0) {
       const line = inferredItems
         .slice(0, 8)
         .map((i) => (i.reason ? `${i.label} (${i.reason})` : (i.label as string)))
         .join(" ; ");
-      profileBlock = `${rawProfileBlock}\n- Sensibilités probables (déduites automatiquement du profil, NON confirmées par l'utilisateur) : ${line}`;
+      if (profileBlock) {
+        profileBlock = `${profileBlock}\n- Sensibilités probables (déduites automatiquement du profil, NON confirmées par l'utilisateur) : ${line}`;
+      }
       for (const it of inferredItems) {
         const s = (it.slug ?? "").trim();
         if (s && !inferredFamilySlugs.includes(s)) inferredFamilySlugs.push(s);
       }
     }
   }
-  const sig = await profileSignature(profileBlock, restrictions.block);
-  // `||` (pas `??`) : une chaîne VIDE doit retomber sur le champ suivant.
-  // FALLBACK COLONNES DB (fix juil 2026) : les analyses anciennes n'ont pas de
-  // catégorie dans result_json → sans ce repli, un hydratant corps passait en
-  // « produit du quotidien » (product_only) et perdait ses bonus profil.
-  const category = resultJson.productType || resultJson.catalogCategory || resultJson.category
-    || (row.product_type as string | null) || (row.category as string | null) || null;
+  const sig = await profileSignature(profileBlock, restrictions.block, productContext);
 
   const wantCompat = body.compat === true;
 
-  // ── Court-circuit gratuit (déjà généré pour ce profil ET version courante) ──
+  // ── Court-circuit gratuit (déjà généré pour ce profil, cette zone ET version) ─
   // SELF-HEAL (18 juil 2026) : si le client veut la compat mais que la ligne a
   // des blocs SANS compatibility (bug historique : l'upsert dédup au re-scan
-  // préservait les blocs mais effaçait la compat → carte sans score, pour
-  // toujours), on NE court-circuite PAS : on retombe sur la régénération —
-  // GRATUITE (alreadyHasBlocks ⇒ aucun débit) — qui re-persiste blocs + compat.
+  // préservait les blocs mais effaçait la compat, carte sans score pour
+  // toujours), on NE court-circuite PAS : on retombe sur la régénération,
+  // GRATUITE (alreadyHasBlocks ⇒ aucun débit), qui re-persiste blocs + compat.
   if (
     resultJson.personalBlocks && resultJson.personalBlocksKey === sig &&
     (!wantCompat || resultJson.compatibility)
@@ -160,24 +187,24 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   // ── Pré-check pertinence AVANT tout crédit / appel IA ───────────────────────
-  // Produit rattaché à un axe du profil (peau/cheveux) mais axe VIDE → on NE
+  // Produit rattaché à un axe du profil (peau/cheveux) mais axe VIDE : on NE
   // débite PAS et on renvoie l'utilisateur compléter EXACTEMENT la bonne section.
-  // Produit hors profil (dentifrice, déo, accessoire…) → jamais bloqué (le score
-  // se basera sur la qualité de la formule, MODE product_only).
+  // Produit hors profil (dentifrice, déo, accessoire…) ou dont la zone n'est
+  // couverte par aucun élément du profil : jamais bloqué (MODE product_only).
   // Le blocage « profil incomplet » n'est activé QUE si le client le demande
   // (compat:true). RÉTRO-COMPATIBILITÉ : les anciens clients (sans le flag)
   // reçoivent toujours leurs 3 blocs comme avant + le score (qu'ils ignorent) ;
-  // ils ne sont jamais bloqués → déploiement edge sûr avant rebuild des apps.
-  const verdict = relevanceVerdict(category, skin);
+  // ils ne sont jamais bloqués : déploiement edge sûr avant rebuild des apps.
+  const verdict = relevanceVerdictForContext(productContext, skin);
   if (wantCompat && verdict.kind === "profile_incomplete") {
     return jsonResponse({ profileIncomplete: true, missingSection: verdict.missingSection });
   }
 
   // ── CRÉDIT : seule la PREMIÈRE génération coûte 1 crédit ────────────────────
   // Si des blocs existent déjà mais que la clé est PÉRIMÉE (nouvelle version de
-  // prompt, ou profil modifié), c'est une RÉGÉNÉRATION d'un contenu DÉJÀ PAYÉ →
-  // on ne re-débite JAMAIS (sinon une amélioration de notre part coûterait au
-  // user, et un user à 0 crédit resterait bloqué sur d'anciens blocs).
+  // prompt, profil ou zone modifiés), c'est une RÉGÉNÉRATION d'un contenu DÉJÀ
+  // PAYÉ : on ne re-débite JAMAIS (sinon une amélioration de notre part
+  // coûterait au user, et un user à 0 crédit resterait bloqué sur d'anciens blocs).
   const alreadyHasBlocks = Boolean(resultJson.personalBlocks);
   if (!alreadyHasBlocks) {
     const { data: creditData } = await supabase.rpc("cosme_check_consume_credit", {
@@ -200,7 +227,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   // ── Prépare les données + matching restrictions ─────────────────────────────
-  const items = resultJson.items as StoredItem[];
   const checkItems: CheckableItem[] = items.map((it) => ({
     position: it.position,
     input: it.input,
@@ -211,7 +237,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const matches = checkRestrictions(checkItems, restrictions.restrictions, restrictions.families);
   // Détection des familles DÉDUITES du profil présentes dans le produit (mêmes
   // -8 que les restrictions cochées). loadUserContext ne charge le catalogue de
-  // familles QUE si l'utilisateur a des restrictions cochées → on le charge ici
+  // familles QUE si l'utilisateur a des restrictions cochées : on le charge ici
   // si besoin (cas « aucune restriction cochée mais sensibilités déduites »).
   let familyCatalogue = restrictions.families;
   if (inferredFamilySlugs.length > 0 && familyCatalogue.length === 0) {
@@ -246,23 +272,24 @@ Deno.serve(async (req: Request): Promise<Response> => {
     scoreTone: resultJson.scoreTone ?? null,
     productLabel: row.product_label ?? null,
     category,
+    productContext,
     userId: user.id,
     profileBlock,
     restrictionsBlock: restrictions.block,
     restrictionMatches: matches,
     inferredRestrictionMatches: inferredMatches,
-    // product_only = produit HORS PROFIL (axe "none" : dentifrice, déo…) OU
-    // profil/axe non renseigné (v29, demande user 16 juil 2026) : le score suit
-    // la QUALITÉ de la formule, mais l'IA liste quand même les bons actifs
-    // (utiles de manière globale) et les points à surveiller — affichés à
-    // 0 point dans le détail du calcul. Seul verdict "personal" (axe peau/
-    // cheveux rattaché ET renseigné) donne les bonus/malus qui bougent le score.
+    // product_only = produit HORS PROFIL (dentifrice, déo…), profil/axe non
+    // renseigné, ou zone non couverte par le profil (v29, demande user 16 juil
+    // 2026) : le score suit la QUALITÉ de la formule, mais l'IA liste quand même
+    // les bons actifs (utiles de manière globale) et les points à surveiller,
+    // affichés à 0 point dans le détail du calcul. Seul verdict "personal" (axe
+    // peau/cheveux rattaché ET renseigné pour cette zone) donne les bonus/malus.
     productOnly: verdict.kind !== "personal",
-    // Filets déterministes (le LLM les rate parfois) : alcool asséchant × peau
-    // sèche/sensible, allergènes parfum, comédogènes, sulfates, allergie déclarée.
-    // Uniquement en mode personal : ces filets croisent le profil PEAU/CHEVEUX,
-    // hors sujet pour un produit hors profil (dentifrice × « ta peau sensible »).
-    forcedAgainst: verdict.kind === "personal" ? detectForcedAgainst(items, skin) : [],
+    // Filets déterministes (le LLM les rate parfois) : alcool asséchant, parfum,
+    // comédogènes, sulfates, allergie déclarée, SELON LA ZONE ET L'USAGE du
+    // produit (plus de comédogènes « peau grasse » sur un soin capillaire).
+    // Uniquement en mode personal : hors sujet pour un produit hors profil.
+    forcedAgainst: verdict.kind === "personal" ? detectForcedAgainst(items, skin, productContext) : [],
   });
 
   if (!result) {
@@ -279,6 +306,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
     personalBlocks: blocks,
     personalBlocksKey: sig,
     compatibility,
+    // Trace de la zone retenue (support / audit : « pourquoi ce score ? »).
+    personalContext: {
+      axis: productContext.axis,
+      zones: productContext.zones,
+      usage: productContext.usage,
+      source: productContext.source,
+    },
   };
   await supabase
     .schema("cosme_check")

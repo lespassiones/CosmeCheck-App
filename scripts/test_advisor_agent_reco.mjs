@@ -89,6 +89,8 @@ async function askAgent(messages, token, seenEans = []) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
       apikey: ANON_KEY,
+      // charge:false n'est honoré que sur présentation de la clé service.
+      'x-admin-key': SERVICE_KEY,
     },
     body: JSON.stringify({ messages, seen_eans: seenEans, charge: false }),
   });

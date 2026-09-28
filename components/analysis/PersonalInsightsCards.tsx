@@ -15,11 +15,11 @@ import {
   ActivityIndicator,
   Image,
   type ImageSourcePropType,
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { Ionicons } from '@expo/vector-icons'
 import { BlurView } from 'expo-blur'
 import { useRouter } from 'expo-router'
@@ -195,6 +195,7 @@ export const PersonalInsightsCards: FC<Props> = ({
     return (
       <Pressable
         onPress={() => router.push(ROUTES.OFFRE.INDEX)}
+        haptic="primary"
         accessibilityRole="button"
         accessibilityLabel="Débloquer l'analyse personnalisée avec Premium"
         style={styles.lockedWrap}

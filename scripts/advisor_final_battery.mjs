@@ -51,7 +51,7 @@ async function call(token, msg) {
   for (let a = 0; a < 5; a++) {
     const r = await fetch(`${URL}/functions/v1/advisor-agent`, {
       method: "POST",
-      headers: { apikey: ANON, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: { apikey: ANON, Authorization: `Bearer ${token}`, "Content-Type": "application/json", "x-admin-key": process.env.SUPABASE_SERVICE_ROLE_KEY ?? "" },
       body: JSON.stringify({ model: MODEL, reasoning_effort: EFFORT, charge: false, messages: [{ role: "user", content: msg }] }),
     });
     if (r.status === 429) { await new Promise((s) => setTimeout(s, 65000)); continue; }

@@ -13,7 +13,7 @@ const base: AuthRouteInput = {
   onboardingShown: false,
   isProfileComplete: false,
   paywallShown: false,
-  consentGiven: false,
+  draftPending: false,
   preOnbSeen: false,
   group: undefined,
 }
@@ -36,7 +36,6 @@ describe('phases de chargement', () => {
         onboardingShown: true,
         isProfileComplete: true,
         paywallShown: true,
-        consentGiven: true,
         group: '(auth)',
       }),
     ).toBeNull()
@@ -100,35 +99,27 @@ describe('non authentifié : le carrousel est le seul point d\'entrée', () => {
         onboardingShown: true,
         isProfileComplete: true,
         paywallShown: true,
-        consentGiven: true,
       }),
     ).toBe('preonboarding')
   })
 })
 
-describe('consentement (avant le questionnaire)', () => {
+describe('consentement recueilli par le parcours (28/09/2026)', () => {
   const authed = { ...base, isAuthenticated: true }
 
-  it('nouvel inscrit sans consentement -> ecran de consentement', () => {
-    expect(resolveAuthRoute({ ...authed, group: '(tabs)' })).toBe('consent')
+  it('nouvel inscrit sans profil -> questionnaire, sans ecran intermediaire', () => {
+    expect(resolveAuthRoute({ ...authed, group: '(tabs)' })).toBe('onboarding')
   })
 
-  it('depuis (auth) apres inscription -> consentement AVANT onboarding', () => {
-    expect(resolveAuthRoute({ ...authed, group: '(auth)' })).toBe('consent')
+  it('depuis (auth) apres inscription -> questionnaire', () => {
+    expect(resolveAuthRoute({ ...authed, group: '(auth)' })).toBe('onboarding')
   })
 
-  it('deja sur l\'ecran de consentement -> on laisse (anti-boucle)', () => {
-    expect(resolveAuthRoute({ ...authed, group: 'consent' })).toBeNull()
+  it('deja dans le questionnaire -> on laisse (anti-boucle)', () => {
+    expect(resolveAuthRoute({ ...authed, group: '(onboarding)' })).toBeNull()
   })
 
-  it('consentement donne -> on enchaine sur le questionnaire', () => {
-    expect(
-      resolveAuthRoute({ ...authed, group: 'consent', consentGiven: true }),
-    ).toBe('onboarding')
-  })
-
-  it('compte deja onboarde AVANT l\'existence de cet ecran -> jamais re-sollicite', () => {
-    // needsOnboarding est faux pour eux : pas de consentement retroactif impose.
+  it('compte deja onboarde -> jamais re-sollicite', () => {
     expect(
       resolveAuthRoute({
         ...authed,
@@ -136,27 +127,27 @@ describe('consentement (avant le questionnaire)', () => {
         onboardingShown: true,
         isProfileComplete: true,
         paywallShown: true,
-        consentGiven: false,
       }),
     ).toBeNull()
   })
+})
 
-  it('compte deja onboarde qui atterrit sur /consent -> il en ressort', () => {
+describe("reponses du parcours invite en cours d'ecriture", () => {
+  it('connecte avec un brouillon en attente -> on ne decide rien', () => {
     expect(
-      resolveAuthRoute({
-        ...authed,
-        group: 'consent',
-        onboardingShown: true,
-        isProfileComplete: true,
-        paywallShown: true,
-        consentGiven: true,
-      }),
-    ).toBe('home')
+      resolveAuthRoute({ ...base, isAuthenticated: true, draftPending: true, group: '(auth)' }),
+    ).toBeNull()
+  })
+
+  it('le brouillon ne retient jamais un visiteur non connecte', () => {
+    expect(resolveAuthRoute({ ...base, draftPending: true, group: '(tabs)' })).toBe(
+      'preonboarding',
+    )
   })
 })
 
 describe('authentifié', () => {
-  const authed = { ...base, isAuthenticated: true, consentGiven: true }
+  const authed = { ...base, isAuthenticated: true }
 
   it('nouvel inscrit (rien rempli) hors onboarding -> onboarding', () => {
     expect(resolveAuthRoute({ ...authed, group: '(tabs)' })).toBe('onboarding')

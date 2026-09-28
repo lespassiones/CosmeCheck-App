@@ -16,7 +16,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState, type FC, type ReactNode } from 'react'
 import {
   ActivityIndicator,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -33,6 +32,7 @@ import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { GlassCard } from '@/components/design/GlassCard'
 import { Reveal } from '@/components/design/Reveal'
 import { PressableScale } from '@/components/design/motion'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { ROUTES } from '@/constants/routes'
 import { radius, spacing } from '@/constants/spacing'
@@ -48,6 +48,7 @@ import {
   buildCompareBonASavoir,
   routineOverlapSlugs,
 } from '@/lib/routine/compareOverlap'
+import { displayTitle } from '@/lib/analysis/displayTitle'
 
 type Flagged = {
   name: string
@@ -177,7 +178,7 @@ const CompareScreen: FC = () => {
         if (!result) return null
         return {
           id: r.id,
-          name: r.product_label?.trim() || r.name?.trim() || 'Analyse',
+          name: displayTitle(r, 'Analyse'),
           score: r.score,
           result,
         }
@@ -380,6 +381,7 @@ const CompareScreen: FC = () => {
           {insights.status === 'ready' && !showFull && (
             <PressableScale
               onPress={() => setShowFull(true)}
+              haptic="secondary"
               style={styles.expandBtn}
               accessibilityRole="button"
               accessibilityLabel="Voir l'analyse complète"
@@ -433,6 +435,7 @@ const CompareScreen: FC = () => {
           {insights.status === 'ready' && showFull && (
             <PressableScale
               onPress={() => setShowFull(false)}
+              haptic="secondary"
               style={styles.collapseBtn}
               accessibilityRole="button"
               accessibilityLabel="Réduire l'analyse"

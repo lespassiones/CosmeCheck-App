@@ -163,31 +163,77 @@ export function scoreLabel(score: number): { label: string; tone: ScoreTone } {
 }
 
 /**
- * Garde-fou de réconciliation score catalogue ↔ couleurs AFFICHÉES.
+ * SCORE SERVI = LE SCORE CATALOGUE, POINT.
  *
- * Le score catalogue (calculé par le scraper hors-ligne) peut l'avoir été avec
- * un coloriage DIFFÉRENT du moteur live. Or l'app affiche les couleurs live
- * (recalculées depuis l'INCI catalogue). Résultat vu par le testeur : un orange
- * visible mais une note "Bien", ou une compo propre notée "Moyen", et une note
- * qui change quand le produit entre au catalogue.
+ * Règle produit (14 sept 2026, arbitrage bêta) : l'app LIT les notes déjà
+ * calculées, elle n'en recalcule aucune à l'affichage. Le catalogue est la
+ * SEULE source de vérité quand il porte une note ; le score live (moteur
+ * pastille sur l'INCI) ne sert que pour un produit ABSENT du catalogue ou
+ * catalogué sans note (saisie manuelle, produit trouvé sur internet).
  *
- * On ne sert donc le score catalogue QUE s'il tombe dans la MÊME bande de
- * qualité (tone) que le score LIVE recalculé sur le même INCI. Sinon on sert le
- * live → la note correspond toujours à ce que l'utilisateur voit. Garde :
- * uniquement si ≥50 % d'ingrédients identifiés (sinon le coloriage live n'est
- * pas fiable et le catalogue reste la source de vérité). PARITÉ web
- * (lib/inciParser.reconcileScore).
+ * Ce que ça remplace : l'ancien `reconcileScore` servait le score LIVE quand il
+ * tombait dans une bande de qualité différente du catalogue. Conséquence vue en
+ * bêta (Stela, 12 sept) : l'Anua Azelaic Acid 10 sortait à 12,9 « Moyen » (œil
+ * jaune) dans la recherche et à 16,51 « Bien » (4 étoiles vertes) sur sa fiche,
+ * parce que la fiche servait le live et la recherche le catalogue. Une seule
+ * note partout vaut mieux qu'une note « plus juste » sur un seul écran, d'autant
+ * que `routine-smart-suggest` qualifie les produits sur la note catalogue.
+ *
+ * Corollaire assumé : si le coloriage catalogue diverge du coloriage live, les
+ * étoiles peuvent sembler sévères au regard des couleurs listées en dessous. Le
+ * correctif est alors de corriger la LIGNE CATALOGUE (re-score hors ligne), pas
+ * de diverger à l'affichage.
  */
-export function reconcileScore(
-  catalogScore: number,
-  liveScore: number | null,
-  matched: number,
-  total: number,
+export function resolveDisplayScore(
+  catalogScore: number | null | undefined,
+  liveScore: number | null | undefined,
+): number | null {
+  if (catalogScore != null && !Number.isNaN(catalogScore)) return catalogScore;
+  return liveScore != null && !Number.isNaN(liveScore) ? liveScore : null;
+}
+
+/**
+ * NOTE DE RÉFÉRENCE d'une analyse (28 sept 2026) : le moteur pastille appliqué
+ * aux ingrédients AFFICHÉS, si au moins 50 % d'entre eux sont identifiés ;
+ * sinon `null` (analyse pas assez fiable pour faire foi).
+ *
+ * Pourquoi : la note catalogue venait de l'ancien outil d'import, qui découpe
+ * l'INCI autrement. Résultat vu en bêta (Stela, 27 sept) : « pielsana gel de
+ * ducha » à 17,34 « Très bien » dans les alternatives, alors que sa fiche
+ * listait 2 rouges (MIT + MCI) et 3 orange. Décision éditeur : la note unique
+ * est celle du moteur sur les ingrédients affichés. Le trigger SQL
+ * `trg_align_catalog_from_analysis` (f_reference_score, même règle des 50 %)
+ * recopie cette note dans le catalogue dès que l'analyse produit est écrite,
+ * donc recherche, alternatives, Pépites et historique lisent la même valeur.
+ */
+export function referenceScore(
+  items: { colorRating?: ColorRating | null; position?: number | null }[],
+): number | null {
+  if (items.length === 0) return null;
+  const colored = items.filter((it) => it.colorRating != null && it.colorRating in RANK);
+  if (colored.length / items.length < 0.5) return null;
+  return synthScore(
+    pastilleTone(
+      items.map((it) => ({ color: it.colorRating ?? null, position: Number(it.position ?? 0) })),
+      items.length,
+      false,
+    ),
+  );
+}
+
+/**
+ * Note servie pour un produit (cache EAN ou calcul live) :
+ *   - catalogue sans note (retirée volontairement ou jamais notée) → le moteur ;
+ *   - sinon la note de référence des ingrédients servis, et à défaut (analyse
+ *     peu fiable) la note catalogue.
+ * Le trigger SQL applique la même règle au catalogue : la valeur servie ici est
+ * donc celle que la recherche et les alternatives afficheront.
+ */
+export function servedProductScore(
+  catalogScore: number | null | undefined,
+  items: { colorRating?: ColorRating | null; position?: number | null }[],
+  engineScore: number,
 ): number {
-  if (liveScore == null) return catalogScore;
-  const identRatio = total > 0 ? matched / total : 0;
-  if (identRatio < 0.5) return catalogScore;
-  return scoreLabel(catalogScore).tone === scoreLabel(liveScore).tone
-    ? catalogScore
-    : liveScore;
+  if (catalogScore == null || Number.isNaN(catalogScore)) return engineScore;
+  return referenceScore(items) ?? catalogScore;
 }

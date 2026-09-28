@@ -25,8 +25,9 @@ interface PastilleSlot {
 //   ≥17 → cœur vert · ≥13 → feuille vert · ≥9 → œil jaune · ≥5 → triangle orange · <5 → stop rouge
 export function scoreToSlot(score: number | null | undefined): PastilleSlot | null {
   if (score == null) return null
-  if (score >= 17) return { bg: '#34D399', iconColor: '#022C22', icon: 'heart' }
-  if (score >= 13) return { bg: '#34D399', iconColor: '#022C22', icon: 'leaf' }
+  // Vert unique de l'app (#16A34A, celui des boutons), icône blanche.
+  if (score >= 17) return { bg: '#16A34A', iconColor: '#FFFFFF', icon: 'heart' }
+  if (score >= 13) return { bg: '#16A34A', iconColor: '#FFFFFF', icon: 'leaf' }
   if (score >= 9) return { bg: '#FBBF24', iconColor: '#451A03', icon: 'eye' }
   if (score >= 5) return { bg: '#F97316', iconColor: '#FFFFFF', icon: 'triangle' }
   return { bg: '#F43F5E', iconColor: '#FFFFFF', icon: 'stop' }

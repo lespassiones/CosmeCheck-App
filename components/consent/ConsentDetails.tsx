@@ -1,0 +1,378 @@
+/**
+ * ConsentDetails : le texte COMPLET du consentement aux données de profil.
+ *
+ * Extrait mot pour mot de l'ancien écran `/consent` (DataConsentScreen,
+ * supprimé le 28/09/2026 quand le consentement est passé dans l'onboarding
+ * « Le diagnostic de Perle »). L'écran de consentement du parcours en montre
+ * l'essentiel en quatre blocs et ouvre ce texte intégral sur demande
+ * (« Tout lire en détail ») : un consentement éclairé se juge à ce qui est
+ * lisible avant de cocher.
+ *
+ * Il reprend les engagements de `app/legal/privacy.tsx` (sous-traitants,
+ * durées, base légale). Si l'un des deux change, l'autre doit changer aussi.
+ */
+
+import { type FC, type ReactNode } from 'react'
+import { StyleSheet, Text, View } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
+
+import { WhiteCard } from '@/components/design/WhiteCard'
+import { colors } from '@/constants/colors'
+import { radius, spacing } from '@/constants/spacing'
+import { typography } from '@/constants/typography'
+
+/** Un paragraphe de section, avec son titre et son icône. */
+const Section: FC<{
+  icon: keyof typeof Ionicons.glyphMap
+  tint: string
+  title: string
+  children: ReactNode
+}> = ({ icon, tint, title, children }) => (
+  <WhiteCard padding={spacing.lg} style={styles.card}>
+    <View style={styles.cardHead}>
+      <View style={[styles.cardIcon, { backgroundColor: `${tint}1A` }]}>
+        <Ionicons name={icon} size={17} color={tint} />
+      </View>
+      <Text style={styles.cardTitle}>{title}</Text>
+    </View>
+    {children}
+  </WhiteCard>
+)
+
+/** Paragraphe courant. */
+const P: FC<{ children: ReactNode }> = ({ children }) => (
+  <Text style={styles.para}>{children}</Text>
+)
+
+/** Puce d'une liste. */
+const Bullet: FC<{ children: ReactNode; tint?: string }> = ({
+  children,
+  tint = colors.inkMuted,
+}) => (
+  <View style={styles.bulletRow}>
+    <View style={[styles.bulletDot, { backgroundColor: tint }]} />
+    <Text style={styles.bulletText}>{children}</Text>
+  </View>
+)
+
+/** Puce d'une liste de garanties (coche verte). */
+const Never: FC<{ children: ReactNode }> = ({ children }) => (
+  <View style={styles.bulletRow}>
+    <Ionicons
+      name="close-circle"
+      size={17}
+      color={colors.success}
+      style={styles.neverIcon}
+    />
+    <Text style={styles.bulletText}>{children}</Text>
+  </View>
+)
+
+export const ConsentDetails: FC = () => (
+  <View>
+    <Text style={styles.lede}>
+      Les questions portent sur ta peau, tes cheveux et tes sensibilités. Ce
+      sont des informations personnelles sensibles, alors voici précisément ce
+      qu'on en fait, et ce qu'on n'en fait pas.
+    </Text>
+    {/* L'essentiel, avant le détail : à qui vont les données et pour quoi.
+          C'est ce qui distingue un consentement éclairé d'un consentement
+          simplement documenté. */}
+      <View style={styles.aiCallout}>
+        <View style={styles.aiHead}>
+          <View style={styles.aiIcon}>
+            <Ionicons name="sparkles" size={16} color={colors.accent} />
+          </View>
+          <Text style={styles.aiTitle}>
+            Ton profil est transmis à une intelligence artificielle
+          </Text>
+        </View>
+        <Text style={styles.aiPara}>
+          Toutes les réponses <Text style={styles.aiStrong}>personnalisées</Text>{' '}
+          de l'application, les explications d'ingrédients, la compatibilité
+          avec ta peau, les conseils de routine et le conseiller beauté, sont
+          rédigées par une intelligence artificielle :{' '}
+          <Text style={styles.aiStrong}>
+            les modèles GPT d'OpenAI, la technologie de ChatGPT
+          </Text>
+          , et <Text style={styles.aiStrong}>Mistral AI</Text> en complément.
+          On leur transmet pour cela{' '}
+          <Text style={styles.aiStrong}>ton profil beauté</Text> et la
+          composition du produit concerné.
+        </Text>
+        <View style={styles.aiFacts}>
+          <Text style={styles.aiFact}>
+            · Jamais ton nom, ton adresse e-mail ni ton identifiant de compte.
+          </Text>
+          <Text style={styles.aiFact}>
+            · Jamais pour entraîner un modèle, c'est contractuellement exclu.
+          </Text>
+          <Text style={styles.aiFact}>
+            · La note d'un produit, elle, est calculée sans IA, et ton profil
+            ne la modifie pas.
+          </Text>
+        </View>
+        <Text style={styles.aiMore}>Tout le détail plus bas, « Le rôle de l'intelligence artificielle ».</Text>
+      </View>
+
+      <Section icon="flask-outline" tint={colors.accent} title="Ce que fait Cosme Check">
+        <P>
+          Cosme Check lit la liste INCI d'un produit, c'est-à-dire la liste
+          officielle de ses ingrédients, et lui attribue une note. Cette note
+          est calculée par un moteur déterministe : les mêmes ingrédients
+          donnent toujours le même résultat, pour tout le monde. Aucune
+          intelligence artificielle n'intervient dans le calcul de la note, et
+          ton profil ne la modifie pas.
+        </P>
+        <P>
+          Mais une note générale ne dit pas tout. Un produit très bien noté
+          peut mal te convenir, et un produit moyen peut être exactement ce
+          qu'il te faut. Un actif qui aide une peau sèche peut irriter une
+          peau réactive. Un ingrédient inoffensif pour la plupart des gens
+          devient un problème si tu y es allergique.
+        </P>
+        <P>
+          Le vrai apport de l'application est là : te dire si CE produit
+          convient à TA peau. C'est cette compatibilité, propre à toi, qui
+          demande de savoir de quelle peau on parle.
+        </P>
+      </Section>
+
+      <Section
+        icon="person-outline"
+        tint={colors.rose}
+        title="Pourquoi on a besoin de ton profil"
+      >
+        <P>
+          Sans profil, l'application ne peut faire qu'une chose : afficher une
+          note et une liste d'ingrédients. Avec ton profil, elle peut :
+        </P>
+        <Bullet tint={colors.rose}>
+          juger la compatibilité de chaque produit avec ta peau plutôt que
+          dans l'absolu ;
+        </Bullet>
+        <Bullet tint={colors.rose}>
+          signaler les ingrédients auxquels tu as dit être sensible ou
+          allergique, avant que tu n'achètes ;
+        </Bullet>
+        <Bullet tint={colors.rose}>
+          proposer des alternatives qui tiennent compte de ton type de peau et
+          de tes objectifs ;
+        </Bullet>
+        <Bullet tint={colors.rose}>
+          repérer les conflits entre les produits de ta routine ;
+        </Bullet>
+        <Bullet tint={colors.rose}>
+          confronter les promesses affichées sur l'emballage à la composition
+          réelle, pour ton cas.
+        </Bullet>
+        <P>
+          Tu restes libre de ne rien renseigner ou de passer des questions :
+          l'application continue de fonctionner, simplement sans
+          personnalisation. Tu peux modifier ou effacer ton profil à tout
+          moment depuis « Mon profil ».
+        </P>
+      </Section>
+
+      <Section
+        icon="sparkles-outline"
+        tint={colors.accent}
+        title="Le rôle de l'intelligence artificielle"
+      >
+        <P>
+          Rédiger une explication compréhensible, comparer deux produits ou
+          répondre à une question ouverte demande autre chose qu'un calcul.
+          Pour ces parties précises, l'application fait appel à des modèles de
+          langage. En principal, les modèles GPT d'OpenAI, ceux qui font
+          tourner ChatGPT : GPT-4o mini et GPT-4.1 selon la demande. En
+          complément et en secours, Mistral Small, de la société française
+          Mistral AI.
+        </P>
+        <P>
+          Précision utile : l'application n'utilise pas l'application ChatGPT
+          grand public. Elle appelle directement l'interface professionnelle
+          d'OpenAI, ce qui n'est pas la même chose du point de vue de tes
+          données, comme le paragraphe suivant l'explique.
+        </P>
+        <P>
+          Ce qui leur est transmis se limite à ce qui est nécessaire : les
+          éléments de ton profil beauté utiles à la demande, et la composition
+          du produit concerné. Ton nom, ton adresse e-mail et ton identifiant
+          de compte ne leur sont pas envoyés.
+        </P>
+        <P>
+          Les appels passent par les interfaces professionnelles de ces
+          fournisseurs, pas par leurs applications grand public. Sur ces
+          interfaces, les données envoyées ne servent pas à entraîner les
+          modèles : c'est un engagement contractuel du fournisseur, et
+          l'option correspondante est désactivée sur notre compte. Elles sont
+          conservées trente jours au maximum chez le fournisseur pour des
+          raisons de sécurité, puis supprimées.
+        </P>
+      </Section>
+
+      <Section
+        icon="lock-closed-outline"
+        tint={colors.success}
+        title="Ce qui n'arrivera pas"
+      >
+        <Never>Tes données ne servent pas à entraîner un modèle d'IA.</Never>
+        <Never>Elles ne sont ni vendues, ni louées, ni échangées.</Never>
+        <Never>Elles ne servent pas à te cibler avec de la publicité.</Never>
+        <Never>
+          Aucun autre utilisateur ne peut y accéder : chaque ligne est
+          cloisonnée au niveau de la base de données.
+        </Never>
+      </Section>
+
+      <Section icon="server-outline" tint={colors.inkMuted} title="Où vont tes données">
+        <Bullet>
+          Hébergement principal chez Supabase, sur des serveurs situés en
+          Irlande, dans l'Union européenne.
+        </Bullet>
+        <Bullet>
+          Les appels à OpenAI impliquent un transfert vers les États-Unis,
+          encadré par les Clauses Contractuelles Types de la Commission
+          européenne.
+        </Bullet>
+        <Bullet>
+          Mistral AI est une société française, dont l'hébergement est
+          principalement européen.
+        </Bullet>
+        <Bullet>
+          Tes données sont chiffrées pendant leur transport et au repos.
+        </Bullet>
+      </Section>
+
+      <Section icon="key-outline" tint={colors.rose} title="Tes droits">
+        <P>
+          La base légale de ce traitement est ton consentement, au titre des
+          articles 6.1.a et 9.2.a du RGPD. Tu peux le retirer quand tu veux,
+          sans avoir à te justifier, en effaçant ton profil beauté depuis
+          « Mon profil ». Le retrait ne remet pas en cause ce qui a été fait
+          avant.
+        </P>
+        <P>
+          Tu disposes également d'un droit d'accès, de rectification,
+          d'effacement, de limitation et de portabilité. La suppression de ton
+          compte efface tes données sous trente jours. Pour toute demande,
+          écris à contact@cosme-check.com.
+        </P>
+      </Section>
+
+      <Section icon="medkit-outline" tint={colors.warning} title="Ce n'est pas un avis médical">
+        <P>
+          Cosme Check est un outil d'information sur la composition des
+          cosmétiques. Il ne pose aucun diagnostic et ne remplace pas l'avis
+          d'un médecin ou d'un dermatologue. En cas de réaction cutanée, de
+          traitement en cours ou de grossesse, demande conseil à un
+          professionnel de santé.
+        </P>
+      </Section>
+  </View>
+)
+
+const styles = StyleSheet.create({
+  lede: {
+    ...typography.body,
+    color: colors.inkMuted,
+    marginBottom: spacing.sm,
+  },
+  // ── Encart « l'IA lit ton profil », en tête d'écran ──────────────────
+  aiCallout: {
+    marginTop: spacing.base,
+    marginBottom: spacing.sm,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: `${colors.accent}33`,
+    gap: spacing.sm,
+  },
+  aiHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  aiIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.full,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiTitle: {
+    ...typography.bodySemiBold,
+    color: colors.ink,
+    flex: 1,
+  },
+  aiPara: {
+    ...typography.small,
+    color: colors.ink,
+    lineHeight: 20,
+  },
+  aiStrong: {
+    ...typography.smallSemiBold,
+    color: colors.ink,
+  },
+  aiFacts: {
+    gap: 4,
+  },
+  aiFact: {
+    ...typography.small,
+    color: colors.inkMuted,
+    lineHeight: 19,
+  },
+  aiMore: {
+    ...typography.xs,
+    color: colors.accentDeep,
+  },
+
+  card: { marginBottom: spacing.md },
+  cardHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  cardIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardTitle: {
+    ...typography.bodySemiBold,
+    color: colors.ink,
+    flex: 1,
+  },
+  para: {
+    ...typography.small,
+    color: colors.inkMuted,
+    lineHeight: 21,
+    marginTop: spacing.sm,
+  },
+
+  bulletRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  bulletDot: {
+    width: 5,
+    height: 5,
+    borderRadius: radius.full,
+    marginTop: 8,
+  },
+  neverIcon: { marginTop: 1 },
+  bulletText: {
+    ...typography.small,
+    color: colors.inkMuted,
+    lineHeight: 21,
+    flex: 1,
+  },
+
+})

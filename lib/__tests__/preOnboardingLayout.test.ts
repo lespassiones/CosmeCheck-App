@@ -105,54 +105,45 @@ describe('geometrie : pourquoi cover coupait du texte', () => {
   })
 })
 
-describe('le carrousel ne peut plus tronquer ni recouvrir son texte', () => {
-  const code = sansCommentaires(lire('components/onboarding/PreOnboardingCarousel.tsx'))
+describe("les ecrans d'accroche ne peuvent pas tronquer ni recouvrir leur texte", () => {
+  // Depuis le 28/09/2026 la vitrine est l'accroche de l'onboarding
+  // « Le diagnostic de Perle » (components/onboarding/flow/steps/Hooks.tsx).
+  // Memes lecons que le carrousel qu'elle remplace.
+  const code = sansCommentaires(lire('components/onboarding/flow/steps/Hooks.tsx'))
 
-  it("l'illustration est affichee entiere, jamais cadree", () => {
+  it('les illustrations sont affichees entieres, jamais cadrees', () => {
     expect(code).toMatch(/contentFit="contain"/)
     expect(code).not.toMatch(/contentFit="cover"/)
   })
 
   it('la barre du bas occupe sa place au lieu de la prendre', () => {
-    // C'etait la seconde cause : pastilles et bouton etaient poses en absolu
-    // par-dessus l'image. Tant que le cadrage ne bougeait pas ils tombaient
-    // dans la marge basse de l'illustration ; des qu'il bouge, sur du texte.
-    const footer = code.match(/footer:\s*\{[\s\S]*?\n {2}\},/)
+    const footer = code.match(/footer:\s*\{[\s\S]*?\},/)
     expect(footer).not.toBeNull()
     expect(footer![0]).not.toMatch(/position:\s*'absolute'/)
-    expect(code).not.toMatch(/bottomWrap/)
   })
 
-  it("la hauteur de l'image est mesuree, pas deduite de la fenetre", () => {
-    // Deduire la hauteur utile de `useWindowDimensions` ignore la barre du bas,
-    // les encoches et l'indicateur d'accueil. C'est cette approximation qui a
-    // coute le refus.
-    expect(code).toMatch(/onLayout=\{onAreaLayout\}/)
-    expect(code).toMatch(/height: areaHeight/)
+  it("le contenu defile si la fenetre est trop courte (iPhone SE, fenetre iPad)", () => {
+    expect(code).toMatch(/<ScrollView/)
   })
 
-  it('les controles sont bornes en largeur sur une fenetre large', () => {
-    expect(code).toMatch(/const CONTROLS_MAX_WIDTH = \d+/)
-    expect(code).toMatch(/maxWidth: CONTROLS_MAX_WIDTH/)
+  it('la colonne est bornee en largeur sur une fenetre large', () => {
+    expect(code).toMatch(/maxWidth: FLOW_MAX_WIDTH/)
   })
 })
 
 describe("le consentement annonce l'IA avant de la detailler", () => {
-  const source = lire('components/consent/DataConsentScreen.tsx')
+  // Le texte integral vit dans ConsentDetails (ex-DataConsentScreen) ; l'ecran
+  // du parcours (steps/Consent.tsx) en montre l'essentiel et porte la case.
+  const source = lire('components/consent/ConsentDetails.tsx')
+  const ecran = lire('components/onboarding/flow/steps/Consent.tsx')
 
   it('la politique de confidentialite nomme la meme technologie', () => {
-    // L'en-tete de DataConsentScreen impose que les deux textes disent la
-    // meme chose. Deux versions divergentes du meme engagement, c'est
-    // exactement ce qu'un verificateur releve.
     const privacy = lire('app/legal/privacy.tsx')
     expect(privacy).toMatch(/ChatGPT/)
     expect(privacy).toMatch(/Mistral/)
   })
 
   it("l'encart IA precede la premiere section depliee", () => {
-    // Un consentement eclaire ne se juge pas a ce qui est ecrit quelque part,
-    // mais a ce qui est lu avant de cocher. Le destinataire des donnees doit
-    // apparaitre d'emblee, pas apres deux ecrans de defilement.
     const encart = source.indexOf('styles.aiCallout')
     const premiereSection = source.indexOf('<Section')
     expect(encart).toBeGreaterThan(-1)
@@ -161,36 +152,42 @@ describe("le consentement annonce l'IA avant de la detailler", () => {
   })
 
   it("l'encart nomme le traitement, les fournisseurs et ce qui est transmis", () => {
-    const encart = source.slice(
-      source.indexOf('styles.aiCallout'),
-      source.indexOf('<Section'),
-    )
+    const encart = source.slice(source.indexOf('styles.aiCallout'), source.indexOf('<Section'))
     expect(encart).toMatch(/intelligence artificielle/i)
     expect(encart).toMatch(/OpenAI/)
     expect(encart).toMatch(/Mistral AI/)
-    // Nommer la technologie, pas seulement le fournisseur : « OpenAI » ne
-    // dit rien au grand public, « ChatGPT » si.
     expect(encart).toMatch(/ChatGPT/)
     expect(encart).toMatch(/profil beaut/i)
     expect(encart).toMatch(/personnalis/i)
   })
 
   it("l'encart dit aussi ce qui n'est PAS transmis, et ce qui n'utilise pas d'IA", () => {
-    const encart = source.slice(
-      source.indexOf('styles.aiCallout'),
-      source.indexOf('<Section'),
-    )
+    const encart = source.slice(source.indexOf('styles.aiCallout'), source.indexOf('<Section'))
     expect(encart).toMatch(/Jamais ton nom/)
     expect(encart).toMatch(/Jamais pour entra/)
     expect(encart).toMatch(/calcul.{0,10}sans IA/)
   })
 
-  it("la case a cocher nomme l'IA, puisque c'est elle qui vaut consentement", () => {
-    const debut = source.indexOf('accessibilityRole="checkbox"')
-    const zone = source.slice(debut, debut + 1800)
-    expect(zone).toMatch(/intelligence\s*\n?\s*artificielle/i)
-    expect(zone).toMatch(/OpenAI/)
-    expect(zone).toMatch(/Mistral AI/)
-    expect(zone).toMatch(/ChatGPT/)
+  it("l'ecran du parcours nomme les destinataires AVANT la case, et ouvre le texte integral", () => {
+    const case_ = ecran.indexOf('accessibilityRole="checkbox"')
+    const avant = ecran.slice(0, case_)
+    expect(avant).toMatch(/OpenAI/)
+    expect(avant).toMatch(/Mistral AI/)
+    expect(ecran).toMatch(/<ConsentDetails \/>/)
+  })
+
+  it("le bloc « Qui les traite », juste au-dessus de la case, nomme l'IA et ses fournisseurs", () => {
+    // Depuis le 28/09/2026 la case est courte (choix produit) : la mention des
+    // destinataires ne doit donc JAMAIS quitter ce bloc, lu avant de cocher.
+    const bloc = ecran.slice(ecran.indexOf("title: 'Qui les traite'"), ecran.indexOf("title: 'Ton choix'"))
+    expect(bloc).toMatch(/IA/)
+    expect(bloc).toMatch(/OpenAI/)
+    expect(bloc).toMatch(/Mistral AI/)
+    expect(bloc).toMatch(/ChatGPT/)
+    expect(ecran.indexOf("title: 'Qui les traite'")).toBeLessThan(ecran.indexOf('accessibilityRole="checkbox"'))
+  })
+
+  it("la case n'est jamais pre-cochee", () => {
+    expect(ecran).toMatch(/useState\(false\)/)
   })
 })

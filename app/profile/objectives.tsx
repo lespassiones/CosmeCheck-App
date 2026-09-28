@@ -8,7 +8,7 @@
  */
 
 import { type FC, useMemo, useState } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -21,6 +21,7 @@ import { useProfile } from '@/hooks/useProfile'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { Reveal } from '@/components/design/Reveal'
 import { Step3Goals } from '@/components/onboarding/Step3Goals'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 
 const ObjectivesScreen: FC = () => {
   const insets = useSafeAreaInsets()
@@ -86,6 +87,7 @@ const ObjectivesScreen: FC = () => {
             style={({ pressed }) => [styles.saveBtn, pressed && styles.saveBtnPressed]}
             onPress={save}
             disabled={isSaving}
+            haptic="primary"
             accessibilityRole="button"
           >
             {isSaving ? (

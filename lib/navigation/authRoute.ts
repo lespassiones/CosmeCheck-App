@@ -20,12 +20,20 @@
  *
  * Ce n'est donc plus le fait d'être dans `(auth)` qui autorise à y rester, mais
  * le fait d'avoir traversé le carrousel PENDANT CE LANCEMENT (`preOnbSeen`).
+ *
+ * ── Onboarding « Le diagnostic de Perle » (28/09/2026) ──────────────────────
+ * Le carrousel est remplacé par le parcours invité (`(preonboarding)`), qui
+ * pose les questions AVANT le compte, consentement compris. Deux conséquences :
+ *   - l'écran `/consent` n'existe plus : le parcours recueille lui-même le
+ *     consentement (en mode invité comme en mode connecté) ;
+ *   - juste après l'inscription, les réponses du parcours sont en cours
+ *     d'écriture (`draftPending`) : le guard s'abstient, sinon il renverrait au
+ *     questionnaire quelqu'un qui vient d'y répondre.
  */
 
 export type AuthRouteTarget =
   | 'welcome'
   | 'preonboarding'
-  | 'consent'
   | 'onboarding'
   | 'paywall'
   | 'home'
@@ -58,16 +66,16 @@ export interface AuthRouteInput {
   isProfileComplete: boolean
   paywallShown: boolean
   /**
-   * Consentement à l'usage des données de profil (données de santé, RGPD
-   * art. 9) recueilli. Exigé AVANT le questionnaire, jamais après.
+   * Un parcours d'onboarding terminé AVANT le compte attend d'être écrit dans
+   * le profil (`lib/onboarding/draft.ts`). Tant qu'il l'est, on ne décide rien.
    */
-  consentGiven: boolean
+  draftPending: boolean
   /**
    * Carrousel de présentation traversé pendant CE lancement de l'app.
    * Volontairement non persisté : voir `lib/storage/preOnboarding.ts`.
    */
   preOnbSeen: boolean
-  /** `segments[0]` d'expo-router : `'(auth)'` | `'(onboarding)'` | `'consent'` | … */
+  /** `segments[0]` d'expo-router : `'(auth)'` | `'(onboarding)'` | `'offre'` | … */
   group: string | undefined
 }
 
@@ -81,7 +89,7 @@ export function resolveAuthRoute(input: AuthRouteInput): AuthRouteTarget {
     onboardingShown,
     isProfileComplete,
     paywallShown,
-    consentGiven,
+    draftPending,
     preOnbSeen,
     group,
   } = input
@@ -96,7 +104,6 @@ export function resolveAuthRoute(input: AuthRouteInput): AuthRouteTarget {
 
   const inAuthGroup = group === '(auth)'
   const inOnboarding = group === '(onboarding)'
-  const inConsent = group === 'consent'
   // Le paywall EST la page /offre (groupe 'offre'). L'ancien groupe (paywall)
   // a été supprimé : c'était un écran mort, en anglais, et l'un des quatre
   // prétendants à `/` qui faisaient s'ouvrir l'app sur la connexion.
@@ -117,6 +124,10 @@ export function resolveAuthRoute(input: AuthRouteInput): AuthRouteTarget {
     return preOnbSeen ? 'welcome' : 'preonboarding'
   }
 
+  // 2 bis. Réponses du parcours invité en cours d'écriture : le profil lu est
+  //        encore celui d'AVANT. On attend, la cible tombera d'elle-même.
+  if (draftPending) return null
+
   // 3. Authentifié : le profil décide l'onboarding → on attend son chargement.
   if (profileLoading) return null
 
@@ -132,14 +143,9 @@ export function resolveAuthRoute(input: AuthRouteInput): AuthRouteTarget {
 
   const needsOnboarding = !onboardingShown && !isProfileComplete
 
-  // 4. Consentement AVANT le questionnaire. Les réponses (type de peau,
-  //    sensibilités, allergies) sont des données de santé : on les demande
-  //    seulement après un oui explicite. Les comptes qui ont terminé
-  //    l'onboarding avant l'existence de cet écran ne sont PAS re-sollicités
-  //    (`needsOnboarding` est déjà faux pour eux).
-  if (needsOnboarding && !consentGiven) {
-    return inConsent ? null : 'consent'
-  }
+  // 4. Le consentement (données de santé, RGPD art. 9) est recueilli PAR le
+  //    parcours d'onboarding lui-même, avant toute question sur la peau : il
+  //    n'y a plus d'écran séparé à imposer ici.
 
   // 5. Sur une page auth/pré-onboarding alors qu'on est connecté → destination.
   if (inAuthGroup || inPreOnboarding) {
@@ -148,8 +154,7 @@ export function resolveAuthRoute(input: AuthRouteInput): AuthRouteTarget {
     return 'home'
   }
 
-  // 6. Onboarding requis mais on n'y est pas → onboarding. Couvre aussi la
-  //    sortie de l'écran de consentement une fois le oui enregistré.
+  // 6. Onboarding requis mais on n'y est pas → onboarding.
   if (needsOnboarding && !inOnboarding) return 'onboarding'
 
   // 7. On quitte l'onboarding UNIQUEMENT quand il a été explicitement terminé
@@ -159,10 +164,6 @@ export function resolveAuthRoute(input: AuthRouteInput): AuthRouteTarget {
     // Si paywall pas vu, aller au paywall sinon home
     return !paywallShown ? 'paywall' : 'home'
   }
-
-  // 8. Plus rien à consentir mais on est resté sur l'écran de consentement
-  //    (ex. compte déjà onboardé qui l'ouvre) → on ressort.
-  if (inConsent) return !paywallShown ? 'paywall' : 'home'
 
   // 9. Paywall pas vu et profil complet → paywall, sauf si on y est déjà ou si
   //    on est sur l'écran de bienvenue post-achat.

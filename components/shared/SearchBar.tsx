@@ -9,7 +9,6 @@
 
 import { type FC, useState } from 'react'
 import {
-  Pressable,
   StyleSheet,
   TextInput,
   View,
@@ -18,6 +17,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
 import { radius } from '@/constants/spacing'
@@ -61,7 +61,7 @@ export const SearchBar: FC<Props> = ({
         onBlur={() => setIsFocused(false)}
       />
       {value.length > 0 && (
-        <Pressable hitSlop={8} onPress={handleClear} style={styles.clearBtn}>
+        <Pressable hitSlop={8} onPress={handleClear} style={styles.clearBtn} haptic="selection">
           <Ionicons name="close-circle" size={18} color={colors.inkMuted} />
         </Pressable>
       )}

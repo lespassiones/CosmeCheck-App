@@ -21,11 +21,15 @@ import type { AnalyseCounts } from '@/lib/analysis/types'
 
 interface Props {
   counts: AnalyseCounts
+  /** `row` : les 3 chiffres côte à côte (défaut) ; `column` : empilés. */
+  layout?: 'row' | 'column'
+  /** Sans carte autour (quand il est posé dans une autre carte). */
+  bare?: boolean
 }
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name']
 
-const PenaltySummaryStripBase: FC<Props> = ({ counts }) => {
+const PenaltySummaryStripBase: FC<Props> = ({ counts, layout = 'row', bare = false }) => {
   const matched = counts.matched
   const penalised = counts.jaune + counts.orange + counts.rouge
   const pctSafe = matched > 0 ? Math.round((counts.vert / matched) * 100) : 0
@@ -36,7 +40,6 @@ const PenaltySummaryStripBase: FC<Props> = ({ counts }) => {
     key: string
     icon: IoniconName
     iconColor: string
-    iconBg: string
     valueColor: string
     value: string
     label: string
@@ -45,7 +48,6 @@ const PenaltySummaryStripBase: FC<Props> = ({ counts }) => {
       key: 'safe',
       icon: 'shield-checkmark',
       iconColor: colors.rating.vert.text,
-      iconBg: colors.rating.vert.bg,
       valueColor: colors.rating.vert.text,
       value: `${pctSafe} %`,
       label: 'sans pénalité',
@@ -54,7 +56,6 @@ const PenaltySummaryStripBase: FC<Props> = ({ counts }) => {
       key: 'penalty',
       icon: 'warning',
       iconColor: colors.rating.jaune.text,
-      iconBg: colors.rating.jaune.bg,
       valueColor: colors.rating.orange.text,
       value: `${pctPenalised} %`,
       label: 'avec pénalité',
@@ -63,20 +64,19 @@ const PenaltySummaryStripBase: FC<Props> = ({ counts }) => {
       key: 'risk',
       icon: 'close-circle',
       iconColor: colors.rating.rouge.text,
-      iconBg: colors.rating.rouge.bg,
       valueColor: colors.rating.rouge.text,
       value: `${atRisk}`,
       label: 'à risque fort',
     },
   ]
 
-  return (
-    <WhiteCard padding={spacing.md}>
-      <View style={styles.row}>
+  const content = (
+      <View style={layout === 'column' ? styles.column : styles.row}>
         {stats.map((s) => (
-          <View key={s.key} style={styles.stat}>
-            <View style={[styles.iconBox, { backgroundColor: s.iconBg }]}>
-              <Ionicons name={s.icon} size={16} color={s.iconColor} />
+          <View key={s.key} style={[styles.stat, layout === 'column' && styles.statStacked]}>
+            {/* Icône seule, en couleur, sans bloc teinté autour (28/09/2026). */}
+            <View style={styles.iconBox}>
+              <Ionicons name={s.icon} size={22} color={s.iconColor} />
             </View>
             <View style={styles.statBody}>
               <Text style={[styles.value, { color: s.valueColor }]}>{s.value}</Text>
@@ -87,8 +87,9 @@ const PenaltySummaryStripBase: FC<Props> = ({ counts }) => {
           </View>
         ))}
       </View>
-    </WhiteCard>
   )
+  // `bare` : posé dans une autre carte (à droite du demi-donut), sans carte à lui.
+  return bare ? content : <WhiteCard padding={spacing.md}>{content}</WhiteCard>
 }
 
 export const PenaltySummaryStrip = memo(PenaltySummaryStripBase)
@@ -98,6 +99,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
   },
+  // Les 3 chiffres empilés (à droite du demi-donut).
+  column: {
+    gap: spacing.sm,
+  },
+  // Empilés : chaque ligne prend sa hauteur naturelle (pas de flex: 1 en colonne).
+  statStacked: {
+    flex: 0,
+  },
   stat: {
     flex: 1,
     flexDirection: 'row',
@@ -106,9 +115,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   iconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },

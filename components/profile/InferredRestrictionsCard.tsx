@@ -4,15 +4,18 @@
  * (profile-restriction-inference). RIEN n'est activé : simple information (les
  * vraies restrictions restent celles cochées ci-dessous). Rendu null tant que
  * la ligne n'existe pas ou que la liste est vide → zéro bruit visuel.
+ *
+ * 28/09/2026 : repliée par défaut, une seule ligne « Suggestions selon ton
+ * profil » avec une ampoule ; le détail s'ouvre au toucher.
  */
 import { type FC, useEffect, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
-import { WhiteCard } from '@/components/design/WhiteCard'
 import { db } from '@/lib/supabase/client'
 
 type Item = { label: string; reason?: string | null }
@@ -26,6 +29,7 @@ interface InferenceQuery {
 
 export const InferredRestrictionsCard: FC<{ userId: string | null }> = ({ userId }) => {
   const [items, setItems] = useState<Item[]>([])
+  const [open, setOpen] = useState(false)
 
   useEffect(() => {
     if (!userId) return
@@ -54,11 +58,19 @@ export const InferredRestrictionsCard: FC<{ userId: string | null }> = ({ userId
   if (items.length === 0) return null
 
   return (
-    <WhiteCard padding={spacing.base} style={styles.card}>
-      <View style={styles.titleRow}>
-        <Ionicons name="sparkles" size={14} color={colors.accent} />
-        <Text style={styles.title}>Suggérées selon ton profil</Text>
-      </View>
+    <View style={styles.card}>
+      <Pressable
+        onPress={() => setOpen((v) => !v)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        style={styles.titleRow}
+      >
+        <Ionicons name="bulb-outline" size={20} color={colors.ink} />
+        <Text style={styles.title}>Suggestions selon ton profil</Text>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.inkMuted} />
+      </Pressable>
+      {open ? (
+      <View style={styles.body}>
       <Text style={styles.hint}>
         Déduites automatiquement de ton profil (peau, préoccupations, objectifs).
         Simple récapitulatif : rien n&apos;est activé, tes restrictions restent
@@ -75,19 +87,33 @@ export const InferredRestrictionsCard: FC<{ userId: string | null }> = ({ userId
           </View>
         ))}
       </View>
-    </WhiteCard>
+      </View>
+      ) : null}
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  card: { marginBottom: spacing.md },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  title: { ...typography.smallSemiBold, color: colors.ink },
+  // Même cadre que le champ de recherche et la liste : fond blanc, filet, sans ombre.
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.base,
+  },
+  title: { ...typography.bodyMedium, fontWeight: '700', color: colors.ink, flex: 1 },
+  body: { paddingHorizontal: spacing.base, paddingBottom: spacing.base },
   hint: {
     ...typography.xs,
     color: colors.inkMuted,
     lineHeight: 16,
-    marginTop: 4,
     marginBottom: spacing.sm,
   },
   list: { gap: 6 },

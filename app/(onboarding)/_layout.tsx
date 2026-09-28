@@ -30,7 +30,8 @@
  * d'une réponse en vol, et `LOADER_MAX_MS` le convertit en destination s'il
  * s'éternise : cette porte ne peut plus rester close.
  *
- * La barre de progression / navigation vit dans OnboardingWizard (index.tsx).
+ * Le parcours lui-même (en-tête, progression, écrans) vit dans
+ * components/onboarding/flow/OnboardingFlow.tsx (index.tsx, mode « member »).
  */
 
 import { useEffect, useState, type FC } from 'react'

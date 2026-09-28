@@ -23,6 +23,7 @@ import { db } from '@/lib/supabase/client'
 import type { AlternativeProduct } from '@/lib/analysis/alternativesFilter'
 import type { AnalysisRow } from '@/lib/supabase/types'
 import { ensureEanAnalysis } from '@/lib/analysis/eanAnalysisPrefetch'
+import { alignCachedResult } from '@/lib/analysis/fastPathRow'
 import { cacheProductImage } from '@/lib/storage/productImageCache'
 import { cacheAnalysisRow } from '@/lib/storage/session'
 
@@ -47,7 +48,10 @@ export function useLaunchAlternative(): {
         const cached = product.ean ? await ensureEanAnalysis(qc, product.ean) : null
         if (cached && Array.isArray(cached.items) && cached.items.length > 0) {
           const label = product.name?.slice(0, 200) ?? null
-          const result_json = { ...cached, synthesis: null }
+          // Note = note catalogue actuelle (renvoyée par la RPC), sinon celle de
+          // la carte ; jamais 0 inventé (cf. lib/analysis/fastPathRow.ts).
+          const aligned = alignCachedResult(cached, product.score)
+          const result_json = aligned.resultJson
           const { data: inserted } = await db()
             .from('analyses' as never)
             .insert({
@@ -58,7 +62,7 @@ export function useLaunchAlternative(): {
               category: (cached.category as string | null) ?? null,
               input_text: inci,
               result_json,
-              score: Number(((cached.score as number) ?? 0).toFixed(2)),
+              score: aligned.score,
               ean: product.ean ?? null,
             } as never)
             .select('*')

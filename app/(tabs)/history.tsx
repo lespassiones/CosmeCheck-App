@@ -5,6 +5,10 @@
  *
  * - Liste les 50 dernières analyses de l'utilisateur (demi-donut + score + date).
  * - Recherche par nom de produit OU par ingrédient (tokens issus de result_json).
+ * - En-tête (28/09/2026) : titre + « Comparer » à droite (à la place des crédits
+ *   et du bouton menu), puis sélecteur Analyses / Favoris / Promesses. L'onglet
+ *   Promesses (ex-onglet de la barre du bas) rend PromessesList ; `?tab=` choisit
+ *   l'onglet à l'ouverture (ROUTES.TABS.PROMESSES y mène).
  * - Mode "Comparer 2 analyses" : sélection de max 2 (remplace la plus ancienne),
  *   CTA → /compare?ids=a,b.
  * - Feuille d'actions par ligne : renommer (update analyses.name) / supprimer
@@ -13,17 +17,16 @@
  *   analyse de cohérence existe déjà, sinon /promesses/nouvelle.
  */
 
-import { type FC, useCallback, useMemo, useState } from 'react'
+import { type FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   FlatList,
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { router, useLocalSearchParams } from 'expo-router'
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -31,12 +34,13 @@ import { Ionicons } from '@expo/vector-icons'
 
 import { colors } from '@/constants/colors'
 import { spacing, radius } from '@/constants/spacing'
-import { typography } from '@/constants/typography'
+import { fontFamilies, typography } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { db } from '@/lib/supabase/client'
 import { invalidateCachedAnalysisRow } from '@/lib/storage/session'
 import { filterHistory } from '@/lib/history/filterHistory'
 import { showToast } from '@/components/shared/Toast'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import {
   parseAnalyseResponse,
   toneToColorRating,
@@ -50,6 +54,8 @@ import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { StaggerItem } from '@/components/design/motion'
 import { ScreenHeader } from '@/components/shared/ScreenHeader'
 import { SearchBar } from '@/components/shared/SearchBar'
+import { SegmentedControl } from '@/components/shared/SegmentedControl'
+import { PromessesList } from '@/components/promesses/PromessesList'
 import { HistoryRowCard, type HistoryItemView } from '@/components/history/HistoryRowCard'
 import { HistoryItemActions } from '@/components/history/HistoryItemActions'
 import { PromesseFlowModal } from '@/components/promesses/PromesseFlowModal'
@@ -87,6 +93,17 @@ interface HistoryItem extends HistoryItemView {
 }
 
 type CountsTuple = { vert: number; jaune: number; orange: number; rouge: number }
+
+type HistoryTab = 'analyses' | 'favoris' | 'promesses'
+
+const TABS = [
+  { key: 'analyses', label: 'Analyses' },
+  { key: 'favoris', label: 'Favoris' },
+  { key: 'promesses', label: 'Promesses' },
+] as const
+
+const parseTab = (raw: unknown): HistoryTab =>
+  raw === 'favoris' || raw === 'promesses' ? raw : 'analyses'
 
 function emptyCounts(): CountsTuple {
   return { vert: 0, jaune: 0, orange: 0, rouge: 0 }
@@ -160,16 +177,45 @@ const HistoryScreen: FC = () => {
   const insets = useSafeAreaInsets()
   const queryClient = useQueryClient()
   // Écran d'origine à retrouver si l'onglet a été ouvert depuis une autre page
-  // (ex. /promesses/choisir). Affiche alors un chevron retour dans l'en-tête.
-  const { returnTo: returnToParam } = useLocalSearchParams<{ returnTo?: string }>()
+  // (ex. la feuille « Vérifier une promesse »). Affiche alors un chevron retour
+  // dans l'en-tête.
+  const { returnTo: returnToParam, tab: tabParam } = useLocalSearchParams<{
+    returnTo?: string
+    tab?: string
+  }>()
   const returnTo = typeof returnToParam === 'string' && returnToParam ? returnToParam : null
 
   const [search, setSearch] = useState('')
-  const [favorisOnly, setFavorisOnly] = useState(false)
+  const [tab, setTab] = useState<HistoryTab>(() => parseTab(tabParam))
+  const favorisOnly = tab === 'favoris'
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
   const [promesseModalFor, setPromesseModalFor] = useState<HistoryItem | null>(null)
   const [actionsFor, setActionsFor] = useState<HistoryItem | null>(null)
+
+  // À CHAQUE arrivée sur l'écran : « Analyses » par défaut. Un onglet de la
+  // barre du bas reste monté, donc sans ça le dernier choix (Favoris,
+  // Promesses) survivait au retour. Seul un lien explicite (?tab=promesses,
+  // cf. ROUTES.TABS.PROMESSES) choisit un autre onglet, et il est CONSOMMÉ :
+  // on l'efface des paramètres, sinon il resterait collé à la route et
+  // ramènerait sur Promesses aux arrivées suivantes. Lu via une ref pour que
+  // l'effacement ne relance pas l'effet pendant que l'écran est affiché.
+  const tabParamRef = useRef(tabParam)
+  tabParamRef.current = tabParam
+  useFocusEffect(
+    useCallback(() => {
+      const requested = tabParamRef.current
+      setTab(parseTab(requested))
+      if (requested) router.setParams({ tab: undefined })
+    }, []),
+  )
+
+  // Lien reçu alors que l'écran est DÉJÀ affiché (pas de nouveau focus).
+  useEffect(() => {
+    if (!tabParam) return
+    setTab(parseTab(tabParam))
+    router.setParams({ tab: undefined })
+  }, [tabParam])
 
   const queryKey = ['history', userId] as const
 
@@ -246,6 +292,9 @@ const HistoryScreen: FC = () => {
     () => filterHistory(items, search, favorisOnly),
     [items, search, favorisOnly],
   )
+  // Liste de l'onglet sans la recherche : base de la sélection « Comparer ».
+  const tabItems = useMemo(() => filterHistory(items, '', favorisOnly), [items, favorisOnly])
+  const listData = selectMode ? tabItems : filtered
 
   // ── Mutations renommer / supprimer ─────────────────────────────────────────
   const renameMutation = useMutation({
@@ -329,6 +378,12 @@ const HistoryScreen: FC = () => {
     setSelected([])
   }
 
+  const changeTab = (next: HistoryTab) => {
+    // La sélection « Comparer » ne survit pas à un changement d'onglet.
+    if (selectMode) cancelSelect()
+    setTab(next)
+  }
+
   const compare = () => {
     if (selected.length !== 2) return
     router.push(`${ROUTES.COMPARE.INDEX}?ids=${selected.join(',')}` as never)
@@ -385,7 +440,7 @@ const HistoryScreen: FC = () => {
           <Text style={styles.emptyText}>
             Mets des produits en favori (icône signet) pour les retrouver ici.
           </Text>
-          <Pressable onPress={() => setFavorisOnly(false)} hitSlop={8}>
+          <Pressable onPress={() => changeTab('analyses')} hitSlop={8}>
             <Text style={styles.emptyLink}>Voir tout l'historique</Text>
           </Pressable>
         </View>
@@ -418,26 +473,22 @@ const HistoryScreen: FC = () => {
 
   const canCompare = selected.length === 2
 
-  // En-tête de la LISTE (scrolle avec le contenu : seul le ScreenHeader/crédits
-  // reste fixe). Recherche en haut, puis ligne « Tout | Favoris … Comparer ».
+  // En-tête de la LISTE (scrolle avec le contenu ; l'en-tête d'écran, lui,
+  // reste fixe). Recherche, ou consigne de sélection en mode « Comparer ».
   const listHeaderElement =
     items.length === 0 ? null : (
       <View style={styles.headerWrap}>
         {selectMode ? (
           <View style={styles.toolbar}>
             <Text style={styles.hint}>{hint}</Text>
-            <View style={styles.toolbarRight}>
-              <Pressable onPress={cancelSelect} hitSlop={8} style={styles.cancelBtn}>
-                <Text style={styles.cancelText}>Annuler</Text>
-              </Pressable>
-              <Pressable
-                onPress={compare}
-                disabled={!canCompare}
-                style={[styles.compareBtn, !canCompare && styles.compareBtnDisabled]}
-              >
-                <Text style={styles.compareText}>Comparer ({selected.length}/2)</Text>
-              </Pressable>
-            </View>
+            <Pressable
+              onPress={compare}
+              haptic="primary"
+              disabled={!canCompare}
+              style={[styles.compareBtn, !canCompare && styles.compareBtnDisabled]}
+            >
+              <Text style={styles.compareText}>Comparer ({selected.length}/2)</Text>
+            </Pressable>
           </View>
         ) : (
           <>
@@ -446,33 +497,6 @@ const HistoryScreen: FC = () => {
               onChangeText={setSearch}
               placeholder="Rechercher un produit ou un ingrédient…"
             />
-            <View style={styles.controlsRow}>
-              <View style={styles.segmentRow}>
-                <Pressable
-                  onPress={() => setFavorisOnly(false)}
-                  style={[styles.segment, !favorisOnly && styles.segmentOn]}
-                >
-                  <Text style={[styles.segmentText, !favorisOnly && styles.segmentTextOn]}>Tout</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setFavorisOnly(true)}
-                  style={[styles.segment, favorisOnly && styles.segmentOn]}
-                >
-                  <Ionicons
-                    name={favorisOnly ? 'bookmark' : 'bookmark-outline'}
-                    size={13}
-                    color={favorisOnly ? colors.rose : colors.inkMuted}
-                  />
-                  <Text style={[styles.segmentText, favorisOnly && styles.segmentTextOn]}>Favoris</Text>
-                </Pressable>
-              </View>
-              {items.length >= 2 ? (
-                <Pressable onPress={startSelect} style={styles.compareEntry}>
-                  <Text style={styles.compareEntryText}>Comparer 2 analyses</Text>
-                  <Ionicons name="swap-horizontal" size={15} color={colors.surface} />
-                </Pressable>
-              ) : null}
-            </View>
             {search.trim().length > 0 ? (
               <Text style={styles.searchCount}>
                 {filtered.length === 0
@@ -485,6 +509,23 @@ const HistoryScreen: FC = () => {
       </View>
     )
 
+  // « Comparer » à droite du titre : entre en sélection, puis devient « Annuler ».
+  // Rien sur l'onglet Promesses (on n'y compare pas d'analyses).
+  const headerAction =
+    tab !== 'promesses' && tabItems.length >= 2 ? (
+      <Pressable
+        onPress={selectMode ? cancelSelect : startSelect}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel={selectMode ? 'Annuler la comparaison' : 'Comparer 2 analyses'}
+        style={({ pressed }) => pressed && styles.headerActionPressed}
+      >
+        <Text style={styles.headerAction}>{selectMode ? 'Annuler' : 'Comparer'}</Text>
+      </Pressable>
+    ) : (
+      <View />
+    )
+
   return (
     <View style={styles.root}>
       <BackgroundGlow variant="minimal" />
@@ -495,24 +536,31 @@ const HistoryScreen: FC = () => {
             ? () => router.navigate(returnTo as Parameters<typeof router.navigate>[0])
             : undefined
         }
+        right={headerAction}
+        below={<SegmentedControl segments={TABS} value={tab} onChange={changeTab} />}
+        menuSpace={false}
       />
       <SafeAreaView style={styles.safe} edges={[]}>
-        <FlatList
-          data={selectMode ? items : filtered}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          ListHeaderComponent={listHeaderElement}
-          ListEmptyComponent={listEmpty}
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingBottom: insets.bottom + 64 + spacing.xl },
-            (selectMode ? items : filtered).length === 0 && styles.listContentEmpty,
-          ]}
-          ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
-          showsVerticalScrollIndicator={false}
-          refreshing={isRefetching}
-          onRefresh={() => void refetch()}
-        />
+        {tab === 'promesses' ? (
+          <PromessesList />
+        ) : (
+          <FlatList
+            data={listData}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            ListHeaderComponent={listHeaderElement}
+            ListEmptyComponent={listEmpty}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: insets.bottom + 64 + spacing.xl },
+              listData.length === 0 && styles.listContentEmpty,
+            ]}
+            ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
+            showsVerticalScrollIndicator={false}
+            refreshing={isRefetching}
+            onRefresh={() => void refetch()}
+          />
+        )}
       </SafeAreaView>
 
       <HistoryItemActions
@@ -558,29 +606,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     minHeight: 36,
   },
-  toolbarRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  controlsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: spacing.md,
-  },
-  segmentRow: { flexDirection: 'row', gap: spacing.sm },
-  segment: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: spacing.base,
-    paddingVertical: 7,
-    borderRadius: radius.full,
-    backgroundColor: colors.gray100,
-  },
-  segmentOn: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.rose },
-  segmentText: { ...typography.xsSemiBold, color: colors.inkMuted },
-  segmentTextOn: { color: colors.rose },
   hint: { ...typography.xs, color: colors.inkMuted },
-  cancelBtn: { paddingHorizontal: spacing.sm, paddingVertical: 6 },
-  cancelText: { ...typography.xsSemiBold, color: colors.inkMuted },
+  headerAction: { fontFamily: fontFamilies.semiBold, fontSize: 16, color: colors.ink },
+  headerActionPressed: { opacity: 0.6 },
   compareBtn: {
     backgroundColor: colors.accent,
     paddingHorizontal: spacing.base,
@@ -589,16 +617,6 @@ const styles = StyleSheet.create({
   },
   compareBtnDisabled: { opacity: 0.4 },
   compareText: { ...typography.xsSemiBold, color: colors.surface },
-  compareEntry: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.success,
-    paddingHorizontal: spacing.base,
-    paddingVertical: 8,
-    borderRadius: radius.full,
-  },
-  compareEntryText: { ...typography.xsSemiBold, color: colors.surface },
   searchCount: { ...typography.xs, color: colors.inkMuted, marginTop: spacing.sm },
   listContent: {
     paddingHorizontal: spacing.sm,

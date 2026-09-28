@@ -27,7 +27,7 @@ import { serviceClient } from "../_shared/auth.ts";
 import { getCatalogInfo } from "./catalog.ts";
 import { dedupeKey } from "../_shared/dedupeKey.ts";
 import { sha256Hex } from "../_shared/aiClient.ts";
-import { type ColorRating, pastilleTone, reconcileScore, type ScoreTone, scoreLabel, synthScore } from "./score.ts";
+import { type ColorRating, pastilleTone, type ScoreTone, scoreLabel, servedProductScore, synthScore } from "./score.ts";
 import { isCleanInciInput, parseInciList } from "./parse.ts";
 import {
   buildAnalysisCore,
@@ -197,9 +197,40 @@ Deno.serve(async (req: Request) => {
       // items (anti-cache-d'un-autre-produit, cf. inciKey/cacheMatchesInci).
       // Un cache rejeté n'est pas perdu : la branche live recalcule et réécrit la
       // ligne via upsertProductAnalysis → la table se répare d'elle-même.
-      const cacheTrustworthy =
+      let cacheTrustworthy =
         (inputTokenCount < 5 || cachedItems.length >= inputTokenCount * 0.5) &&
         cacheMatchesInci(cachedItems, freshTokens.map((t) => t.raw));
+      // Garde de FRAÎCHEUR des couleurs (28 sept 2026) : le cache garde les
+      // couleurs du jour où il a été calculé. Mesuré en prod : des lignes du
+      // backfill de juillet affichaient d'anciennes couleurs, donc une fiche
+      // contredite par sa propre note. Si une seule couleur a changé depuis,
+      // on recalcule (branche live) : la ligne est réécrite, et le trigger SQL
+      // réaligne la note catalogue sur ces couleurs.
+      if (cachedResult && cacheTrustworthy) {
+        const slugs = [...new Set(
+          cachedItems
+            .map((it) => (it as { slug?: string | null }).slug)
+            .filter((s): s is string => typeof s === "string" && s.length > 0),
+        )];
+        if (slugs.length > 0) {
+          const { data: colorRows, error: colorErr } = await svc
+            .schema("cosme_check")
+            .from("ingredients")
+            .select("slug, color_rating")
+            .in("slug", slugs);
+          if (!colorErr && colorRows) {
+            const current = new Map(
+              (colorRows as { slug: string; color_rating: ColorRating | null }[])
+                .map((r) => [r.slug, r.color_rating]),
+            );
+            cacheTrustworthy = cachedItems.every((it) => {
+              const slug = (it as { slug?: string | null }).slug;
+              if (!slug || !current.has(slug)) return true;
+              return current.get(slug) === ((it as { colorRating?: ColorRating | null }).colorRating ?? null);
+            });
+          }
+        }
+      }
       if (cachedResult && cacheTrustworthy) {
         cachedResult.items = recomputeThresholdContext(cachedItems);
         cachedResult.synthesis = null;
@@ -251,25 +282,22 @@ Deno.serve(async (req: Request) => {
           cachedResult.catalogCategory = catalogInfo.category;
         }
         if (catScore != null) {
-          // Réconciliation : le score catalogue peut avoir été calculé avec un
-          // coloriage différent. On recalcule le score live depuis les couleurs
-          // des items cachés (celles affichées) ; s'il tombe dans une bande
-          // différente, on sert le live (note = couleurs vues). Garde >=50%.
-          const past = pastilleTone(
-            cachedItems.map((it) => ({
-              color: (it as { colorRating?: ColorRating | null }).colorRating ?? null,
-              position: Number((it as { position?: number }).position ?? 0),
-            })),
-            cachedItems.length,
-            false,
-          );
-          const cnts = cachedResult.counts as { total?: number; matched?: number } | undefined;
-          const chosen = reconcileScore(
+          // Note de référence des ingrédients servis (≥ 50 % identifiés), sinon
+          // la note catalogue. Le trigger SQL tient le catalogue égal à cette
+          // même valeur : recherche, alternatives et fiche affichent la même.
+          const chosen = servedProductScore(
             catScore,
-            synthScore(past),
-            cnts?.matched ?? 0,
-            cnts?.total ?? cachedItems.length,
+            cachedItems as { colorRating?: ColorRating | null; position?: number | null }[],
+            catScore,
           );
+          // Catalogue pas encore réaligné sur ces ingrédients : on l'aligne
+          // maintenant (même règle que le trigger), avant de répondre.
+          if (Math.abs(chosen - catScore) >= 0.005) {
+            await svc.rpc("cosme_check_align_catalog_score", { p_ean: productEan }).then(
+              () => undefined,
+              () => undefined,
+            );
+          }
           const { label, tone } = scoreLabel(chosen);
           cachedResult.score = chosen;
           cachedResult.scoreLabel = label;
@@ -461,7 +489,7 @@ Deno.serve(async (req: Request) => {
   // (extraction verbatim, 14 juil 2026) pour que le script de repeuplement
   // produise EXACTEMENT les mêmes result_json que le live.
   const core = buildAnalysisCore({ tokens, rows });
-  const { enriched, counts, matched, observations, thresholdFor } = core;
+  const { enriched, counts, observations, thresholdFor } = core;
 
   let score = core.score;
   let scoreLabelText = core.scoreLabelText;
@@ -475,10 +503,16 @@ Deno.serve(async (req: Request) => {
   const catalogScore = catalogInfo?.score ?? null;
   const catalogCategorySlug = catalogInfo?.category ?? null;
   if (catalogScore != null) {
-    // Réconciliation : on garde le score catalogue SAUF s'il tombe dans une
-    // bande de qualité différente des couleurs live affichées (score déjà dans
-    // `score` = core.score) → dans ce cas on sert le live (note = couleurs vues).
-    score = reconcileScore(catalogScore, score, matched, core.countsPayload.total);
+    // Note unique (28 sept 2026) : la note de référence des ingrédients servis
+    // (≥ 50 % identifiés), sinon la note catalogue. Le produit est ensuite
+    // écrit dans product_analyses (plus bas) et le trigger SQL recopie cette
+    // valeur dans le catalogue : la recherche et les alternatives affichent
+    // alors la même note que cette fiche.
+    score = servedProductScore(
+      catalogScore,
+      enriched.map((r) => ({ colorRating: r.effective_color, position: r.position_idx })),
+      score,
+    );
     const lab = scoreLabel(score);
     scoreLabelText = lab.label;
     scoreTone = lab.tone;
@@ -487,11 +521,16 @@ Deno.serve(async (req: Request) => {
   // Catégorisation : UNIQUEMENT pour un produit hors catalogue (ou catalogué sans
   // catégorie). Un produit déjà catalogué garde SA catégorie (source de vérité) :
   // on ne relance PAS le classifieur LLM. Cf. consigne « scan = lecture seule ».
+  // Nom lisible (marque + libellé + type) : sert au classifieur LLM de
+  // catégorie ET au garde capillaire (une crème cheveux reconnue par son nom).
+  const productNameForGuard = [body.brand, body.productLabel, body.productType]
+    .filter(Boolean)
+    .join(" ");
   const needsCategory = !catalogCategorySlug;
   const categoryTop5Names = core.categoryTop5Names;
   const categoryPromise: Promise<ProductCategory> =
     needsCategory && categoryTop5Names.length > 0
-      ? categorizeProduct(categoryTop5Names, user.id).catch(() => "autre" as ProductCategory)
+      ? categorizeProduct(categoryTop5Names, user.id, productNameForGuard).catch(() => "autre" as ProductCategory)
       : Promise.resolve("autre" as ProductCategory);
   const precisePromise: Promise<string | null> = needsCategory
     ? classifyPreciseCategory(
@@ -567,9 +606,6 @@ Deno.serve(async (req: Request) => {
         new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
       ]);
   // Nom servant les gardes déterministes de catégorie (marque + libellé + type).
-  const productNameForGuard = [body.brand, body.productLabel, body.productType]
-    .filter(Boolean)
-    .join(" ");
   // Le slug catalogue reste intouché (curation = source de vérité) ; seule la
   // catégorie DÉDUITE (LLM 1,5 s / mappage productType) passe le garde capillaire.
   const deducedCategory = llmCategory ?? normalizeProductTypeToCategory(body.productType) ?? null;
@@ -660,9 +696,17 @@ Deno.serve(async (req: Request) => {
     }
   } catch { /* l'échec d'historique ne bloque jamais la réponse */ }
 
-  // Cache EAN product_analyses (service-role, non-bloquant).
-  if (productEan) {
-    void (async () => {
+  // Cache EAN product_analyses (service-role). Deux règles (28 sept 2026) :
+  //   1. on n'écrit QUE si l'analyse porte sur l'INCI du catalogue (ou si le
+  //      produit n'y est pas) : un texte client plus long (photo, lien) ne doit
+  //      jamais réécrire la note catalogue via le trigger d'alignement ;
+  //   2. l'écriture est ATTENDUE pour un produit catalogué : le trigger aligne
+  //      la note catalogue avant que l'app ne relise la fiche (sinon la carte
+  //      de recherche pouvait encore montrer l'ancienne note quelques instants).
+  const usedCatalogInci =
+    !!catalogInfo?.ingredientsText && effectiveText === catalogInfo.ingredientsText.slice(0, 8000);
+  if (productEan && (!catalogInfo || usedCatalogInci)) {
+    const writeCache = (async () => {
       const { upsertProductAnalysis } = await import("./catalog.ts");
       await upsertProductAnalysis({
         ean: productEan,
@@ -672,7 +716,10 @@ Deno.serve(async (req: Request) => {
         scoreTone,
         algoVersion: "v1.2",
       });
-    })();
+    })().catch(() => undefined);
+    if (catalogInfo) await writeCache;
+  }
+  if (productEan) {
 
     // Écriture catalogue SUPPRIMÉE : le scan est en LECTURE SEULE. Le catalogue
     // (catégorie + score propriétaire) est la source de vérité, jamais alimenté

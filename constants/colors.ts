@@ -102,26 +102,30 @@ export const colors = {
   gray800: '#1F2937',
   gray900: '#111827',
 
+  // ⚠️ VERT UNIQUE (28/09/2026) : tout vert « bon » = #16A34A (= success, le
+  // vert des boutons). Textes foncés #15803D/#166534, fonds #F0FDF4/#DCFCE7,
+  // liserés #BBF7D0. Plus d'émeraude (#10B981/#34D399…) ni de vert lime.
+
   // ── Blob / Donut (IngredientBlob) — DISTINCT des chips rating ─────
-  blob: { vert: '#A3D26C', jaune: '#F6CE5A', orange: '#F49B43', rouge: '#E0432A' },
+  blob: { vert: '#16A34A', jaune: '#F6CE5A', orange: '#F49B43', rouge: '#E0432A' },
   // Ombres colorées neumorphiques par tranche
   blobShadow: {
-    vert: 'rgba(123,176,67,0.70)',
+    vert: 'rgba(22,163,74,0.60)',
     jaune: 'rgba(214,165,44,0.68)',
     orange: 'rgba(214,118,40,0.68)',
     rouge: 'rgba(190,52,28,0.68)',
   },
-  blobText: { vert: '#84B043', jaune: '#D4A017', orange: '#E07F2C', rouge: '#C73523' },
+  blobText: { vert: '#16A34A', jaune: '#D4A017', orange: '#E07F2C', rouge: '#C73523' },
 
   // ── HalfDonut (composant séparé) — palette HARD, distincte du blob ─
-  halfDonut: { vert: '#10B981', jaune: '#FBBF24', orange: '#F97316', rouge: '#F43F5E', empty: '#E5E7EB' },
+  halfDonut: { vert: '#16A34A', jaune: '#FBBF24', orange: '#F97316', rouge: '#F43F5E', empty: '#E5E7EB' },
 
   // ── Spectrum (carrés analyse) ─────────────────────────────────────
-  spectrum: { vert: '#10B981', jaune: '#FBBF24', orange: '#FB923C', rouge: '#F43F5E', empty: '#E5E7EB' },
+  spectrum: { vert: '#16A34A', jaune: '#FBBF24', orange: '#FB923C', rouge: '#F43F5E', empty: '#E5E7EB' },
 
   // ── Verdict (PROMESSES) — source unique de vérité ─────────────────
   verdict: {
-    tenue:         { DEFAULT: '#10B981', soft: '#ECFDF5', ring: '#A7F3D0', text: '#047857' },
+    tenue:         { DEFAULT: '#16A34A', soft: '#F0FDF4', ring: '#BBF7D0', text: '#15803D' },
     partielle:     { DEFAULT: '#FBBF24', soft: '#FFFBEB', ring: '#FDE68A', text: '#B45309' },
     marketing:     { DEFAULT: '#FB923C', soft: '#FFF7ED', ring: '#FED7AA', text: '#C2410C' },
     non_demontree: { DEFAULT: '#EF4444', soft: '#FEF2F2', ring: '#FECACA', text: '#B91C1C' },

@@ -1,11 +1,11 @@
 /**
- * TagExposureBar — barre d'exposition cumulée pour une famille d'ingrédients.
+ * TagExposureBar : barre d'exposition cumulée pour une famille d'ingrédients.
  *
- * Port du web (CosmetWiki components/routine/TagExposureBar.tsx) : label +
- * compteur cumulé /j + barre proportionnelle multi-couleur. La barre est
- * remplie selon `count / max` (min 6 % comme le web) et segmentée par couleur
- * (vert/jaune/orange/rouge) via `colorSegments` (fractions). Animation de
- * remplissage au montage (reanimated, désactivable).
+ * Nom de la famille au-dessus, puis la barre avec « 1,5 par jour » à sa
+ * droite. La barre est remplie selon `count / max` (min 6 %) et
+ * découpée par couleur (vert, jaune, orange, rouge) via `colorSegments`
+ * (fractions), chaque couleur séparée par un fin trait blanc. Remplissage
+ * animé au montage (reanimated, désactivable, respecte reduce-motion).
  */
 
 import { memo, useEffect } from 'react'
@@ -22,12 +22,12 @@ import Animated, {
 import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
 
-/** Couleurs des segments — alignées sur le web (COLOR_HEX). */
+/** Couleurs des segments : teintes pleines et douces, lisibles côte à côte. */
 const COLOR_HEX: Record<string, string> = {
-  Vert: '#10B981',
-  Jaune: '#F59E0B',
-  Orange: '#F97316',
-  Rouge: '#F87171',
+  Vert: '#3FA46A',
+  Jaune: '#EFC048',
+  Orange: '#EE8A3E',
+  Rouge: '#E0555A',
 }
 
 export interface TagColorSegment {
@@ -44,6 +44,13 @@ interface Props {
   index?: number
 }
 
+/** 1.5 → « 1,5 par jour », 2 → « 2 par jour ». */
+function perDay(count: number): string {
+  const rounded = Math.round(count * 10) / 10
+  const text = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1).replace('.', ',')
+  return `${text} par jour`
+}
+
 export const TagExposureBar = memo(function TagExposureBar({
   label,
   count,
@@ -52,7 +59,7 @@ export const TagExposureBar = memo(function TagExposureBar({
   animate = true,
   index = 0,
 }: Props) {
-  // Remplissage cible : pourcentage de la piste (min 6 %, comme le web).
+  // Remplissage cible : pourcentage de la piste (min 6 %).
   const pct = Math.max(6, Math.round((count / Math.max(max, 0.0001)) * 100))
 
   const progress = useSharedValue(animate ? 0 : 1)
@@ -84,60 +91,75 @@ export const TagExposureBar = memo(function TagExposureBar({
       : [{ color: 'gris', fraction: 1 }]
 
   return (
-    <View style={styles.row}>
-      <View style={styles.labelRow}>
-        <Text style={styles.label} numberOfLines={1}>
-          {label}
+    <View
+      style={styles.row}
+      accessible
+      accessibilityLabel={`${label} : ${perDay(count)}`}
+    >
+      <Text style={styles.label} numberOfLines={1}>
+        {label}
+      </Text>
+      <View style={styles.barRow}>
+        <View style={styles.track}>
+          <Animated.View style={[styles.fill, fillStyle]}>
+            {segments.map((seg, i) => (
+              <View
+                key={`${seg.color}-${i}`}
+                style={{
+                  flex: Math.max(seg.fraction, 0.0001),
+                  backgroundColor: COLOR_HEX[seg.color] ?? colors.inkLight,
+                }}
+              />
+            ))}
+          </Animated.View>
+        </View>
+        <Text style={styles.count} numberOfLines={1}>
+          {perDay(count)}
         </Text>
-        <Text style={styles.count}>{count.toFixed(2)}/j</Text>
-      </View>
-      <View style={styles.track}>
-        <Animated.View style={[styles.fill, fillStyle]}>
-          {segments.map((seg, i) => (
-            <View
-              key={`${seg.color}-${i}`}
-              style={{
-                flex: Math.max(seg.fraction, 0.0001),
-                backgroundColor: COLOR_HEX[seg.color] ?? '#9CA3AF',
-              }}
-            />
-          ))}
-        </Animated.View>
       </View>
     </View>
   )
 })
 
+const BAR_H = 12
+
 const styles = StyleSheet.create({
-  row: { marginBottom: 10 },
-  labelRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    marginBottom: 4,
+  row: {
+    paddingVertical: 7,
+    gap: 6,
   },
   label: {
-    flex: 1,
     fontFamily: fontFamilies.medium,
-    fontSize: 12,
-    color: '#111111',
-    marginRight: 8,
+    fontSize: 13.5,
+    lineHeight: 18,
+    color: colors.ink,
   },
-  count: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 12,
-    color: colors.inkMuted,
+  barRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   track: {
-    height: 10,
-    borderRadius: 5,
+    flex: 1,
+    height: BAR_H,
+    borderRadius: BAR_H / 2,
     backgroundColor: colors.gray100,
     overflow: 'hidden',
   },
+  // Fond blanc + écart de 2 px entre segments = fin trait blanc entre couleurs.
   fill: {
     height: '100%',
-    borderRadius: 5,
+    borderRadius: BAR_H / 2,
     flexDirection: 'row',
+    gap: 2,
+    backgroundColor: '#FFFFFF',
     overflow: 'hidden',
+  },
+  count: {
+    minWidth: 74,
+    textAlign: 'right',
+    fontFamily: fontFamilies.regular,
+    fontSize: 12.5,
+    color: colors.inkMuted,
   },
 })

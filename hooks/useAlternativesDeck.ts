@@ -29,6 +29,7 @@ import { useKeepFavorite } from '@/hooks/useKeepFavorite'
 import { useLaunchAlternative } from '@/hooks/useLaunchAlternative'
 import type { DeckSuggestion } from '@/components/routine/SuggestionsDeck'
 import type { RoutineItem } from '@/hooks/useRoutine'
+import { showCreditsExhausted } from '@/lib/credits/exhaustedStore'
 
 function titleFor(item: RoutineItem): string {
   return decodeHtml(item.analysis?.product_label?.trim() || item.analysis?.name?.trim()) || 'Produit'
@@ -116,6 +117,15 @@ export function useAlternativesDeck(items: RoutineItem[]): UseAlternativesDeckRe
             ean: a.ean ?? null,
             category: a.category_precise ?? null,
             productType: a.product_type ?? null,
+            // Tête de liste INCI (noms triés par position) : le serveur en déduit
+            // la FORME de la formule (crème, gel lavant, savon solide, huile...)
+            // pour ne suggérer que des alternatives de même forme.
+            ingredients: (Array.isArray(parsed.items) ? parsed.items : [])
+              .slice()
+              .sort((x, y) => (x.position ?? 0) - (y.position ?? 0))
+              .map((x) => x.name || x.input)
+              .filter((s): s is string => typeof s === 'string' && s.length > 0)
+              .slice(0, 15),
             counts: {
               vert: counts.vert ?? 0,
               jaune: counts.jaune ?? 0,
@@ -171,8 +181,7 @@ export function useAlternativesDeck(items: RoutineItem[]): UseAlternativesDeckRe
         if (anyLocked) {
           // Des produits méritaient une suggestion mais les crédits sont épuisés
           // (le serveur n'a lancé AUCUNE IA : vérification du solde en amont).
-          showToast('Crédits épuisés pour aujourd’hui.', 'info')
-          router.push(ROUTES.OFFRE.INDEX)
+          showCreditsExhausted()
         } else if (suggestions.length === 0) {
           // AUCUN produit ne qualifie (pas d'orange/rouge, pas de restriction, vert ≥ jaune)
           // → la routine est réellement propre.
@@ -275,8 +284,7 @@ export function useAlternativesDeck(items: RoutineItem[]): UseAlternativesDeckRe
             { p_feature: 'compare' } as never,
           )
           if ((credit as { ok?: boolean } | null)?.ok !== true) {
-            showToast('Crédits épuisés pour aujourd’hui.', 'info')
-            router.push(ROUTES.OFFRE.INDEX)
+            showCreditsExhausted()
             return
           }
           void qc.invalidateQueries({ queryKey: ['credits'] })

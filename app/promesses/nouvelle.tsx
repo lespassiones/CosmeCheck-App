@@ -8,7 +8,7 @@
  */
 
 import { type FC } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -17,6 +17,7 @@ import { useQuery } from '@tanstack/react-query'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { Reveal } from '@/components/design/Reveal'
 import { CoherenceWizard, type AnalysisOption } from '@/components/promesses/CoherenceWizard'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'

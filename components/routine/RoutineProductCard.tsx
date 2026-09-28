@@ -1,7 +1,8 @@
 /**
  * RoutineProductCard — carte produit ÉPURÉE (refonte juil 2026).
  *
- * Ne montre plus QUE : photo produit verticale à gauche + nom + marque, et le
+ * Ne montre plus QUE : photo produit verticale à gauche + nom + marque (+ la
+ * fréquence d'usage sous la marque, 28/09/2026, page Routine produit), et le
  * donut de proportions couleur en bas à droite. Toute l'édition (fréquence,
  * suppression, voir l'analyse) a été déplacée sur la sous-page de l'item
  * (app/routine/item/[id].tsx), atteinte au tap sur la carte.
@@ -20,8 +21,16 @@ import { colors } from '@/constants/colors'
 import { spacing, radius } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 import type { BlobCounts } from '@/components/design/IngredientBlob'
+import type { RoutineFrequency } from '@/lib/supabase/types'
 import { useProductImage } from '@/hooks/useProductImage'
 import { RoutineMiniDonut } from '@/components/routine/RoutineMiniDonut'
+
+/** Libellé de la fréquence d'usage, en toutes lettres (le sélecteur dit « Hebdo »). */
+const FREQUENCY_LABEL: Record<RoutineFrequency, string> = {
+  daily: 'Quotidien',
+  weekly: 'Hebdomadaire',
+  monthly: 'Mensuel',
+}
 
 /** Hauteur FIXE de la carte + écart vertical : base du calcul d'index du drag. */
 export const ROUTINE_CARD_HEIGHT = 100
@@ -41,6 +50,8 @@ interface Props {
   onPress: (itemId: string) => void
   /** Affiche le badge numéro d'ordre (routine soin uniquement). */
   showIndex?: boolean
+  /** Fréquence d'usage (produits de la routine) ; absente = pas d'étiquette. */
+  frequency?: RoutineFrequency | null
 }
 
 export const RoutineProductCard = memo(function RoutineProductCard({
@@ -54,6 +65,7 @@ export const RoutineProductCard = memo(function RoutineProductCard({
   counts,
   onPress,
   showIndex = false,
+  frequency = null,
 }: Props) {
   const imageUrl = useProductImage(analysisId, ean, fallbackImageUrl)
 
@@ -61,6 +73,7 @@ export const RoutineProductCard = memo(function RoutineProductCard({
     <PressableScale
       style={styles.card}
       scaleTo={0.98}
+      haptic="secondary"
       onPress={() => onPress(itemId)}
       accessibilityRole="button"
       accessibilityLabel={`Ouvrir ${name}`}
@@ -71,7 +84,7 @@ export const RoutineProductCard = memo(function RoutineProductCard({
           <Image
             source={{ uri: imageUrl }}
             style={styles.productImage}
-            contentFit="contain"
+            contentFit="cover"
             cachePolicy="memory-disk"
             transition={120}
           />
@@ -98,6 +111,14 @@ export const RoutineProductCard = memo(function RoutineProductCard({
               {brand}
             </Text>
           ) : null}
+          {frequency ? (
+            <View style={styles.freq}>
+              <Ionicons name="repeat" size={12} color={colors.inkMuted} />
+              <Text style={styles.freqText} numberOfLines={1}>
+                {FREQUENCY_LABEL[frequency]}
+              </Text>
+            </View>
+          ) : null}
         </View>
         <View style={styles.donutWrap}>
           <RoutineMiniDonut counts={counts} size={54} />
@@ -107,14 +128,16 @@ export const RoutineProductCard = memo(function RoutineProductCard({
   )
 })
 
-const IMG_W = 58
+// Visuel collé aux bords gauche, haut et bas de la carte : il reprend la marge
+// qu'il avait avant (spacing.sm) pour que le texte et le donut ne bougent pas.
+const IMG_W = 58 + spacing.sm
 
 const styles = StyleSheet.create({
   card: {
     height: ROUTINE_CARD_HEIGHT,
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    padding: spacing.sm,
+    paddingRight: spacing.sm,
     flexDirection: 'row',
     gap: spacing.sm,
     shadowColor: '#0F172A',
@@ -123,10 +146,13 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
+  // Coins gauches = ceux de la carte, côté droit droit. Arrondi porté par le
+  // visuel (pas d'overflow hidden sur la carte, qui couperait l'ombre iOS).
   visualWrap: {
     width: IMG_W,
     height: '100%',
-    borderRadius: radius.md,
+    borderTopLeftRadius: radius.lg,
+    borderBottomLeftRadius: radius.lg,
     backgroundColor: colors.gray50,
     alignItems: 'center',
     justifyContent: 'center',
@@ -152,10 +178,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingVertical: 2,
+    paddingVertical: spacing.sm + 2,
   },
   nameWrap: { flex: 1 },
   name: { fontFamily: fontFamilies.semiBold, fontSize: 14, color: colors.ink },
   brand: { fontFamily: fontFamilies.regular, fontSize: 11, color: colors.inkMuted, marginTop: 1 },
+  freq: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.full,
+    backgroundColor: colors.gray100,
+  },
+  freqText: { fontFamily: fontFamilies.semiBold, fontSize: 11, color: colors.inkMuted },
   donutWrap: { alignItems: 'center', justifyContent: 'center' },
 })

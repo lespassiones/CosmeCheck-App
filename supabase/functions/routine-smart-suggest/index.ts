@@ -45,6 +45,14 @@ import {
   productTypeToCategoryPrefix,
   resolveCategoryPlan,
 } from "./categoryResolve.ts";
+import {
+  affinityRank,
+  classifyFormulation,
+  formulationAffinity,
+  type Galenic,
+  GALENIC_LABEL_FR,
+  splitInci,
+} from "../_shared/formulation.ts";
 
 type Counts = { vert: number; jaune: number; orange: number; rouge: number };
 
@@ -56,6 +64,10 @@ type ReqItem = {
   /** Type produit STRUCTURÉ de l'analyseur (ex. « Nettoyant visage ») — signal
    *  de catégorie prioritaire sur la classification par nom (peu fiable). */
   productType: string | null;
+  /** Ingrédients INCI du produit (noms triés par position, envoyés par le client
+   *  depuis result_json.items) : servent au filtre de FORME GALÉNIQUE. Absents
+   *  (ancien client) : repli sur ingredients_text du catalogue via l'EAN. */
+  ingredients: string[] | null;
   counts: Counts;
   cappedScore: number;
   restrictedCount: number;
@@ -104,7 +116,10 @@ const MAX_ITEMS = 40;
 // e4 (juil 2026) : résolution de catégorie fiabilisée (product_type prioritaire
 // sur la classification par nom + garde-fou de confiance) + réanalyse IA exigeant
 // la même FONCTION/bénéfice → invalide les suggestions incohérentes précédentes.
-const ENGINE_VERSION = "e4";
+// e5 (sept 2026) : filtre de FORME GALÉNIQUE dans la shortlist (même forme
+// d'abord, voisine en repli, opposée écartée), règles de catégorie resynchronisées
+// avec le client, prompt IA sans tolérance de texture → invalide le cache e4.
+const ENGINE_VERSION = "e5";
 
 // ─── Règle de sélection (À GARDER EN PHASE avec mobile lib/routine/qualify.ts) ─
 // Le jaune doit simplement DÉPASSER le vert (jaune > vert) pour un produit sans
@@ -268,16 +283,24 @@ type CatalogAlt = {
 // deno-lint-ignore no-explicit-any
 type SB = any;
 
-async function categoriesByEan(sb: SB, eans: string[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  if (eans.length === 0) return out;
+/** Catégorie ET liste INCI catalogue par EAN (1 requête). L'INCI sert de repli
+ *  au filtre de forme galénique quand le client n'a pas envoyé les ingrédients. */
+async function catalogRowsByEan(
+  sb: SB,
+  eans: string[],
+): Promise<{ categories: Map<string, string>; inci: Map<string, string> }> {
+  const categories = new Map<string, string>();
+  const inci = new Map<string, string>();
+  if (eans.length === 0) return { categories, inci };
   try {
-    const { data } = await sb.schema("cosme_check").from("catalog").select("ean, category").in("ean", eans);
-    for (const r of (data as { ean: string; category: string | null }[] | null) ?? []) {
-      if (r.category && r.category.trim()) out.set(String(r.ean), r.category.trim());
+    const { data } = await sb.schema("cosme_check").from("catalog")
+      .select("ean, category, ingredients_text").in("ean", eans);
+    for (const r of (data as { ean: string; category: string | null; ingredients_text: string | null }[] | null) ?? []) {
+      if (r.category && r.category.trim()) categories.set(String(r.ean), r.category.trim());
+      if (r.ingredients_text && r.ingredients_text.trim()) inci.set(String(r.ean), r.ingredients_text);
     }
   } catch { /* ignore */ }
-  return out;
+  return { categories, inci };
 }
 
 /** Photo produit de la routine (catalogue via EAN) — 1 requête pour tous. */
@@ -388,9 +411,23 @@ function altHitsRestriction(alt: CatalogAlt, r: UserRestrictions): boolean {
  * 0 rouge, aucune restriction), on exige une note strictement meilleure pour
  * éviter un remplacement latéral sans gain.
  *
- * Trié par note desc, top SHORTLIST — soumis ensuite à la réanalyse IA.
+ * FORME GALÉNIQUE (sept 2026, retour bêta « pour une crème dont le premier
+ * ingrédient est l'eau, l'alternative doit être une crème dont le premier
+ * ingrédient est l'eau ») : quand la forme du produit actuel est connue, les
+ * candidats de forme OPPOSÉE sont écartés (pas de savon solide pour un gel
+ * douche, pas d'huile pour une crème) ; ceux de MÊME forme passent devant, puis
+ * les formes voisines ou inconnues (fail-open). Même logique que le carrousel
+ * mobile (lib/analysis/alternativesFormulation.ts).
+ *
+ * Trié par (affinité de forme, note desc), top SHORTLIST : soumis ensuite à la
+ * réanalyse IA.
  */
-function shortlist(item: ReqItem, alts: CatalogAlt[], r: UserRestrictions): CatalogAlt[] {
+function shortlist(
+  item: ReqItem,
+  alts: CatalogAlt[],
+  r: UserRestrictions,
+  source: Galenic,
+): CatalogAlt[] {
   const pureYellow =
     (item.counts.orange ?? 0) === 0 &&
     (item.counts.rouge ?? 0) === 0 &&
@@ -401,8 +438,31 @@ function shortlist(item: ReqItem, alts: CatalogAlt[], r: UserRestrictions): Cata
     .filter((a) => a.score >= GREEN_MIN)
     .filter((a) => !pureYellow || a.score > item.cappedScore)
     .filter((a) => !altHitsRestriction(a, r))
-    .sort((x, y) => y.score - x.score)
-    .slice(0, SHORTLIST);
+    .map((a) => ({ a, rank: affinityRank(formulationAffinity(source, altGalenic(a))) }))
+    .filter((x) => x.rank < 2)
+    .sort((x, y) => x.rank - y.rank || y.a.score - x.a.score)
+    .slice(0, SHORTLIST)
+    .map((x) => x.a);
+}
+
+/** Forme galénique d'un candidat, calculée une fois par EAN (requête courante). */
+const altGalenicCache = new Map<string, Galenic>();
+function altGalenic(a: CatalogAlt): Galenic {
+  const hit = altGalenicCache.get(a.ean);
+  if (hit) return hit;
+  const g = classifyFormulation(a.ingredients_text).galenic;
+  if (altGalenicCache.size > 5000) altGalenicCache.clear();
+  altGalenicCache.set(a.ean, g);
+  return g;
+}
+
+/** Forme galénique du produit de la routine : ingrédients envoyés, sinon INCI catalogue. */
+function itemGalenic(item: ReqItem, inciByEan: Map<string, string>): Galenic {
+  if (item.ingredients && item.ingredients.length > 0) {
+    return classifyFormulation(item.ingredients).galenic;
+  }
+  const catalogInci = item.ean ? inciByEan.get(item.ean) ?? null : null;
+  return classifyFormulation(catalogInci).galenic;
 }
 
 /**
@@ -447,8 +507,9 @@ async function resolveCategory(item: ReqItem, catByEan: Map<string, string>, sb:
 // ensuite l'indice 1 (pass 1) puis l'indice 2 (pass 2) avec un garde
 // déterministe — d'où « 2 passes maximum ».
 
-type EvalCand = { n: number; label: string; inci: string };
-type EvalTask = { idx: number; product: string; candidates: EvalCand[] };
+/** `form` : forme galénique déduite de l'INCI (libellé français, cf. _shared/formulation.ts). */
+type EvalCand = { n: number; label: string; inci: string; form: string };
+type EvalTask = { idx: number; product: string; productForm: string | null; candidates: EvalCand[] };
 type EvalResult = { best_indices: number[]; reason: string };
 
 const EVAL_SCHEMA = {
@@ -483,22 +544,24 @@ function buildEvalPrompt(
   const system =
     "Tu es un expert cosmétique rigoureux. Pour CHAQUE produit de la routine de l'utilisateur, on te donne son nom et une liste numérotée d'ALTERNATIVES candidates (déjà plus propres : sans ingrédient orange/rouge, bien notées). Chaque candidate a sa RECETTE (INCI). "
     + "RÉANALYSE la recette de chaque candidate et sélectionne jusqu'à DEUX meilleures candidates (best-first) qui remplissent TOUTES ces conditions : "
-    + "(1) MÊME ZONE d'application (visage / corps / cheveux / bouche-dents / aisselles) ET MÊME usage (laver-rincer ; hydrater-laisser poser ; déodorer ; démaquiller...). La TEXTURE/forme peut différer tant que la zone ET l'usage sont identiques. "
-    + "COMPATIBLES (exemples) : pour HYDRATER le corps, lait ↔ crème ↔ baume ↔ beurre corporel ; pour LAVER le corps, gel douche ↔ crème lavante ↔ savon liquide corps ↔ huile de douche ↔ body wash ↔ pain surgras ; pour les AISSELLES, déodorant ↔ anti-transpirant ↔ déo stick/bille/spray/crème (proposer un déodorant SANS sels d'aluminium à la place d'un anti-transpirant à l'aluminium est un TRÈS BON remplacement) ; deux nettoyants VISAGE quotidiens (gel/mousse/huile/gelée/eau micellaire) ; deux dentifrices ; deux shampooings. "
-    + "INCOMPATIBLES (zone OU usage différent) : gel douche (laver le corps) ≠ shampooing (laver les cheveux) ; laver ≠ hydrater ; soin VISAGE ≠ soin CORPS ; dentifrice ≠ déodorant ; démaquillant/nettoyant ≠ crème de jour ; soin cheveux ≠ soin peau ; "
-    + "et SURTOUT : un NETTOYANT/démaquillant QUOTIDIEN ≠ un GOMMAGE / EXFOLIANT / peeling (usage occasionnel, action mécanique ou acide) — ce sont des usages DIFFÉRENTS, ne les échange jamais l'un pour l'autre. "
+    + "(1) MÊME ZONE d'application (visage / corps / cheveux / bouche-dents / aisselles) ET MÊME usage (laver-rincer ; hydrater-laisser poser ; déodorer ; démaquiller...). "
+    + "(1 bis) MÊME FORME DE FORMULE : le produit actuel et chaque candidate sont annotés de leur forme, déduite de leur INCI (émulsion eau + huile, base aqueuse, base lavante liquide, savon solide, huile, baume, poudre, base alcoolique). Quand la forme du produit actuel est connue, préfère une candidate de MÊME forme ; une forme voisine (base aqueuse pour une émulsion, baume pour une huile) n'est acceptable que faute de mieux ; ne propose JAMAIS une forme différente (savon solide pour un gel douche, huile pour une crème, poudre pour un lait). "
+    + "COMPATIBLES (exemples) : pour HYDRATER le corps, deux laits ou deux crèmes (émulsions) ; pour LAVER le corps, gel douche ↔ body wash ↔ savon liquide (bases lavantes liquides), savon solide ↔ savon solide ; pour les AISSELLES, déodorant ↔ anti-transpirant de même format (proposer un déodorant SANS sels d'aluminium à la place d'un anti-transpirant à l'aluminium est un TRÈS BON remplacement) ; deux nettoyants VISAGE de même forme ; deux dentifrices ; deux shampooings. "
+    + "INCOMPATIBLES (zone, usage OU forme différents) : gel douche (laver le corps) ≠ shampooing (laver les cheveux) ; laver ≠ hydrater ; soin VISAGE ≠ soin CORPS ; dentifrice ≠ déodorant ; démaquillant/nettoyant ≠ crème de jour ; soin cheveux ≠ soin peau ; crème (émulsion) ≠ huile ; gel douche ≠ savon solide ; "
+    + "et SURTOUT : un NETTOYANT/démaquillant QUOTIDIEN ≠ un GOMMAGE / EXFOLIANT / peeling (usage occasionnel, action mécanique ou acide) : ce sont des usages DIFFÉRENTS, ne les échange jamais l'un pour l'autre. "
     + "(2) MÊME FONCTION / BÉNÉFICE PRINCIPAL que le produit actuel. Déduis le bénéfice dominant du produit actuel d'après son nom (ex. « lait nutritif » = nourrir/hydrater ; « eau micellaire » = nettoyer en douceur ; « soin hydratant » = hydrater) et n'accepte une candidate QUE si elle rend ce même service. Ne remplace JAMAIS un produit dont le bénéfice principal est l'HYDRATATION/la NUTRITION par un produit qui l'assèche ou ne fait que nettoyer/exfolier, et inversement. "
     + "(3) la recette RESPECTE les restrictions : elle NE doit contenir AUCUN ingrédient d'une famille bannie NI aucun ingrédient nommé banni. Reconnais les familles dans l'INCI : sulfate = ...SULFATE (sodium lauryl/laureth/coco sulfate...) ; silicone = DIMETHICONE, ...SILOXANE, ...SILANOL, ...-CONE/-CONOL ; paraben = ...PARABEN ; ethoxyle (éthoxylé) = PEG-..., ...-ETH-... (LAURETH, STEARETH, CETEARETH...), POLYSORBATE ; propoxyle = PPG-.... "
-    + "(4) adaptée au profil (type de peau, préoccupations, objectifs) — ne retiens du profil que ce qui est pertinent pour CE type de produit. Si le profil a un BESOIN FORT (peau sèche, sensible, préoccupation sécheresse...), la candidate ne doit pas SACRIFIER ce besoin par rapport au produit actuel : pour une peau sèche, ne propose pas une alternative qui hydrate/nourrit MOINS bien. "
-    + "Si AUCUNE candidate ne remplit tout → best_indices = []. En cas de DOUTE sur la ZONE, l'USAGE, la FONCTION ou une RESTRICTION → EXCLURE la candidate (mieux vaut ne rien proposer qu'une mauvaise alternative). Mais NE rejette PAS une candidate seulement parce que sa TEXTURE/forme diffère (lait vs baume, gel vs crème lavante, savon liquide vs gel douche) si la zone, l'usage ET la fonction sont identiques. "
+    + "(4) adaptée au profil (type de peau, préoccupations, objectifs) : ne retiens du profil que ce qui est pertinent pour CE type de produit. Si le profil a un BESOIN FORT (peau sèche, sensible, préoccupation sécheresse...), la candidate ne doit pas SACRIFIER ce besoin par rapport au produit actuel : pour une peau sèche, ne propose pas une alternative qui hydrate/nourrit MOINS bien. "
+    + "Si AUCUNE candidate ne remplit tout → best_indices = []. En cas de DOUTE sur la ZONE, l'USAGE, la FONCTION, la FORME ou une RESTRICTION → EXCLURE la candidate (mieux vaut ne rien proposer qu'une mauvaise alternative). "
     + "best_indices = indices 1-based (max 2, best-first). reason = une phrase courte en tutoiement (≤ 18 mots) expliquant pourquoi CE TYPE de produit te convient, SANS nommer aucune marque ni produit (ex : « Plus doux pour ton corps très sec, et sans les ingrédients que tu évites »). Pas de marketing. "
     + "Réponds en JSON strict : un élément par produit, MÊME ordre, MÊME nombre.";
   const blocks = tasks
     .map((t, i) => {
       const cands = t.candidates
-        .map((c) => `   ${c.n}. ${c.label}\n      INCI: ${c.inci || "(inconnu)"}`)
+        .map((c) => `   ${c.n}. ${c.label}\n      Forme : ${c.form}\n      INCI: ${c.inci || "(inconnu)"}`)
         .join("\n");
-      return `Produit ${i + 1} : "${t.product}"\n  Candidates :\n${cands}`;
+      const form = t.productForm ? ` (forme : ${t.productForm})` : "";
+      return `Produit ${i + 1} : "${t.product}"${form}\n  Candidates :\n${cands}`;
     })
     .join("\n\n");
   const user =
@@ -629,6 +692,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
           productType: typeof o.productType === "string" && o.productType.trim()
             ? o.productType.trim().slice(0, 120)
             : null,
+          // Ingrédients (noms INCI triés) : 20 noms max de 120 caractères, ou une
+          // liste brute de 2 000 caractères max. Seule la tête de liste compte.
+          ingredients: Array.isArray(o.ingredients)
+            ? (o.ingredients as unknown[])
+                .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+                .slice(0, 20)
+                .map((x) => x.trim().slice(0, 120))
+            : typeof o.ingredients === "string" && o.ingredients.trim()
+              ? splitInci(o.ingredients.slice(0, 2000)).slice(0, 20)
+              : null,
           counts,
           cappedScore: typeof o.cappedScore === "number" ? o.cappedScore : (typeof o.score === "number" ? o.score : 20),
           restrictedCount: Number(o.restrictedCount) || 0,
@@ -679,6 +752,25 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const toGenerate = qualifying.filter((q) => !cache.has(q.analysisId));
 
+  // Régénération GRATUITE après une montée de version du moteur (28 sept 2026) :
+  // si ce produit avait déjà une suggestion pour le MÊME profil (seul le préfixe
+  // ENGINE_VERSION de profile_sig diffère), c'est notre correctif qui invalide
+  // le cache, pas un changement de l'utilisateur : on ne redébite pas.
+  const profilePart = sig.slice(sig.indexOf("-"));
+  const freeRegen = new Set<string>();
+  if (toGenerate.length > 0) {
+    const { data: olderRows } = await svc
+      .schema("cosme_check").from("routine_suggestions")
+      .select("analysis_id, profile_sig")
+      .eq("user_id", user.id)
+      .in("analysis_id", toGenerate.map((q) => q.analysisId));
+    for (const r of (olderRows as { analysis_id: string; profile_sig: string }[] | null) ?? []) {
+      if (r.profile_sig !== sig && r.profile_sig.slice(r.profile_sig.indexOf("-")) === profilePart) {
+        freeRegen.add(r.analysis_id);
+      }
+    }
+  }
+
   // ── Crédits AVANT toute IA (règle produit) : on ne lance JAMAIS une
   // génération qu'on ne pourra pas débiter. Solde lu UNE fois ici ; seuls les
   // `remaining` produits les plus sévères sont préparés/évalués, le reste est
@@ -692,46 +784,52 @@ Deno.serve(async (req: Request): Promise<Response> => {
   } catch { /* fail-closed */ }
 
   const lockedIds = new Set<string>();
-  const affordable = toGenerate.slice(0, Math.max(0, remaining));
-  for (const item of toGenerate.slice(affordable.length)) lockedIds.add(item.analysisId);
+  // Les régénérations gratuites (montée de version) passent toujours ; le solde
+  // ne limite que les générations facturables.
+  const freeItems = toGenerate.filter((q) => freeRegen.has(q.analysisId));
+  const paidItems = toGenerate.filter((q) => !freeRegen.has(q.analysisId));
+  const affordable = [...freeItems, ...paidItems.slice(0, Math.max(0, remaining))];
+  for (const item of paidItems.slice(Math.max(0, remaining))) lockedIds.add(item.analysisId);
 
   // Résolution catégorie + shortlist pour les produits à générer (finançables).
   const eans = Array.from(new Set(affordable.map((i) => i.ean).filter((e): e is string => Boolean(e))));
-  const catByEan = await categoriesByEan(svc, eans);
+  const { categories: catByEan, inci: inciByEan } = await catalogRowsByEan(svc, eans);
 
   const prepared = await Promise.all(
     affordable.map(async (item) => {
       const plan = await resolveCategory(item, catByEan, svc);
+      // Forme galénique du produit actuel (ingrédients envoyés, sinon INCI catalogue).
+      const source = itemGalenic(item, inciByEan);
       // Aucun signal de catégorie fiable → on S'ABSTIENT (pas de devinette) :
       // 0 candidat → aucune suggestion pour ce produit (0 crédit).
-      if (!plan) return { item, category: null as string | null, cands: [] as CatalogAlt[] };
+      if (!plan) return { item, category: null as string | null, cands: [] as CatalogAlt[], source };
 
       let cands: CatalogAlt[] = [];
       if (plan.isPrefix) {
         // product_type → préfixe LARGE (l1/l2/%) : beaucoup de candidats propres.
-        cands = shortlist(item, await fetchAlternativesByPrefix(svc, plan.value), restrictions);
+        cands = shortlist(item, await fetchAlternativesByPrefix(svc, plan.value), restrictions, source);
         // Repli — élargir au niveau 1 (l1/%) si la sous-catégorie est affamée.
         if (cands.length === 0) {
           const l1 = plan.value.split("/")[0];
           const wide = l1 ? `${l1}/%` : null;
           if (wide && wide !== plan.value) {
-            cands = shortlist(item, await fetchAlternativesByPrefix(svc, wide), restrictions);
+            cands = shortlist(item, await fetchAlternativesByPrefix(svc, wide), restrictions, source);
           }
         }
       } else {
         // Feuille EXACTE (EAN catalogue, category_precise, ou classification confiante).
-        cands = shortlist(item, await fetchAlternatives(svc, plan.value), restrictions);
+        cands = shortlist(item, await fetchAlternatives(svc, plan.value), restrictions, source);
         // Repli — ÉLARGIR AUX SŒURS : la feuille exacte peut être affamée (ex. déo
         // « anti-transpirant » : presque tous à l'aluminium) alors que les feuilles
         // sœurs (« deodorant-stick/bille/spray... ») regorgent d'alternatives propres.
         if (cands.length === 0) {
           const prefix = parentPrefix(plan.value);
           if (prefix) {
-            cands = shortlist(item, await fetchAlternativesByPrefix(svc, prefix), restrictions);
+            cands = shortlist(item, await fetchAlternativesByPrefix(svc, prefix), restrictions, source);
           }
         }
       }
-      return { item, category: plan.value, cands };
+      return { item, category: plan.value, cands, source };
     }),
   );
 
@@ -745,10 +843,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
       evalTasks.push({
         idx: i,
         product: p.item.name,
+        productForm: p.source !== "unknown" ? GALENIC_LABEL_FR[p.source] : null,
         candidates: p.cands.map((c, k) => ({
           n: k + 1,
           label: [c.brand, c.name].filter(Boolean).join(" ") || c.ean,
           inci: (c.ingredients_text ?? "").slice(0, 300),
+          form: GALENIC_LABEL_FR[altGalenic(c)],
         })),
       });
     }
@@ -815,7 +915,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
   for (const item of affordable) {
     const c = chosen.get(item.analysisId)!;
     if (c.abstained) continue; // IA indispo → ne pas cacher, réessayer au prochain tour
-    if (c.alternative) {
+    if (c.alternative && freeRegen.has(item.analysisId)) {
+      generatedCount++;
+    } else if (c.alternative) {
       if (remaining <= 0) { lockedIds.add(item.analysisId); continue; }
       const charge = await g.consumeCredit("routine_suggest");
       if (!charge.ok) { lockedIds.add(item.analysisId); remaining = 0; continue; }

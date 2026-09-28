@@ -26,6 +26,9 @@ export interface ProductByEanRow {
    *  navigation) → alimentent applyColorCap pour une pastille identique partout. */
   count_orange?: number | null
   count_rouge?: number | null
+  /** Liste INCI brute (la RPC la renvoie) : sert au filtre de forme galénique
+   *  des alternatives sur la page « Voir tout » (hooks/useAlternatives.ts). */
+  ingredients_text?: string | null
 }
 
 const STALE_MS = 5 * 60 * 1000

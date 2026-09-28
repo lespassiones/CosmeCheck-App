@@ -1,14 +1,13 @@
 /**
- * SignInScreen — écran de connexion (email + mot de passe uniquement).
+ * SignInScreen (A24) : « Te revoilà ! ».
  *
- * Le bouton Google vit désormais uniquement sur l'écran de bienvenue
- * (/(auth)/welcome) pour ne pas le dupliquer. Ici : flèche retour, logo,
- * formulaire, et lien vers l'inscription.
+ * Apple (iPhone) et Google en haut, puis l'e-mail. On y arrive depuis
+ * l'accroche (« Se connecter »), depuis l'écran de compte (« J'ai déjà un
+ * compte ») ou depuis l'inscription.
  */
 
 import { type FC } from 'react'
 import {
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -16,128 +15,98 @@ import {
   Text,
   View,
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { keyboardPadding, useKeyboardAwareScroll } from '@/hooks/useKeyboardHeight'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 
 import { colors } from '@/constants/colors'
-import { spacing } from '@/constants/spacing'
-import { typography } from '@/constants/typography'
+import { fontFamilies } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
-import { BackgroundGlow } from '@/components/design/BackgroundGlow'
-import { LogoMark } from '@/components/shared/Logo'
 import { SignInForm } from '@/components/auth/SignInForm'
+import { ProviderButtons } from '@/components/auth/AuthProviders'
+import { FLOW_MAX_WIDTH } from '@/components/onboarding/flow/ui'
 
 const SignInScreen: FC = () => {
+  const insets = useSafeAreaInsets()
+  // Clavier : le formulaire remonte et garde le champ actif ET le bouton en vue.
+  const { scrollRef, keyboardHeight, onScroll, onContentSizeChange } = useKeyboardAwareScroll(120)
   return (
-    <View style={styles.root}>
-      <BackgroundGlow variant="auth" />
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <KeyboardAvoidingView
-          style={styles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <ScrollView
-            contentContainerStyle={styles.content}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
+  <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <View style={[styles.flex, keyboardHeight > 0 && { paddingBottom: keyboardPadding(keyboardHeight, insets.bottom, true) }]}>
+      <ScrollView
+        ref={scrollRef}
+        onScroll={onScroll}
+        scrollEventThrottle={32}
+        onContentSizeChange={onContentSizeChange}
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.column}>
+          <Pressable
+            hitSlop={8}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace(ROUTES.AUTH.WELCOME))}
+            accessibilityRole="button"
+            accessibilityLabel="Retour"
+            style={styles.back}
           >
-            <View style={styles.topBar}>
-              <Pressable
-                hitSlop={10}
-                onPress={() =>
-                  router.canGoBack()
-                    ? router.back()
-                    : router.replace(ROUTES.AUTH.WELCOME)
-                }
-                accessibilityLabel="Retour"
-                style={styles.backBtn}
-              >
-                <Ionicons name="chevron-back" size={22} color={colors.ink} />
-              </Pressable>
-              <View style={styles.topLogo} pointerEvents="none">
-                <LogoMark size={18} />
-              </View>
-            </View>
+            <Ionicons name="arrow-back" size={22} color={colors.ink} />
+          </Pressable>
+          <Text style={styles.title} accessibilityRole="header">
+            Te revoilà !
+          </Text>
+          <Text style={styles.subtitle}>Connecte-toi pour retrouver ta carte de peau.</Text>
 
-            <View style={styles.header}>
-              <Text style={styles.title}>Connexion</Text>
-              <Text style={styles.subtitle}>
-                Connecte-toi pour continuer ton suivi beauté.
-              </Text>
-            </View>
+          <ProviderButtons />
+          <View style={styles.or}>
+            <View style={styles.orLine} />
+            <Text style={styles.orText}>ou</Text>
+            <View style={styles.orLine} />
+          </View>
+          <SignInForm />
 
-            <SignInForm />
-
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>Pas encore de compte ?</Text>
-              <Pressable hitSlop={6} onPress={() => router.replace(ROUTES.AUTH.SIGN_UP)}>
-                <Text style={styles.footerLink}>S’inscrire</Text>
-              </Pressable>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
+          <Text style={styles.switch}>
+            Pas encore de compte ?{' '}
+            <Text style={styles.switchLink} onPress={() => router.replace(ROUTES.AUTH.SIGN_UP)} accessibilityRole="link">
+              Créer un compte
+            </Text>
+          </Text>
+        </View>
+      </ScrollView>
     </View>
+  </SafeAreaView>
   )
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  safe: { flex: 1 },
-  flex: { flex: 1 },
-  content: {
-    flexGrow: 1,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing['2xl'],
-    gap: spacing.lg,
-  },
-  topBar: {
-    height: 32,
-    justifyContent: 'center',
-    marginTop: spacing.sm,
-  },
-  backBtn: {
-    position: 'absolute',
-    left: 0,
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topLogo: {
-    alignItems: 'center',
-  },
-  header: {
-    gap: spacing.sm,
-    alignItems: 'center',
-  },
-  title: {
-    ...typography.h1,
-    color: colors.ink,
-    textAlign: 'center',
-  },
-  subtitle: {
-    ...typography.body,
-    color: colors.inkMuted,
-    textAlign: 'center',
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: spacing.xs,
-    marginTop: spacing.sm,
-  },
-  footerText: {
-    ...typography.small,
-    color: colors.inkMuted,
-  },
-  footerLink: {
-    ...typography.smallSemiBold,
-    color: colors.rose,
-  },
-})
-
 export default SignInScreen
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.bg },
+  flex: { flex: 1 },
+  scroll: { flexGrow: 1, paddingHorizontal: 22, paddingTop: 8, paddingBottom: 28 },
+  column: { width: '100%', maxWidth: FLOW_MAX_WIDTH, alignSelf: 'center' },
+  back: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.gray100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  title: { fontFamily: fontFamilies.bold, fontSize: 32, lineHeight: 38, letterSpacing: -0.6, color: colors.ink },
+  subtitle: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 17,
+    lineHeight: 24,
+    color: colors.inkMuted,
+    marginTop: 6,
+    marginBottom: 24,
+  },
+  or: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 20 },
+  orLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  orText: { fontFamily: fontFamilies.regular, fontSize: 14, color: colors.inkLight },
+  switch: { fontFamily: fontFamilies.regular, fontSize: 15, color: colors.inkMuted, textAlign: 'center', marginTop: 22 },
+  switchLink: { color: colors.rose, fontFamily: fontFamilies.semiBold, textDecorationLine: 'underline' },
+})

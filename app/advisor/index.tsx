@@ -9,21 +9,28 @@
  *
  * Le chat dégrade en douceur si l'Edge Function `advisor-chat` n'est pas
  * déployée (cf. AdvisorChat).
+ *
+ * Entrée échelonnée (fondu + légère montée, sans rebond) : en-tête, sous-titre,
+ * résumé profil, puis conversation, suggestions et saisie (rangs 1 à 6, pas
+ * ADVISOR_ENTER_STEP). Depuis Perle, elle prend le relais du cercle d'ouverture
+ * (`components/navigation/AdvisorReveal`).
  */
 
 import { useState, type FC } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { AdvisorChat } from '@/components/advisor/AdvisorChat'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
+import { ADVISOR_ENTER_STEP, AdvisorChat } from '@/components/advisor/AdvisorChat'
 import { AdvisorHistorySheet } from '@/components/advisor/AdvisorHistorySheet'
 import { loadConversationMessages, type StoredMessage } from '@/lib/advisor/conversations'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { GlassCard } from '@/components/design/GlassCard'
 import { Reveal } from '@/components/design/Reveal'
-import { PressableScale, StaggerItem } from '@/components/design/motion'
+import { listEntering, PressableScale, StaggerItem } from '@/components/design/motion'
 import { colors } from '@/constants/colors'
 import { ROUTES } from '@/constants/routes'
 import { radius, spacing } from '@/constants/spacing'
@@ -81,7 +88,7 @@ const AdvisorScreen: FC = () => {
 
       {/* Header UNE ligne : retour + ✨ titre à gauche, crayon + historique à droite
           (le titre n'occupe plus sa propre ligne → plus de place pour le chat). */}
-      <View style={styles.topBar}>
+      <Animated.View entering={listEntering(1, ADVISOR_ENTER_STEP)} style={styles.topBar}>
         <Pressable
           onPress={() => router.back()}
           hitSlop={12}
@@ -116,15 +123,17 @@ const AdvisorScreen: FC = () => {
             </Pressable>
           </View>
         ) : null}
-      </View>
+      </Animated.View>
 
       <View style={styles.content}>
-        <Text style={styles.subtitle} numberOfLines={1}>
-          Un assistant IA qui s'appuie sur ton profil et ta routine.
-        </Text>
+        <Animated.View entering={listEntering(2, ADVISOR_ENTER_STEP)}>
+          <Text style={styles.subtitle} numberOfLines={1}>
+            Un assistant IA qui s'appuie sur ton profil et ta routine.
+          </Text>
+        </Animated.View>
 
         {isLoading ? null : !config.flag_advisor ? (
-          <Reveal>
+          <Reveal delay={3 * ADVISOR_ENTER_STEP}>
             <GlassCard style={styles.gateCard} padding={spacing.xl}>
               <Text style={styles.gateTitle}>Bientôt de retour</Text>
               <Text style={styles.gateText}>
@@ -133,7 +142,7 @@ const AdvisorScreen: FC = () => {
             </GlassCard>
           </Reveal>
         ) : !started ? (
-          <Reveal>
+          <Reveal delay={3 * ADVISOR_ENTER_STEP}>
             <GlassCard style={styles.gateCard} padding={spacing.xl}>
               <Text style={styles.gateTitle}>Complète ton profil beauté</Text>
               <Text style={styles.gateText}>
@@ -142,6 +151,7 @@ const AdvisorScreen: FC = () => {
               </Text>
               <PressableScale
                 onPress={() => router.push(ROUTES.PROFILE.INDEX)}
+                haptic="primary"
                 style={styles.gateCta}
                 accessibilityRole="button"
               >
@@ -151,11 +161,9 @@ const AdvisorScreen: FC = () => {
           </Reveal>
         ) : (
           <View style={styles.chatWrap}>
-            {/* Résumé profil repliable (parité du <details> web).
-                StaggerItem index 0 : simple fondu d'apparition initiale (pas de
-                stagger, le chat en dessous gère ses propres messages). */}
+            {/* Résumé profil repliable (parité du <details> web), rang 3 de l'entrée. */}
             {(summaryHead || concernsText || skin.allergiesFreeform) && (
-              <StaggerItem index={0}>
+              <StaggerItem index={3} step={ADVISOR_ENTER_STEP}>
                 <Pressable
                   onPress={() => setSummaryOpen((v) => !v)}
                   style={styles.summaryBar}
@@ -185,6 +193,7 @@ const AdvisorScreen: FC = () => {
               conversationId={activeConv.id}
               initialMessages={activeConv.messages}
               onConversationCreated={(id) => setActiveConv((c) => ({ ...c, id }))}
+              entranceIndex={4}
             />
           </View>
         )}

@@ -16,7 +16,6 @@
 import {
   ActivityIndicator,
   Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -28,6 +27,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/constants/colors'
 import { spacing, radius } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import type { ConflictSeverity, RoutineConflict } from '@/lib/routine/conflicts'
 
 /** Conflit issu de l'analyse IA (le high reste réservé au moteur déterministe). */
@@ -115,7 +115,7 @@ export function ConflictsSheet({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} haptic="none" pressScale={false} />
         <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
           <View style={styles.handle} />
           <View style={styles.header}>
@@ -189,6 +189,7 @@ export function ConflictsSheet({
                     <Pressable
                       style={[styles.aiCta, aiLoading && styles.aiCtaDisabled]}
                       onPress={onRunAi}
+                      haptic="primary"
                       disabled={aiLoading}
                       accessibilityRole="button"
                       accessibilityLabel="Lancer l'analyse approfondie par IA"

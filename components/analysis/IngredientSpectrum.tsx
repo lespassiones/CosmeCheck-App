@@ -13,13 +13,13 @@
 
 import { memo, useState } from 'react'
 import {
-  Pressable,
   StyleSheet,
   Text,
   View,
   type StyleProp,
   type ViewStyle,
 } from 'react-native'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { Ionicons } from '@expo/vector-icons'
 
 import { colors } from '@/constants/colors'
@@ -134,6 +134,7 @@ export const IngredientSpectrum = memo(function IngredientSpectrum({
                   accessibilityRole="button"
                   accessibilityLabel={`${nameAt(position)} - position ${position}${rating ? ` - ${rating}` : ''}`}
                   onPress={() => handlePress(position)}
+                  haptic="selection"
                   style={({ pressed }) => [
                     styles.bigSquare,
                     { backgroundColor: ratingColor(rating) },
@@ -191,6 +192,7 @@ export const IngredientSpectrum = memo(function IngredientSpectrum({
               accessibilityRole="button"
               accessibilityLabel={`${nameAt(position)} - position ${position}${rating ? ` - ${rating}` : ''}`}
               onPress={() => handlePress(position)}
+              haptic="selection"
               style={({ pressed }) => [
                 styles.smallSquare,
                 { backgroundColor: ratingColor(rating) },

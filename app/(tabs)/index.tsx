@@ -43,6 +43,7 @@ import { SearchPromptBar } from '@/components/home/SearchPromptBar'
 import { TipCarousel } from '@/components/home/TipCarousel'
 import { DailyPicksCard } from '@/components/home/DailyPicksCard'
 import { WeeklyPicksCard } from '@/components/home/WeeklyPicksCard'
+import { PromesseChooserSheet } from '@/components/promesses/PromesseChooserSheet'
 import { useAppConfig } from '@/hooks/useAppConfig'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
@@ -77,14 +78,13 @@ function countsFromResultJson(json: unknown): BlobCounts | null {
 type TileTheme = {
   bg: string
   title: string
-  chevronBg: string
   chevron: string
 }
 
 const THEMES: Record<'green' | 'pink' | 'purple', TileTheme> = {
-  green: { bg: '#E4F3E9', title: '#15803D', chevronBg: 'rgba(255,255,255,0.75)', chevron: '#15803D' },
-  pink: { bg: '#FCE3EC', title: '#E11D48', chevronBg: 'rgba(255,255,255,0.75)', chevron: '#E11D48' },
-  purple: { bg: '#ECE6FA', title: '#6D28D9', chevronBg: 'rgba(255,255,255,0.75)', chevron: '#6D28D9' },
+  green: { bg: '#E4F3E9', title: '#15803D', chevron: '#15803D' },
+  pink: { bg: '#FCE3EC', title: '#E11D48', chevron: '#E11D48' },
+  purple: { bg: '#ECE6FA', title: '#6D28D9', chevron: '#6D28D9' },
 }
 
 const DashboardTile: FC<{
@@ -98,14 +98,16 @@ const DashboardTile: FC<{
     <PressableScale
       onPress={onPress}
       scaleTo={0.96}
+      haptic="secondary"
       accessibilityRole="button"
       accessibilityLabel={title.replace(/\n/g, ' ')}
       style={[styles.tile, { backgroundColor: t.bg }]}
     >
       <View style={styles.tileHead}>
         <Text style={[styles.tileTitle, { color: t.title }]}>{title}</Text>
-        <View style={[styles.tileChevron, { backgroundColor: t.chevronBg }]}>
-          <Ionicons name="chevron-forward" size={15} color={t.chevron} />
+        {/* Flèche seule, dans la couleur de la carte (plus de pastille autour). */}
+        <View style={styles.tileChevron}>
+          <Ionicons name="chevron-forward" size={18} color={t.chevron} />
         </View>
       </View>
       <View style={styles.tileArt}>{children}</View>
@@ -125,6 +127,7 @@ const DashboardScreen: FC = () => {
   const userId = user?.id ?? null
 
   const [refreshing, setRefreshing] = useState(false)
+  const [chooserOpen, setChooserOpen] = useState(false)
 
   const tips = useMemo(() => tipsForCarousel(12), [])
 
@@ -171,9 +174,19 @@ const DashboardScreen: FC = () => {
     <View style={styles.root}>
       <BackgroundGlow variant="dashboard" />
 
-      {/* En-tête commun : titre + CreditsPill + filet. */}
+      {/* En-tête commun : titre + CreditsPill + filet. La barre de recherche y est
+          posée (`below`) : elle reste fixe en haut quand on fait défiler (28/09/2026). */}
       <ScreenHeader
         title={greetingName ? `Bonjour ${greetingName} 👋` : 'Bienvenue 👋'}
+        below={
+          // Barre de recherche à placeholder animé (noms de produits qui
+          // s'écrivent/s'effacent). Au tap → recherche produit dédiée.
+          <SearchPromptBar
+            onPress={() =>
+              router.push({ pathname: ROUTES.TABS.SCAN, params: { mode: 'search' } })
+            }
+          />
+        }
       />
 
       <ScrollView
@@ -188,14 +201,6 @@ const DashboardScreen: FC = () => {
         }
       >
         <Reveal stagger={70}>
-          {/* Barre de recherche à placeholder animé (noms de produits qui
-              s'écrivent/s'effacent). Au tap → recherche produit dédiée. */}
-          <SearchPromptBar
-            onPress={() =>
-              router.push({ pathname: ROUTES.TABS.SCAN, params: { mode: 'search' } })
-            }
-          />
-
           {/* Astuce du jour (carrousel) */}
           <TipCarousel tips={tips} />
 
@@ -215,7 +220,7 @@ const DashboardScreen: FC = () => {
                   <IngredientBlob counts={lastCounts} variant="md" neumorphic width={132} />
                 </View>
               ) : (
-                <Ionicons name="leaf" size={52} color="#86C99A" />
+                <Ionicons name="leaf" size={52} color="#16A34A" />
               )}
             </DashboardTile>
 
@@ -246,7 +251,7 @@ const DashboardScreen: FC = () => {
             <DashboardTile
               theme="green"
               title={'Promesses\nvs Formule'}
-              onPress={() => router.push(ROUTES.PROMESSES.CHOISIR)}
+              onPress={() => setChooserOpen(true)}
             >
               <Image
                 source={PROMESSE_ILLUSTRATION}
@@ -271,6 +276,12 @@ const DashboardScreen: FC = () => {
           </View>
         </Reveal>
       </ScrollView>
+
+      <PromesseChooserSheet
+        visible={chooserOpen}
+        onClose={() => setChooserOpen(false)}
+        returnTo={ROUTES.TABS.HOME}
+      />
     </View>
   )
 }
@@ -323,11 +334,11 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
     flexShrink: 1,
   },
+  // Même encombrement que l'ancienne pastille : le titre ne bouge pas.
   tileChevron: {
     width: 28,
     height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'center',
   },
   tileArt: {

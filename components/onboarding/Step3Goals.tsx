@@ -6,12 +6,11 @@
  * Cheveux / Routine), chips multi-select → goals. Un champ texte libre permet
  * d'ajouter un « Autre objectif » → otherGoals.
  *
- * La CTA finale « Entrer dans Cosme Check » est gérée par OnboardingWizard.
+ * Utilisé par l'édition du profil (BeautyProfileForm, écran Objectifs).
  */
 
 import { type FC } from 'react'
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
-import * as Haptics from 'expo-haptics'
+import { StyleSheet, Text, TextInput, View } from 'react-native'
 
 import {
   PROFILE_GOAL_GROUPS,
@@ -20,42 +19,16 @@ import {
   type SkinProfile,
 } from '@/lib/skin/profile'
 import { colors } from '@/constants/colors'
-import { radius, spacing } from '@/constants/spacing'
-import { typography } from '@/constants/typography'
+import { spacing } from '@/constants/spacing'
+import { fontFamilies } from '@/constants/typography'
 import { Reveal } from '@/components/design/Reveal'
-import { WhiteCard } from '@/components/design/WhiteCard'
 import { PackedChips } from '@/components/onboarding/PackedChips'
+import { ChoiceChip, FormGroupLabel, formInput } from '@/components/profile/ProfileFormKit'
 
 interface Props {
   value: SkinProfile
   onChange: (patch: Partial<SkinProfile>) => void
 }
-
-const Chip: FC<{
-  label: string
-  selected: boolean
-  onPress: () => void
-}> = ({ label, selected, onPress }) => (
-  <Pressable
-    onPress={() => {
-      Haptics.selectionAsync().catch(() => {})
-      onPress()
-    }}
-    style={({ pressed }) => [
-      styles.chip,
-      selected
-        ? { backgroundColor: colors.accentSoft, borderColor: colors.accent }
-        : { backgroundColor: colors.neu.bg, borderColor: 'transparent' },
-      pressed && !selected ? { backgroundColor: '#DDE1E7' } : null,
-    ]}
-  >
-    <Text
-      style={[styles.chipText, { color: selected ? colors.accentDeep : colors.ink }]}
-    >
-      {label}
-    </Text>
-  </Pressable>
-)
 
 export const Step3Goals: FC<Props> = ({ value, onChange }) => {
   const goals = value.goals ?? []
@@ -74,13 +47,14 @@ export const Step3Goals: FC<Props> = ({ value, onChange }) => {
         conseils de ton Beauty Advisor.
       </Text>
 
-      <Reveal stagger={80}>
+      {/* Groupes (Visage / Corps / Cheveux / Routine) : sous-libellé gris + puces. */}
+      <Reveal stagger={80} style={styles.groups}>
         {PROFILE_GOAL_GROUPS.map((group) => (
-          <WhiteCard key={group.label} style={styles.section}>
-            <Text style={styles.sectionTitle}>{group.label}</Text>
+          <View key={group.label} style={styles.group}>
+            <FormGroupLabel>{group.label}</FormGroupLabel>
             <PackedChips>
               {group.goals.map((key) => (
-                <Chip
+                <ChoiceChip
                   key={key}
                   label={PROFILE_GOAL_LABEL[key]}
                   selected={goals.includes(key)}
@@ -88,66 +62,33 @@ export const Step3Goals: FC<Props> = ({ value, onChange }) => {
                 />
               ))}
             </PackedChips>
-          </WhiteCard>
+          </View>
         ))}
 
-        <WhiteCard style={styles.section}>
-          <Text style={styles.sectionTitle}>Autre objectif</Text>
+        <View style={styles.group}>
+          <FormGroupLabel>Autre objectif</FormGroupLabel>
           <TextInput
-            style={styles.input}
+            style={formInput.line}
             value={value.otherGoals ?? ''}
             onChangeText={(t) => onChange({ otherGoals: t })}
             placeholder="Un objectif qui n'est pas dans la liste ?"
             placeholderTextColor={colors.inkLight}
             maxLength={300}
           />
-        </WhiteCard>
+        </View>
       </Reveal>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  root: {
-    gap: spacing.xs,
-  },
+  root: { gap: spacing.base },
   intro: {
-    ...typography.body,
-    color: colors.inkMuted,
-    marginBottom: spacing.xl,
+    fontFamily: fontFamilies.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.inkLight,
   },
-  section: {
-    marginBottom: spacing.md,
-  },
-  sectionTitle: {
-    ...typography.h4,
-    color: colors.ink,
-    marginBottom: spacing.base,
-  },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  chip: {
-    minHeight: 42,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.full,
-    borderWidth: 1.5,
-  },
-  chipText: {
-    ...typography.smallMedium,
-  },
-  input: {
-    ...typography.body,
-    color: colors.ink,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.md,
-  },
+  groups: { gap: spacing.lg },
+  group: { gap: spacing.sm },
 })

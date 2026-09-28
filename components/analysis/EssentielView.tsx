@@ -15,7 +15,8 @@
  */
 
 import { memo, type FC } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { Ionicons } from '@expo/vector-icons'
 
 import { WhiteCard } from '@/components/design/WhiteCard'
@@ -88,6 +89,7 @@ export const EssentielToggleButton: FC<{ expanded: boolean; onToggle: () => void
   return (
     <Pressable
       onPress={onToggle}
+      haptic="primary"
       accessibilityRole="button"
       accessibilityState={{ expanded }}
       style={({ pressed }) => [styles.toggleBtn, pressed && styles.toggleBtnPressed]}

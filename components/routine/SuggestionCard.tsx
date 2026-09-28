@@ -5,13 +5,14 @@
  * Bouton « Garder en favori » + lien « Voir l'analyse ».
  */
 import { type FC } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { TierDots } from './TierDots'
 import type { AlternativeProduct } from '@/lib/analysis/alternativesFilter'
 
@@ -131,6 +132,7 @@ export const SuggestionCard: FC<Props> = ({
       <Pressable
         style={[styles.keepBtn, kept && styles.keepBtnDone, (keeping || comparing) && styles.keepBtnDisabled]}
         onPress={onKeep}
+        haptic="primary"
         disabled={keeping || comparing || kept}
         accessibilityRole="button"
       >
@@ -206,8 +208,8 @@ const styles = StyleSheet.create({
   badgeRouge: { backgroundColor: colors.rose },
   badgeOrange: { backgroundColor: '#F97316' },
   badgeRougeText: { ...typography.xs, color: colors.surface, fontWeight: '600' },
-  badgeVert: { backgroundColor: '#ECFDF5', borderWidth: 1, borderColor: '#A7F3D0' },
-  badgeVertText: { ...typography.xs, color: '#047857', fontWeight: '600' },
+  badgeVert: { backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0' },
+  badgeVertText: { ...typography.xs, color: '#15803D', fontWeight: '600' },
   keepBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
     backgroundColor: colors.success, borderRadius: radius.full, paddingVertical: spacing.md,

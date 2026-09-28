@@ -34,7 +34,6 @@ import { readRestrictions, type UserProfileRow } from '@/lib/supabase/types'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
-import { NeuCard } from '@/components/design/NeuCard'
 import { Reveal } from '@/components/design/Reveal'
 import { StaggerItem } from '@/components/design/motion'
 import { InferredRestrictionsCard } from '@/components/profile/InferredRestrictionsCard'
@@ -93,6 +92,8 @@ const RestrictionsScreen: FC = () => {
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const familySet = useMemo(() => new Set(restrictions.families), [restrictions.families])
+  // Filtre local de la liste des familles (aucune requête).
+  const [familyQuery, setFamilyQuery] = useState('')
 
   // ── Chargement du catalogue de familles ───────────────────────────
   useEffect(() => {
@@ -138,6 +139,23 @@ const RestrictionsScreen: FC = () => {
     const without = families.filter((f) => !f.tagSlug)
     return [...withTag, ...without]
   }, [families])
+
+  // Familles cochées en tête, selon la sélection À L'OUVERTURE de l'écran : l'ordre
+  // reste ensuite figé, sinon une ligne qu'on décoche sauterait sous le doigt.
+  const [pinnedOn, setPinnedOn] = useState<Set<string> | null>(null)
+  useEffect(() => {
+    if (pinnedOn === null && families.length > 0) setPinnedOn(new Set(restrictions.families))
+  }, [pinnedOn, families.length, restrictions.families])
+
+  // Puis filtre du champ « Rechercher une famille » (insensible à la casse et aux accents).
+  const visibleFamilies = useMemo(() => {
+    const first = pinnedOn ?? new Set<string>()
+    const on = sortedFamilies.filter((f) => first.has(f.slug))
+    const off = sortedFamilies.filter((f) => !first.has(f.slug))
+    const q = normalize(familyQuery.trim())
+    const all = [...on, ...off]
+    return q ? all.filter((f) => normalize(f.name).includes(q)) : all
+  }, [sortedFamilies, pinnedOn, familyQuery])
 
   // ── Persistance read-modify-write ─────────────────────────────────
   const persist = useCallback(
@@ -283,13 +301,9 @@ const RestrictionsScreen: FC = () => {
               préviendra à chaque analyse si un produit en contient.
             </Text>
 
-            {/* Récap LECTURE SEULE des sensibilités déduites du profil (worker IA
-                back-end). Rien n'est activé ; null si pas encore calculé. */}
-            <InferredRestrictionsCard userId={userId} />
-
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
-            {/* ── Onglets ──────────────────────────────────────── */}
+            {/* ── Onglets (28/09/2026 : contrôle segmenté, onglet actif plein) ── */}
             <View style={styles.tabs}>
               <TabButton
                 label="Familles"
@@ -305,9 +319,15 @@ const RestrictionsScreen: FC = () => {
               />
             </View>
 
+            {/* Récap LECTURE SEULE des sensibilités déduites du profil (worker IA
+                back-end), replié par défaut. Rien n'est activé ; null si pas encore calculé. */}
+            <InferredRestrictionsCard userId={userId} />
+
             {tab === 'families' ? (
               <FamiliesPanel
-                families={sortedFamilies}
+                families={visibleFamilies}
+                query={familyQuery}
+                onChangeQuery={setFamilyQuery}
                 loading={familiesLoading}
                 selected={familySet}
                 onToggle={toggleFamily}
@@ -346,12 +366,9 @@ const TabButton: FC<{
     accessibilityState={{ selected: active }}
     style={[styles.tabBtn, active && styles.tabBtnActive]}
   >
-    <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
-    {count > 0 ? (
-      <View style={[styles.tabBadge, active && styles.tabBadgeActive]}>
-        <Text style={[styles.tabBadgeText, active && styles.tabBadgeTextActive]}>{count}</Text>
-      </View>
-    ) : null}
+    <Text style={[styles.tabText, active && styles.tabTextActive]}>
+      {count > 0 ? `${label} · ${count}` : label}
+    </Text>
   </Pressable>
 )
 
@@ -359,29 +376,38 @@ const TabButton: FC<{
 
 const FamiliesPanel: FC<{
   families: IngredientFamily[]
+  query: string
+  onChangeQuery: (v: string) => void
   loading: boolean
   selected: Set<string>
   onToggle: (slug: string) => void
   disabled: boolean
-}> = ({ families, loading, selected, onToggle, disabled }) => {
+}> = ({ families, query, onChangeQuery, loading, selected, onToggle, disabled }) => {
   if (loading) {
     return (
-      <NeuCard padding={spacing.lg} interactive={false} style={styles.card}>
+      <View style={[styles.card, styles.cardPadded]}>
         <ActivityIndicator size="small" color={colors.accent} />
-      </NeuCard>
+      </View>
     )
   }
-  if (families.length === 0) {
+  if (families.length === 0 && !query.trim()) {
     return (
-      <NeuCard padding={spacing.lg} interactive={false} style={styles.card}>
+      <View style={[styles.card, styles.cardPadded]}>
         <Text style={styles.emptyText}>
           La liste des familles est momentanément indisponible. Réessaie plus tard.
         </Text>
-      </NeuCard>
+      </View>
     )
   }
   return (
-    <NeuCard padding={0} interactive={false} style={styles.card}>
+    <View style={styles.ingPanel}>
+      <SearchField value={query} onChangeText={onChangeQuery} placeholder="Rechercher une famille" />
+      {families.length === 0 ? (
+        <View style={[styles.card, styles.cardPadded]}>
+          <Text style={styles.emptyText}>Aucune famille ne correspond.</Text>
+        </View>
+      ) : (
+    <View style={styles.card}>
       {families.map((fam, i) => {
         const on = selected.has(fam.slug)
         return (
@@ -396,7 +422,7 @@ const FamiliesPanel: FC<{
                 <Text style={styles.familyName}>{fam.name}</Text>
                 {!fam.tagSlug ? (
                   <View style={styles.soonBadge}>
-                    <Text style={styles.soonBadgeText}>Bientôt actif</Text>
+                    <Text style={styles.soonBadgeText}>Bientôt</Text>
                   </View>
                 ) : null}
               </View>
@@ -407,8 +433,42 @@ const FamiliesPanel: FC<{
           </StaggerItem>
         )
       })}
-    </NeuCard>
+    </View>
+      )}
+    </View>
   )
+}
+
+/** Champ de recherche blanc (familles et ingrédients). */
+const SearchField: FC<{
+  value: string
+  onChangeText: (v: string) => void
+  placeholder: string
+}> = ({ value, onChangeText, placeholder }) => (
+  <View style={styles.searchWrap}>
+    <Ionicons name="search" size={18} color={colors.inkLight} />
+    <TextInput
+      style={styles.searchInput}
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={placeholder}
+      placeholderTextColor={colors.inkLight}
+      autoCapitalize="none"
+      autoCorrect={false}
+      returnKeyType="search"
+      selectionColor={colors.textSelection}
+    />
+    {value.length > 0 ? (
+      <Pressable hitSlop={8} onPress={() => onChangeText('')} accessibilityLabel="Effacer la recherche">
+        <Ionicons name="close-circle" size={18} color={colors.inkLight} />
+      </Pressable>
+    ) : null}
+  </View>
+)
+
+/** Minuscules sans accents, pour filtrer « Parabènes » avec « parabene ». */
+function normalize(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
 // ─── Panneau ingrédients ───────────────────────────────────────────────
@@ -426,23 +486,10 @@ const IngredientsPanel: FC<{
   const showResults = query.trim().length >= 2
   return (
     <View style={styles.ingPanel}>
-      <View style={styles.searchWrap}>
-        <Ionicons name="search" size={16} color={colors.inkLight} style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          value={query}
-          onChangeText={onChangeQuery}
-          placeholder="Rechercher un ingrédient…"
-          placeholderTextColor={colors.inkLight}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-          selectionColor={colors.textSelection}
-        />
-      </View>
+      <SearchField value={query} onChangeText={onChangeQuery} placeholder="Rechercher un ingrédient" />
 
       {showResults ? (
-        <NeuCard padding={0} interactive={false} style={styles.card}>
+        <View style={styles.card}>
           {searching ? (
             <View style={styles.resultLoading}>
               <ActivityIndicator size="small" color={colors.accent} />
@@ -467,7 +514,7 @@ const IngredientsPanel: FC<{
               </View>
             ))
           )}
-        </NeuCard>
+        </View>
       ) : null}
 
       <View style={styles.section}>
@@ -475,11 +522,11 @@ const IngredientsPanel: FC<{
           Ingrédients à éviter{ingredients.length > 0 ? ` (${ingredients.length})` : ''}
         </Text>
         {ingredients.length === 0 ? (
-          <NeuCard padding={spacing.lg} interactive={false} style={styles.card}>
+          <View style={[styles.card, styles.cardPadded]}>
             <Text style={styles.emptyText}>
               Aucun ingrédient ajouté. Utilise la recherche ci-dessus pour en ajouter.
             </Text>
-          </NeuCard>
+          </View>
         ) : (
           <View style={styles.chips}>
             {ingredients.map((ing) => (
@@ -535,40 +582,36 @@ const styles = StyleSheet.create({
   intro: { ...typography.small, color: colors.inkMuted },
   error: { ...typography.small, color: colors.error },
 
-  // Onglets
+  // Onglets : contrôle segmenté blanc, onglet actif plein (violet de l'app).
   tabs: {
     flexDirection: 'row',
-    backgroundColor: colors.gray100,
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
     borderRadius: radius.full,
     padding: 4,
     gap: 4,
   },
   tabBtn: {
     flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
     borderRadius: radius.full,
   },
-  tabBtnActive: { backgroundColor: colors.accentSoft },
-  tabText: { ...typography.smallSemiBold, color: colors.inkMuted },
-  tabTextActive: { color: colors.accentDeep },
-  tabBadge: {
-    minWidth: 20,
-    height: 20,
-    paddingHorizontal: 6,
-    borderRadius: radius.full,
-    backgroundColor: colors.gray300,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabBadgeActive: { backgroundColor: colors.accent },
-  tabBadgeText: { ...typography.xsSemiBold, color: colors.gray700 },
-  tabBadgeTextActive: { color: '#FFFFFF' },
+  tabBtnActive: { backgroundColor: colors.accent },
+  tabText: { ...typography.smallSemiBold, fontSize: 15, color: colors.inkMuted },
+  tabTextActive: { color: '#FFFFFF' },
 
-  card: { borderRadius: radius.lg, overflow: 'hidden' },
+  // Cartes blanches à filet (remplacent les cartes néomorphiques grises).
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  cardPadded: { padding: spacing.lg },
   emptyText: { ...typography.small, color: colors.inkMuted },
 
   // Familles
@@ -581,14 +624,14 @@ const styles = StyleSheet.create({
   },
   familyRowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
   familyInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
-  familyName: { ...typography.bodyMedium, color: colors.ink },
+  familyName: { ...typography.body, color: colors.ink },
   soonBadge: {
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderRadius: radius.full,
-    backgroundColor: colors.warningSoft,
+    backgroundColor: colors.gray100,
   },
-  soonBadgeText: { ...typography.xsSemiBold, color: colors.warning },
+  soonBadgeText: { ...typography.xsSemiBold, color: colors.inkMuted },
   toggle: {
     width: 46,
     height: 28,
@@ -612,12 +655,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     paddingHorizontal: spacing.base,
+    gap: spacing.sm,
   },
-  searchIcon: { marginRight: spacing.sm },
   searchInput: { ...typography.body, color: colors.ink, flex: 1, paddingVertical: spacing.md },
   resultLoading: { padding: spacing.lg, alignItems: 'center' },
   resultEmpty: { ...typography.small, color: colors.inkMuted, padding: spacing.lg },

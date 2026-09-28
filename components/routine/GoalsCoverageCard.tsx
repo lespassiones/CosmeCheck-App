@@ -14,13 +14,14 @@
  */
 
 import { type FC, useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import Animated, { FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated'
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 
 import { WhiteCard } from '@/components/design/WhiteCard'
 import { AnimatedGaugeFill, useCountUp } from '@/components/design/motion'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
@@ -112,6 +113,7 @@ export const GoalsCoverageCard: FC = () => {
   const {
     state,
     coverage,
+    reloadEnabled,
     goalsChanged,
     isEvaluating,
     noCredits,
@@ -160,6 +162,7 @@ export const GoalsCoverageCard: FC = () => {
                 void evaluate(false)
               }
             }}
+            haptic="primary"
             disabled={isEvaluating}
             hitSlop={8}
             accessibilityRole="button"
@@ -255,6 +258,29 @@ export const GoalsCoverageCard: FC = () => {
       const hasExtra = extra.length > 0
       return (
         <Animated.View style={styles.gaugeList} layout={LinearTransition.duration(280)}>
+          {/* La couverture ne bouge PAS toute seule quand on ajoute un produit :
+              elle est recalculée au tap sur ↻ (3 crédits). `reloadEnabled` savait
+              déjà que la routine avait changé mais ne le disait nulle part, d'où
+              la question de la bêta (« quand est-ce que ça change ? »). */}
+          {reloadEnabled && (
+            <Pressable
+              style={({ pressed }) => [styles.staleBanner, pressed && styles.staleBannerPressed]}
+              onPress={() => {
+                if (isEvaluating) return
+                setRefreshTick((t) => t + 1)
+                void evaluate(false)
+              }}
+              haptic="primary"
+              disabled={isEvaluating}
+              accessibilityRole="button"
+              accessibilityLabel="Recalculer la couverture après le changement de routine"
+            >
+              <Ionicons name="refresh" size={14} color={colors.accent} />
+              <Text style={styles.staleText}>
+                Ta routine a changé depuis ce calcul. Recalculer
+              </Text>
+            </Pressable>
+          )}
           {base.map((item, i) => (
             <GaugeRow key={item.key} item={item} index={i} animateKey={refreshTick} />
           ))}
@@ -305,6 +331,7 @@ export const GoalsCoverageCard: FC = () => {
         <Pressable
           style={({ pressed }) => [styles.evalBtn, pressed && styles.evalBtnPressed]}
           onPress={() => void evaluate(false)}
+          haptic="primary"
           accessibilityRole="button"
         >
           <Ionicons name="sparkles-outline" size={15} color="#FFFFFF" />
@@ -324,15 +351,28 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.md,
   },
-  title: { fontFamily: fontFamilies.semiBold, fontSize: 15, color: colors.ink, flex: 1 },
+  // +20 % (15 → 18), demande user.
+  title: { fontFamily: fontFamilies.semiBold, fontSize: 18, color: colors.ink, flex: 1 },
+  // Icône seule, sans pastille grise (demande user) ; 30×30 garde la zone de tap.
   reloadBtn: {
     width: 30,
     height: 30,
-    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  // Bandeau « résultat périmé » (routine modifiée depuis le dernier calcul)
+  staleBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.md,
     backgroundColor: colors.gray100,
   },
+  staleBannerPressed: { opacity: 0.7 },
+  staleText: { fontFamily: fontFamilies.medium, fontSize: 12, color: colors.accent, flex: 1 },
 
   // Jauges
   gaugeList: { gap: 12 },

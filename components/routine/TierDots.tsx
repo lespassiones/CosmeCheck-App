@@ -1,14 +1,14 @@
 /**
  * TierDots — rangée de 5 pastilles colorées (connotation app), VERT À DROITE :
- * gauche→droite = rouge, orange, jaune, vert clair, vert foncé. Chaque pastille
- * porte sa vraie couleur ; la position du produit est cerclée d'un ANNEAU
- * (2 cercles) sur la pastille active. Pas de chiffre.
+ * gauche→droite = rouge, orange, jaune, vert, vert. Les deux niveaux verts ont
+ * le vert unique de l'app (#16A34A), comme les pastilles. La position du
+ * produit est cerclée d'un ANNEAU (2 cercles) sur la pastille active. Pas de chiffre.
  */
 import { type FC } from 'react'
 import { StyleSheet, View } from 'react-native'
 
 // index = tier (0 = meilleur … 4 = pire)
-const TIER_COLORS = ['#059669', '#34D399', '#FBBF24', '#F97316', '#F43F5E'] as const
+const TIER_COLORS = ['#16A34A', '#16A34A', '#FBBF24', '#F97316', '#F43F5E'] as const
 // Ordre d'affichage gauche → droite : pire → meilleur (vert à droite).
 const VISUAL_ORDER = [4, 3, 2, 1, 0] as const
 

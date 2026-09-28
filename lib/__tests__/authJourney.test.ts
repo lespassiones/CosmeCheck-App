@@ -21,7 +21,6 @@ import {
 const GROUP_OF: Record<Exclude<AuthRouteTarget, null>, string> = {
   welcome: '(auth)',
   preonboarding: '(preonboarding)',
-  consent: 'consent',
   onboarding: '(onboarding)',
   // Le paywall est rendu par la page /offre, pas par un groupe dedie.
   paywall: 'offre',
@@ -67,7 +66,7 @@ const visiteur: AuthRouteInput = {
   onboardingShown: false,
   isProfileComplete: false,
   paywallShown: false,
-  consentGiven: false,
+  draftPending: false,
   preOnbSeen: false,
   group: undefined,
 }
@@ -85,7 +84,6 @@ const etabli: AuthRouteInput = {
   onboardingShown: true,
   isProfileComplete: true,
   paywallShown: true,
-  consentGiven: true,
 }
 
 describe('parcours : premiere installation', () => {
@@ -124,28 +122,33 @@ describe('parcours : du carrousel au compte cree', () => {
     expect(path).toEqual([])
   })
 
-  it('inscription terminee -> consentement, PUIS questionnaire', () => {
-    // Depuis (auth), un compte neuf doit passer par le consentement avant
-    // qu'on lui demande quoi que ce soit sur sa peau.
+  it('inscription sans parcours invite -> questionnaire (qui recueille le consentement)', () => {
+    // Depuis le 28/09/2026 le consentement vit DANS le parcours : plus d'ecran
+    // intermediaire, une seule redirection.
     const { group, path } = run({ ...nouveau, group: '(auth)' })
-    expect(path[0]).toBe('consent')
-    expect(group).toBe('consent')
-  })
-
-  it('consentement donne -> questionnaire', () => {
-    const { group, path } = run({
-      ...nouveau,
-      consentGiven: true,
-      group: 'consent',
-    })
     expect(path).toEqual(['onboarding'])
     expect(group).toBe('(onboarding)')
+  })
+
+  it("reponses du parcours invite en cours d'ecriture -> on attend sur place", () => {
+    const { group, path } = run({ ...nouveau, draftPending: true, group: '(auth)' })
+    expect(path).toEqual([])
+    expect(group).toBe('(auth)')
+  })
+
+  it('reponses ecrites -> paywall directement, sans repasser par le questionnaire', () => {
+    const { path } = run({
+      ...nouveau,
+      onboardingShown: true,
+      isProfileComplete: true,
+      group: '(auth)',
+    })
+    expect(path).toEqual(['paywall'])
   })
 
   it('questionnaire termine -> paywall', () => {
     const { group } = run({
       ...nouveau,
-      consentGiven: true,
       onboardingShown: true,
       isProfileComplete: true,
       group: '(onboarding)',
@@ -163,9 +166,9 @@ describe('parcours : du carrousel au compte cree', () => {
     expect(group).toBe('offre')
   })
 
-  it('le parcours complet ne repasse jamais par le consentement', () => {
+  it('compte etabli qui se reconnecte -> accueil, jamais le questionnaire', () => {
     const { path } = run({ ...etabli, group: '(auth)' })
-    expect(path).not.toContain('consent')
+    expect(path).toEqual(['home'])
   })
 })
 
@@ -203,7 +206,6 @@ describe('parcours : deconnexion', () => {
       onboardingShown: true,
       isProfileComplete: true,
       paywallShown: true,
-      consentGiven: true,
       group: '(tabs)',
     })
     expect(group).toBe('(preonboarding)')
@@ -223,14 +225,13 @@ describe('parcours : phases d\'attente', () => {
 })
 
 describe('aucun etat n\'engendre de boucle', () => {
-  // Balayage exhaustif : 6 booleens x 8 groupes = 512 combinaisons. `run`
+  // Balayage exhaustif : 7 booleens x 7 groupes = 896 combinaisons. `run`
   // leve si le guard n'a pas converge en 8 etapes, donc ce test suffit a
   // prouver l'absence de cycle sur tout l'espace d'etats atteignable.
   const GROUPES = [
     undefined,
     '(auth)',
     '(preonboarding)',
-    'consent',
     '(onboarding)',
     'offre',
     'premium',
@@ -238,14 +239,14 @@ describe('aucun etat n\'engendre de boucle', () => {
   ]
   const BOOLS = [false, true]
 
-  it('1024 combinaisons convergent', () => {
+  it('896 combinaisons convergent', () => {
     let checked = 0
     for (const isAuthenticated of BOOLS)
       for (const profileUnavailable of BOOLS)
       for (const onboardingShown of BOOLS)
         for (const isProfileComplete of BOOLS)
           for (const paywallShown of BOOLS)
-            for (const consentGiven of BOOLS)
+            for (const draftPending of BOOLS)
               for (const preOnbSeen of BOOLS)
                 for (const group of GROUPES) {
                   expect(() =>
@@ -258,13 +259,13 @@ describe('aucun etat n\'engendre de boucle', () => {
                       onboardingShown,
                       isProfileComplete,
                       paywallShown,
-                      consentGiven,
+                      draftPending,
                       preOnbSeen,
                       group,
                     }),
                   ).not.toThrow()
                   checked += 1
                 }
-    expect(checked).toBe(1024)
+    expect(checked).toBe(896)
   })
 })

@@ -283,7 +283,15 @@ Deno.serve(async (req: Request) => {
     routineRes = routineRpcRes;
   }
 
-  const credit = (creditRes.data ?? { ok: true }) as { ok: boolean; remaining?: number; limit?: number };
+  // Débit injoignable = on REFUSE (ex-`?? { ok: true }` laissait passer l'appel
+  // IA sans débiter quand la RPC ne répondait pas ; audit du 28/09/2026).
+  if (creditRes.error || !creditRes.data) {
+    return jsonResponse(
+      { error: "Service momentanément indisponible. Réessaie dans un instant." },
+      { status: 503 },
+    );
+  }
+  const credit = creditRes.data as { ok: boolean; remaining?: number; limit?: number };
   if (!credit.ok) {
     return jsonResponse(
       {

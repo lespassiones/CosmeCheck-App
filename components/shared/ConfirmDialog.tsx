@@ -1,19 +1,26 @@
 /**
- * ConfirmDialog — modal de confirmation universelle (actions destructives,
- * déconnexion, etc.). Backdrop pressable + carte neumorphique avec deux boutons.
+ * ConfirmDialog : modal de confirmation universelle (actions destructives,
+ * déconnexion, etc.). Backdrop pressable + carte blanche (WhiteCard, arrondi
+ * `radius.pill`, ombre douce) avec deux boutons pilule : « Annuler » en contour,
+ * action en encre foncée (neutre) ou en rouge (`destructive`).
  *
  * Props : { visible, title, message?, confirmLabel?, cancelLabel?,
- *           destructive?, onConfirm, onCancel }
+ *           destructive?, centered?, loading?, loadingLabel?, onConfirm, onCancel }
+ *
+ * `loading` (ex. suppression du compte en cours) : roue de chargement dans le
+ * bouton d'action avec `loadingLabel`, boutons désactivés, et la fenêtre ne se
+ * ferme plus (ni par le fond, ni par le retour Android) tant que l'action tourne.
  */
 
 import { type FC } from 'react'
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native'
-import * as Haptics from 'expo-haptics'
+import { ActivityIndicator, Modal, StyleSheet, Text, View } from 'react-native'
+
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 
 import { colors } from '@/constants/colors'
 import { spacing, radius } from '@/constants/spacing'
-import { typography } from '@/constants/typography'
-import { NeuCard } from '@/components/design/NeuCard'
+import { fontFamilies, typography } from '@/constants/typography'
+import { WhiteCard } from '@/components/design/WhiteCard'
 
 interface Props {
   visible: boolean
@@ -22,6 +29,12 @@ interface Props {
   confirmLabel?: string
   cancelLabel?: string
   destructive?: boolean
+  /** Titre et message centrés, titre en gras, « Annuler » en encre foncée. */
+  centered?: boolean
+  /** Action en cours : roue dans le bouton d'action, fenêtre verrouillée. */
+  loading?: boolean
+  /** Libellé du bouton d'action pendant `loading` (défaut : `confirmLabel`). */
+  loadingLabel?: string
   onConfirm: () => void
   onCancel: () => void
 }
@@ -33,41 +46,82 @@ export const ConfirmDialog: FC<Props> = ({
   confirmLabel = 'Confirmer',
   cancelLabel = 'Annuler',
   destructive = false,
+  centered = false,
+  loading = false,
+  loadingLabel,
   onConfirm,
   onCancel,
 }) => {
   const handleConfirm = () => {
-    if (destructive) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {})
-    }
+    if (loading) return
     onConfirm()
+  }
+  // Pendant l'action, aucune porte de sortie : fermer la fenêtre ferait croire
+  // que l'action est annulée alors qu'elle continue côté serveur.
+  const handleCancel = () => {
+    if (!loading) onCancel()
   }
 
   return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onCancel}>
-      <Pressable style={styles.backdrop} onPress={onCancel}>
-        <Pressable style={styles.dialogWrap} onPress={(e) => e.stopPropagation()}>
-          <NeuCard variant="raised" interactive={false} padding={spacing.xl} style={styles.dialog}>
-            <Text style={styles.title}>{title}</Text>
-            {message ? <Text style={styles.message}>{message}</Text> : null}
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={handleCancel}>
+      <Pressable style={styles.backdrop} onPress={handleCancel} haptic="none" pressScale={false}>
+        <Pressable
+          style={styles.dialogWrap}
+          onPress={(e) => e.stopPropagation()}
+          haptic="none"
+          pressScale={false}
+        >
+          <WhiteCard padding={spacing.xl} borderRadius={radius.pill}>
+            <Text style={[styles.title, centered && styles.titleCentered]}>{title}</Text>
+            {message ? (
+              <Text style={[styles.message, centered && styles.messageCentered]}>{message}</Text>
+            ) : null}
 
             <View style={styles.actions}>
               <Pressable
-                style={[styles.btn, styles.cancelBtn]}
-                onPress={onCancel}
+                style={({ pressed }) => [
+                  styles.btn,
+                  styles.cancelBtn,
+                  pressed && !loading && styles.pressed,
+                  loading && styles.dimmed,
+                ]}
+                onPress={handleCancel}
+                disabled={loading}
                 accessibilityRole="button"
+                accessibilityState={{ disabled: loading }}
               >
-                <Text style={styles.cancelText}>{cancelLabel}</Text>
+                <Text style={[styles.cancelText, centered && styles.cancelTextStrong]}>
+                  {cancelLabel}
+                </Text>
               </Pressable>
               <Pressable
-                style={[styles.btn, destructive ? styles.destructiveBtn : styles.confirmBtn]}
+                style={({ pressed }) => [
+                  styles.btn,
+                  destructive ? styles.destructiveBtn : styles.confirmBtn,
+                  pressed && !loading && styles.pressed,
+                  loading && styles.busy,
+                ]}
                 onPress={handleConfirm}
+                haptic={destructive ? 'warning' : 'primary'}
+                disabled={loading}
                 accessibilityRole="button"
+                accessibilityState={{ disabled: loading, busy: loading }}
               >
-                <Text style={styles.confirmText}>{confirmLabel}</Text>
+                {loading ? (
+                  <View style={styles.loadingRow}>
+                    <ActivityIndicator size="small" color={colors.surface} />
+                    <Text style={styles.confirmText} numberOfLines={1}>
+                      {loadingLabel ?? confirmLabel}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={styles.confirmText} numberOfLines={1}>
+                    {confirmLabel}
+                  </Text>
+                )}
               </Pressable>
             </View>
-          </NeuCard>
+          </WhiteCard>
         </Pressable>
       </Pressable>
     </Modal>
@@ -86,18 +140,22 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 360,
   },
-  dialog: {
-    backgroundColor: colors.surface,
-  },
   title: {
     ...typography.h4,
     color: colors.ink,
     marginBottom: spacing.sm,
   },
+  titleCentered: {
+    fontFamily: fontFamilies.bold,
+    textAlign: 'center',
+  },
   message: {
     ...typography.body,
     color: colors.inkMuted,
     marginBottom: spacing.xl,
+  },
+  messageCentered: {
+    textAlign: 'center',
   },
   actions: {
     flexDirection: 'row',
@@ -116,12 +174,15 @@ const styles = StyleSheet.create({
   cancelBtn: {
     borderWidth: 1.5,
     borderColor: colors.border,
-    backgroundColor: 'transparent',
+    backgroundColor: colors.surface,
   },
   cancelText: {
     ...typography.button,
     color: colors.inkMuted,
     textAlign: 'center',
+  },
+  cancelTextStrong: {
+    color: colors.ink,
   },
   confirmBtn: {
     backgroundColor: colors.ink,
@@ -131,7 +192,22 @@ const styles = StyleSheet.create({
   },
   confirmText: {
     ...typography.button,
-    color: '#FFFFFF',
+    color: colors.surface,
     textAlign: 'center',
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  pressed: {
+    opacity: 0.85,
+  },
+  // Action en cours : le bouton reste lisible mais adouci (cf. maquette).
+  busy: {
+    opacity: 0.8,
+  },
+  dimmed: {
+    opacity: 0.5,
   },
 })

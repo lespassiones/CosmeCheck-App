@@ -11,8 +11,8 @@
  * Pas de date d'utilisation / péremption (choix produit).
  */
 
-import { type FC, useCallback, useMemo } from 'react'
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { type FC, useCallback, useMemo, useState } from 'react'
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -32,9 +32,12 @@ import { PressableScale } from '@/components/design/motion'
 import { Reveal } from '@/components/design/Reveal'
 import { RoutineMiniDonut } from '@/components/routine/RoutineMiniDonut'
 import { FrequencySelect } from '@/components/routine/FrequencySelect'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
+import { displayTitle } from '@/lib/analysis/displayTitle'
 
 function titleFor(item: RoutineItem): string {
-  return decodeHtml(item.analysis?.product_label?.trim() || item.analysis?.name?.trim()) || 'Produit'
+  return decodeHtml(displayTitle(item.analysis ?? {}, '')) || 'Produit'
 }
 
 function countsOf(item: RoutineItem): BlobCounts | null {
@@ -70,22 +73,16 @@ const RoutineItemScreen: FC = () => {
     [item, updateFrequency],
   )
 
-  const handleDelete = useCallback(() => {
+  const [confirmOpen, setConfirmOpen] = useState(false)
+
+  const confirmRemove = useCallback(() => {
+    setConfirmOpen(false)
     if (!item) return
-    Alert.alert('Retirer ce produit ?', 'Ce produit sera retiré de ta routine.', [
-      {
-        text: 'Retirer',
-        style: 'destructive',
-        onPress: () => {
-          void removeFromRoutine(item.id)
-            .then(() => {
-              if (router.canGoBack()) router.back()
-            })
-            .catch(() => Alert.alert('Erreur', 'La suppression a échoué.'))
-        },
-      },
-      { text: 'Annuler', style: 'cancel' },
-    ])
+    void removeFromRoutine(item.id)
+      .then(() => {
+        if (router.canGoBack()) router.back()
+      })
+      .catch(() => Alert.alert('Erreur', 'La suppression a échoué.'))
   }, [item, removeFromRoutine])
 
   return (
@@ -129,7 +126,7 @@ const RoutineItemScreen: FC = () => {
                   <Image
                     source={{ uri: imageUrl }}
                     style={styles.heroImage}
-                    contentFit="contain"
+                    contentFit="cover"
                     cachePolicy="memory-disk"
                     transition={120}
                   />
@@ -150,27 +147,29 @@ const RoutineItemScreen: FC = () => {
               <RoutineMiniDonut counts={countsOf(item)} size={44} />
             </View>
 
-            {/* ── Fréquence ── */}
-            <View style={styles.freqRow}>
-              <Text style={styles.freqRowLabel}>Fréquence d'utilisation</Text>
-              <FrequencySelect
-                value={item.frequency}
-                onChange={handleFrequency}
-                productName={titleFor(item)}
-              />
+            {/* ── Fréquence : titre + contrôle segmenté pleine largeur ── */}
+            <View style={styles.freqSection}>
+              <Text style={styles.sectionTitle}>Fréquence</Text>
+              <FrequencySelect value={item.frequency} onChange={handleFrequency} />
             </View>
 
             {/* ── Actions ── */}
             <PressableScale
               style={styles.primaryBtn}
               onPress={() => item.analysis && router.push(ROUTES.ANALYSE.DETAIL(item.analysis_id))}
+              haptic="primary"
               accessibilityRole="button"
             >
               <Ionicons name="document-text-outline" size={16} color="#FFFFFF" />
               <Text style={styles.primaryBtnText}>Voir l'analyse</Text>
             </PressableScale>
 
-            <PressableScale style={styles.deleteBtn} onPress={handleDelete} accessibilityRole="button">
+            <PressableScale
+              style={styles.deleteBtn}
+              onPress={() => setConfirmOpen(true)}
+              haptic="secondary"
+              accessibilityRole="button"
+            >
               <Ionicons name="trash-outline" size={15} color={colors.rose} />
               <Text style={styles.deleteBtnText}>Retirer de ma routine</Text>
             </PressableScale>
@@ -178,6 +177,18 @@ const RoutineItemScreen: FC = () => {
           </ScrollView>
         )}
       </SafeAreaView>
+
+      <ConfirmDialog
+        visible={confirmOpen}
+        title="Retirer ce produit ?"
+        message="Il ne comptera plus dans ton exposition."
+        confirmLabel="Retirer"
+        cancelLabel="Annuler"
+        destructive
+        centered
+        onConfirm={confirmRemove}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </View>
   )
 }
@@ -221,7 +232,8 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    padding: spacing.base,
+    paddingRight: spacing.base,
+    minHeight: 64 + spacing.base * 2,
     marginBottom: spacing.lg,
     shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 2 },
@@ -229,42 +241,26 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
+  // Visuel collé aux bords gauche, haut et bas de la carte (comme les cartes de
+  // l'onglet routine) : il reprend l'ancienne marge pour que le texte ne bouge pas.
   heroImageWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: radius.md,
+    width: 64 + spacing.base,
+    alignSelf: 'stretch',
+    borderTopLeftRadius: radius.lg,
+    borderBottomLeftRadius: radius.lg,
     backgroundColor: colors.gray50,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  heroImage: { width: '100%', height: '100%' },
-  heroText: { flex: 1 },
+  // En absolu : la photo remplit la zone sans jamais dicter la hauteur de la
+  // carte (sinon sa hauteur naturelle étire toute la carte).
+  heroImage: StyleSheet.absoluteFillObject,
+  heroText: { flex: 1, paddingVertical: spacing.base },
   heroName: { fontFamily: fontFamilies.semiBold, fontSize: 15, color: colors.ink },
   heroBrand: { fontFamily: fontFamilies.regular, fontSize: 12, color: colors.inkMuted, marginTop: 1 },
-  freqRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    paddingVertical: spacing.sm,
-    paddingLeft: spacing.base,
-    paddingRight: spacing.sm,
-    marginBottom: spacing.lg,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  freqRowLabel: {
-    flex: 1,
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 13,
-    color: colors.ink,
-  },
+  freqSection: { gap: spacing.md, marginBottom: spacing.xl },
+  sectionTitle: { fontFamily: fontFamilies.bold, fontSize: 20, color: colors.ink },
   primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -12,11 +12,11 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
@@ -164,6 +164,7 @@ export const SubmitProductPhotosSheet: FC<Props> = ({
                         <Pressable
                           style={styles.slotRemove}
                           onPress={() => removePhoto(i)}
+                          haptic="warning"
                           hitSlop={8}
                           accessibilityRole="button"
                           accessibilityLabel="Retirer la photo"
@@ -203,6 +204,7 @@ export const SubmitProductPhotosSheet: FC<Props> = ({
               <Pressable
                 style={[styles.primaryBtn, uris.length === 0 && styles.primaryBtnDisabled]}
                 onPress={handleSend}
+                haptic="primary"
                 disabled={uris.length === 0 || phase === 'sending'}
               >
                 {phase === 'sending' ? (

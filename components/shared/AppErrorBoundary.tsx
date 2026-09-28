@@ -8,9 +8,10 @@
  */
 
 import { Component, type ReactNode } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import * as SplashScreen from 'expo-splash-screen'
 
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
@@ -55,6 +56,7 @@ export class AppErrorBoundary extends Component<Props, State> {
         </Text>
         <Pressable
           onPress={this.reset}
+          haptic="primary"
           accessibilityRole="button"
           accessibilityLabel="Réessayer"
           style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]}

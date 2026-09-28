@@ -13,7 +13,6 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -24,6 +23,7 @@ import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
 import { radius, spacing } from '@/constants/spacing'
@@ -116,14 +116,14 @@ export const ContributeProductSheet: FC<Props> = ({ visible, onClose, ean }) => 
                 On vérifie tes photos, on lit la composition et on ajoute le produit très vite. Tu
                 aides toute la communauté à mieux décrypter ses cosmétiques.
               </Text>
-              <Pressable style={styles.primaryBtn} onPress={handleClose}>
+              <Pressable style={styles.primaryBtn} onPress={handleClose} haptic="primary">
                 <Text style={styles.primaryBtnText}>Terminé</Text>
               </Pressable>
             </View>
           ) : (
             <>
               <Text style={styles.intro}>
-                Ce produit n'est pas encore dans notre base. Aide-nous à l'ajouter avec 2 photos —
+                Ce produit n'est pas encore dans notre base. Aide-nous à l'ajouter avec 2 photos :
                 on lira la composition pour le noter.
               </Text>
 
@@ -167,6 +167,7 @@ export const ContributeProductSheet: FC<Props> = ({ visible, onClose, ean }) => 
                 style={[styles.primaryBtn, !canSend && styles.primaryBtnDisabled]}
                 onPress={handleSend}
                 disabled={!canSend}
+                haptic="primary"
               >
                 {phase === 'sending' ? (
                   <ActivityIndicator color="#FFFFFF" />
@@ -195,7 +196,7 @@ const PhotoSlot: FC<{
     {uri ? (
       <View style={styles.thumb}>
         <Image source={{ uri }} style={styles.thumbImg} contentFit="cover" />
-        <Pressable style={styles.thumbRemove} onPress={onRemove} hitSlop={8} accessibilityLabel="Retirer">
+        <Pressable style={styles.thumbRemove} onPress={onRemove} hitSlop={8} accessibilityLabel="Retirer" haptic="warning">
           <Ionicons name="close" size={14} color="#FFFFFF" />
         </Pressable>
       </View>

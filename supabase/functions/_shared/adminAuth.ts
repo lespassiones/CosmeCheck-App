@@ -48,6 +48,41 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
+/**
+ * Voie 1 seule : le jeton EST la clé service injectée. À utiliser pour un
+ * en-tête que la plateforme ne vérifie pas (ex. `x-admin-key`) ou sous
+ * verify_jwt=false, où la voie 2 accepterait un JWT forgé non signé.
+ */
+export function isServiceKey(token: string | null | undefined): boolean {
+  return Boolean(SERVICE_KEY) && timingSafeEqual(token ?? "", SERVICE_KEY);
+}
+
+/**
+ * Comme `isServiceKey`, mais accepte aussi une clé service_role du projet dont
+ * la CHAÎNE diffère de la valeur injectée (cas réel : le JWT legacy du .env des
+ * scripts ≠ clé injectée dans l'edge). Sa signature n'étant pas vérifiée ici
+ * (en-tête libre / verify_jwt=false), c'est l'API Auth admin qui la valide :
+ * elle ne répond 200 qu'à une vraie clé service. Un JWT forgé y est rejeté.
+ * L'appel réseau n'a lieu que si le jeton SE DIT service_role du projet.
+ */
+export async function verifyServiceKey(token: string | null | undefined): Promise<boolean> {
+  if (!token) return false;
+  if (isServiceKey(token)) return true;
+  const claims = decodeJwtRoleRef(token);
+  if (claims?.role !== "service_role" || claims?.ref !== PROJECT_REF) return false;
+  const url = Deno.env.get("SUPABASE_URL");
+  if (!url) return false;
+  try {
+    const r = await fetch(`${url}/auth/v1/admin/users?page=1&per_page=1`, {
+      headers: { apikey: token, Authorization: `Bearer ${token}` },
+    });
+    await r.body?.cancel();
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Décode le payload d'un JWT (SANS vérifier la signature — c'est le rôle de la plateforme). */
 function decodeJwtRoleRef(token: string): { role?: string; ref?: string } | null {
   const parts = token.split(".");

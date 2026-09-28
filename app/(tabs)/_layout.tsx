@@ -1,35 +1,51 @@
 /**
  * TabsLayout — layout principal de l'app avec la BottomTabBar custom.
  *
- * Déclare les 5 écrans dans l'ordre de la barre : index (Accueil), routine,
- * scan (FAB central), history, promesses. Aucun header natif.
+ * Déclare les 5 écrans : index (Accueil), routine, scan (bouton central de la
+ * barre), history (Analyses / Favoris / Promesses), profil. Aucun header natif.
  *
- * Monte aussi la chrome de navigation qui flotte au-dessus des écrans :
- *   - BurgerMenu : bouton burger haut-droite + drawer (pages hors barre).
- *   - Bouton flottant Beauty Advisor (gold-sparkle) au-dessus de la barre,
- *     masqué sur /advisor — twin du web AppShell.
+ * Plus de menu latéral (supprimé le 28/09/2026) : le Profil est un onglet de
+ * la barre et regroupe ce que le menu contenait (crédits, offre, annuaire des
+ * ingrédients, déconnexion).
+ *
+ * Monte le bouton flottant Beauty Advisor (bas-droite, au-dessus de la barre), avec
+ *     la mascotte Perle dedans. Masqué sur /scan. Le tap ouvre l'Advisor en
+ *     cercle qui grandit depuis Perle (`AdvisorReveal`), et le retour s'y referme.
  */
 
-import type { FC } from 'react'
-import { Pressable, StyleSheet, View } from 'react-native'
+import { useCallback, type FC } from 'react'
+import { StyleSheet, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 import { Tabs, useRouter, usePathname } from 'expo-router'
-import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { BottomTabBar } from '@/components/navigation/BottomTabBar'
-import { BurgerMenu } from '@/components/navigation/BurgerMenu'
-import { colors } from '@/constants/colors'
+import { BottomTabBar, TAB_BAR_HEIGHT } from '@/components/navigation/BottomTabBar'
+import { AdvisorFAB } from '@/components/navigation/AdvisorFAB'
+import { AdvisorRevealOverlay, useAdvisorReveal } from '@/components/navigation/AdvisorReveal'
 import { ROUTES } from '@/constants/routes'
+
+const FAB_SIZE = 56
+const FAB_RIGHT = 16
 
 const TabsLayout: FC = () => {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const pathname = usePathname()
-  // Masqué pendant le scan (caméra plein écran) : le bouton ne doit pas gêner.
+  // Masqué pendant le scan (caméra plein écran, recherche, saisie) : il ne doit pas gêner.
   const onScan = pathname?.includes('/scan') ?? false
+  // Bouton flottant calé 16 px au-dessus de la barre d'onglets.
+  const fabBottom = Math.max(insets.bottom, 8) + TAB_BAR_HEIGHT + 16
+
+  const openAdvisor = useCallback(() => router.push(ROUTES.ADVISOR.INDEX), [router])
+  const reveal = useAdvisorReveal({
+    onNavigate: openAdvisor,
+    fabRight: FAB_RIGHT,
+    fabBottom,
+    fabSize: FAB_SIZE,
+  })
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} onLayout={reveal.onLayout}>
       <Tabs
         tabBar={(props) => <BottomTabBar {...props} />}
         screenOptions={{ headerShown: false }}
@@ -38,26 +54,16 @@ const TabsLayout: FC = () => {
         <Tabs.Screen name="routine" options={{ title: 'Routine' }} />
         <Tabs.Screen name="scan" options={{ title: 'Scan' }} />
         <Tabs.Screen name="history" options={{ title: 'Historique' }} />
-        <Tabs.Screen name="promesses" options={{ title: 'Promesses' }} />
+        <Tabs.Screen name="profil" options={{ title: 'Profil' }} />
       </Tabs>
 
-      {/* Bouton burger flottant (haut-droite) + drawer */}
-      <BurgerMenu />
+      {/* Les vagues de l'ouverture : au-dessus des onglets, sous le bouton. */}
+      <AdvisorRevealOverlay reveal={reveal} />
 
-      {/* Bouton flottant Beauty Advisor — clair + icône chatbot.
-          Masqué pendant le scan (caméra plein écran). */}
       {!onScan && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Ouvrir Beauty Advisor"
-          onPress={() => router.push(ROUTES.ADVISOR.INDEX)}
-          style={[styles.advisorBtn, { bottom: insets.bottom + 88 }]}
-          hitSlop={6}
-        >
-          <View style={styles.advisorInner}>
-            <Ionicons name="chatbubble-ellipses" size={22} color={colors.rose} />
-          </View>
-        </Pressable>
+        <Animated.View style={[styles.advisorBtn, { bottom: fabBottom }, reveal.fabStyle]}>
+          <AdvisorFAB onPress={reveal.open} size={FAB_SIZE} />
+        </Animated.View>
       )}
     </View>
   )
@@ -69,25 +75,8 @@ const styles = StyleSheet.create({
   },
   advisorBtn: {
     position: 'absolute',
-    right: 16,
+    right: FAB_RIGHT,
     zIndex: 75,
-    height: 48,
-    width: 48,
-    borderRadius: 24,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 14,
-    elevation: 8,
-  },
-  advisorInner: {
-    flex: 1,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
   },
 })
 

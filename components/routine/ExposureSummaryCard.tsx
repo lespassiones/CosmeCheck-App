@@ -17,6 +17,7 @@ import { WhiteCard } from '@/components/design/WhiteCard'
 import { useCountUp } from '@/components/design/motion'
 import { IngredientBlob, type BlobCounts } from '@/components/design/IngredientBlob'
 import type { RoutineMetrics } from '@/lib/routine/engine'
+import { exposureChangeText, type ExposureChange } from '@/lib/routine/exposureDelta'
 
 /** Couleur du label/score d'exposition selon le palier. */
 export function exposureColor(label: RoutineMetrics['exposureLabel']): string {
@@ -36,6 +37,14 @@ interface Props {
    * des produits. Le score n'a de sens qu'à partir d'un produit.
    */
   empty?: boolean
+  /**
+   * Nombre de produits pris en compte. Affiché sous la note, car la note est
+   * une MOYENNE pondérée par la fréquence (retour bêta : « la note ne change
+   * pas ? » après des ajouts proches de la moyenne).
+   */
+  productCount?: number
+  /** Évolution depuis la dernière modification de la routine. */
+  change?: ExposureChange
   /** Si fourni, la carte devient cliquable (mène au détail). */
   onPress?: () => void
   /** Affiche le chevron « > » en haut à droite (indique une suite). */
@@ -48,6 +57,8 @@ export const ExposureSummaryCard: FC<Props> = ({
   exposureLabel,
   colorCounts,
   empty,
+  productCount,
+  change,
   onPress,
   showChevron,
   style,
@@ -55,6 +66,13 @@ export const ExposureSummaryCard: FC<Props> = ({
   const fg = exposureColor(exposureLabel)
   // Le score « compte » de 0 vers sa valeur à l'apparition de la carte.
   const shownScore = useCountUp(exposureScore, 0, 900, 200, 1)
+  const changeText = change ? exposureChangeText(change) : null
+  const changeColor =
+    change?.kind === 'up'
+      ? colors.rating.vert.text
+      : change?.kind === 'down'
+        ? colors.rating.orange.text
+        : colors.inkMuted
   return (
     <WhiteCard padding={spacing.lg} onPress={onPress} style={style}>
       <View style={styles.row}>
@@ -63,7 +81,7 @@ export const ExposureSummaryCard: FC<Props> = ({
           {empty ? (
             <>
               <View style={styles.scoreLine}>
-                <Text style={[styles.scoreBig, { color: colors.inkLight }]}>—</Text>
+                <Text style={[styles.scoreBig, { color: colors.inkLight }]}>-</Text>
                 <Text style={styles.scoreUnit}>/20</Text>
               </View>
               <Text style={styles.emptyHint}>Ajoute des produits pour la calculer</Text>
@@ -75,6 +93,16 @@ export const ExposureSummaryCard: FC<Props> = ({
                 <Text style={styles.scoreUnit}>/20</Text>
               </View>
               <Text style={[styles.exposureLabel, { color: fg }]}>{exposureLabel}</Text>
+              {productCount != null && productCount > 0 ? (
+                <Text style={styles.averageHint}>
+                  {productCount === 1
+                    ? 'Note de ton produit'
+                    : `Moyenne de tes ${productCount} produits, selon leur fréquence`}
+                </Text>
+              ) : null}
+              {changeText ? (
+                <Text style={[styles.changeText, { color: changeColor }]}>{changeText}</Text>
+              ) : null}
             </>
           )}
         </View>
@@ -105,6 +133,17 @@ const styles = StyleSheet.create({
   scoreBig: { fontFamily: fontFamilies.bold, fontSize: 30 },
   scoreUnit: { fontFamily: fontFamilies.regular, fontSize: 13, color: colors.inkMuted },
   exposureLabel: { fontFamily: fontFamilies.semiBold, fontSize: 12, marginTop: 2 },
+  averageHint: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 11,
+    color: colors.inkMuted,
+    marginTop: 4,
+  },
+  changeText: {
+    fontFamily: fontFamilies.semiBold,
+    fontSize: 11,
+    marginTop: 2,
+  },
   emptyHint: {
     fontFamily: fontFamilies.regular,
     fontSize: 12,

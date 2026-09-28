@@ -28,7 +28,6 @@ import {
   DeviceEventEmitter,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -57,6 +56,8 @@ import { supabase } from '@/lib/supabase/client'
 import { useLaunchAlternative } from '@/hooks/useLaunchAlternative'
 import { AlternativesCarousel } from '@/components/analysis/AlternativesCarousel'
 import { ProcessingOverlay } from '@/components/shared/ProcessingOverlay'
+import { listEntering } from '@/components/design/motion'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import {
   askAdvisorAgent,
   askAdvisorAgentStreaming,
@@ -134,7 +135,15 @@ interface AdvisorChatProps {
   initialMessages?: StoredMessage[] | null
   /** Notifie le parent quand une nouvelle conversation est créée (1er message). */
   onConversationCreated?: (id: string) => void
+  /**
+   * Rang du chat dans l'entrée échelonnée de la page : la conversation, puis
+   * les suggestions, puis la saisie arrivent à la suite (rangs n, n+1, n+2).
+   */
+  entranceIndex?: number
 }
+
+/** Pas de l'entrée échelonnée de la page Advisor (ms entre deux éléments). */
+export const ADVISOR_ENTER_STEP = 80
 
 const greeting = (firstName: string): ChatMsg => ({
   role: 'assistant',
@@ -148,6 +157,7 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
   conversationId = null,
   initialMessages = null,
   onConversationCreated,
+  entranceIndex = 0,
 }) => {
   const [messages, setMessages] = useState<ChatMsg[]>(() =>
     initialMessages && initialMessages.length > 0
@@ -430,105 +440,116 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <ScrollView
-        ref={scrollRef}
+      {/* La conversation arrive d'un bloc (message d'accueil ou historique repris) ;
+          les messages envoyés ensuite ne rejouent pas cette entrée. */}
+      <Animated.View
+        entering={listEntering(entranceIndex, ADVISOR_ENTER_STEP)}
         style={styles.flex}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
       >
-        {messages.map((m, i) => (
-          <Fragment key={i}>
-            <MessageBubble
-              msg={m}
-              isLast={i === messages.length - 1}
-              streaming={streaming}
-              loadingLabel={
-                liveStatus ?? loadingSeqRef.current[loadingTick % loadingSeqRef.current.length]
-              }
-              loadingColor={advisorLoadingColor(loadingTick)}
-            />
-            {/* Bouton « Montre-moi des recommandations » : uniquement sous la
-                DERNIÈRE réponse de l'assistant quand aucune reco n'a été faite. */}
-            {m.role === 'assistant' &&
-            m.productOffer === 'offer' &&
-            !m.recoTried &&
-            !m.uiOnly &&
-            !m.errorMsg &&
-            m.content.length > 0 &&
-            i === messages.length - 1 &&
-            !streaming ? (
-              <View style={styles.recoAskWrap}>
-                <Pressable
-                  onPress={() => void requestReco(i)}
-                  disabled={recoRequesting}
-                  style={({ pressed }) => [
-                    styles.recoAskBtn,
-                    pressed && styles.recoAskBtnPressed,
-                    recoRequesting && styles.recoAskBtnDisabled,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Explorer quelques pistes"
-                >
-                  <Text style={styles.recoAskEmoji}>✨</Text>
-                  <Text style={styles.recoAskText}>Explorer quelques pistes</Text>
-                </Pressable>
-              </View>
-            ) : null}
-            {m.role === 'assistant' && m.recoTried ? (
-              <View style={styles.recoWrap}>
-                {m.recoRelaxation && !m.recoLoading && (m.products?.length ?? 0) === 0 ? (
-                  <View style={styles.relaxBox}>
-                    <Text style={styles.relaxText}>
-                      {m.recoRelaxation.keptLabels.length > 0
-                        ? `Aucun produit ne coche tout. J'en ai ${m.recoRelaxation.products.length} ${m.recoRelaxation.keptLabels.join(' et ')}, mais je ne peux pas garantir : ${m.recoRelaxation.droppedLabels.join(', ')}.`
-                        : `Aucun produit ne respecte toutes ces contraintes dans notre base. J'ai ${m.recoRelaxation.products.length} produits du bon type (compatibles avec ton profil), mais je ne peux pas garantir : ${m.recoRelaxation.droppedLabels.join(', ')}.`}
-                    </Text>
-                    <Pressable
-                      onPress={() => acceptRelaxation(i)}
-                      style={({ pressed }) => [styles.relaxBtn, pressed && styles.relaxBtnPressed]}
-                      accessibilityRole="button"
-                    >
-                      <Text style={styles.relaxBtnText}>
-                        Voir ces {m.recoRelaxation.products.length} produits
+        <ScrollView
+          ref={scrollRef}
+          style={styles.flex}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {messages.map((m, i) => (
+            <Fragment key={i}>
+              <MessageBubble
+                msg={m}
+                isLast={i === messages.length - 1}
+                streaming={streaming}
+                loadingLabel={
+                  liveStatus ?? loadingSeqRef.current[loadingTick % loadingSeqRef.current.length]
+                }
+                loadingColor={advisorLoadingColor(loadingTick)}
+              />
+              {/* Bouton « Montre-moi des recommandations » : uniquement sous la
+                  DERNIÈRE réponse de l'assistant quand aucune reco n'a été faite. */}
+              {m.role === 'assistant' &&
+              m.productOffer === 'offer' &&
+              !m.recoTried &&
+              !m.uiOnly &&
+              !m.errorMsg &&
+              m.content.length > 0 &&
+              i === messages.length - 1 &&
+              !streaming ? (
+                <View style={styles.recoAskWrap}>
+                  <Pressable
+                    onPress={() => void requestReco(i)}
+                    disabled={recoRequesting}
+                    haptic="primary"
+                    style={({ pressed }) => [
+                      styles.recoAskBtn,
+                      pressed && styles.recoAskBtnPressed,
+                      recoRequesting && styles.recoAskBtnDisabled,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Explorer quelques pistes"
+                  >
+                    <Text style={styles.recoAskEmoji}>✨</Text>
+                    <Text style={styles.recoAskText}>Explorer quelques pistes</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+              {m.role === 'assistant' && m.recoTried ? (
+                <View style={styles.recoWrap}>
+                  {m.recoRelaxation && !m.recoLoading && (m.products?.length ?? 0) === 0 ? (
+                    <View style={styles.relaxBox}>
+                      <Text style={styles.relaxText}>
+                        {m.recoRelaxation.keptLabels.length > 0
+                          ? `Aucun produit ne coche tout. J'en ai ${m.recoRelaxation.products.length} ${m.recoRelaxation.keptLabels.join(' et ')}, mais je ne peux pas garantir : ${m.recoRelaxation.droppedLabels.join(', ')}.`
+                          : `Aucun produit ne respecte toutes ces contraintes dans notre base. J'ai ${m.recoRelaxation.products.length} produits du bon type (compatibles avec ton profil), mais je ne peux pas garantir : ${m.recoRelaxation.droppedLabels.join(', ')}.`}
                       </Text>
-                    </Pressable>
-                  </View>
-                ) : (
-                  <AlternativesCarousel
-                    products={m.products ?? []}
-                    isInitialLoading={!!m.recoLoading}
-                    isEmpty={!m.recoLoading && (m.products?.length ?? 0) === 0}
-                    analyzing={isAnalyzing}
-                    showSeeAll={(m.products?.length ?? 0) >= 10 && !!m.recoCriteria}
-                    onSelect={(p) => void analyze(p)}
-                    onSeeAll={() => {
-                      if (!m.recoCriteria) return
-                      router.push({
-                        pathname: '/advisor/recommendations',
-                        params: {
-                          ingredients: m.recoCriteria.ingredients.join(','),
-                          form: m.recoCriteria.form ?? '',
-                          exclude: m.recoCriteria.exclude?.join(',') ?? '',
-                        },
-                      })
-                    }}
-                    title="Quelques pistes à considérer"
-                    emptyText={
-                      m.recoEmptyReason === 'restrictions'
-                        ? "Des produits correspondaient, mais aucun ne respecte tes restrictions actuelles. Assouplis-les dans ton profil pour voir des suggestions."
-                        : "Je n'ai pas trouvé de produit qui colle vraiment à ce besoin. Précise un peu et je recherche autrement."
-                    }
-                  />
-                )}
-              </View>
-            ) : null}
-          </Fragment>
-        ))}
-      </ScrollView>
+                      <Pressable
+                        onPress={() => acceptRelaxation(i)}
+                        style={({ pressed }) => [styles.relaxBtn, pressed && styles.relaxBtnPressed]}
+                        accessibilityRole="button"
+                      >
+                        <Text style={styles.relaxBtnText}>
+                          Voir ces {m.recoRelaxation.products.length} produits
+                        </Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <AlternativesCarousel
+                      products={m.products ?? []}
+                      isInitialLoading={!!m.recoLoading}
+                      isEmpty={!m.recoLoading && (m.products?.length ?? 0) === 0}
+                      analyzing={isAnalyzing}
+                      showSeeAll={(m.products?.length ?? 0) >= 10 && !!m.recoCriteria}
+                      onSelect={(p) => void analyze(p)}
+                      onSeeAll={() => {
+                        if (!m.recoCriteria) return
+                        router.push({
+                          pathname: '/advisor/recommendations',
+                          params: {
+                            ingredients: m.recoCriteria.ingredients.join(','),
+                            form: m.recoCriteria.form ?? '',
+                            exclude: m.recoCriteria.exclude?.join(',') ?? '',
+                          },
+                        })
+                      }}
+                      title="Quelques pistes à considérer"
+                      emptyText={
+                        m.recoEmptyReason === 'restrictions'
+                          ? "Des produits correspondaient, mais aucun ne respecte tes restrictions actuelles. Assouplis-les dans ton profil pour voir des suggestions."
+                          : "Je n'ai pas trouvé de produit qui colle vraiment à ce besoin. Précise un peu et je recherche autrement."
+                      }
+                    />
+                  )}
+                </View>
+              ) : null}
+            </Fragment>
+          ))}
+        </ScrollView>
+      </Animated.View>
 
       {showSuggestions && (
-        <View style={styles.suggestionsWrap}>
+        <Animated.View
+          entering={listEntering(entranceIndex + 1, ADVISOR_ENTER_STEP)}
+          style={styles.suggestionsWrap}
+        >
           <Text style={styles.suggestionsLabel}>SUGGESTIONS</Text>
           <ScrollView
             horizontal
@@ -551,10 +572,13 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
               </Pressable>
             ))}
           </ScrollView>
-        </View>
+        </Animated.View>
       )}
 
-      <View style={styles.inputBar}>
+      <Animated.View
+        entering={listEntering(entranceIndex + 2, ADVISOR_ENTER_STEP)}
+        style={styles.inputBar}
+      >
         <TextInput
           value={input}
           onChangeText={setInput}
@@ -572,6 +596,7 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
         <Pressable
           onPress={() => void send(input)}
           disabled={streaming || input.trim().length === 0}
+          haptic="primary"
           style={({ pressed }) => [
             styles.sendBtn,
             (streaming || input.trim().length === 0) && styles.sendBtnDisabled,
@@ -586,7 +611,7 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
             <Ionicons name="send" size={16} color={colors.surface} />
           )}
         </Pressable>
-      </View>
+      </Animated.View>
 
       <ProcessingOverlay visible={isAnalyzing} message="On décode la composition…" />
     </KeyboardAvoidingView>

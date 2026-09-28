@@ -12,11 +12,10 @@
  *     changeait, et le garde-fou de l'analyser ne comparait QUE le nombre
  *     d'items (12 ≥ 13×0,5 → accepté). → `cacheMatchesInci`.
  *
- *  2. L'écran d'analyse mobile ré-imposait `catalog.score` aux étoiles, ce qui
- *     ANNULAIT l'arbitrage `reconcileScore` déjà fait par l'Edge Function.
- *     Yepoda The Calm Balm : analyse servie 16,55 « Bien » (top5 tout vert),
- *     catalogue 12,9 → 3 étoiles ambres sur mobile contre 4 vertes sur le web.
- *     → `reconcileScore` côté client.
+ *  2. Les étoiles de la fiche et la pastille de la recherche divergeaient pour
+ *     un MÊME produit. Arbitré le 14 sept 2026 (bêta Stela) : le catalogue est
+ *     la source unique, l'app ne recalcule plus rien à l'affichage.
+ *     → `resolveDisplayScore` (remplace l'ancien `reconcileScore`).
  *
  *  3. Un produit capillaire recevait une catégorie peau (« Crème Capillaire
  *     Koni » → `creme_corps`), et `personal-insights` déduit l'axe du profil de
@@ -26,7 +25,7 @@
 import { cacheMatchesInci, inciKey } from '../../supabase/functions/analyser/core'
 import { guardHairCategory, hasHairMarker } from '../../supabase/functions/analyser/engine'
 import { parseInciList } from '../../supabase/functions/analyser/parse'
-import { reconcileScore, scoreToneFromScore } from '../analysis/scoreCap'
+import { resolveDisplayScore, scoreToneFromScore } from '../analysis/scoreCap'
 
 // INCI réels relevés en prod le 21 août 2026.
 const VAGANCE_INCI =
@@ -80,28 +79,38 @@ describe('cacheMatchesInci — cache EAN décrivant un AUTRE produit (défaut 1)
   })
 })
 
-describe('reconcileScore — les étoiles ne contredisent plus les couleurs (défaut 2)', () => {
-  it('garde le score servi quand le catalogue est dans une AUTRE bande (cas Yepoda)', () => {
-    // Catalogue 12,9 « Moyen » (ambre) vs analyse servie 16,55 « Bien » (vert),
-    // 34/34 ingrédients identifiés → on garde 16,55, donc 4 étoiles vertes,
-    // cohérent avec un top5 tout vert et avec le web.
-    expect(reconcileScore(12.9, 16.55, 34, 34)).toBe(16.55)
+describe('resolveDisplayScore — une seule note pour un produit (défaut 2)', () => {
+  it('sert TOUJOURS le score catalogue quand il existe (cas Anua, bêta 12 sept)', () => {
+    // Catalogue 12,9 « Moyen » (œil jaune en recherche) vs analyse live 16,51
+    // « Bien » (4 étoiles vertes sur la fiche). L'ancienne règle servait le live
+    // et la fiche contredisait la liste. Désormais : 12,9 PARTOUT.
+    expect(resolveDisplayScore(12.9, 16.51)).toBe(12.9)
+    // Cas Yepoda, même bascule : le catalogue gagne aussi.
+    expect(resolveDisplayScore(12.9, 16.55)).toBe(12.9)
   })
 
-  it('sert le score catalogue quand les deux sont dans la même bande (curation respectée)', () => {
-    expect(reconcileScore(16.12, 16.12, 15, 15)).toBe(16.12)
-    // 19,5 et 16,3 sont tous deux « vert » → le catalogue gagne.
-    expect(reconcileScore(19.5, 16.3, 13, 13)).toBe(19.5)
+  it('sert le score catalogue même quand les deux sont dans la même bande', () => {
+    expect(resolveDisplayScore(16.12, 16.12)).toBe(16.12)
+    expect(resolveDisplayScore(19.5, 16.3)).toBe(19.5)
   })
 
-  it('retombe sur le catalogue si moins de 50 % des ingrédients sont identifiés', () => {
-    // Coloriage live non fiable → la curation reste maîtresse.
-    expect(reconcileScore(16.3, 8.1, 4, 13)).toBe(16.3)
+  it('ne tient plus compte du taux d’identification (plus aucun arbitrage)', () => {
+    expect(resolveDisplayScore(16.3, 8.1)).toBe(16.3)
   })
 
-  it('retombe sur le catalogue si aucun score servi', () => {
-    expect(reconcileScore(16.3, null, 13, 13)).toBe(16.3)
-    expect(reconcileScore(16.3, undefined, 13, 13)).toBe(16.3)
+  it('retombe sur le score servi UNIQUEMENT sans note catalogue', () => {
+    expect(resolveDisplayScore(null, 16.3)).toBe(16.3)
+    expect(resolveDisplayScore(undefined, 8.1)).toBe(8.1)
+  })
+
+  it('renvoie null quand aucune des deux notes n’existe (produit non noté)', () => {
+    expect(resolveDisplayScore(null, null)).toBeNull()
+    expect(resolveDisplayScore(undefined, undefined)).toBeNull()
+  })
+
+  it('ignore NaN des deux côtés', () => {
+    expect(resolveDisplayScore(Number.NaN, 14)).toBe(14)
+    expect(resolveDisplayScore(Number.NaN, Number.NaN)).toBeNull()
   })
 
   it('« Très bien » et « Bien » partagent la bande verte (pas de bascule inutile)', () => {
@@ -113,7 +122,7 @@ describe('reconcileScore — les étoiles ne contredisent plus les couleurs (dé
   })
 })
 
-describe('guardHairCategory — un produit cheveux n’est plus rangé en catégorie peau (défaut 3)', () => {
+describe('guardHairCategory : un produit cheveux n’est plus rangé en catégorie peau (défaut 3)', () => {
   it('corrige le cas réel « Crème Capillaire Koni » classé creme_corps', () => {
     expect(guardHairCategory('creme_corps', 'Crème Capillaire Koni')).toBe('apres_shampooing')
   })
@@ -142,6 +151,7 @@ describe('guardHairCategory — un produit cheveux n’est plus rangé en catég
     expect(guardHairCategory('nettoyant_visage', 'Gel Nettoyant Purifiant Cicafalte+')).toBe('nettoyant_visage')
     expect(guardHairCategory('creme_visage', "Lotion Tonique à l'Acide Glycolique 7%")).toBe('creme_visage')
     expect(guardHairCategory(null, 'Sérum Niacinamide 10%')).toBeNull()
+    expect(guardHairCategory('creme_visage', 'Yepoda The Calm Balm')).toBe('creme_visage')
   })
 
   it('NE TOUCHE PAS un produit MULTI-ZONE corps et cheveux (cas réels en base)', () => {
@@ -151,6 +161,9 @@ describe('guardHairCategory — un produit cheveux n’est plus rangé en catég
       guardHairCategory('parfum', 'Yves Rocher Framboise & Menthe Poivrée Brume Parfumée Corps & Cheveux - 100 ml'),
     ).toBe('parfum')
     expect(guardHairCategory('creme_corps', 'Beauté Insolente Crème Pure Energie 3 en 1 cheveux')).toBe('creme_corps')
+    // Variantes à tirets et anglaises (sept 2026).
+    expect(guardHairCategory('creme_corps', 'Crème 3-en-1 visage cheveux')).toBe('creme_corps')
+    expect(guardHairCategory('creme_corps', 'Hair & Body Wash Coco')).toBe('creme_corps')
   })
 
   it('laisse un parfum en parfum même sans marqueur multi-zone', () => {
@@ -167,5 +180,43 @@ describe('guardHairCategory — un produit cheveux n’est plus rangé en catég
     expect(hasHairMarker('soin cheveux')).toBe(true)
     expect(hasHairMarker('crème pour le corps')).toBe(false)
     expect(hasHairMarker(null)).toBe(false)
+  })
+
+  it('nouveaux marqueurs capillaires (bêta sept 2026 : crème cheveux vue comme un soin visage)', () => {
+    for (const name of [
+      'Leave-in Conditioner Coco',
+      'Crème sans rinçage boucles',
+      'Soin sans rinçage réparateur',
+      'Crème pour cheveux crépus',
+      'Gelée définition boucles',
+      'Curl Defining Cream for curly hair',
+      'Huile pointes sèches',
+      'Soin des longueurs',
+      'Co-wash nourrissant',
+      'Défrisant doux',
+      'Lotion anti-chute',
+      'Spray thermo-protecteur',
+      'Spray démêlant enfant',
+      'Masque capillaire karité',
+      'Huile capillaire ricin',
+      'Crème coiffante frisés',
+      'Sérum cuir chevelu apaisant',
+    ]) {
+      expect([name, hasHairMarker(name)]).toEqual([name, true])
+    }
+    // … et donc re-rangés hors catégorie peau (non lavants : apres_shampooing).
+    expect(guardHairCategory('creme_visage', 'Leave-in Conditioner Coco')).toBe('apres_shampooing')
+    expect(guardHairCategory('creme_corps', 'Crème pour cheveux crépus')).toBe('apres_shampooing')
+    expect(guardHairCategory('nettoyant_visage', 'Co-wash nourrissant')).toBe('apres_shampooing')
+  })
+
+  it('pas de faux positif sur les mots courts ou le maquillage des yeux', () => {
+    expect(hasHairMarker('Chair de poule crème corps')).toBe(false) // « hair » dans « chair »
+    expect(hasHairMarker('Mascara Volume Curl')).toBe(false)
+    expect(hasHairMarker('Mascara boucles intenses')).toBe(false)
+    expect(hasHairMarker('Sérum cils et sourcils')).toBe(false)
+    expect(guardHairCategory('maquillage', 'Mascara boucles intenses')).toBe('maquillage')
+    expect(hasHairMarker('Eau micellaire sans rinçage')).toBe(false)
+    expect(hasHairMarker('Crème lavante sans rinçage bébé')).toBe(false)
   })
 })

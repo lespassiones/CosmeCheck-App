@@ -9,7 +9,7 @@ const { access_token } = await a.json();
 async function ask(msgs, seen = []) {
   const r = await fetch(`${URL}/functions/v1/advisor-agent`, {
     method: "POST",
-    headers: { apikey: ANON, Authorization: `Bearer ${access_token}`, "Content-Type": "application/json" },
+    headers: { apikey: ANON, Authorization: `Bearer ${access_token}`, "Content-Type": "application/json", "x-admin-key": process.env.SUPABASE_SERVICE_ROLE_KEY ?? "" },
     body: JSON.stringify({ charge: false, messages: msgs, seen_eans: seen }),
   });
   return r.json();

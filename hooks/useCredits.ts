@@ -22,6 +22,8 @@ interface UseCreditsReturn {
   remaining: number
   limit: number
   used: number
+  /** Crédits bonus (non renouvelables) inclus dans `remaining`. */
+  bonus: number
   renewalPeriod: RenewalPeriod | null
   renewalIntervalDays: number | null
   isLoading: boolean
@@ -64,6 +66,7 @@ export function useCredits(): UseCreditsReturn {
   const remaining = useMemo(() => credits?.remaining ?? 0, [credits?.remaining])
   const limit = useMemo(() => credits?.limit ?? 0, [credits?.limit])
   const used = useMemo(() => credits?.used ?? 0, [credits?.used])
+  const bonus = useMemo(() => credits?.bonus ?? 0, [credits?.bonus])
   const renewalPeriod = useMemo(() => (credits?.renewal_period as RenewalPeriod) ?? null, [credits?.renewal_period])
   const renewalIntervalDays = useMemo(() => credits?.renewal_interval_days ?? null, [credits?.renewal_interval_days])
 
@@ -72,6 +75,7 @@ export function useCredits(): UseCreditsReturn {
     remaining,
     limit,
     used,
+    bonus,
     renewalPeriod,
     renewalIntervalDays,
     isLoading,

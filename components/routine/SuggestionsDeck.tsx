@@ -22,7 +22,6 @@
 import { type FC, useEffect, useState } from 'react'
 import {
   Modal,
-  Pressable,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -45,6 +44,8 @@ import { colors } from '@/constants/colors'
 import { spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
 import { SuggestionCard } from './SuggestionCard'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
+import { fireHaptic } from '@/lib/pressFeedback'
 import type { AlternativeProduct } from '@/lib/analysis/alternativesFilter'
 
 export interface DeckSuggestion {
@@ -153,7 +154,10 @@ export const SuggestionsDeck: FC<Props> = ({
   const styleP1 = useSlotStyle(1)
   const styleP2 = useSlotStyle(2)
 
-  const commit = (target: number) => setIndex(target)
+  const commit = (target: number) => {
+    if (target !== idx) fireHaptic('selection')
+    setIndex(target)
+  }
 
   const pan = Gesture.Pan()
     .activeOffsetX([-12, 12])

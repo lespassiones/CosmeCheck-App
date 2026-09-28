@@ -15,7 +15,6 @@ import { type FC, useEffect, useState } from 'react'
 import {
   LayoutAnimation,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   UIManager,
@@ -25,6 +24,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useReducedMotion } from 'react-native-reanimated'
 
 import { WhiteCard } from '@/components/design/WhiteCard'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'

@@ -19,7 +19,6 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -37,6 +36,8 @@ import { parseAnalyseResponse } from '@/lib/analysis/types'
 import { RoutineMiniDonut } from '@/components/routine/RoutineMiniDonut'
 import type { BlobCounts } from '@/components/design/IngredientBlob'
 import { SearchBar } from '@/components/shared/SearchBar'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
+import { displayTitle } from '@/lib/analysis/displayTitle'
 
 interface AnalysisRow {
   id: string
@@ -55,7 +56,7 @@ function countsFor(row: AnalysisRow): BlobCounts | null {
 }
 
 function titleFor(row: AnalysisRow): string {
-  return row.product_label?.trim() || row.name?.trim() || 'Analyse'
+  return displayTitle(row, 'Analyse')
 }
 
 interface Props {
@@ -124,6 +125,7 @@ export const AddProductModal = memo(function AddProductModal({
     <Pressable
       style={styles.histItem}
       onPress={() => handleSelect(item.id)}
+      haptic="primary"
       disabled={addingId !== null}
     >
       <View style={styles.histMain}>
@@ -143,7 +145,7 @@ export const AddProductModal = memo(function AddProductModal({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
       <View style={styles.backdrop}>
-        <Pressable style={styles.backdropPress} onPress={close} />
+        <Pressable style={styles.backdropPress} onPress={close} haptic="none" pressScale={false} />
         <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
           <View style={styles.handle} />
           <View style={styles.header}>
@@ -169,13 +171,13 @@ export const AddProductModal = memo(function AddProductModal({
           {mode === 'choice' ? (
             <View style={styles.choices}>
               <Pressable
-                style={styles.choiceCard}
+                style={({ pressed }) => [styles.choiceCard, pressed && styles.choicePressed]}
                 onPress={() => {
                   close()
                   onOpenScanner()
                 }}
               >
-                <View style={[styles.choiceIcon, { backgroundColor: colors.roseSoft }]}>
+                <View style={styles.choiceIcon}>
                   <Ionicons name="camera-outline" size={24} color={colors.rose} />
                 </View>
                 <View style={styles.choiceText}>
@@ -187,8 +189,13 @@ export const AddProductModal = memo(function AddProductModal({
                 <Ionicons name="chevron-forward" size={18} color={colors.inkLight} />
               </Pressable>
 
-              <Pressable style={styles.choiceCard} onPress={() => setMode('history')}>
-                <View style={[styles.choiceIcon, { backgroundColor: colors.accentSoft }]}>
+              <View style={styles.choiceDivider} />
+
+              <Pressable
+                style={({ pressed }) => [styles.choiceCard, pressed && styles.choicePressed]}
+                onPress={() => setMode('history')}
+              >
+                <View style={styles.choiceIcon}>
                   <Ionicons name="time-outline" size={24} color={colors.accent} />
                 </View>
                 <View style={styles.choiceText}>
@@ -270,21 +277,19 @@ const styles = StyleSheet.create({
   },
   backBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   title: { fontFamily: fontFamilies.bold, fontSize: 16, color: colors.ink },
-  choices: { padding: spacing.lg, gap: spacing.md },
+  // Choix en simples lignes (plus de carte grise ni de pastille derrière les
+  // icônes), séparées par un filet.
+  choices: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   choiceCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.gray50,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.base,
+    paddingVertical: spacing.base,
   },
+  choicePressed: { opacity: 0.6 },
+  choiceDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.gray300 },
   choiceIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.md,
+    width: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },

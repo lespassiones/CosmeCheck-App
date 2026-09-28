@@ -11,7 +11,8 @@
  */
 
 import { memo, type FC } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { Ionicons } from '@expo/vector-icons'
 
 import { colors } from '@/constants/colors'

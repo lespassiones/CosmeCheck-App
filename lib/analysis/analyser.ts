@@ -18,6 +18,7 @@
  *   - ApiError (code API_ERROR, status)            — autre réponse non-2xx
  */
 
+import { isNoCreditsRefusal } from '@/lib/credits/noCreditsCore'
 import { supabase, db } from '../supabase/client'
 import { parseAnalyseResponse as parseAnalyseResponseSafe } from './types'
 import type { AnalyseItem, AnalyseResponse } from './types'
@@ -299,7 +300,9 @@ export async function runAnalysis(params: RunAnalysisParams): Promise<RunAnalysi
     const status = res?.status ?? 0
     const errorBody = await readJsonBody(res)
 
-    if (status === 429) {
+    // 429 = crédits épuisés SEULEMENT avec `code`/`credits` : analyser ne débite
+    // pas, ses 429 sont des rate-limits (qui ouvraient à tort la feuille crédits).
+    if (status === 429 && isNoCreditsRefusal(status, errorBody)) {
       const credits = extractCredits(errorBody)
       const msg =
         (errorBody && typeof errorBody.error === 'string' && errorBody.error) ||

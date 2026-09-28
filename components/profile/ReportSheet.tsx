@@ -15,7 +15,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -25,6 +24,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
 import { radius, spacing } from '@/constants/spacing'
@@ -128,6 +128,7 @@ export const ReportSheet: FC<Props> = ({ visible, onClose, firstName }) => {
                     <Pressable
                       key={opt.key}
                       onPress={() => setObjectKey(opt.key)}
+                      haptic="selection"
                       style={[styles.option, selected && styles.optionSelected]}
                       accessibilityRole="radio"
                       accessibilityState={{ selected }}
@@ -173,6 +174,7 @@ export const ReportSheet: FC<Props> = ({ visible, onClose, firstName }) => {
                 style={[styles.primaryBtn, !canSend && styles.primaryBtnDisabled]}
                 onPress={handleSend}
                 disabled={!canSend}
+                haptic="primary"
               >
                 {phase === 'sending' ? (
                   <ActivityIndicator color="#FFFFFF" />

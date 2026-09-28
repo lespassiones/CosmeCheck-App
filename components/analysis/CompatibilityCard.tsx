@@ -27,12 +27,12 @@
 import { type FC, useEffect, useRef, useState } from 'react'
 import {
   Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Svg, { Circle } from 'react-native-svg'
 import { Ionicons } from '@expo/vector-icons'
@@ -55,6 +55,7 @@ import { radius, spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { supabase } from '@/lib/supabase/client'
+import { isNoCreditsRefusal } from '@/lib/credits/noCreditsCore'
 import {
   PersonalBlocksList,
   PERSONAL_BLOCKS_VERSION,
@@ -87,7 +88,8 @@ const TONE_COLOR: Record<CompatTone, { ring: string; text: string; bg: string }>
 // Teinte de la tranche d'extrusion (l'épaisseur 3D sous l'arc), par tone.
 // Miroir exact du web (CompatibilityCard.tsx, TONE.ringDark).
 const RING_DARK: Record<CompatTone, string> = {
-  vert: '#065F46',
+  // Tranche du vert des boutons (#16A34A) : green-800, pas l'émeraude du web.
+  vert: '#166534',
   jaune: '#B45309',
   orange: '#C2410C',
   rouge: '#BE123C',
@@ -322,7 +324,15 @@ export const CompatibilityCard: FC<Props> = ({
           const res: Response | undefined =
             response ?? ((error as { context?: Response }).context as Response | undefined)
           if (res?.status === 429) {
-            setState({ status: 'locked' })
+            // Chargé tout seul à l'ouverture de l'analyse : bloc verrouillé, sans
+            // feuille. Un rate-limit (429 sans crédits) reste une erreur simple.
+            let body: unknown = null
+            try {
+              body = await res.clone().json()
+            } catch {
+              /* illisible */
+            }
+            setState({ status: isNoCreditsRefusal(res.status, body) ? 'locked' : 'error' })
             return
           }
           setState({ status: 'error' })
@@ -397,7 +407,17 @@ export const CompatibilityCard: FC<Props> = ({
     <WhiteCard padding={spacing.lg}>
       {/* Titre de carte, en gros — TOUJOURS le même (exigence user) : le cercle
           est un score de compatibilité au profil, jamais « de qualité ». */}
-      <Text style={styles.cardTitle}>Score de compatibilité à ton profil</Text>
+      {/* Couleur du titre = couleur du score dès qu'il est calculé (28/09/2026). */}
+      <Text
+        style={[
+          styles.cardTitle,
+          state.status === 'ready' && state.compatibility
+            ? { color: TONE_COLOR[state.compatibility.tone].text }
+            : null,
+        ]}
+      >
+        Score de compatibilité à ton profil
+      </Text>
 
       {state.status === 'loading' ? (
         <View style={styles.row}>
@@ -432,6 +452,7 @@ export const CompatibilityCard: FC<Props> = ({
           </Text>
           <Pressable
             onPress={() => goComplete(state.missingSection)}
+            haptic="primary"
             accessibilityRole="button"
             style={({ pressed }) => [styles.ctaPill, pressed && { opacity: 0.9 }]}
           >
@@ -456,6 +477,7 @@ export const CompatibilityCard: FC<Props> = ({
       {state.status === 'locked' ? (
         <Pressable
           onPress={() => router.push(ROUTES.OFFRE.INDEX)}
+          haptic="primary"
           accessibilityRole="button"
           accessibilityLabel="Débloquer ta compatibilité avec Premium"
           style={styles.lockedWrap}
@@ -484,38 +506,31 @@ export const CompatibilityCard: FC<Props> = ({
 
       {state.status === 'ready' ? (
         state.compatibility ? (
-          <>
-            {/* Phrase-verdict (chip tonale) SOUS le titre, avant le cercle. */}
-            <View
-              style={[
-                styles.chip,
-                styles.chipUnderTitle,
-                { backgroundColor: TONE_COLOR[state.compatibility.tone].bg },
-              ]}
-            >
-              <Text
-                style={[styles.chipText, { color: TONE_COLOR[state.compatibility.tone].text }]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.8}
+          <Pressable
+            onPress={() => setModalOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Voir ce qu'il faut retenir"
+            style={({ pressed }) => pressed && { opacity: 0.9 }}
+          >
+            <View style={styles.row}>
+              {/* Anneau 3D à GAUCHE, taille pleine, remplissage animé */}
+              <FillRing score={state.compatibility.score} tone={state.compatibility.tone} />
+              {/* Bloc unique à DROITE, centré VERTICALEMENT vs le cercle :
+                  verdict (chip + phrase), une ligne, puis « Ce qu'il faut retenir ». */}
+              <Animated.View
+                entering={FadeInRight.duration(380).delay(120)}
+                style={styles.infoBlock}
               >
-                {state.compatibility.label}
-              </Text>
-            </View>
-            <Pressable
-              onPress={() => setModalOpen(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Voir ce qu'il faut retenir"
-              style={({ pressed }) => pressed && { opacity: 0.9 }}
-            >
-              <View style={styles.row}>
-                {/* Anneau 3D à GAUCHE, taille pleine, remplissage animé */}
-                <FillRing score={state.compatibility.score} tone={state.compatibility.tone} />
-                {/* Textes à DROITE, centrés VERTICALEMENT vs le cercle */}
-                <Animated.View
-                  entering={FadeInRight.duration(380).delay(120)}
-                  style={styles.rightCol}
-                >
+                <View style={styles.infoTop}>
+                  {/* Verdict : seul le texte porte la couleur du ton, pas de fond. */}
+                  <Text
+                    style={[styles.verdictText, { color: TONE_COLOR[state.compatibility.tone].text }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
+                  >
+                    {state.compatibility.label}
+                  </Text>
                   {state.compatibility.subtitle ? (
                     <Animated.Text
                       entering={FadeIn.duration(420).delay(320)}
@@ -525,20 +540,20 @@ export const CompatibilityCard: FC<Props> = ({
                       {state.compatibility.subtitle}
                     </Animated.Text>
                   ) : null}
-                  <Animated.View entering={FadeIn.duration(420).delay(460)} style={styles.retainBlock}>
-                    <Ionicons name="sparkles" size={13} color={colors.accent} />
-                    <Text style={styles.retainText}>Ce qu'il faut retenir</Text>
-                    <Ionicons
-                      name="chevron-forward"
-                      size={14}
-                      color={colors.inkLight}
-                      style={styles.retainChevron}
-                    />
-                  </Animated.View>
+                </View>
+                <View style={styles.infoDivider} />
+                <Animated.View entering={FadeIn.duration(420).delay(460)} style={styles.infoRetainRow}>
+                  <Text style={styles.retainText}>Ce qu'il faut retenir</Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={14}
+                    color={colors.inkLight}
+                    style={styles.retainChevron}
+                  />
                 </Animated.View>
-              </View>
-            </Pressable>
-          </>
+              </Animated.View>
+            </View>
+          </Pressable>
         ) : (
           // Blocs présents mais score non produit (rare) : accès aux 3 blocs conservé.
           <Pressable onPress={() => setModalOpen(true)} accessibilityRole="button">
@@ -550,7 +565,6 @@ export const CompatibilityCard: FC<Props> = ({
               <Text style={styles.lockSub}>Découvre ce qu'il faut retenir pour toi.</Text>
             </View>
             <View style={[styles.retainBlock, styles.retainRowCentered]}>
-              <Ionicons name="sparkles" size={13} color={colors.accent} />
               <Text style={styles.retainText}>Ce qu'il faut retenir</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.inkLight} />
             </View>
@@ -583,10 +597,19 @@ export const CompatibilityCard: FC<Props> = ({
             </Pressable>
           </View>
           <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalContent}>
+            {/* Le score, UNE seule fois, tout en haut : anneau + verdict. */}
+            {state.status === 'ready' && state.compatibility ? (
+              <View style={styles.modalScoreHead}>
+                <FillRing score={state.compatibility.score} tone={state.compatibility.tone} />
+                <Text
+                  style={[styles.modalScoreLabel, { color: TONE_COLOR[state.compatibility.tone].text }]}
+                >
+                  {state.compatibility.label}
+                </Text>
+              </View>
+            ) : null}
             {state.status === 'ready' && state.compatibility?.breakdown ? (
               <BreakdownCard
-                score={state.compatibility.score}
-                tone={state.compatibility.tone}
                 relevance={state.compatibility.relevance}
                 breakdown={state.compatibility.breakdown}
               />
@@ -619,14 +642,13 @@ const BdBullet: FC<{ dot: string; label: string }> = ({ dot, label }) => (
 
 /**
  * Détail du calcul en PUCES courtes et QUALITATIVES (demande user) : le
- * pourquoi du score sans étalage de chiffres ; seul le total est chiffré.
+ * pourquoi du score sans étalage de chiffres. Le total n'est PAS répété ici :
+ * il est affiché une seule fois, en tête de la modal.
  */
 const BreakdownCard: FC<{
-  score: number
-  tone: CompatTone
   relevance: Compatibility['relevance']
   breakdown: CompatBreakdown
-}> = ({ score, tone, relevance, breakdown }) => {
+}> = ({ relevance, breakdown }) => {
   return (
     <WhiteCard padding={spacing.lg}>
       <Text style={styles.bdTitle}>Le calcul de ton score</Text>
@@ -660,12 +682,6 @@ const BreakdownCard: FC<{
           label={l.label}
         />
       ))}
-
-      <View style={styles.bdDivider} />
-      <View style={styles.bdRow}>
-        <Text style={styles.bdTotalLabel}>Ton score</Text>
-        <Text style={[styles.bdTotal, { color: TONE_COLOR[tone].text }]}>{score}%</Text>
-      </View>
     </WhiteCard>
   )
 }
@@ -710,18 +726,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     color: colors.inkMuted,
   },
-  chip: {
-    borderRadius: radius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    maxWidth: '100%',
-  },
-  // Chip verdict rendue SOUS le titre (au-dessus du cercle).
-  chipUnderTitle: {
-    alignSelf: 'flex-start',
-    marginBottom: spacing.base,
-  },
-  chipText: { fontFamily: fontFamilies.semiBold, fontSize: 13 },
   subtitle: {
     fontFamily: fontFamilies.regular,
     fontSize: 13,
@@ -747,9 +751,40 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
+  // Bloc unique de droite (même habillage que retainBlock) : verdict en haut,
+  // filet, puis la ligne « Ce qu'il faut retenir ». flexShrink EXPLICITE :
+  // avec `flex: 1` seul, le bloc prenait la largeur de son texte et sortait
+  // de la carte (constaté sur Android et iOS le 28/09/2026).
+  infoBlock: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.08)',
+    borderRadius: radius.md,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  infoTop: { gap: 6, paddingHorizontal: 12, paddingVertical: 12 },
+  // Verdict en gras, +15 % (14 → 16) ; la phrase et « Ce qu'il faut retenir »
+  // partagent ensuite la même police, taille et graisse (regular 13).
+  verdictText: { fontFamily: fontFamilies.bold, fontSize: 16 },
+  infoDivider: { height: 1, backgroundColor: colors.borderMuted },
+  infoRetainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
   retainChevron: { marginLeft: 'auto' },
   retainRowCentered: { justifyContent: 'center', marginTop: spacing.md },
-  retainText: { fontFamily: fontFamilies.semiBold, fontSize: 13, color: colors.ink },
+  retainText: { fontFamily: fontFamilies.regular, fontSize: 13, lineHeight: 18, color: colors.ink },
   centerArea: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xs },
   divider: {
     height: 1,
@@ -834,6 +869,8 @@ const styles = StyleSheet.create({
   },
   modalScroll: { flex: 1 },
   modalContent: { padding: spacing.base, gap: spacing.md },
+  modalScoreHead: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
+  modalScoreLabel: { fontFamily: fontFamilies.bold, fontSize: 18 },
   // Breakdown (détail du calcul)
   bdTitle: {
     fontFamily: fontFamilies.bold,
@@ -862,7 +899,4 @@ const styles = StyleSheet.create({
   },
   bdBase: { fontFamily: fontFamilies.semiBold, fontSize: 14, color: colors.ink },
   bdPoints: { fontFamily: fontFamilies.semiBold, fontSize: 14 },
-  bdDivider: { height: 1, backgroundColor: colors.borderMuted, marginVertical: 6 },
-  bdTotalLabel: { flex: 1, fontFamily: fontFamilies.bold, fontSize: 14, color: colors.ink },
-  bdTotal: { fontFamily: fontFamilies.bold, fontSize: 18 },
 })

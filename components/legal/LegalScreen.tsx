@@ -8,13 +8,14 @@
  */
 
 import { type FC, type ReactNode } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { LegalSections, type LegalSection } from '@/components/legal/LegalSections'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'

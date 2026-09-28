@@ -6,17 +6,16 @@
  *   - Type de peau CORPS    (SKIN_TYPES_BODY, choix unique) + « Autre » texte libre
  *   - État des cheveux      (HAIR_STATE_CONCERNS, multi-select)
  *
- * Props (pilotées par OnboardingWizard) :
+ * Props (pilotées par BeautyProfileForm) :
  *   - value:    SkinProfile courant
  *   - onChange: (patch: Partial<SkinProfile>) => void — merge + auto-save débounce
  *
- * DA : chips neumorphiques (NeuCard raised → pressed) ; état sélectionné =
- * fond accentSoft + bordure accent (peau) ou roseSoft + bordure rose (cheveux).
+ * DA (28/09/2026) : design « Profil beauté » de ProfileFormKit (sections à
+ * plat, puces blanches bordées, puce choisie en noir).
  */
 
 import { useState, type FC } from 'react'
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
-import * as Haptics from 'expo-haptics'
+import { StyleSheet, TextInput } from 'react-native'
 
 import {
   HAIR_CONCERN_LABEL,
@@ -31,52 +30,12 @@ import {
   type SkinTypeFace,
 } from '@/lib/skin/profile'
 import { colors } from '@/constants/colors'
-import { radius, spacing } from '@/constants/spacing'
-import { typography } from '@/constants/typography'
+import { spacing } from '@/constants/spacing'
 import { Reveal } from '@/components/design/Reveal'
-import { WhiteCard } from '@/components/design/WhiteCard'
 import { PackedChips } from '@/components/onboarding/PackedChips'
+import { ChoiceChip, FormSection, formInput } from '@/components/profile/ProfileFormKit'
 
 const OTHER = '__other__'
-
-/**
- * Chip neumorphique sélectionnable. `tone` change la couleur de l'état
- * sélectionné : violet (peau / défaut) ou rose (cheveux).
- */
-const Chip: FC<{
-  label: string
-  selected: boolean
-  onPress: () => void
-  tone?: 'accent' | 'rose'
-}> = ({ label, selected, onPress, tone = 'accent' }) => {
-  const selBg = tone === 'rose' ? colors.roseSoft : colors.accentSoft
-  const selBorder = tone === 'rose' ? colors.rose : colors.accent
-  const selText = tone === 'rose' ? colors.roseDeep : colors.accentDeep
-  return (
-    <Pressable
-      onPress={() => {
-        Haptics.selectionAsync().catch(() => {})
-        onPress()
-      }}
-      style={({ pressed }) => [
-        styles.chip,
-        selected
-          ? { backgroundColor: selBg, borderColor: selBorder }
-          : { backgroundColor: colors.neu.bg, borderColor: 'transparent' },
-        pressed && !selected ? { backgroundColor: '#DDE1E7' } : null,
-      ]}
-    >
-      <Text
-        style={[
-          styles.chipText,
-          { color: selected ? selText : colors.ink },
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  )
-}
 
 interface Props {
   value: SkinProfile
@@ -98,7 +57,6 @@ export const Step1Skin: FC<Props> = ({ value, onChange }) => {
   const hairSelected = value.hairConcerns ?? []
 
   const toggleHairOther = () => {
-    Haptics.selectionAsync().catch(() => {})
     const next = !hairOtherOpen
     setHairOtherOpen(next)
     // Refermer « Autre » vide le texte libre associé.
@@ -152,154 +110,104 @@ export const Step1Skin: FC<Props> = ({ value, onChange }) => {
   }
 
   return (
-    <View style={styles.root}>
-      <Reveal stagger={70}>
-        {/* ── Visage ───────────────────────────────────────────── */}
-        <WhiteCard style={styles.section}>
-          <Text style={styles.sectionTitle}>Ton type de peau (visage)</Text>
-          <Text style={styles.sectionHint}>Choisis ce qui te ressemble le plus.</Text>
-          <PackedChips>
-            {SKIN_TYPES_FACE.map((key) => (
-              <Chip
-                key={key}
-                label={SKIN_TYPE_FACE_LABEL[key]}
-                selected={value.skinTypeFace === key}
-                onPress={() => selectFace(key)}
-              />
-            ))}
-            <Chip
-              key="__other__"
-              label="Autre"
-              selected={faceOtherOpen}
-              onPress={() => selectFace(OTHER)}
+    <Reveal stagger={70} style={styles.root}>
+      {/* ── Visage ───────────────────────────────────────────── */}
+      <FormSection title="Ton type de peau (visage)" hint="Choisis ce qui te ressemble le plus.">
+        <PackedChips>
+          {SKIN_TYPES_FACE.map((key) => (
+            <ChoiceChip
+              key={key}
+              label={SKIN_TYPE_FACE_LABEL[key]}
+              selected={value.skinTypeFace === key}
+              onPress={() => selectFace(key)}
             />
-          </PackedChips>
-          {faceOtherOpen ? (
-            <TextInput
-              style={styles.input}
-              value={value.otherSkinTypeFace ?? ''}
-              onChangeText={(t) => onChange({ otherSkinTypeFace: t })}
-              placeholder="Décris ton type de peau du visage"
-              placeholderTextColor={colors.inkLight}
-              maxLength={120}
-            />
-          ) : null}
-        </WhiteCard>
+          ))}
+          <ChoiceChip
+            key="__other__"
+            label="Autre"
+            selected={faceOtherOpen}
+            onPress={() => selectFace(OTHER)}
+          />
+        </PackedChips>
+        {faceOtherOpen ? (
+          <TextInput
+            style={formInput.line}
+            value={value.otherSkinTypeFace ?? ''}
+            onChangeText={(t) => onChange({ otherSkinTypeFace: t })}
+            placeholder="Décris ton type de peau du visage"
+            placeholderTextColor={colors.inkLight}
+            maxLength={120}
+          />
+        ) : null}
+      </FormSection>
 
-        {/* ── Corps ────────────────────────────────────────────── */}
-        <WhiteCard style={styles.section}>
-          <Text style={styles.sectionTitle}>Ton type de peau (corps)</Text>
-          <Text style={styles.sectionHint}>Comment se comporte la peau de ton corps ?</Text>
-          <PackedChips>
-            {SKIN_TYPES_BODY.map((key) => (
-              <Chip
-                key={key}
-                label={SKIN_TYPE_BODY_LABEL[key]}
-                selected={value.skinTypeBody === key}
-                onPress={() => selectBody(key)}
-              />
-            ))}
-            <Chip
-              key="__other__"
-              label="Autre"
-              selected={bodyOtherOpen}
-              onPress={() => selectBody(OTHER)}
+      {/* ── Corps ────────────────────────────────────────────── */}
+      <FormSection title="Ton type de peau (corps)" hint="Comment se comporte la peau de ton corps ?">
+        <PackedChips>
+          {SKIN_TYPES_BODY.map((key) => (
+            <ChoiceChip
+              key={key}
+              label={SKIN_TYPE_BODY_LABEL[key]}
+              selected={value.skinTypeBody === key}
+              onPress={() => selectBody(key)}
             />
-          </PackedChips>
-          {bodyOtherOpen ? (
-            <TextInput
-              style={styles.input}
-              value={value.otherSkinTypeBody ?? ''}
-              onChangeText={(t) => onChange({ otherSkinTypeBody: t })}
-              placeholder="Décris ton type de peau du corps"
-              placeholderTextColor={colors.inkLight}
-              maxLength={120}
-            />
-          ) : null}
-        </WhiteCard>
+          ))}
+          <ChoiceChip
+            key="__other__"
+            label="Autre"
+            selected={bodyOtherOpen}
+            onPress={() => selectBody(OTHER)}
+          />
+        </PackedChips>
+        {bodyOtherOpen ? (
+          <TextInput
+            style={formInput.line}
+            value={value.otherSkinTypeBody ?? ''}
+            onChangeText={(t) => onChange({ otherSkinTypeBody: t })}
+            placeholder="Décris ton type de peau du corps"
+            placeholderTextColor={colors.inkLight}
+            maxLength={120}
+          />
+        ) : null}
+      </FormSection>
 
-        {/* ── Cheveux (état) ───────────────────────────────────── */}
-        <WhiteCard style={styles.section}>
-          <Text style={styles.sectionTitle}>L&apos;état de tes cheveux</Text>
-          <Text style={styles.sectionHint}>
-            Plusieurs choix possibles, laisse vide si tu n&apos;es pas concerné·e.
-          </Text>
-          <PackedChips>
-            {HAIR_STATE_CONCERNS.map((key) => (
-              <Chip
-                key={key}
-                label={HAIR_CONCERN_LABEL[key]}
-                selected={hairSelected.includes(key)}
-                onPress={() => toggleHair(key)}
-                tone="rose"
-              />
-            ))}
-            <Chip
-              key="__other__"
-              label="Autre"
-              selected={hairOtherOpen}
-              onPress={toggleHairOther}
-              tone="rose"
+      {/* ── Cheveux (état) ───────────────────────────────────── */}
+      <FormSection
+        title="L'état de tes cheveux"
+        hint="Plusieurs choix possibles, laisse vide si tu n'es pas concerné·e."
+      >
+        <PackedChips>
+          {HAIR_STATE_CONCERNS.map((key) => (
+            <ChoiceChip
+              key={key}
+              label={HAIR_CONCERN_LABEL[key]}
+              selected={hairSelected.includes(key)}
+              onPress={() => toggleHair(key)}
             />
-          </PackedChips>
-          {hairOtherOpen ? (
-            <TextInput
-              style={styles.input}
-              value={value.otherHair ?? ''}
-              onChangeText={(t) => onChange({ otherHair: t })}
-              placeholder="Décris l'état de tes cheveux"
-              placeholderTextColor={colors.inkLight}
-              maxLength={200}
-            />
-          ) : null}
-        </WhiteCard>
-      </Reveal>
-    </View>
+          ))}
+          <ChoiceChip
+            key="__other__"
+            label="Autre"
+            selected={hairOtherOpen}
+            onPress={toggleHairOther}
+          />
+        </PackedChips>
+        {hairOtherOpen ? (
+          <TextInput
+            style={formInput.line}
+            value={value.otherHair ?? ''}
+            onChangeText={(t) => onChange({ otherHair: t })}
+            placeholder="Décris l'état de tes cheveux"
+            placeholderTextColor={colors.inkLight}
+            maxLength={200}
+          />
+        ) : null}
+      </FormSection>
+    </Reveal>
   )
 }
 
 const styles = StyleSheet.create({
-  root: {
-    gap: spacing.xs,
-  },
-  section: {
-    marginBottom: spacing.md,
-  },
-  sectionTitle: {
-    ...typography.h4,
-    color: colors.ink,
-  },
-  sectionHint: {
-    ...typography.xs,
-    color: colors.inkMuted,
-    marginTop: spacing.xs,
-    marginBottom: spacing.base,
-  },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  chip: {
-    minHeight: 42,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.full,
-    borderWidth: 1.5,
-  },
-  chipText: {
-    ...typography.smallMedium,
-  },
-  input: {
-    ...typography.body,
-    color: colors.ink,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.md,
-    marginTop: spacing.md,
-  },
+  // Sections à plat, bien espacées (design « Profil beauté »).
+  root: { gap: spacing.xl },
 })

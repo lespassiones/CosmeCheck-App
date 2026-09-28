@@ -5,12 +5,13 @@
  * déterministe et local. Un badge rond orange affiche le nombre de conflits
  * ACTIONNABLES (severity !== 'info'), masqué à zéro.
  */
-import { StyleSheet, Text, View, Pressable } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
 import { colors } from '@/constants/colors'
 import { spacing, radius } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 
 export interface ConflictsButtonProps {
   count: number

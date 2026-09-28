@@ -12,12 +12,12 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 
@@ -139,6 +139,7 @@ export const ReportProductErrorSheet: FC<Props> = ({
               <Pressable
                 style={[styles.primaryBtn, !canSend && styles.primaryBtnDisabled]}
                 onPress={handleSend}
+                haptic="primary"
                 disabled={!canSend}
               >
                 {phase === 'sending' ? (

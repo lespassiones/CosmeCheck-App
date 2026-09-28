@@ -5,6 +5,10 @@
  * hygiène du quotidien…) sont dans une seule liste, sans distinction de bloc et
  * sans axe matin / soir. Parité avec le web (liste simple ordonnée par ajout).
  *
+ * En tête (28/09/2026) : « Retour » + pilule verte « Ajouter un produit » sur
+ * une ligne, puis des filtres GROSSIERS Tous / Visage / Corps / Cheveux /
+ * Autres (zones présentes seulement, via lib/routine/zoneFilter).
+ *
  * Cartes ÉPURÉES (photo + nom + marque + donut) : toute l'édition (fréquence,
  * suppression, voir l'analyse) se fait sur la sous-page de l'item
  * (/routine/item/[id]), atteinte au tap.
@@ -14,10 +18,12 @@
  */
 
 import { type FC, useCallback, useMemo, useState } from 'react'
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
+import * as Haptics from 'expo-haptics'
 
 import { colors } from '@/constants/colors'
 import { spacing, radius } from '@/constants/spacing'
@@ -31,14 +37,22 @@ import { useAlternativesDeck } from '@/hooks/useAlternativesDeck'
 import type { BlobCounts } from '@/components/design/IngredientBlob'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { StaggerItem } from '@/components/design/motion'
-import { Reveal } from '@/components/design/Reveal'
 import { AddProductModal } from '@/components/routine/AddProductModal'
 import { RoutineProductCard, ROUTINE_CARD_GAP } from '@/components/routine/RoutineProductCard'
 import { SuggestionsDeck } from '@/components/routine/SuggestionsDeck'
 import { SuggestionsLoadingOverlay } from '@/components/routine/SuggestionsLoadingOverlay'
+import { displayTitle } from '@/lib/analysis/displayTitle'
+import {
+  presentZones,
+  routineZonesOf,
+  ROUTINE_ZONE_LABEL,
+  type RoutineZone,
+} from '@/lib/routine/zoneFilter'
+
+type ZoneFilter = RoutineZone | 'tous'
 
 function titleFor(item: RoutineItem): string {
-  return decodeHtml(item.analysis?.product_label?.trim() || item.analysis?.name?.trim()) || 'Produit'
+  return decodeHtml(displayTitle(item.analysis ?? {}, '')) || 'Produit'
 }
 
 function countsOf(item: RoutineItem): BlobCounts | null {
@@ -67,6 +81,30 @@ const ProduitsScreen: FC = () => {
 
   const deck = useAlternativesDeck(routineItems)
 
+  // Filtre grossier Visage / Corps / Cheveux / Autres : seules les zones
+  // présentes dans la routine sont proposées. Les alternatives (deck) portent
+  // toujours sur TOUTE la routine.
+  const [zoneFilter, setZoneFilter] = useState<ZoneFilter>('tous')
+  const zonesById = useMemo(
+    () => new Map(routineItems.map((it) => [it.id, routineZonesOf(it.analysis)])),
+    [routineItems],
+  )
+  const zones = useMemo(() => presentZones([...zonesById.values()]), [zonesById])
+  // Zone disparue (produit retiré) → retour à « Tous ».
+  const activeZone: ZoneFilter =
+    zoneFilter !== 'tous' && zones.includes(zoneFilter) ? zoneFilter : 'tous'
+  const visibleItems = useMemo(
+    () =>
+      activeZone === 'tous'
+        ? routineItems
+        : routineItems.filter((it) => zonesById.get(it.id)?.includes(activeZone)),
+    [routineItems, zonesById, activeZone],
+  )
+  const pickZone = useCallback((z: ZoneFilter) => {
+    Haptics.selectionAsync().catch(() => {})
+    setZoneFilter(z)
+  }, [])
+
   const handleAddFromHistory = useCallback(
     async (analysisId: string) => {
       try {
@@ -94,9 +132,48 @@ const ProduitsScreen: FC = () => {
             <Ionicons name="chevron-back" size={16} color={colors.ink} />
             <Text style={styles.backPillText}>Retour</Text>
           </Pressable>
-          <Text style={styles.topTitle}>Routine produit</Text>
-          <View style={styles.topSpacer} />
+          {/* Même pilule que « Retour », en vert, sur la même ligne. */}
+          <Pressable
+            style={[styles.backPill, styles.addPill]}
+            haptic="primary"
+            onPress={() => setAddOpen(true)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Ajouter un produit"
+          >
+            <Ionicons name="add" size={16} color="#FFFFFF" />
+            <Text style={styles.addPillText}>Ajouter un produit</Text>
+          </Pressable>
         </View>
+
+        {/* Filtres par zone, sous les boutons (fixes, hors scroll). Affichés dès
+            que la routine couvre au moins 2 zones, sinon ils ne filtreraient rien. */}
+        {!isLoading && zones.length >= 2 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.filtersScroll}
+            contentContainerStyle={styles.filters}
+          >
+            {(['tous', ...zones] as ZoneFilter[]).map((z) => {
+              const active = z === activeZone
+              return (
+                <Pressable
+                  key={z}
+                  haptic="none"
+                  onPress={() => pickZone(z)}
+                  style={[styles.filterChip, active && styles.filterChipActive]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Text style={[styles.filterText, active && styles.filterTextActive]}>
+                    {z === 'tous' ? 'Tous' : ROUTINE_ZONE_LABEL[z]}
+                  </Text>
+                </Pressable>
+              )
+            })}
+          </ScrollView>
+        ) : null}
 
         {isLoading ? (
           <View style={styles.center}>
@@ -108,18 +185,6 @@ const ProduitsScreen: FC = () => {
             contentContainerStyle={[styles.content, { paddingBottom: spacing.xl }]}
             showsVerticalScrollIndicator={false}
           >
-            <Reveal>
-              <Pressable
-                style={styles.addBtn}
-                onPress={() => setAddOpen(true)}
-                accessibilityRole="button"
-                accessibilityLabel="Ajouter un produit"
-              >
-                <Ionicons name="add" size={16} color="#FFFFFF" />
-                <Text style={styles.addBtnText}>Ajouter un produit</Text>
-              </Pressable>
-            </Reveal>
-
             {routineItems.length === 0 ? (
               <View style={styles.emptyWrap}>
                 <Ionicons name="sparkles-outline" size={40} color={colors.inkLight} />
@@ -129,7 +194,7 @@ const ProduitsScreen: FC = () => {
               </View>
             ) : (
               <View style={styles.list}>
-                {routineItems.map((item, index) => (
+                {visibleItems.map((item, index) => (
                   <StaggerItem key={item.id} index={index}>
                     <RoutineProductCard
                       itemId={item.id}
@@ -137,6 +202,7 @@ const ProduitsScreen: FC = () => {
                       displayIndex={0}
                       name={titleFor(item)}
                       brand={item.analysis?.brand ?? null}
+                      frequency={item.frequency}
                       ean={item.analysis?.ean ?? null}
                       fallbackImageUrl={fallbackImage(item)}
                       counts={countsOf(item)}
@@ -239,22 +305,26 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   backPillText: { fontFamily: fontFamilies.semiBold, fontSize: 13, color: colors.ink },
-  topTitle: { fontFamily: fontFamilies.semiBold, fontSize: 15, color: colors.ink },
-  topSpacer: { width: 78 },
-  scroll: { flex: 1 },
-  content: { paddingHorizontal: spacing.sm, paddingTop: spacing.xs },
-  center: { paddingTop: spacing['3xl'], alignItems: 'center', flex: 1 },
-  addBtn: {
-    flexDirection: 'row',
+  // Variante verte de la pilule Retour (mêmes dimensions), ombre teintée.
+  addPill: { backgroundColor: colors.success, shadowColor: colors.success, shadowOpacity: 0.25 },
+  addPillText: { fontFamily: fontFamilies.semiBold, fontSize: 13, color: '#FFFFFF' },
+  // Filtres par zone : actif = pilule noire texte blanc, inactif = gris clair.
+  filtersScroll: { flexGrow: 0 },
+  filters: { gap: spacing.sm, paddingHorizontal: spacing.base, paddingBottom: spacing.sm },
+  filterChip: {
+    height: 38,
+    paddingHorizontal: 20,
+    borderRadius: radius.full,
+    backgroundColor: colors.gray100,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    backgroundColor: colors.success,
-    borderRadius: radius.full,
-    paddingVertical: 10,
-    marginBottom: spacing.base,
   },
-  addBtnText: { fontFamily: fontFamilies.semiBold, fontSize: 13, color: '#FFFFFF' },
+  filterChipActive: { backgroundColor: colors.gray900 },
+  filterText: { fontFamily: fontFamilies.medium, fontSize: 14, color: colors.inkMuted },
+  filterTextActive: { fontFamily: fontFamilies.semiBold, color: '#FFFFFF' },
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: spacing.sm, paddingTop: spacing.sm },
+  center: { paddingTop: spacing['3xl'], alignItems: 'center', flex: 1 },
   list: { gap: ROUTINE_CARD_GAP },
   // Barre d'action fixe collée au bas de l'écran (hors ScrollView).
   footer: {

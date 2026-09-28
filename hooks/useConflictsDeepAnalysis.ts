@@ -16,11 +16,8 @@
  */
 import { useCallback, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { router } from 'expo-router'
 
-import { showToast } from '@/components/shared/Toast'
 import { supabase } from '@/lib/supabase/client'
-import { ROUTES } from '@/constants/routes'
 import {
   readAiCache,
   stableHash,
@@ -36,6 +33,7 @@ import {
 } from '@/lib/inci/activesDictionary'
 import type { ConflictInput, RoutineConflict } from '@/lib/routine/conflicts'
 import type { AiConflict } from '@/components/routine/ConflictsSheet'
+import { handleNoCreditsResponse, showCreditsExhausted } from '@/lib/credits/exhaustedStore'
 
 const AI_NAMESPACE = 'routine-conflicts'
 const MAX_SIGNALS = 12
@@ -188,12 +186,7 @@ export function useConflictsDeepAnalysis(): UseConflictsDeepAnalysisResult {
 
         if (fnError) {
           // FunctionsHttpError expose la Response d'origine dans `context`.
-          const ctx = (fnError as { context?: { status?: number } }).context
-          if (ctx?.status === 429) {
-            showToast('Crédits épuisés pour aujourd’hui.', 'info')
-            router.push(ROUTES.OFFRE.INDEX)
-            return
-          }
+          if (await handleNoCreditsResponse(fnError)) return
           setError('Analyse approfondie indisponible. Réessaie.')
           return
         }
@@ -201,8 +194,7 @@ export function useConflictsDeepAnalysis(): UseConflictsDeepAnalysisResult {
         // Un body { code: 'no_credits' } peut passer sans fnError selon le SDK.
         const code = (data as { code?: unknown } | null)?.code
         if (code === 'no_credits') {
-          showToast('Crédits épuisés pour aujourd’hui.', 'info')
-          router.push(ROUTES.OFFRE.INDEX)
+          showCreditsExhausted()
           return
         }
 

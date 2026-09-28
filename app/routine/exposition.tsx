@@ -12,7 +12,7 @@
  */
 
 import { type FC, useMemo } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -31,9 +31,11 @@ import { Reveal } from '@/components/design/Reveal'
 import { type BlobCounts } from '@/components/design/IngredientBlob'
 import { TagExposureBar } from '@/components/routine/TagExposureBar'
 import { ExposureSummaryCard } from '@/components/routine/ExposureSummaryCard'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
+import { displayTitle } from '@/lib/analysis/displayTitle'
 
 function titleFor(item: RoutineItem): string {
-  return decodeHtml(item.analysis?.product_label?.trim() || item.analysis?.name?.trim()) || 'Produit'
+  return decodeHtml(displayTitle(item.analysis ?? {}, '')) || 'Produit'
 }
 
 const ExpositionScreen: FC = () => {
@@ -97,6 +99,7 @@ const ExpositionScreen: FC = () => {
                 exposureScore={metrics.exposureScore}
                 exposureLabel={metrics.exposureLabel}
                 colorCounts={metrics.colorCounts as BlobCounts}
+                productCount={products.length}
                 style={styles.summary}
               />
 

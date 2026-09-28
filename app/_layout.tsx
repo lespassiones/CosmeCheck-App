@@ -31,6 +31,8 @@ import {
 import { colors } from '@/constants/colors'
 import { ROUTES } from '@/constants/routes'
 import { resolveAuthRoute } from '@/lib/navigation/authRoute'
+import { isDraftPendingFlush, subscribeDraft } from '@/lib/onboarding/draft'
+import { OnboardingDraftFlusher } from '@/components/onboarding/flow/DraftFlusher'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
 import { initRevenueCat, loginUser } from '@/lib/revenucat/client'
@@ -122,7 +124,7 @@ const asyncStoragePersister = createAsyncStoragePersister({
  *     été traversé pendant ce lancement (règle absolue : l'écran de connexion
  *     n'est jamais un point d'entrée) ;
  *   - session et dans (auth) → onboarding si nécessaire, sinon /(tabs) ;
- *   - session, onboarding requis et consentement non donné → /consent ;
+ *   - session et réponses du parcours invité en cours d'écriture → on attend ;
  *   - session, onboarding non vu et profil incomplet, hors (onboarding)
  *     → /(onboarding) (on attend que le profil soit chargé avant de décider) ;
  *   - sinon : on laisse passer.
@@ -133,7 +135,6 @@ function AuthGuard() {
     isProfileComplete,
     onboardingShown,
     paywallShown,
-    dataConsentGiven,
     profileUnavailable,
     isLoading: profileLoading,
   } = useProfile()
@@ -145,6 +146,12 @@ function AuthGuard() {
   // cause de l'un d'eux, rien ne le réveillait à sa retombée et son « ne bouge
   // pas » devenait définitif. `useSyncExternalStore` les rend observables, donc
   // toute abstention redevient une simple attente.
+  // Réponses du parcours invité en cours d'écriture (lib/onboarding/draft.ts).
+  const draftPending = useSyncExternalStore(
+    subscribeDraft,
+    isDraftPendingFlush,
+    isDraftPendingFlush,
+  )
   const signInPending = useSyncExternalStore(
     subscribeSignInPending,
     isSignInPending,
@@ -174,7 +181,7 @@ function AuthGuard() {
       onboardingShown,
       isProfileComplete,
       paywallShown,
-      consentGiven: dataConsentGiven,
+      draftPending,
       preOnbSeen,
       group: segments[0],
     })
@@ -184,9 +191,6 @@ function AuthGuard() {
         break
       case 'preonboarding':
         router.replace(ROUTES.PREONBOARDING.INDEX)
-        break
-      case 'consent':
-        router.replace(ROUTES.CONSENT.INDEX as any)
         break
       case 'onboarding':
         router.replace(ROUTES.ONBOARDING.INDEX)
@@ -215,7 +219,7 @@ function AuthGuard() {
     onboardingShown,
     isProfileComplete,
     paywallShown,
-    dataConsentGiven,
+    draftPending,
     preOnbSeen,
     segments,
     router,
@@ -269,18 +273,21 @@ function RootNavigator() {
     >
       <Stack.Screen name="(preonboarding)" options={{ animation: 'fade' }} />
       <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
-      <Stack.Screen name="consent/index" options={{ animation: 'fade', gestureEnabled: false }} />
       <Stack.Screen name="(onboarding)" />
       <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
-      <Stack.Screen name="advisor/index" options={{ animation: 'fade' }} />
+      {/* Fondu court (iOS : 500 ms par défaut) : ouvert depuis Perle, la page
+          arrive en fondu sur la fin des vagues d'AdvisorReveal. */}
+      <Stack.Screen name="advisor/index" options={{ animation: 'fade', animationDuration: 300 }} />
       <Stack.Screen name="advisor/recommendations" />
       <Stack.Screen name="compare/index" />
       <Stack.Screen name="routine/exposition" />
       <Stack.Screen name="routine/produits" />
       <Stack.Screen name="routine/item/[id]" />
-      <Stack.Screen name="analyse/[id]" />
+      {/* freezeOnBlur : un écran recouvert (analyse sous le tableau, tableau sous
+          la fiche ingrédient) ne se re-rend plus tant qu'il est caché. */}
+      <Stack.Screen name="analyse/[id]" options={{ freezeOnBlur: true }} />
+      <Stack.Screen name="analyse/ingredients/[id]" options={{ freezeOnBlur: true }} />
       <Stack.Screen name="alternatives/[ean]" />
-      <Stack.Screen name="promesses/choisir" />
       <Stack.Screen name="promesses/nouvelle" options={{ presentation: 'modal' }} />
       <Stack.Screen name="promesses/[id]" />
       <Stack.Screen name="profile/index" />
@@ -288,6 +295,7 @@ function RootNavigator() {
       <Stack.Screen name="profile/objectives" />
       <Stack.Screen name="profile/beauty" />
       <Stack.Screen name="profile/credits" />
+      <Stack.Screen name="ingredient/index" />
       <Stack.Screen name="ingredient/[slug]" />
       <Stack.Screen name="offre/index" options={{ presentation: 'modal' }} />
       {/* Bienvenue Premium : plein écran, sans geste de retour. Revenir en
@@ -354,6 +362,7 @@ export default function RootLayout() {
               donc l'élargir ne coûte rien. */}
           <AppErrorBoundary>
             <CacheJanitor />
+            <OnboardingDraftFlusher />
             <RevenueCatInit />
             <NotificationsInit />
             <AuthGuard />

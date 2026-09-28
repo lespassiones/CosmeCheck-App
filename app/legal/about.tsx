@@ -18,7 +18,7 @@ import { spacing, radius } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 
 function appVersion(): string {
-  const v = Constants.expoConfig?.version ?? '—'
+  const v = Constants.expoConfig?.version ?? '-'
   const build =
     (Constants.expoConfig?.ios?.buildNumber as string | undefined) ??
     (Constants.expoConfig?.android?.versionCode as number | undefined)?.toString()
@@ -76,7 +76,7 @@ export default function AboutScreen() {
           ],
           bullets: [
             "Open Beauty Facts et Open Products Facts (sous licence ODbL).",
-            "CosIng — base européenne des ingrédients cosmétiques.",
+            "CosIng : base européenne des ingrédients cosmétiques.",
             "Règlement (CE) N° 1223/2009 sur les produits cosmétiques.",
             "Base éditoriale Cosme Check (classifications, catégories d'usage, fonctions).",
           ],

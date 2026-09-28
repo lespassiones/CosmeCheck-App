@@ -522,23 +522,8 @@ export const CATEGORIES: readonly CategoryNode[] = [
 ] as const
 
 // ─── Icônes par catégorie L1 ──────────────────────────────────────────────────
-
-export const CATEGORY_ICONS: Record<string, string> = {
-  'Bien-être':             'heart-outline',
-  'Coiffure':              'cut-outline',
-  'Hygiène dentaire':      'medkit-outline',
-  'Hygiène du corps':      'water-outline',
-  'Manucure et pédicure':  'hand-left-outline',
-  'Maquillage':            'color-palette-outline',
-  'Parfum':                'flower-outline',
-  'Produit solaire':       'sunny-outline',
-  'Rasage et épilation':   'remove-outline',
-  'Santé':                 'fitness-outline',
-  'Soin du corps et visage': 'body-outline',
-  'Soin et hygiène bébé':  'person-outline',
-}
-
-export const DEFAULT_CATEGORY_ICON = 'pricetag-outline'
+// Dessins PNG dans assets/icons/categories/, rendus par
+// components/scan/CategoryIcon.tsx (pas ici : Jest ne charge pas les images).
 
 // ─── Utilitaires de slug ──────────────────────────────────────────────────────
 

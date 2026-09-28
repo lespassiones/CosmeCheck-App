@@ -48,7 +48,7 @@ export const OfflineBanner: FC = () => {
   return (
     <View style={[styles.bar, { paddingTop: insets.top + 6 }]} pointerEvents="none">
       <Ionicons name="cloud-offline-outline" size={14} color="#FFFFFF" />
-      <Text style={styles.text}>Hors ligne — vérifie ta connexion</Text>
+      <Text style={styles.text}>Hors ligne : vérifie ta connexion</Text>
     </View>
   )
 }

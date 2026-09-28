@@ -162,7 +162,7 @@ export function sortProductsByScore(
  */
 export function formatProductScore(score: ProductScore): string {
   if (score.final_score < 0) {
-    return `${score.brand} ${score.name} — ⚠️ Contient une restriction (score: ${score.final_score})`;
+    return `${score.brand} ${score.name} : ⚠️ Contient une restriction (score: ${score.final_score})`;
   }
 
   let label = '';
@@ -178,5 +178,5 @@ export function formatProductScore(score: ProductScore): string {
     label = '⭐ Pas idéal';
   }
 
-  return `${label} — ${score.brand} ${score.name}`;
+  return `${label} : ${score.brand} ${score.name}`;
 }

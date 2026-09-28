@@ -677,6 +677,11 @@ const TAG_LABELS: Record<string, string> = {
   ogm: "OGM",
 };
 
+/** Nom lisible d'une famille (tag), null si le tag n'est pas référencé. */
+export function familyLabelForTag(tag: string): string | null {
+  return TAG_LABELS[tag] ?? null;
+}
+
 /**
  * Short, plain-French effect per family. Phrased to follow the family label
  * grammatically: "Conservateurs — peuvent sensibiliser les peaux réactives."

@@ -12,6 +12,13 @@
  *   3. Récupère par pages les produits de la catégorie résolue triés par score
  *      (`cosme_check_alternatives_by_category_{exact,prefix}`), les FILTRE côté
  *      client, et accumule jusqu'à la cible (ou épuisement / plafond de scan).
+ *   4. Filtre AVEC REPLI sur la FORME GALÉNIQUE (retour bêta sept 2026 : « pour
+ *      une crème dont le premier ingrédient est l'eau, l'alternative doit être
+ *      une crème dont le premier ingrédient est l'eau ») : la formule de la source
+ *      (INCI de l'analyse, sinon ingredients_text catalogue) et celle de chaque
+ *      candidat sont classées (lib/inci/formulation.ts). Même forme d'abord, puis
+ *      forme voisine ou inconnue ; forme OPPOSÉE jamais proposée
+ *      (lib/analysis/alternativesFormulation.ts).
  *
  * La pagination « Voir plus » augmente la cible de `step` ; l'effet refait
  * tourner la boucle de remplissage. Le filtrage pouvant écarter beaucoup de
@@ -26,7 +33,6 @@ import { fetchProductByEan } from '@/lib/catalog/productByEan'
 import { resolveAlternativesQuery } from '@/lib/catalog/productTypeCategory'
 import { fetchFamilyIngredientNames } from '@/lib/catalog/familyIngredientNames'
 import { applyColorCap } from '@/lib/analysis/scoreCap'
-import { orderByTierShuffled } from '@/lib/analysis/tierShuffle'
 import {
   buildExclusionSet,
   filterAlternatives,
@@ -34,11 +40,24 @@ import {
   type AlternativeProduct,
   type ExclusionSet,
 } from '@/lib/analysis/alternativesFilter'
+import {
+  groupByFormulation,
+  needsMoreCandidates,
+  orderFormulationGroups,
+  type FormulationGroups,
+} from '@/lib/analysis/alternativesFormulation'
+import { classifyFormulation, type Galenic } from '@/lib/inci/formulation'
 import { supabase } from '@/lib/supabase/client'
 
 const RAW_PAGE = 40
-/** Plafond de lignes brutes scannées pour trouver des produits « propres ». */
-const SCAN_CAP = 240
+/**
+ * Plafond de lignes brutes scannées (10 pages de 40). Relevé de 240 à 400 en
+ * sept 2026 : le filtre de forme galénique écarte les formules opposées et on
+ * cherche en priorité des candidats de MÊME forme, qui peuvent se trouver plus
+ * loin dans le classement par score. 400 lignes reste une charge modérée (pages
+ * cachées 5 min) et borne le pire cas (catégorie où la forme source est rare).
+ */
+const SCAN_CAP = 400
 /** Taille du VIVIER accumulé quand on mélange (graine) : donne de la variété
  *  dans chaque tier au lieu de toujours afficher les mêmes premiers. */
 const POOL_MIN = 32
@@ -135,6 +154,14 @@ export interface UseAlternativesParams {
    * score classique (ex. page « Voir tout »).
    */
   seed?: string | null
+  /**
+   * Ingrédients du produit consulté, pour le filtre de FORME GALÉNIQUE : noms
+   * INCI triés par position (écran d'analyse : `result.items`) ou liste brute.
+   * Absent : le hook retombe sur `ingredients_text` de la ligne catalogue qu'il
+   * charge déjà pour la page « Voir tout » (EAN direct). Forme inconnue : aucun
+   * filtre (fail-open).
+   */
+  sourceIngredients?: readonly string[] | string | null
   initialCount: number
   step: number
   enabled?: boolean
@@ -152,6 +179,13 @@ export interface UseAlternativesResult {
 }
 
 const EMPTY_NAMES: string[] = []
+/** Séparateur de la clé de mémoïsation des ingrédients source (absent des noms INCI). */
+const SOURCE_SEP = '\n'
+
+/** Note plafonnée (pastille) : sert au tri et au mélange par tier. */
+function cappedScore(p: AlternativeProduct): number {
+  return applyColorCap(p.score ?? 0, p.countOrange, p.countRouge)
+}
 
 export function useAlternatives({
   ean: directEan,
@@ -160,6 +194,7 @@ export function useAlternatives({
   productType,
   category,
   seed,
+  sourceIngredients,
   initialCount,
   step,
   enabled = true,
@@ -259,11 +294,9 @@ export function useAlternatives({
   const offsetRef = useRef(0)
   const exhaustedRef = useRef(false)
   const targetRef = useRef(target)
-  const exclusionRef = useRef(exclusion)
   const fillingRef = useRef(false)
   rawRef.current = raw
   targetRef.current = target
-  exclusionRef.current = exclusion
 
   // Vivier à accumuler : plus large que l'affichage quand on mélange (graine),
   // pour que le tirage dans chaque tier ait de la variété.
@@ -271,16 +304,76 @@ export function useAlternatives({
   const poolTargetRef = useRef(poolTarget)
   poolTargetRef.current = poolTarget
 
-  // Filtré (restrictions/profil) PUIS re-trié par score PLAFONNÉ (plancher
-  // couleur) : les recommandations réellement bonnes remontent en premier, et
-  // la note affichée = celle qu'on verra au clic.
-  const filtered = useMemo(() => {
-    const capped = (p: AlternativeProduct) =>
-      applyColorCap(p.score ?? 0, p.countOrange, p.countRouge)
-    return filterAlternatives(raw, exclusion)
-      .slice()
-      .sort((a, b) => capped(b) - capped(a))
-  }, [raw, exclusion])
+  // Forme galénique de la SOURCE (mémoïsée) : ingrédients de l'analyse en
+  // priorité, sinon ingredients_text de la ligne catalogue (page « Voir tout »).
+  // La clé de mémoïsation est une chaîne : un nouveau tableau à chaque rendu ne
+  // relance pas le classement.
+  const sourceIsList = Array.isArray(sourceIngredients)
+  const sourceKey = sourceIsList
+    ? (sourceIngredients as readonly string[]).join(SOURCE_SEP)
+    : typeof sourceIngredients === 'string'
+      ? sourceIngredients.trim()
+      : ''
+  const catalogInci = directEan ? directRowQuery.data?.ingredients_text ?? null : null
+  const sourceGalenic = useMemo<Galenic>(() => {
+    if (sourceKey) {
+      return classifyFormulation(sourceIsList ? sourceKey.split(SOURCE_SEP) : sourceKey).galenic
+    }
+    return classifyFormulation(catalogInci).galenic
+  }, [sourceKey, sourceIsList, catalogInci])
+  const sourceKnown = sourceGalenic !== 'unknown'
+
+  // Forme de chaque candidat, mise en cache par EAN (même INCI pour un EAN dans
+  // la session) : le classement n'est calculé qu'une fois par produit scanné.
+  const candidateCacheRef = useRef(new Map<string, Galenic>())
+  const candidateGalenic = useCallback((p: AlternativeProduct): Galenic => {
+    const cache = candidateCacheRef.current
+    const hit = cache.get(p.ean)
+    if (hit) return hit
+    const galenic = classifyFormulation(p.ingredientsText).galenic
+    cache.set(p.ean, galenic)
+    return galenic
+  }, [])
+
+  // Filtré (restrictions/profil), sans le produit consulté, PUIS réparti selon
+  // l'affinité de formule avec la source (même forme / voisine ou inconnue /
+  // opposée écartée). Chaque groupe est ensuite trié par score PLAFONNÉ
+  // (plancher couleur) : la note affichée = celle qu'on verra au clic.
+  //
+  // On écarte AUSSI le produit consulté : il est dans sa propre catégorie, donc
+  // la RPC le remonte comme candidat et il s'affichait en « alternative » à
+  // lui-même (constaté en e2e le 14 sept 2026 sur 3 produits sur 5). On écarte
+  // sur l'EAN ET sur le couple marque+nom normalisé, parce que le catalogue
+  // porte le même produit sous plusieurs EAN (formats, traductions).
+  const selfEan = ean
+  const selfKey = useMemo(() => {
+    const n = normalizeToken([brand, productName].filter(Boolean).join(' '))
+    return n.length >= 3 ? n : null
+  }, [brand, productName])
+
+  const computeGroups = useCallback(
+    (list: AlternativeProduct[]): FormulationGroups<AlternativeProduct> => {
+      const isSelf = (p: AlternativeProduct) => {
+        if (selfEan && p.ean === selfEan) return true
+        if (!selfKey) return false
+        return normalizeToken([p.brand, p.name].filter(Boolean).join(' ')) === selfKey
+      }
+      const clean = filterAlternatives(list, exclusion).filter((p) => !isSelf(p))
+      return groupByFormulation(clean, sourceGalenic, candidateGalenic)
+    },
+    [exclusion, selfEan, selfKey, sourceGalenic, candidateGalenic],
+  )
+  // La boucle async lit la version fraîche via une ref (évite les closures périmées).
+  const computeGroupsRef = useRef(computeGroups)
+  computeGroupsRef.current = computeGroups
+  const sourceKnownRef = useRef(sourceKnown)
+  sourceKnownRef.current = sourceKnown
+
+  const groups = useMemo(() => computeGroups(raw), [computeGroups, raw])
+  // Liste utilisable (opposés écartés) : même forme d'abord, puis voisine ou
+  // inconnue, chacune triée par note plafonnée.
+  const filtered = useMemo(() => orderFormulationGroups(groups, cappedScore), [groups])
+  const sameCount = groups.same.length
 
   // Réinitialise quand le produit cible change (nouvel EAN).
   useEffect(() => {
@@ -294,17 +387,32 @@ export function useAlternatives({
     setTarget(initialCount)
   }, [altKey, initialCount])
 
+  // Faut-il scanner une page de plus ? Compté APRÈS le filtre de formule, sinon la
+  // boucle s'arrêtait sur des candidats ensuite écartés (carrousel vide).
+  const wantMore = needsMoreCandidates({
+    sameCount,
+    usableCount: filtered.length,
+    poolTarget,
+    displayTarget: target,
+    sourceKnown,
+  })
+
   const fill = useCallback(async () => {
     if (!altKey || !exclusionReady || fillingRef.current) return
     fillingRef.current = true
     setFilling(true)
+    const needMore = () => {
+      const g = computeGroupsRef.current(rawRef.current)
+      return needsMoreCandidates({
+        sameCount: g.same.length,
+        usableCount: g.same.length + g.fallback.length,
+        poolTarget: poolTargetRef.current,
+        displayTarget: targetRef.current,
+        sourceKnown: sourceKnownRef.current,
+      })
+    }
     try {
-      while (
-        filterAlternatives(rawRef.current, exclusionRef.current).length <
-          poolTargetRef.current &&
-        !exhaustedRef.current &&
-        offsetRef.current < SCAN_CAP
-      ) {
+      while (needMore() && !exhaustedRef.current && offsetRef.current < SCAN_CAP) {
         const page = await fetchAlternativesPage(queryClient, altKey, offsetRef.current)
         offsetRef.current += RAW_PAGE
         setScanned(offsetRef.current)
@@ -328,22 +436,22 @@ export function useAlternatives({
 
   useEffect(() => {
     if (!enabled || !altKey || !exclusionReady) return
-    if (filtered.length < poolTarget && !exhausted && offsetRef.current < SCAN_CAP) {
+    if (wantMore && !exhausted && offsetRef.current < SCAN_CAP) {
       void fill()
     }
-  }, [enabled, altKey, exclusionReady, filtered.length, poolTarget, exhausted, fill])
+  }, [enabled, altKey, exclusionReady, wantMore, filtered.length, exhausted, fill])
 
   const loadMore = useCallback(() => {
     setTarget((t) => t + step)
   }, [step])
 
   // Mélange « aléatoire contrôlé » DANS chaque tier de pastille quand une graine
-  // (ID d'analyse) est fournie ; sinon tri par score classique.
-  const displayPool = seed
-    ? orderByTierShuffled(filtered, seed, (p) =>
-        applyColorCap(p.score ?? 0, p.countOrange, p.countRouge),
-      )
-    : filtered
+  // (ID d'analyse) est fournie, À L'INTÉRIEUR de chaque groupe d'affinité (la
+  // même forme reste devant) ; sinon tri par score classique.
+  const displayPool = useMemo(
+    () => (seed ? orderFormulationGroups(groups, cappedScore, seed) : filtered),
+    [seed, groups, filtered],
+  )
   const products = displayPool.slice(0, target)
   const canScanMore = !exhausted && scanned < SCAN_CAP
   const hasMore = filtered.length > target || canScanMore

@@ -14,10 +14,17 @@ import Svg, { Path, Circle, Rect } from 'react-native-svg'
 type Props = {
   size?: number
   color?: string
+  /**
+   * Variante pleine (onglet actif de la barre du bas). Les détails intérieurs
+   * (porte, aiguilles, lignes) sont alors évidés en blanc, le fond de la barre.
+   */
+  filled?: boolean
 }
 
 const DEFAULT_SIZE = 20
 const DEFAULT_COLOR = '#1F2937'
+/** Couleur des évidements des variantes pleines (= fond blanc de la barre). */
+const CUTOUT = '#FFFFFF'
 
 const base = (size: number) => ({
   width: size,
@@ -25,32 +32,44 @@ const base = (size: number) => ({
   viewBox: '0 0 24 24',
 })
 
-export const HomeIcon: FC<Props> = ({ size = DEFAULT_SIZE, color = DEFAULT_COLOR }) => (
+export const HomeIcon: FC<Props> = ({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, filled = false }) => (
   <Svg {...base(size)} fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-    <Path d="M3 11l9-8 9 8" />
-    <Path d="M5 10v10h14V10" />
+    {filled ? (
+      <>
+        <Path d="M5 9.2 12 3l7 6.2V20H5z" fill={color} />
+        <Path d="M3 11l9-8 9 8" />
+        <Path d="M10.2 21v-5.4h3.6V21" fill={CUTOUT} stroke={CUTOUT} strokeWidth={1.4} />
+      </>
+    ) : (
+      // Contour de la MÊME silhouette que la variante pleine (toit, murs, porte).
+      <>
+        <Path d="M3 11l9-8 9 8" />
+        <Path d="M5 9.2V20h14V9.2" />
+        <Path d="M10.2 20v-5.4h3.6V20" />
+      </>
+    )}
   </Svg>
 )
 
-export const LayersIcon: FC<Props> = ({ size = DEFAULT_SIZE, color = DEFAULT_COLOR }) => (
+export const LayersIcon: FC<Props> = ({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, filled = false }) => (
   <Svg {...base(size)} fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-    <Path d="M12 2 2 7l10 5 10-5-10-5z" />
+    <Path d="M12 2 2 7l10 5 10-5-10-5z" fill={filled ? color : 'none'} />
     <Path d="M2 17l10 5 10-5" />
     <Path d="M2 12l10 5 10-5" />
   </Svg>
 )
 
-export const ClockIcon: FC<Props> = ({ size = DEFAULT_SIZE, color = DEFAULT_COLOR }) => (
+export const ClockIcon: FC<Props> = ({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, filled = false }) => (
   <Svg {...base(size)} fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-    <Circle cx={12} cy={12} r={9} />
-    <Path d="M12 7v5l3 2" />
+    <Circle cx={12} cy={12} r={9} fill={filled ? color : 'none'} />
+    <Path d="M12 7v5l3 2" stroke={filled ? CUTOUT : color} />
   </Svg>
 )
 
-export const UserIcon: FC<Props> = ({ size = DEFAULT_SIZE, color = DEFAULT_COLOR }) => (
+export const UserIcon: FC<Props> = ({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, filled = false }) => (
   <Svg {...base(size)} fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-    <Circle cx={12} cy={8} r={4} />
-    <Path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6" />
+    <Circle cx={12} cy={8} r={4} fill={filled ? color : 'none'} />
+    <Path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6" fill={filled ? color : 'none'} />
   </Svg>
 )
 
@@ -82,12 +101,21 @@ export const SparklesIcon: FC<Props> = ({ size = DEFAULT_SIZE, color = DEFAULT_C
 /**
  * "Promesses" — checklist avec une coche (web PromisesIcon : document + tick).
  */
-export const PromisesIcon: FC<Props> = ({ size = DEFAULT_SIZE, color = DEFAULT_COLOR }) => (
+export const PromisesIcon: FC<Props> = ({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, filled = false }) => (
   <Svg {...base(size)} fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-    <Rect x={4} y={3} width={16} height={18} rx={2} />
-    <Path d="M8 8h8" />
-    <Path d="M8 12h5" />
-    <Path d="m14 16 2 2 4-4" />
+    {filled ? (
+      <>
+        <Rect x={4} y={3} width={16} height={18} rx={2} fill={color} />
+        {/* Coche ramenée dans le document : sur le bord, elle mordrait le contour. */}
+        <Path d="M8 7.5h8M8 11.5h5m-4 4 2 2 4-4" stroke={CUTOUT} />
+      </>
+    ) : (
+      // Même dessin intérieur que la variante pleine (coche dans le document).
+      <>
+        <Rect x={4} y={3} width={16} height={18} rx={2} />
+        <Path d="M8 7.5h8M8 11.5h5m-4 4 2 2 4-4" />
+      </>
+    )}
   </Svg>
 )
 
@@ -128,6 +156,15 @@ export const CloseIcon: FC<Props> = ({ size = DEFAULT_SIZE, color = DEFAULT_COLO
 )
 
 /** Déconnexion — porte de sortie (web MobileBurgerMenu signOut). */
+/** Fiole de laboratoire — annuaire des ingrédients. */
+export const FlaskIcon: FC<Props> = ({ size = DEFAULT_SIZE, color = DEFAULT_COLOR }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M9 3h6" />
+    <Path d="M10 3v6.5L4.8 18a2 2 0 0 0 1.7 3h11a2 2 0 0 0 1.7-3L14 9.5V3" />
+    <Path d="M7.2 14h9.6" />
+  </Svg>
+)
+
 export const LogoutIcon: FC<Props> = ({ size = DEFAULT_SIZE, color = DEFAULT_COLOR }) => (
   <Svg {...base(size)} fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
     <Path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />

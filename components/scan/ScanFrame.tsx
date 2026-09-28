@@ -10,10 +10,11 @@
  */
 
 import { type FC, type ReactNode } from 'react'
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Platform, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'

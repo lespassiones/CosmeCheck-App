@@ -11,7 +11,7 @@
  */
 
 import { type FC } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -23,6 +23,7 @@ import { ROUTES } from '@/constants/routes'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { Reveal } from '@/components/design/Reveal'
 import { WhiteCard } from '@/components/design/WhiteCard'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 
 type IoniconName = keyof typeof Ionicons.glyphMap
 
@@ -169,6 +170,7 @@ const CreditsInfoScreen: FC = () => {
               <Pressable
                 style={({ pressed }) => [styles.premiumCta, pressed && styles.premiumCtaPressed]}
                 onPress={() => router.push(ROUTES.OFFRE.INDEX)}
+                haptic="primary"
                 accessibilityRole="button"
               >
                 <Ionicons name="diamond-outline" size={15} color="#FFFFFF" />

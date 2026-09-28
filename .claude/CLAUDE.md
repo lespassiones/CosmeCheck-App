@@ -20,7 +20,7 @@ App mobile Expo / React Native qui décrypte les compositions cosmétiques (INCI
 
 ```
 app/                          # expo-router
-  (auth)/  (onboarding)/  (tabs)/{index,routine,scan,history,promesses}
+  (auth)/  (onboarding)/  (tabs)/{index,routine,scan,history,profil}
   analyse/[id]  ingredient/[slug]  compare/  promesses/{[id],nouvelle}
   profile/{index,restrictions}  advisor/  offre/  legal/{cgu,privacy,mentions,about}
 components/
@@ -84,7 +84,28 @@ analyser, advisor-chat, coherence-analyze, compare-insights, deep-fetch, ecommer
 - **Redirect URLs Supabase** : `cosmecheck://`, `cosmecheck://**` ✓ + URLs web pour `cosme-check.com`.
 - **Google Cloud OAuth Client (Web)** : `https://rogesnduejmqpxolhbif.supabase.co/auth/v1/callback` autorisé ✓.
 - **Distinction nouveau/existant** : `needsOnboarding = !onboardingShown && !isProfileComplete` (`_layout.tsx`). Marche pour les 2 providers.
-- ⚠️ **Apple Sign-In MANQUANT** — Apple Guideline 4.8 exige Apple Sign-In dès qu'il y a Google. **Bloqueur App Store** (Play OK).
+- **Apple Sign-In (iPhone uniquement)** : `lib/auth/apple.ts` (`expo-apple-authentication`, feuille système, puis `supabase.auth.signInWithIdToken({ provider: 'apple' })`), `usesAppleSignIn: true` dans `app.json`. Bouton « Continuer avec Apple » en PREMIER dans `ProviderButtons` (`components/auth/AuthProviders.tsx`), masqué sur Android. Règle 4.8 couverte.
+- Depuis le 28 sept 2026, l'inscription e-mail ne navigue plus : les réponses du parcours d'onboarding s'écrivent (flusher) puis l'AuthGuard route (paywall s'il n'a pas été vu pendant le parcours, sinon l'accueil ; parcours si pas de réponses).
+
+---
+
+## Onboarding « Le diagnostic de Perle » (28 sept 2026)
+
+Remplace le carrousel `PreOnboardingCarousel`, l'ancien wizard 12 étapes et l'écran `/consent` (supprimés). Mascotte **Perle** (goutte 3D), assets optimisés dans `assets/images/onboarding/` (sources lourdes dans `assets/New Onboarding/`, non référencées).
+
+- **Un parcours, deux modes** (`components/onboarding/flow/OnboardingFlow.tsx`) : `guest` sur `(preonboarding)` (personne non connectée) et `member` sur `(onboarding)` (connecté sans profil, compte review Apple rejoué).
+- **Ordre** : accroche (2) → consentement art. 9 en feuille (case qui NOMME OpenAI/ChatGPT/Mistral, texte intégral via `components/consent/ConsentDetails.tsx`) → prénom → questions avec réactions de Perle → **premier scan réel sans compte** → verdict → cheveux → alertes → montage → **paywall** (étape `paywall` du parcours invité, `OnboardingPaywall embedded`, fond `PREMIUM_CREAM`, « Plus tard » toujours visible) → **compte** (`(auth)/welcome` = « On garde tout ça ? »).
+- **Paywall AVANT le compte (depuis le 28 sept 2026, comme MemoryPilot)** : achat ANONYME RevenueCat autorisé UNIQUEMENT ici (`usePaywallCheckout({ guest: true })` → `purchase(plan, { allowAnonymous: true })` ; partout ailleurs `ensurePurchaseIdentity` bloque). À la connexion, `RevenueCatInit` (`app/_layout.tsx`) appelle `Purchases.logIn(user.id)`, qui rattache l'achat anonyme au compte. Le brouillon garde `paywallSeen` + `purchased` → `preferences.paywall_shown = true` (le paywall ne se remontre pas après l'inscription) et `onboarding.purchasedBeforeAccount`. ⚠️ Trou accepté par le produit : l'événement `INITIAL_PURCHASE` part AVANT le `logIn`, ses `aliases` ne contiennent que l'ID anonyme, donc le webhook l'ignore ; `user_profiles.tier` ne passe `premium` qu'au prochain événement (conversion de l'essai, renouvellement…), dont les `aliases` portent alors l'UUID Supabase. Or l'app lit `profile.tier` (pas le SDK) : pendant l'essai de 3 jours, la personne reste affichée Gratuit. Pour fermer ce trou il faudrait un appel serveur au `logIn` (ex. relire l'abonné via l'API RevenueCat), pas fait. Mode `member` (déjà connecté) : pas d'étape paywall, il vient ensuite via `/offre?fromOnboarding=1`.
+- **Brouillon** `lib/onboarding/draft.ts` (mémoire + AsyncStorage, TTL 7 j) → écrit dans `preferences` par `OnboardingDraftFlusher` (racine) dès qu'une session apparaît. `resolveAuthRoute` reçoit `draftPending` et s'abstient pendant l'écriture. Plus de cible `consent`.
+- **Logique pure testée** (`lib/__tests__/onboardingPerle.test.ts`) : `steps.ts` (visibilité, consentement refusé = aucune question santé), `content.ts` (textes/réactions), `buildPreferences.ts` (aucune donnée peau sans consentement, union des restrictions), `verdict.ts` (étoiles = `applyColorCap` + `verdictToneFromScore`, comme l'aperçu de scan).
+- **Sans compte**, lectures publiques uniquement : `catalog` par EAN, `cosme_check_search_catalog`, `cosme_check_match_inci_batch`, `credit_tiers`. Produits « rien sous la main » = une requête `ean=in.(...)` (`POPULAR_EANS`), pas 6 recherches parallèles (échouaient sur base froide, délai du rôle anon).
+- **Paywall** : tableau Gratuit/Premium mode clair, chiffres LUS dans `credit_tiers` (`hooks/useCreditTiers.ts`, 5/j gratuit vs 50/j Premium au 28/09). Aucune fonction n'est réservée à Premium : ne jamais mettre de croix côté Gratuit. Logique d'achat partagée avec /offre : `hooks/usePaywallCheckout.ts`. Rappel de fin d'essai local (`lib/notifications/trialReminder.ts`) seulement si notifs autorisées.
+- **Un seul paywall depuis le 28 sept 2026** : `/offre` rend `OnboardingPaywall` partout (pastille crédits, crédits épuisés, profil, menu ; « Plus tard » = retour arrière hors onboarding). L'ancienne vue « Plans » (jauge, « 100 crédits/mois » faux) est supprimée. Membre Premium (hors compte review Apple) : vue « Mon abonnement » (statut, renouvellement, résiliation via le magasin).
+- **Essai sur iOS** : `introPrice` ne dit PAS si la personne y a droit (ancien abonné). `usePurchases` appelle `checkTrialOrIntroductoryPriceEligibility` (iOS seulement, 4 s max) et `applyTrialEligibility` retire l'essai si le statut n'est pas « éligible » (inconnu ou sans réponse compris, consigne du SDK). Android : Google Play ne renvoie déjà que les offres accessibles.
+- Émulateur Android : prix « indicatifs » + « Recharger les tarifs » = normal (« In-app billing API version 3 is not supported on this device », pas de compte Play). Tester l'achat sur un vrai téléphone.
+- **Réponses multiples peau** : les écrans visage et corps acceptent plusieurs réponses, mais le profil reste MONO-valeur (`skinTypeFace`, `skinTypeBody`, lus par `analyser/personalization.ts`, `personal-insights/relevance.ts`, advisor). Résolution dans `content.ts` (`resolveFaceSkin` ; `resolveBodySkin` : sensible > très sèche > sèche > mixte) ; le reste part en précision `otherSkinType*` (« Aussi : … », 120 car. max).
+- **Motion** : AUCUN ressort ni rebond (demande explicite). Entrées via `components/onboarding/flow/motion.ts` (`fadeUp`, `fadeSide`, `fade`, `softScaleIn`), `ReduceMotion.System`. Haptique via `lib/haptics.ts`. Jamais d'avance automatique après une sélection : l'utilisateur appuie sur « Continuer ».
+- **Clavier** : pas de `KeyboardAvoidingView`. `hooks/useKeyboardHeight.ts` ; `keyboardPadding` ajoute la barre de navigation Android, absente de la hauteur annoncée en edge-to-edge.
 
 ---
 
@@ -152,7 +173,6 @@ analyser, advisor-chat, coherence-analyze, compare-insights, deep-fetch, ecommer
 - Plugins `expo-camera` + `expo-image-picker` avec strings FR.
 
 ### Bloqueurs avant submission
-- 🔴 **Apple Sign-In** à implémenter (Guideline 4.8 — Apple uniquement).
 - 🟠 Privacy Policy hostée publiquement sur `cosme-check.com/privacy` (Apple Connect exige URL en plus de l'in-app).
 - 🟠 Domaine `cosme-check.com` à acheter si pas fait + email `contact@` actif.
 - 🟠 D-U-N-S Number gratuit pour s'inscrire Apple Developer en "Organization" (recommandé pour afficher "Cosme Check" comme éditeur store) — https://developer.apple.com/enroll/duns-lookup/.
@@ -190,16 +210,36 @@ analyser, advisor-chat, coherence-analyze, compare-insights, deep-fetch, ecommer
 
 ## Patterns récurrents
 
-### En-tête commun des 4 onglets
-`components/shared/ScreenHeader.tsx` : titre h3 + `CreditsPill` à droite + filet `#c5ccd6`. `paddingRight: 36` réserve la place du menu 3-points. **Sticky** hors ScrollView.
+### Boutons : retour haptique + mini-transition (28 sept 2026, OBLIGATOIRE)
+- Tout bouton passe par `components/shared/HapticPressable.tsx`, importé sous le nom `Pressable` : `import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'`. Jamais `Pressable` de 'react-native' pour un bouton.
+- Vibration à l'activation (onPress / onLongPress, jamais au simple toucher : pas de vibration en faisant défiler). Dosage par UTILITÉ (`haptic`, cf. `lib/pressFeedback.ts`) : `primary` action phare (Analyser, Ajouter à ma routine, Continuer), défaut `secondary` (carte, ligne, lien, retour, fermer), `selection` (onglet, filtre, puce, case, bascule), `warning` (destructif SANS ConfirmDialog), `none` + `pressScale={false}` (fond de modale, zone qui bloque la propagation).
+- Mini-transition automatique (rétrécissement 0,97 en fondu, sans rebond) si le bouton n'a pas déjà son effet (style ou enfants en fonction de `pressed`).
+- `PressableScale` (`components/design/motion.tsx`) : `haptic` explicite (défaut `none`, certains écrans vibrent déjà eux-mêmes). Hors Pressable (Switch, gestes) : `fireHaptic(level)`.
 
-### Menu hamburger
-`components/navigation/BurgerMenu.tsx` : 3 points verticaux (icône `MoreVerticalIcon`), drawer droite, CreditsPill + upsell Premium + sign-out.
+### Barre du bas et en-têtes (refonte 28 sept 2026)
+- Onglets : Accueil · Routine · [Scan] · Historique · **Profil** (`app/(tabs)/profil.tsx` → `components/profile/ProfileScreen` `inTab`). L'ancien onglet Promesses n'existe plus : `/profile` redirige vers l'onglet, `ROUTES.PROFILE.INDEX` = `/(tabs)/profil`, `ROUTES.TABS.PROMESSES` = `/(tabs)/history?tab=promesses`.
+- `components/shared/ScreenHeader.tsx` : titre h3 + `CreditsPill` à droite (remplaçable par `right`) + `below` (bloc sous le titre) + filet `#c5ccd6`. Plus de place réservée à droite (`menuSpace` obsolète, défaut false). **Sticky** hors ScrollView.
+- **Historique** : « Comparer » à droite du titre (pas de crédits), puis `SegmentedControl` Analyses / Favoris / Promesses (pilule encre qui glisse). L'onglet Promesses rend `components/promesses/PromessesList`.
+- `CreditsPill` : style unique partout, pilule blanche bordée gris + icône Feather `database` + « N crédits » en encre (rose sous 10 % du quota). Plus de « + », plus d'or Premium.
+
+### Plus de menu latéral (supprimé le 28 sept 2026)
+L'ancien `BurgerMenu` (icône silhouette en haut à droite + tiroir) n'existe plus. Tout ce qu'il contenait est ailleurs : onglets (Accueil, Routine, Historique, Profil), bouton flottant Beauty Advisor (`components/navigation/AdvisorFAB.tsx`, avec Perle), et la page Profil (crédits, offre Premium, annuaire des ingrédients, déconnexion). Ne pas le recréer.
+
+### Ouverture du Beauty Advisor en cercle (29 sept 2026)
+- Tap sur Perle : 3 disques (rose, rose pâle, fond `colors.bg`) sortent de sous le bouton et grandissent en vagues vers le centre jusqu'à couvrir l'écran (`components/navigation/AdvisorReveal.tsx`, monté dans `app/(tabs)/_layout.tsx` entre les onglets et le bouton). La page est poussée à 80 % (fondu natif 300 ms, `animationDuration` dans `app/_layout.tsx`), puis ses éléments entrent l'un après l'autre (`listEntering`, pas `ADVISOR_ENTER_STEP` = 80 ms : en-tête, sous-titre, résumé profil, conversation, suggestions, saisie).
+- Les disques RESTENT déployés sous la page Advisor : au retour (bouton, geste, retour Android), la fin de transition de la route `(tabs)` (`transitionEnd`, filet de 900 ms au focus) les rétracte dans Perle. Pas de `transparentModal` exprès : il ferait passer `advisor/recommendations` en feuille modale sur iOS et supprimerait le geste retour.
+- Géométrie pure testée : `lib/navigation/advisorReveal.ts` (`advisorReveal.test.ts`). Disques = transformations seulement (pas de masque, pas de relayout). « Réduire les animations » : navigation directe. L'entrée par la carte de l'accueil garde le simple fondu.
+
+### Crédits épuisés (28 sept 2026)
+- Feuille du bas `components/shared/CreditsExhaustedModal.tsx` (montée à la racine) : « Plus de crédits aujourd'hui », quota lu (`useCredits` / `credit_tiers`), heure de retour RÉELLE (minuit UTC en heure locale, `lib/credits/resetLabel.ts` : « à 2 h » l'été en France), « Voir Premium » → /offre, « Plus tard ». Premium : « Compris ».
+- Ouvrir via `showCreditsExhausted()` ou `handleNoCreditsResponse(error, response)` (`lib/credits/exhaustedStore.ts`). Un 429 n'est un refus de crédits QUE s'il porte `code: 'no_credits'` ou `credits` (`lib/credits/noCreditsCore.ts`) : le rate-limit IP du gate répond aussi 429, sans l'un ni l'autre.
+- Actions de l'utilisateur → feuille. Chargements automatiques (carte compatibilité à l'ouverture d'une analyse) → bloc verrouillé, pas de feuille.
+- Serveur : `gate()` débite AVANT l'IA. `advisor-agent` n'accepte `charge:false` / `model` / `reasoning_effort` qu'avec la clé service EXACTE en en-tête `x-admin-key` (`isServiceKey`, scripts d'éval). Pas `isAdminCaller` : la fonction tourne en `verify_jwt = false` et cet en-tête n'est vérifié par personne, un JWT « service_role » forgé passerait. `advisor-chat` refuse (503) si le débit ne répond pas.
 
 ### Restrictions
 `RestrictionWarning` (rose) et `RestrictionsOkBadge` (vert) basculés dans `AnalysisResultPanel` selon `restrictedItems.length`.
 
-### Promesses (onglet `/promesses`)
+### Promesses (onglet « Promesses » de l'Historique, `PromessesList`)
 Anneau circulaire SVG (rayon 23, stroke 5, rotation -90°). Seuils : ≥80 vert, ≥60 orange, ≥35 ambre, <35 rose. Long-press 350 ms → suppression.
 
 ### Flow Scan (refactor majeur — pas de tabs, chaque mode = UI dédiée)
@@ -248,6 +288,7 @@ Breadcrumb "Catégories › X › Y", barre recherche sticky en haut.
 - Propagation `imageUrl` depuis `ProductSearchMode` / `PasteLinkFlow` jusqu'au cache après `runAnalysis` succès.
 - `AnalyseDetailScreen` lit via `resolveAndCacheProductImage(id, state.brand, state.productLabel)` au montage → pass à `AnalysisResultPanel.productImageUrl` → `BigScoreCard.imageUrl`.
 - `expo-image cachePolicy="memory-disk"` sur le rendu → binaire local persistant.
+- **Visionneuse plein écran** (28 sept 2026) : `components/shared/ImageViewerModal.tsx`, branchée sur la vignette de `/analyse/[id]`. L'image s'agrandit depuis la vignette (`originRect` mesuré par `measureInWindow`, `imageSize` pris au `onLoad` de la vignette), pincement x5, double-tap x2,5, déplacement borné avec inertie, fermeture par X / retour / tap sur le fond / glisser vertical. Aucun ressort (timings seulement). À réutiliser pour toute autre photo à agrandir.
 
 ### Cache row analyse
 `AnalyseDetailScreen` lit `getCachedAnalysisRow(id)` d'abord, fallback `getAnalysisById(id)`, puis `cacheAnalysisRow(row)`. Invalidé par `invalidateCachedAnalysisRow(id)` après rename/delete dans `history.tsx`.
@@ -299,6 +340,15 @@ Migrations DB : via Supabase MCP `apply_migration` (avec `name` snake_case + `qu
 - Beaucoup d'autres WARN sur `search_path` mutable et SECURITY DEFINER exposés — pré-existants, à traiter en lot à part.
 
 ---
+
+## Note unique par produit (28 sept 2026, NE PAS DÉROGER)
+
+- **La note d'un produit = moteur pastille (`analyser/score.ts`) sur les ingrédients AFFICHÉS par la fiche** (≥ 50 % identifiés), sinon la note catalogue. Tous les écrans lisent la même valeur ; aucun recalcul à l'affichage.
+- En base : `cosme_check.f_pastille_score(items)` (port SQL exact du moteur), trigger `trg_align_catalog_from_analysis` (product_analyses → catalog + sidecar), trigger `trg_propagate_catalog_score` (catalog → historique `analyses`, `product_analyses.score`, sidecar, Pépites). Migrations `supabase/migrations/20260928_*.sql`.
+- Alternatives et Pépites : uniquement des produits avec `product_analyses` (note vérifiée : la carte == la fiche). Pépites : note réelle (plus d'arrondi).
+- Fiche sans code-barres : jamais la note d'un produit trouvé par le nom (`resolveCatalogIdentity().source === 'ean'` requis).
+- Prod = instance **Small** : aucun calcul plpgsql sur une table entière, `set statement_timeout` sur toute requête longue, écritures par lots (une requête lourde a mis la base hors service 1 h 10 le 28 sept).
+- E2E : `node scripts/note-unique-e2e.ts`. Captures : `captures-2026-09-28-notes-alternatives/`.
 
 ## Historique récent (juin 2026)
 

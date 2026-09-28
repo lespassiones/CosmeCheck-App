@@ -138,7 +138,7 @@ export function purchaseErrorMessage(
         title: 'Compte non confirmé',
         body:
           'Impossible de confirmer à quel compte rattacher cet abonnement. ' +
-          'Reconnecte-toi, puis réessaie — mieux vaut ce détour qu\'un paiement ' +
+          'Reconnecte-toi, puis réessaie : mieux vaut ce détour qu\'un paiement ' +
           'qui n\'arriverait pas sur ton compte.',
       }
     case 'store':

@@ -18,6 +18,8 @@
 import { DeviceEventEmitter } from 'react-native'
 import { create } from 'zustand'
 
+import { creditsFromBody, isNoCreditsRefusal } from '@/lib/credits/noCreditsCore'
+
 /** Évènement global qui déclenche l'ouverture de la modale. */
 export const CREDITS_EXHAUSTED_EVENT = 'cosmecheck:credits-exhausted'
 
@@ -49,3 +51,32 @@ DeviceEventEmitter.addListener(
     useExhaustedStore.getState().show(payload ?? {})
   },
 )
+
+/** Ouvre la feuille « Plus de crédits » (même effet que l'évènement). */
+export function showCreditsExhausted(payload?: CreditsExhaustedPayload): void {
+  useExhaustedStore.getState().show(payload ?? {})
+}
+
+/**
+ * Après l'échec d'un `supabase.functions.invoke` : si c'est un refus faute de
+ * crédits (et pas un simple rate-limit, voir `noCreditsCore`), ouvre la feuille
+ * et rend `true`. L'appelant garde la main sur le reste (message, état local).
+ */
+export async function handleNoCreditsResponse(
+  error: unknown,
+  response?: Response,
+): Promise<boolean> {
+  const res: Response | undefined =
+    response ?? ((error as { context?: Response } | null)?.context as Response | undefined)
+  if (res?.status !== 429) return false
+  let body: unknown = null
+  try {
+    // clone() : le corps d'une Response ne se lit qu'une fois.
+    body = await res.clone().json()
+  } catch {
+    /* corps illisible : on ne peut pas affirmer que ce sont les crédits */
+  }
+  if (!isNoCreditsRefusal(res.status, body)) return false
+  showCreditsExhausted(creditsFromBody(body))
+  return true
+}

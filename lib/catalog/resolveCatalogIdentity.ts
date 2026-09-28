@@ -20,6 +20,12 @@ interface SearchRow {
 }
 
 export interface CatalogIdentity {
+  /** Origine de la correspondance : `ean` = ligne EXACTE du produit analysé ;
+   *  `name` = meilleur résultat d'une recherche floue par marque + nom, donc
+   *  possiblement UN AUTRE PRODUIT. Seule une identité `ean` peut prêter sa
+   *  note, ses compteurs ou son EAN à une fiche (bug bêta 28 sept 2026 : 43
+   *  fiches sans code-barres affichaient la note d'un autre produit). */
+  source: 'ean' | 'name'
   /** EAN du produit dans le catalogue. Null si le produit n'est pas au catalogue
    *  (ex. produit internet) mais que la catégorie a quand même pu être votée. */
   ean: string | null
@@ -53,6 +59,7 @@ export async function resolveCatalogIdentity(
           countOrange: typeof row.count_orange === 'number' ? row.count_orange : null,
           countRouge: typeof row.count_rouge === 'number' ? row.count_rouge : null,
           category: row.category ?? null,
+          source: 'ean',
         }
       }
     } catch {
@@ -99,6 +106,7 @@ export async function resolveCatalogIdentity(
             countOrange: typeof row.count_orange === 'number' ? row.count_orange : null,
             countRouge: typeof row.count_rouge === 'number' ? row.count_rouge : null,
             category: votedCategory,
+            source: 'name',
           }
         }
       } catch {
@@ -112,6 +120,7 @@ export async function resolveCatalogIdentity(
       countOrange: null,
       countRouge: null,
       category: votedCategory,
+      source: 'name',
     }
   } catch {
     return null

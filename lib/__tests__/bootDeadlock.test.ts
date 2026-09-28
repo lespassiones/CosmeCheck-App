@@ -142,7 +142,7 @@ describe('profil illisible : on n\'en deduit rien', () => {
       onboardingShown: false,
       isProfileComplete: false,
       paywallShown: false,
-      consentGiven: false,
+      draftPending: false,
       preOnbSeen: false,
       group: undefined,
     }

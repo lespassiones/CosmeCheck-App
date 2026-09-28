@@ -15,6 +15,7 @@ import { db } from '@/lib/supabase/client'
 import type { AlternativeProduct } from '@/lib/analysis/alternativesFilter'
 import type { AnalysisRow } from '@/lib/supabase/types'
 import { ensureEanAnalysis } from '@/lib/analysis/eanAnalysisPrefetch'
+import { alignCachedResult } from '@/lib/analysis/fastPathRow'
 import { cacheProductImage } from '@/lib/storage/productImageCache'
 import { cacheAnalysisRow } from '@/lib/storage/session'
 
@@ -42,6 +43,7 @@ export function useKeepFavorite(): {
         const cached = product.ean ? await ensureEanAnalysis(qc, product.ean) : null
         if (cached && Array.isArray(cached.items) && cached.items.length > 0) {
           const label = product.name?.slice(0, 200) ?? null
+          const aligned = alignCachedResult(cached, product.score)
           const { data: inserted } = await db()
             .from('analyses' as never)
             .insert({
@@ -51,8 +53,8 @@ export function useKeepFavorite(): {
               brand: product.brand?.slice(0, 120) ?? null,
               category: (cached.category as string | null) ?? null,
               input_text: inci,
-              result_json: { ...cached, synthesis: null },
-              score: Number(((cached.score as number) ?? 0).toFixed(2)),
+              result_json: aligned.resultJson,
+              score: aligned.score,
               ean: product.ean ?? null,
               favori,
             } as never)

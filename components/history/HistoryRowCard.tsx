@@ -13,7 +13,7 @@
  */
 
 import { memo, useEffect, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
 import Svg, { Circle, G } from 'react-native-svg'
@@ -22,6 +22,7 @@ import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
 import { WhiteCard } from '@/components/design/WhiteCard'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { getProductImage } from '@/lib/storage/productImageCache'
 import type { ColorRating } from '@/lib/analysis/types'
 
@@ -138,14 +139,17 @@ function ProductThumb({
   url,
   width,
   iconSize,
+  flush = false,
 }: {
   url: string | null
   width: number
   iconSize: number
+  /** Collée aux bords haut/bas/gauche de la carte (sans liseré). */
+  flush?: boolean
 }) {
   return (
     // Largeur fixe, hauteur étirée sur toute la carte (portrait, pas carré).
-    <View style={[styles.thumb, { width }]}>
+    <View style={[styles.thumb, flush && styles.thumbFlush, { width }]}>
       {url ? (
         <Image
           source={{ uri: url }}
@@ -206,7 +210,7 @@ export const HistoryRowCard = memo(function HistoryRowCard({
   return (
     <WhiteCard onPress={onPress} padding={spacing.base} borderRadius={radius.lg}>
       <View style={styles.row}>
-        <ProductThumb url={imageUrl} width={64} iconSize={24} />
+        <ProductThumb url={imageUrl} width={64} iconSize={24} flush />
 
         <View style={styles.main}>
           <Text style={styles.title} numberOfLines={2}>
@@ -249,11 +253,12 @@ export const HistoryRowCard = memo(function HistoryRowCard({
 
         {/* Colonne de droite : anneau de proportion au-dessus du favori + kebab. */}
         <View style={styles.rightCol}>
-          <ProportionRing counts={item.counts} size={40} stroke={7} />
+          <ProportionRing counts={item.counts} size={44} stroke={8} />
           <View style={styles.actions}>
             <Pressable
               onPress={onToggleFavori}
-              hitSlop={8}
+              haptic="selection"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 0 }}
               style={styles.kebab}
               accessibilityRole="button"
               accessibilityLabel={item.favori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
@@ -266,7 +271,7 @@ export const HistoryRowCard = memo(function HistoryRowCard({
             </Pressable>
             <Pressable
               onPress={onOpenActions}
-              hitSlop={8}
+              hitSlop={{ top: 8, bottom: 8, left: 0, right: 8 }}
               style={styles.kebab}
               accessibilityRole="button"
               accessibilityLabel="Plus d'actions"
@@ -301,6 +306,16 @@ const styles = StyleSheet.create({
     minHeight: 56,
     flexShrink: 0,
   },
+  // Carte normale : l'image annule TOUTE la padding (spacing.base) en haut, en
+  // bas et à gauche → bord à bord, coins gauches arrondis comme la carte.
+  // (Pas en mode sélection : la case à cocher est à sa gauche.)
+  thumbFlush: {
+    marginVertical: -spacing.base,
+    marginLeft: -spacing.base,
+    borderRadius: 0,
+    borderTopLeftRadius: radius.lg,
+    borderBottomLeftRadius: radius.lg,
+  },
   // Image en position absolue : elle remplit la hauteur définie par la colonne
   // texte (via 'stretch') SANS que sa taille intrinsèque ne gonfle la carte.
   thumbImg: { ...StyleSheet.absoluteFillObject },
@@ -309,15 +324,19 @@ const styles = StyleSheet.create({
   title: { ...typography.bodySemiBold, color: colors.ink },
   subtitle: { ...typography.xs, color: colors.inkMuted, marginTop: 2 },
   date: { ...typography.xs, color: colors.inkLight, marginTop: 2 },
+  // Anneau (44 px) poussé vers le bord droit : la colonne mord sur le padding de
+  // la carte, il reste ~8 px jusqu'au bord.
   rightCol: {
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
-    marginRight: -spacing.xs,
+    marginRight: -spacing.sm,
   },
+  // Signet + kebab tiennent dans la largeur de l'anneau (2 x 22 = 44 px), centrés
+  // dessous. Les zones de tap débordent via hitSlop, sans se chevaucher entre elles.
   actions: { flexDirection: 'row', alignItems: 'center' },
   kebab: {
-    width: 30,
+    width: 22,
     height: 30,
     alignItems: 'center',
     justifyContent: 'center',

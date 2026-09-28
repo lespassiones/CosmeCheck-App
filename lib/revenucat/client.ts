@@ -123,7 +123,7 @@ export function initDiagnostic(): {
 async function doInit(): Promise<boolean> {
   if (!nativeAvailable()) {
     diagnostic = 'sans-natif'
-    console.warn('[RevenueCat] module natif absent — achats indisponibles (Expo Go ?)')
+    console.warn('[RevenueCat] module natif absent : achats indisponibles (Expo Go ?)')
     return false
   }
 
@@ -132,7 +132,7 @@ async function doInit(): Promise<boolean> {
   if (!apiKey) {
     diagnostic = 'sans-cle'
     console.warn(
-      `[RevenueCat] aucune clé publique pour ${Platform.OS} — achats désactivés. ` +
+      `[RevenueCat] aucune clé publique pour ${Platform.OS} : achats désactivés. ` +
         'Attendu : EXPO_PUBLIC_REVENUECAT_IOS_KEY / _ANDROID_KEY (ou l\'ancienne ' +
         'orthographe REVENUCAT), présentes dans l\'environnement EAS du build.',
     )
@@ -143,7 +143,7 @@ async function doInit(): Promise<boolean> {
   // dans un build RELEASE (protection anti-fraude).
   if (apiKey.startsWith('test_') && !__DEV__) {
     diagnostic = 'cle-de-test-en-release'
-    console.warn('[RevenueCat] clé de test dans un build release — achats désactivés')
+    console.warn('[RevenueCat] clé de test dans un build release : achats désactivés')
     return false
   }
 
@@ -198,7 +198,7 @@ function noteStoreError(where: string, err: unknown): void {
       ? String((err as { code: unknown }).code)
       : null
   const message = err instanceof Error ? err.message : String(err)
-  storeError = code ? `${where} : ${code} — ${message}` : `${where} : ${message}`
+  storeError = code ? `${where} : ${code}, ${message}` : `${where} : ${message}`
   console.warn(`[RevenueCat] ${storeError}`)
 }
 
@@ -375,6 +375,23 @@ export async function getProductsDirect(): Promise<PurchasesStoreProduct[]> {
   } catch (err) {
     noteStoreError('getProducts', err)
     return []
+  }
+}
+
+/**
+ * iOS : éligibilité à l'essai, par identifiant de produit (`null` en cas
+ * d'échec). Voir `applyTrialEligibility` : sur iOS, `introPrice` seul ne dit
+ * pas si la personne a encore droit à l'essai.
+ */
+export async function getTrialEligibility(
+  productIds: string[],
+): Promise<Record<string, { status: number }> | null> {
+  try {
+    if (!(await ensureConfigured())) return null
+    return await Purchases.checkTrialOrIntroductoryPriceEligibility(productIds)
+  } catch (err) {
+    noteStoreError('checkTrialOrIntroductoryPriceEligibility', err)
+    return null
   }
 }
 

@@ -15,7 +15,8 @@
  */
 
 import { useState, type FC } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 
 import { WhiteCard } from '@/components/design/WhiteCard'
 import { colors } from '@/constants/colors'
@@ -160,6 +161,7 @@ export const ExplainIngredient: FC<Props> = ({ slug }) => {
   return (
     <Pressable
       onPress={() => void load()}
+      haptic="primary"
       disabled={phase === 'loading'}
       accessibilityRole="button"
       accessibilityLabel="Expliquer cet ingrédient simplement"

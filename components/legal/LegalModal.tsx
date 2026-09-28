@@ -12,13 +12,14 @@
  */
 
 import { type FC } from 'react'
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 
 import { CGU_CONTENT } from '@/app/legal/cgu'
 import { PRIVACY_CONTENT } from '@/app/legal/privacy'
 import { LegalSections } from '@/components/legal/LegalSections'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'

@@ -12,7 +12,6 @@
 
 import { type FC, useMemo, useState } from 'react'
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,6 +20,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
@@ -77,7 +77,7 @@ export const ManualInciInput: FC<Props> = ({
       <View style={styles.inciLabelRow}>
         <Text style={styles.label}>Liste INCI</Text>
         {inciText.length > 0 && (
-          <Pressable onPress={() => setInciText('')} hitSlop={8}>
+          <Pressable onPress={() => setInciText('')} hitSlop={8} haptic="warning">
             <Text style={styles.clear}>Effacer</Text>
           </Pressable>
         )}
@@ -112,7 +112,7 @@ export const ManualInciInput: FC<Props> = ({
           </Text>
         ) : (
           <Text style={styles.counterWarn}>
-            Aucun ingrédient détecté — vérifie le format
+            Aucun ingrédient détecté, vérifie le format
           </Text>
         )}
         <Text style={styles.charCount}>{charCount} car.</Text>
@@ -123,6 +123,7 @@ export const ManualInciInput: FC<Props> = ({
         style={styles.exampleToggle}
         onPress={() => setShowExample((v) => !v)}
         hitSlop={6}
+        haptic="selection"
       >
         <Ionicons
           name={showExample ? 'chevron-down' : 'chevron-forward'}
@@ -145,6 +146,7 @@ export const ManualInciInput: FC<Props> = ({
       <Pressable
         style={[styles.cta, !canAnalyse && styles.ctaDisabled]}
         disabled={!canAnalyse}
+        haptic="primary"
         onPress={() => {
           const name = productName.trim() || undefined
           setInciText('')

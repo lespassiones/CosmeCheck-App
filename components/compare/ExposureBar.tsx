@@ -22,7 +22,7 @@ export type ExposureCounts = {
 
 // Palette « hard » des proportions (= web emerald/yellow/orange/rose).
 const SEG = {
-  vert: '#10B981',
+  vert: '#16A34A',
   jaune: '#FACC15',
   orange: '#F97316',
   rouge: '#F43F5E',

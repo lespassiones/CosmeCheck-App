@@ -7,7 +7,9 @@
  */
 
 import {
+  INTRO_ELIGIBLE,
   annualPerMonthLabel,
+  applyTrialEligibility,
   findPlanPackage,
   legalDisclosure,
   planPriceLabel,
@@ -230,5 +232,36 @@ describe('renewLine', () => {
 
   it('rend null sans prix, pour ne pas afficher de phrase tronquee', () => {
     expect(renewLine('yearly', null)).toBeNull()
+  })
+})
+
+describe('applyTrialEligibility (iOS)', () => {
+  const essai3j = { ...yearly, product: { ...yearly.product, introPrice: { price: 0, periodUnit: 'DAY', periodNumberOfUnits: 3 } } }
+
+  it("garde l'essai quand le magasin confirme l'éligibilité", () => {
+    const plan = applyTrialEligibility(essai3j, INTRO_ELIGIBLE)
+    expect(plan).toBe(essai3j)
+    expect(trialLabel(plan)).toBe('3 jours')
+  })
+
+  it("retire l'essai d'un ancien abonné (statut « non éligible » = 1)", () => {
+    expect(trialLabel(applyTrialEligibility(essai3j, 1))).toBeNull()
+  })
+
+  it("retire l'essai quand l'éligibilité est inconnue (0) ou sans réponse", () => {
+    expect(trialLabel(applyTrialEligibility(essai3j, 0))).toBeNull()
+    expect(trialLabel(applyTrialEligibility(essai3j, null))).toBeNull()
+    expect(trialLabel(applyTrialEligibility(essai3j, undefined))).toBeNull()
+  })
+
+  it("ne touche ni au prix ni au plan d'origine", () => {
+    const plan = applyTrialEligibility(essai3j, 1)
+    expect(plan.product.priceString).toBe('59,99 €')
+    expect(plan.identifier).toBe(essai3j.identifier)
+    expect(essai3j.product.introPrice).not.toBeNull()
+  })
+
+  it("rend le plan tel quel quand il n'a pas d'essai", () => {
+    expect(applyTrialEligibility(yearly, 1)).toBe(yearly)
   })
 })

@@ -113,6 +113,20 @@ describe('normalizeAdvisorForm — solaire (le segment base est "creme-solaire",
   })
 })
 
+describe('normalizeAdvisorForm — frisottis (segment base « soin-anti-frisottis »)', () => {
+  it('frisottis / frizz → « frisottis », y compris « sérum anti-frisottis »', () => {
+    for (const f of ['frisottis', 'anti frisottis', 'sérum anti-frisottis', 'cheveux anti-frizz', 'soin frisottis cheveux']) {
+      expect(normalizeAdvisorForm(f)).toBe('frisottis')
+    }
+  })
+  it('un shampooing anti-frisottis reste un shampooing', () => {
+    expect(normalizeAdvisorForm('shampooing anti-frisottis')).toBe('shampoing')
+  })
+  it('sérum cheveux sans frisottis inchangé', () => {
+    expect(normalizeAdvisorForm('serum cheveux')).toBe('serum cheveux')
+  })
+})
+
 describe('normalizeAdvisorForm — entrées vides / nulles', () => {
   it('null / undefined / vide → null (la RPC cherche alors par ingrédients seuls)', () => {
     expect(normalizeAdvisorForm(null)).toBeNull()

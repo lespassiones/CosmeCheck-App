@@ -44,21 +44,21 @@ const SLOTS: Slot[] = [
   {
     key: 'very-safe',
     icon: 'heart',
-    activeBg: '#34D399', // emerald-400
-    activeIcon: '#022C22', // emerald-950
-    inactiveBg: '#D1FAE5', // emerald-100
-    inactiveIcon: '#10B981', // emerald-500
-    shadow: '#34D399',
+    activeBg: '#16A34A', // vert unique de l'app (boutons)
+    activeIcon: '#FFFFFF',
+    inactiveBg: '#DCFCE7', // green-100
+    inactiveIcon: '#16A34A',
+    shadow: '#16A34A',
     srLabel: 'Formule très douce',
   },
   {
     key: 'safe',
     icon: 'leaf',
-    activeBg: '#34D399',
-    activeIcon: '#022C22',
-    inactiveBg: '#D1FAE5',
-    inactiveIcon: '#10B981',
-    shadow: '#34D399',
+    activeBg: '#16A34A',
+    activeIcon: '#FFFFFF',
+    inactiveBg: '#DCFCE7',
+    inactiveIcon: '#16A34A',
+    shadow: '#16A34A',
     srLabel: 'Formule globalement saine',
   },
   {

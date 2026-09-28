@@ -10,7 +10,6 @@ import { useEffect, useMemo, useState, type FC } from 'react'
 import {
   ActivityIndicator,
   FlatList,
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -27,6 +26,7 @@ import { typography } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { PressableScale, StaggerItem } from '@/components/design/motion'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { ProcessingOverlay } from '@/components/shared/ProcessingOverlay'
 import { CatalogPastille } from '@/components/shared/CatalogPastille'
 import { useProfile } from '@/hooks/useProfile'
@@ -53,6 +53,7 @@ const GridCard: FC<{
     <PressableScale
       onPress={onPress}
       disabled={disabled}
+      haptic="secondary"
       style={styles.card}
       accessibilityRole="button"
       accessibilityLabel={`${product.name ?? 'Produit'}${product.brand ? `, ${product.brand}` : ''}`}
@@ -185,6 +186,7 @@ const AdvisorRecommendationsScreen: FC = () => {
             hasMore ? (
               <PressableScale
                 onPress={() => setShown((n) => n + PAGE)}
+                haptic="secondary"
                 style={styles.moreBtn}
                 accessibilityRole="button"
                 accessibilityLabel="Voir plus de produits"

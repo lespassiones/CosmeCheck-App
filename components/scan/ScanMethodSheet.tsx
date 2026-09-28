@@ -21,7 +21,6 @@ import { type FC, useCallback, useEffect } from 'react'
 import {
   AccessibilityInfo,
   Modal,
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -35,6 +34,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { spacing, radius } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
@@ -118,6 +118,8 @@ export const ScanMethodSheet: FC<Props> = ({ visible, onClose, onSelect }) => {
             accessibilityLabel="Fermer"
             style={StyleSheet.absoluteFill}
             onPress={onClose}
+            haptic="none"
+            pressScale={false}
           />
         </Animated.View>
 
@@ -198,6 +200,7 @@ const BigOption: FC<{
   <Pressable
     onPress={onPress}
     style={({ pressed }) => [styles.bigCard, grow && styles.bigCardGrow, pressed && styles.cardPressed]}
+    haptic="primary"
     accessibilityRole="button"
   >
     <Ionicons name={icon} size={48} color={colors.ink} />
@@ -221,6 +224,7 @@ const SmallOption: FC<{
   <Pressable
     onPress={onPress}
     style={({ pressed }) => [styles.smallCard, pressed && styles.cardPressed]}
+    haptic="primary"
     accessibilityRole="button"
   >
     <Ionicons name={icon} size={20} color={colors.ink} />

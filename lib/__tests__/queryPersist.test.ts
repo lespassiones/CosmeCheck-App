@@ -44,6 +44,13 @@ describe('shouldPersistQueryKey', () => {
     expect(shouldPersistQueryKey(['productByEan', '3600541234567'])).toBe(false)
   })
 
+  it("exclut l'annuaire des ingrédients (une entrée par lettre, pages au scroll)", () => {
+    expect(shouldPersistQueryKey(['ingredientsAlpha', 'A'])).toBe(false)
+    expect(shouldPersistQueryKey(['ingredientsSearch', 'niacin'])).toBe(false)
+    // Le nombre de fiches reste persisté (un entier).
+    expect(shouldPersistQueryKey(['ingredientsCount'])).toBe(true)
+  })
+
   it('exclut la config app (flags + maintenance, toujours frais)', () => {
     expect(shouldPersistQueryKey(['appConfig'])).toBe(false)
   })

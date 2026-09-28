@@ -11,7 +11,7 @@
  */
 
 import { type FC, useMemo } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -27,16 +27,25 @@ import { useRoutine, type RoutineItem } from '@/hooks/useRoutine'
 import { useProfile } from '@/hooks/useProfile'
 import { useAppConfig } from '@/hooks/useAppConfig'
 import { useFavorites } from '@/hooks/useFavorites'
+import { useAuth } from '@/hooks/useAuth'
+import { useExposureChange } from '@/hooks/useExposureChange'
+import { routineSignature } from '@/lib/routine/exposureDelta'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { Reveal } from '@/components/design/Reveal'
 import { type BlobCounts } from '@/components/design/IngredientBlob'
 import { ScreenHeader } from '@/components/shared/ScreenHeader'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { ExposureSummaryCard } from '@/components/routine/ExposureSummaryCard'
 import { RoutineProductsCard } from '@/components/routine/RoutineProductsCard'
 import { GoalsCoverageCard } from '@/components/routine/GoalsCoverageCard'
+import { displayTitle } from '@/lib/analysis/displayTitle'
+
+/** Colonne d'icône commune aux cartes « Routine produit » et « Mes favoris » :
+ *  même largeur = titres alignés l'un sous l'autre. */
+const CARD_LEADING_WIDTH = 60
 
 function titleFor(item: RoutineItem): string {
-  return decodeHtml(item.analysis?.product_label?.trim() || item.analysis?.name?.trim()) || 'Produit'
+  return decodeHtml(displayTitle(item.analysis ?? {}, '')) || 'Produit'
 }
 
 const RoutineScreen: FC = () => {
@@ -65,6 +74,22 @@ const RoutineScreen: FC = () => {
   }, [items])
 
   const metrics = useMemo(() => computeRoutineMetrics(products), [products])
+
+  // Évolution de la note depuis la dernière modification de la routine : la
+  // note est une moyenne, un ajout proche de la moyenne ne la fait pas bouger,
+  // on le dit au lieu de laisser croire à un bug (retour bêta 28 sept 2026).
+  const { user } = useAuth()
+  const routineSig = useMemo(
+    () => routineSignature(products.map((p) => ({ analysisId: p.id, frequency: p.frequency }))),
+    [products],
+  )
+  const exposureChange = useExposureChange(
+    user?.id,
+    metrics.exposureScore,
+    products.length,
+    routineSig,
+    !isLoading,
+  )
 
   // Liste unifiée : simple compte de tous les produits de la routine.
   const total = useMemo(() => items.filter((it) => it.analysis).length, [items])
@@ -96,6 +121,8 @@ const RoutineScreen: FC = () => {
                 exposureLabel={metrics.exposureLabel}
                 colorCounts={metrics.colorCounts as BlobCounts}
                 empty={products.length === 0}
+                productCount={products.length}
+                change={exposureChange}
                 onPress={() => router.push(ROUTES.ROUTINE.EXPOSITION)}
                 showChevron
                 style={styles.card}
@@ -108,6 +135,8 @@ const RoutineScreen: FC = () => {
                   evening={0}
                   showSlots={false}
                   iconImage={require('@/assets/icons/analyse/soin.png')}
+                  iconImageSize={60}
+                  leadingWidth={CARD_LEADING_WIDTH}
                   emptyText="Ajoute tes produits pour suivre ton exposition cumulée"
                   onPress={() => router.push(ROUTES.ROUTINE.PRODUITS)}
                 />
@@ -125,7 +154,9 @@ const RoutineScreen: FC = () => {
                   title="Mes favoris"
                   icon="bookmark"
                   iconTint={colors.rose}
-                  iconBg={colors.roseSoft}
+                  iconBg="transparent"
+                  iconSize={31}
+                  leadingWidth={CARD_LEADING_WIDTH}
                   emptyText="Mets des produits en favori pour les retrouver ici"
                   onPress={() => router.push(ROUTES.ROUTINE.FAVORIS)}
                 />

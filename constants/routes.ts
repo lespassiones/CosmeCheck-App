@@ -13,14 +13,9 @@ export const ROUTES = {
     RESET_PASSWORD: '/(auth)/reset-password',
   },
 
-  // ── Pré-onboarding (carrousel montré à toute personne non connectée) ──
+  // ── Pré-onboarding : parcours « Le diagnostic de Perle » en mode invité ──
   PREONBOARDING: {
     INDEX: '/(preonboarding)',
-  },
-
-  // ── Consentement données de profil (RGPD art. 9, avant le questionnaire) ──
-  CONSENT: {
-    INDEX: '/consent',
   },
 
   // ── Onboarding ──────────────────────────────────────────────────
@@ -34,7 +29,9 @@ export const ROUTES = {
     ROUTINE: '/(tabs)/routine',
     SCAN: '/(tabs)/scan',
     HISTORY: '/(tabs)/history',
-    PROMESSES: '/(tabs)/promesses',
+    /** Plus d'onglet dédié (28/09/2026) : onglet « Promesses » de l'Historique. */
+    PROMESSES: '/(tabs)/history?tab=promesses',
+    PROFIL: '/(tabs)/profil',
   },
 
   // ── Routine (pages détail hors tab) ──────────────────────────────
@@ -48,6 +45,9 @@ export const ROUTES = {
   // ── Analyse ─────────────────────────────────────────────────────
   ANALYSE: {
     DETAIL: (id: string) => `/analyse/${id}` as const,
+    /** Page « Liste des ingrédients » ; `focus` = position à afficher d'emblée. */
+    INGREDIENTS: (id: string, focus?: number) =>
+      focus != null ? `/analyse/ingredients/${id}?focus=${focus}` : `/analyse/ingredients/${id}`,
   },
 
   // ── Alternatives (page « Voir tout ») ────────────────────────────
@@ -57,7 +57,6 @@ export const ROUTES = {
 
   // ── Promesses ───────────────────────────────────────────────────
   PROMESSES: {
-    CHOISIR: '/promesses/choisir',
     NOUVELLE: '/promesses/nouvelle',
     DETAIL: (id: string) => `/promesses/${id}` as const,
   },
@@ -75,7 +74,8 @@ export const ROUTES = {
 
   // ── Profil ──────────────────────────────────────────────────────
   PROFILE: {
-    INDEX: '/profile',
+    /** Le profil est un onglet de la barre du bas depuis le 28/09/2026. */
+    INDEX: '/(tabs)/profil',
     RESTRICTIONS: '/profile/restrictions',
     OBJECTIVES: '/profile/objectives',
     BEAUTY: '/profile/beauty',
@@ -84,6 +84,8 @@ export const ROUTES = {
 
   // ── Ingrédient ──────────────────────────────────────────────────
   INGREDIENT: {
+    /** Annuaire complet (liste alphabétique + recherche). */
+    INDEX: '/ingredient',
     DETAIL: (slug: string) => `/ingredient/${slug}` as const,
   },
 

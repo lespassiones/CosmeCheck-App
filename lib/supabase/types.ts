@@ -312,7 +312,10 @@ export interface Credits {
   ok: boolean
   used?: number
   limit?: number
+  /** Quota restant de la période + crédits bonus actifs. */
   remaining?: number
+  /** Crédits bonus ponctuels (credit_grants), inclus dans `remaining`. */
+  bonus?: number
   renewal_period?: RenewalPeriod
   renewal_interval_days?: number
   error?: string

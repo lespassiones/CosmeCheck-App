@@ -111,17 +111,21 @@ describe('aucune dimension de fenetre nest figee au chargement du module', () =>
 })
 
 describe("la vitrine ne passe pas sous la barre de notifications", () => {
-  const carrousel = readFileSync(
-    join(racine, 'components/onboarding/PreOnboardingCarousel.tsx'),
+  // La vitrine est desormais le parcours « Le diagnostic de Perle ».
+  const parcours = readFileSync(
+    join(racine, 'components/onboarding/flow/OnboardingFlow.tsx'),
     'utf8',
   )
+  const ui = readFileSync(join(racine, 'components/onboarding/flow/ui.tsx'), 'utf8')
 
-  it('sa racine est une zone sure, haut et bas', () => {
-    // Une illustration plein ecran gagne de la hauteur en passant sous la barre
-    // systeme. C'est refuse : l'heure et les icones ne doivent jamais se poser
-    // sur du contenu de l'app, illustration comprise.
-    expect(carrousel).toMatch(
-      /<SafeAreaView style=\{styles\.root\} edges=\{\['top', 'bottom'\]\}>/,
-    )
+  it('le haut est une zone sure', () => {
+    // L'heure et les icones systeme ne doivent jamais se poser sur du contenu.
+    expect(parcours).toMatch(/<SafeAreaView style=\{styles\.flex\} edges=\{\['top'\]\}>/)
+  })
+
+  it("le bas tient compte de l'indicateur d'accueil", () => {
+    // La barre d'actions de chaque ecran ajoute l'encart du bas a sa marge
+    // (sauf clavier ouvert : elle se pose alors juste au-dessus du clavier).
+    expect(ui).toMatch(/paddingBottom: keyboardOpen \? 12 : Math\.max\(insets\.bottom/)
   })
 })

@@ -145,6 +145,35 @@ export function savingsPercent(
 }
 
 /**
+ * `INTRO_ELIGIBILITY_STATUS_ELIGIBLE` du SDK RevenueCat (valeur 2), recopiée
+ * pour que ce module reste testable sans le module natif.
+ */
+export const INTRO_ELIGIBLE = 2
+
+/**
+ * iOS : ne garde l'essai d'un plan que si le magasin le garantit à CETTE personne.
+ *
+ * Sur iOS, `introPrice` décrit l'offre CONFIGURÉE dans App Store Connect, pas
+ * le droit de la personne à en profiter : un ancien abonné le voit aussi, puis
+ * est débité tout de suite. L'éligibilité se lit à part
+ * (`checkTrialOrIntroductoryPriceEligibility`). Sur Android, Google Play ne
+ * renvoie déjà que les offres auxquelles la personne a droit : ne pas appeler.
+ *
+ * Tout statut autre qu'« éligible » retire l'essai, y compris « inconnu » et
+ * l'absence de réponse : c'est la consigne du SDK (« display the non-intro
+ * pricing, to not create a misleading situation »). L'essai reste accordé par
+ * Apple au moment du paiement si la personne y a droit ; on ne fait que ne pas
+ * le PROMETTRE sans certitude.
+ */
+export function applyTrialEligibility<T extends PackageLike>(
+  plan: T,
+  status: number | null | undefined,
+): T {
+  if (status === INTRO_ELIGIBLE || !plan.product.introPrice) return plan
+  return { ...plan, product: { ...plan.product, introPrice: null } }
+}
+
+/**
  * Durée de l'essai gratuit, telle que le magasin l'annonce (« 3 jours »).
  *
  * ⚠️ Ne jamais écrire cette durée en dur : `introPrice` vaut `null` quand la
@@ -212,4 +241,23 @@ export function legalDisclosure(
     'au moins 24 h avant la fin de la période en cours. Gérable et résiliable à tout moment ' +
     `dans les réglages de ton compte ${store}.`
   )
+}
+
+/**
+ * Durée de l'essai gratuit en jours (`null` sans essai). Sert au rappel de fin
+ * d'essai et à la frise « aujourd'hui, veille, fin » du paywall d'onboarding.
+ */
+export function trialDays(pkg: PackageLike | null | undefined): number | null {
+  const intro = pkg?.product?.introPrice
+  if (!intro || intro.price !== 0) return null
+  const n = intro.periodNumberOfUnits
+  if (!Number.isFinite(n) || n <= 0) return null
+  switch (intro.periodUnit?.toUpperCase()) {
+    case 'DAY':
+      return n
+    case 'WEEK':
+      return n * 7
+    default:
+      return null
+  }
 }

@@ -21,7 +21,6 @@ import { type FC, useCallback, useEffect, useMemo, useRef, useState } from 'reac
 import {
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -42,6 +41,7 @@ import { cacheProductImage } from '@/lib/storage/productImageCache'
 import { clearPendingInci, getPendingInci } from '@/lib/storage/session'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { ProcessingOverlay } from '@/components/shared/ProcessingOverlay'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { ScanFrame } from '@/components/scan/ScanFrame'
 import { BarcodeScanner } from '@/components/scan/BarcodeScanner'
 import { ManualInciInput } from '@/components/scan/ManualInciInput'
@@ -66,7 +66,8 @@ const ScanScreen: FC = () => {
   const router = useRouter()
   const params = useLocalSearchParams<{ mode?: string; returnTo?: string }>()
   const mode = useMemo(() => normalizeMode(params.mode), [params.mode])
-  // Page d'origine à laquelle "Fermer" doit ramener (ex. /promesses/choisir).
+  // Page d'origine à laquelle "Fermer" doit ramener (ex. la feuille « Vérifier
+  // une promesse » ouverte depuis l'accueil ou la liste des promesses).
   // Sans ça, fermer une recherche ouverte depuis une autre page retombe sur
   // l'accueil car naviguer vers un onglet dédoublonne le navigateur d'onglets
   // et retire l'écran d'origine de la pile.
@@ -174,8 +175,8 @@ const ScanScreen: FC = () => {
   }, [runAnalysis, router])
 
   const close = useCallback(() => {
-    // Si un écran d'origine explicite est fourni (ex. ouvert depuis
-    // /promesses/choisir), on y retourne — `navigate` dépile jusqu'à lui s'il
+    // Si un écran d'origine explicite est fourni (ex. ouvert depuis la feuille
+    // « Vérifier une promesse »), on y retourne — `navigate` dépile jusqu'à lui s'il
     // existe encore, sinon le ré-empile proprement.
     if (returnTo) {
       router.navigate(returnTo as Parameters<typeof router.navigate>[0])
@@ -198,7 +199,7 @@ const ScanScreen: FC = () => {
         {error}
       </Text>
       {lastParamsRef.current && (
-        <Pressable onPress={retry} hitSlop={8}>
+        <Pressable onPress={retry} hitSlop={8} haptic="primary">
           <Text style={styles.errorRetry}>Réessayer</Text>
         </Pressable>
       )}
@@ -340,7 +341,7 @@ const ScanScreen: FC = () => {
           </View>
           <Text style={styles.landingTitle}>Décode un produit</Text>
           <Text style={styles.landingSubtitle}>
-            Appuie sur le bouton Décode en bas pour choisir une méthode :
+            Appuie sur le bouton Scan, en bas à droite, pour choisir une méthode :
             code-barres, recherche ou saisie manuelle.
           </Text>
 
@@ -364,6 +365,7 @@ const ScanScreen: FC = () => {
                 <Pressable
                   onPress={resumePending}
                   disabled={isAnalyzing}
+                  haptic="primary"
                   style={({ pressed }) => [styles.resumePrimary, pressed && { opacity: 0.85 }]}
                   accessibilityRole="button"
                   accessibilityLabel="Reprendre l'analyse"

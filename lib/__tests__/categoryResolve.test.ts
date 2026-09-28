@@ -12,11 +12,16 @@
  *   - resolveCategoryPlan (priorité des signaux + garde-fou de confiance).
  */
 import {
+  CATEGORY_RULES,
   MIN_CLASSIFY_VOTES,
   normalizeType,
   productTypeToCategoryPrefix,
   resolveCategoryPlan,
 } from '../../supabase/functions/routine-smart-suggest/categoryResolve'
+import {
+  CATEGORY_RULES as CLIENT_RULES,
+  productTypeToCategoryPrefix as clientProductTypeToCategoryPrefix,
+} from '@/lib/catalog/productTypeCategory'
 
 /** Helper : ne garde que le préfixe l1/l2 (sans le `/%`) pour des assertions lisibles. */
 function bucket(pt: string | null): string | null {
@@ -249,5 +254,71 @@ describe('normalizeType', () => {
   it('minuscule + sans accents + trim', () => {
     expect(normalizeType('  Crème Éclaircissante  ')).toBe('creme eclaircissante')
     expect(normalizeType(null)).toBe('')
+  })
+})
+
+/**
+ * Synchronisation client / serveur (sept 2026) : la copie serveur avait dérivé
+ * (pas de `\bhair\b`, « brume|mist » envoyait « Hair mist » en eaux thermales).
+ * Les deux tables doivent désormais être STRICTEMENT identiques.
+ */
+describe('parité client / serveur des règles de catégorie', () => {
+  it('même table : mêmes regex, mêmes cibles, même ordre, mêmes fourre-tout', () => {
+    const sig = (rules: readonly { re: RegExp; target: string; catchAll?: boolean }[]) =>
+      rules.map((r) => [r.re.source, r.re.flags, r.target, !!r.catchAll])
+    expect(sig(CATEGORY_RULES)).toEqual(sig(CLIENT_RULES))
+  })
+
+  it('même résultat sur une batterie de product_type', () => {
+    const BATTERY = [
+      'Hair mist',
+      'Hair mask',
+      'Curl cream',
+      'Sérum pointes',
+      'Crème sans parfum',
+      'Gel douche parfum vanille',
+      'Eau de toilette',
+      "Baume lèvres à la cire d'abeille",
+      'Gel lavant visage',
+      'Gel nettoyant corps',
+      'Crème Domaine de Provence',
+      'Brume thermale',
+      'Brume hydratante',
+      'Nettoyant visage',
+      'Gel de Limpeza Facial',
+      'Protetor solar FPS 50',
+      'Crème pour les mains',
+      'Rouge à lèvres',
+    ]
+    for (const pt of BATTERY) {
+      expect([pt, productTypeToCategoryPrefix(pt)]).toEqual([pt, clientProductTypeToCategoryPrefix(pt)])
+    }
+  })
+})
+
+describe('règles corrigées côté serveur (sept 2026)', () => {
+  it('Hair mist → cheveux (plus eaux thermales), brume thermale → eaux thermales', () => {
+    expect(bucket('Hair mist')).toBe('coiffure/soin-capillaire')
+    expect(bucket('Brume thermale')).toBe('soin-du-corps-et-visage/eaux-thermales-brumes')
+  })
+
+  it('marqueurs capillaires : hair mask / oil / serum / repair, curl, pointes', () => {
+    expect(bucket('Hair mask')).toBe('coiffure/soin-capillaire')
+    expect(bucket('Hair oil')).toBe('coiffure/soin-capillaire')
+    expect(bucket('Hair serum')).toBe('coiffure/soin-capillaire')
+    expect(bucket('Hair repair treatment')).toBe('coiffure/soin-capillaire')
+    expect(bucket('Curl cream')).toBe('coiffure/soin-capillaire')
+    expect(bucket('Sérum pointes')).toBe('coiffure/soin-capillaire')
+  })
+
+  it('sans parfum : pas parfum ; baume lèvres cire : pas épilation', () => {
+    expect(bucket('Crème sans parfum')).toBe('soin-du-corps-et-visage/creme-hydratante')
+    expect(bucket("Baume lèvres à la cire d'abeille")).toBe('soin-du-corps-et-visage/soin-des-levres')
+  })
+
+  it('lavant visage vs nettoyant corps', () => {
+    expect(bucket('Gel lavant visage')).toBe('soin-du-corps-et-visage/nettoyant-visage')
+    expect(bucket('Savon visage')).toBe('soin-du-corps-et-visage/nettoyant-visage')
+    expect(bucket('Gel nettoyant corps')).toBe('hygiene-du-corps/produit-de-bain')
   })
 })

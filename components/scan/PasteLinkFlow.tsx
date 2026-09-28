@@ -14,7 +14,6 @@ import { type FC, useState } from 'react'
 import {
   ActivityIndicator,
   Image,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,6 +22,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
@@ -173,6 +173,7 @@ export const PasteLinkFlow: FC<Props> = ({
           style={[styles.cta, !looksLikeUrl(url) && styles.ctaDisabled]}
           onPress={() => void fetchUrl()}
           disabled={!looksLikeUrl(url) || disabled}
+          haptic="primary"
         >
           <Ionicons name="cloud-download-outline" size={18} color="#FFFFFF" />
           <Text style={styles.ctaText}>Récupérer la composition</Text>
@@ -204,7 +205,7 @@ export const PasteLinkFlow: FC<Props> = ({
       <View style={styles.centered}>
         <Ionicons name="alert-circle-outline" size={40} color={colors.warning} />
         <Text style={styles.errorText}>{errorMsg}</Text>
-        <Pressable style={styles.cta} onPress={reset}>
+        <Pressable style={styles.cta} onPress={reset} haptic="primary">
           <Text style={styles.ctaText}>Réessayer avec un autre lien</Text>
         </Pressable>
         <Pressable style={styles.linkBtn} onPress={onFallbackToManual}>
@@ -279,6 +280,7 @@ export const PasteLinkFlow: FC<Props> = ({
         style={[styles.cta, !hasInci && styles.ctaDisabled]}
         disabled={!hasInci || disabled}
         onPress={confirm}
+        haptic="primary"
       >
         <Ionicons name="sparkles" size={18} color="#FFFFFF" />
         <Text style={styles.ctaText}>Oui, analyser ce produit</Text>

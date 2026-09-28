@@ -21,7 +21,7 @@ import type { CoherenceResult } from '@/lib/coherence/types'
 type Key = CoherenceResult['positionSnapshot']['keyIngredients'][number]
 
 const ZONE_TONE = {
-  Vert: { bg: '#ECFDF5', border: '#A7F3D0', name: '#065F46', pos: '#059669' },
+  Vert: { bg: '#F0FDF4', border: '#BBF7D0', name: '#166534', pos: '#16A34A' },
   Jaune: { bg: '#FFFBEB', border: '#FDE68A', name: '#92400E', pos: '#B45309' },
   Orange: { bg: '#FFF7ED', border: '#FED7AA', name: '#9A3412', pos: '#C2410C' },
   Rouge: { bg: '#FFF1F2', border: '#FECDD3', name: '#9F1239', pos: '#BE123C' },
@@ -73,10 +73,10 @@ export const IngredientsPositionChart: FC<{ snapshot: CoherenceResult['positionS
       <View style={styles.zones}>
         {/* Zone verte */}
         <View style={[styles.zone, styles.zoneGreen]}>
-          <Text style={[styles.zoneTitle, { color: '#047857' }]}>Ingrédients efficaces</Text>
-          <Text style={[styles.zoneRange, { color: '#059669' }]}>positions 1–{thresholdPos - 1}</Text>
+          <Text style={[styles.zoneTitle, { color: '#15803D' }]}>Ingrédients efficaces</Text>
+          <Text style={[styles.zoneRange, { color: '#16A34A' }]}>positions 1 à {thresholdPos - 1}</Text>
           {before.length === 0 ? (
-            <Text style={[styles.zoneEmpty, { color: '#059669' }]}>Aucun ingrédient clé ici.</Text>
+            <Text style={[styles.zoneEmpty, { color: '#16A34A' }]}>Aucun ingrédient clé ici.</Text>
           ) : (
             <View style={styles.bubbles}>
               {before.map((k) => (
@@ -99,7 +99,7 @@ export const IngredientsPositionChart: FC<{ snapshot: CoherenceResult['positionS
         <View style={[styles.zone, styles.zoneBlue]}>
           <Text style={[styles.zoneTitle, { color: '#0369A1' }]}>En trace ≤ 1 %</Text>
           <Text style={[styles.zoneRange, { color: '#0284C7' }]}>
-            positions {thresholdPos + 1}–{totalPositions}
+            positions {thresholdPos + 1} à {totalPositions}
           </Text>
           {after.length === 0 ? (
             <Text style={[styles.zoneEmpty, { color: '#0284C7' }]}>Aucun ingrédient clé ici.</Text>

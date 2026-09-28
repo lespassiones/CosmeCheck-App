@@ -8,10 +8,11 @@
  */
 
 import { type FC, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
 import { WhiteCard } from '@/components/design/WhiteCard'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
@@ -56,6 +57,7 @@ export const ReviewPromptCard: FC<Props> = ({ onAccept, onDismiss }) => {
         <Pressable
           onPress={handleAccept}
           disabled={busy}
+          haptic="primary"
           accessibilityRole="button"
           accessibilityLabel="Noter l'application"
           style={({ pressed }) => [styles.primary, pressed && styles.pressed]}

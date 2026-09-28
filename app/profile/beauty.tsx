@@ -13,7 +13,6 @@
 import { useCallback, useEffect, useRef, useState, type FC } from 'react'
 import {
   ActivityIndicator,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -27,6 +26,8 @@ import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { Reveal } from '@/components/design/Reveal'
 import { PressableScale } from '@/components/design/motion'
 import { MultiSelectStep, SingleSelectStep } from '@/components/onboarding/OnboardingControls'
+import { FormSection, InfoBanner } from '@/components/profile/ProfileFormKit'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { useProfile } from '@/hooks/useProfile'
 import {
   HAIR_CONCERNS,
@@ -45,7 +46,7 @@ import {
 } from '@/lib/skin/profile'
 import { colors } from '@/constants/colors'
 import { radius, spacing } from '@/constants/spacing'
-import { fontFamilies, typography } from '@/constants/typography'
+import { fontFamilies } from '@/constants/typography'
 
 type Section = 'skin' | 'hair'
 
@@ -124,60 +125,54 @@ const BeautyProfileScreen: FC = () => {
               Les blocs sont des enfants DIRECTS de Reveal (pas de fragment)
               pour que le stagger s'applique bloc par bloc. */}
           <Reveal stagger={70} style={styles.revealStack}>
-            <Text style={styles.subtitle}>
-              {section === 'hair'
-                ? 'Renseigne tes cheveux pour débloquer ta compatibilité avec les produits capillaires.'
-                : 'Renseigne ta peau pour débloquer ta compatibilité avec les produits visage et corps.'}
-            </Text>
+            <InfoBanner
+              text={
+                section === 'hair'
+                  ? 'Renseigne tes cheveux pour débloquer ta compatibilité avec les produits capillaires.'
+                  : 'Renseigne ta peau pour débloquer ta compatibilité avec les produits visage et corps.'
+              }
+            />
 
             {section === 'hair' ? (
-              <View style={styles.block}>
-                <Text style={styles.blockLabel}>Comment sont tes cheveux ?</Text>
+              <FormSection title="Comment sont tes cheveux ?">
                 <MultiSelectStep
-                  tone="violet"
                   options={HAIR_CONCERNS.map((k) => ({ key: k, label: HAIR_CONCERN_LABEL[k] }))}
                   values={hairConcerns}
                   onToggle={(key) => setHairConcerns((prev) => toggle(prev, key as HairConcern))}
                 />
-              </View>
+              </FormSection>
             ) : null}
 
             {section !== 'hair' ? (
-              <View style={styles.block}>
-                <Text style={styles.blockLabel}>Ton type de peau au visage ?</Text>
+              <FormSection title="Ton type de peau au visage ?">
                 <SingleSelectStep
-                  tone="violet"
                   options={SKIN_TYPES_FACE.map((k) => ({ key: k, label: SKIN_TYPE_FACE_LABEL[k] }))}
                   selectedKey={face}
                   onPickKey={(key) =>
                     setFace((prev) => (prev === key ? undefined : (key as SkinTypeFace)))
                   }
                 />
-              </View>
+              </FormSection>
             ) : null}
             {section !== 'hair' ? (
-              <View style={styles.block}>
-                <Text style={styles.blockLabel}>Et la peau de ton corps ?</Text>
+              <FormSection title="Et la peau de ton corps ?">
                 <SingleSelectStep
-                  tone="violet"
                   options={SKIN_TYPES_BODY.map((k) => ({ key: k, label: SKIN_TYPE_BODY_LABEL[k] }))}
                   selectedKey={body}
                   onPickKey={(key) =>
                     setBody((prev) => (prev === key ? undefined : (key as SkinTypeBody)))
                   }
                 />
-              </View>
+              </FormSection>
             ) : null}
             {section !== 'hair' ? (
-              <View style={styles.block}>
-                <Text style={styles.blockLabel}>Tes préoccupations (optionnel)</Text>
+              <FormSection title="Tes préoccupations (optionnel)">
                 <MultiSelectStep
-                  tone="violet"
                   options={SKIN_CONCERNS.map((k) => ({ key: k, label: SKIN_CONCERN_LABEL[k] }))}
                   values={concerns}
                   onToggle={(key) => setConcerns((prev) => toggle(prev, key as SkinConcern))}
                 />
-              </View>
+              </FormSection>
             ) : null}
           </Reveal>
         </ScrollView>
@@ -188,6 +183,7 @@ const BeautyProfileScreen: FC = () => {
           <PressableScale
             onPress={onSave}
             disabled={!canSave || saving}
+            haptic="primary"
             accessibilityRole="button"
             style={[styles.saveBtn, (!canSave || saving) && styles.saveBtnDisabled]}
           >
@@ -220,14 +216,7 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, gap: spacing.lg },
   // Reveal devient l'unique enfant du ScrollView : on y reporte le gap.
-  revealStack: { gap: spacing.lg },
-  subtitle: {
-    ...typography.body,
-    color: colors.inkMuted,
-    marginBottom: spacing.xs,
-  },
-  block: { gap: spacing.md },
-  blockLabel: { fontFamily: fontFamilies.semiBold, fontSize: 15, color: colors.ink },
+  revealStack: { gap: spacing.xl },
   footer: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
@@ -239,7 +228,7 @@ const styles = StyleSheet.create({
   saveBtn: {
     height: 52,
     borderRadius: radius.full,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.success,
     alignItems: 'center',
     justifyContent: 'center',
   },

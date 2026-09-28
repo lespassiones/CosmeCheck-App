@@ -14,7 +14,7 @@
  */
 
 import { type FC } from 'react'
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
+import { FlatList, StyleSheet, Text, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 
@@ -23,6 +23,7 @@ import { radius, spacing } from '@/constants/spacing'
 import { fontFamilies, typography } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { ProductMiniCard } from '@/components/shared/ProductMiniCard'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { useWeeklyPicks } from '@/hooks/useWeeklyPicks'
 import { useLaunchAlternative } from '@/hooks/useLaunchAlternative'
 
@@ -41,7 +42,6 @@ export const WeeklyPicksCard: FC = () => {
         <Ionicons name="sparkles" size={18} color={colors.accent} />
         <Text style={styles.kicker}>PÉPITES DU JOUR</Text>
       </View>
-      <Text style={styles.subtitle}>Sélectionnées pour toi</Text>
 
       {isLoading ? (
         <View style={[styles.row, styles.bleed]}>
@@ -57,6 +57,7 @@ export const WeeklyPicksCard: FC = () => {
           <Pressable
             style={styles.cta}
             onPress={() => router.push(ROUTES.PROFILE.INDEX)}
+            haptic="primary"
             accessibilityRole="button"
           >
             <Text style={styles.ctaText}>Compléter mon profil</Text>
@@ -90,19 +91,12 @@ export const WeeklyPicksCard: FC = () => {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.md },
   kicker: {
     fontFamily: fontFamilies.bold,
     fontSize: 12,
     letterSpacing: 1,
     color: colors.accent,
-  },
-  subtitle: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 13,
-    color: colors.inkMuted,
-    marginTop: 2,
-    marginBottom: spacing.md,
   },
   // Full-bleed : déborde le padding horizontal du dashboard.
   bleed: { marginHorizontal: -EDGE },
@@ -110,7 +104,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: EDGE },
   skeleton: {
     width: CARD_W,
-    height: 190,
+    height: 205,
     borderRadius: radius.lg,
     backgroundColor: colors.gray100,
   },

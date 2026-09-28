@@ -54,7 +54,7 @@ export default function MentionsScreen() {
         {
           title: 'Propriété intellectuelle',
           paragraphs: [
-            "L'ensemble des éléments composant l'Application — code source, interface, charte graphique, logos, illustrations, textes éditoriaux, algorithmes de notation — est protégé par le droit d'auteur et le droit des marques. Toute reproduction, représentation ou exploitation non autorisée est interdite.",
+            "L'ensemble des éléments composant l'Application (code source, interface, charte graphique, logos, illustrations, textes éditoriaux, algorithmes de notation) est protégé par le droit d'auteur et le droit des marques. Toute reproduction, représentation ou exploitation non autorisée est interdite.",
             "Les marques de produits cosmétiques éventuellement citées dans l'Application restent la propriété de leurs détenteurs respectifs. Leur mention vise uniquement à fournir une information factuelle à l'utilisateur, sans aucune affiliation ni endossement.",
           ],
         },
@@ -64,9 +64,9 @@ export default function MentionsScreen() {
             "La base de connaissances ingrédients de Cosme Check s'appuie sur des sources publiques et propriétaires :",
           ],
           bullets: [
-            "Open Beauty Facts (openbeautyfacts.org) — base collaborative sous licence Open Database License (ODbL).",
-            "Open Products Facts (openproductsfacts.org) — base collaborative sous licence ODbL.",
-            "CosIng — la base européenne d'ingrédients cosmétiques publiée par la Commission européenne.",
+            "Open Beauty Facts (openbeautyfacts.org) : base collaborative sous licence Open Database License (ODbL).",
+            "Open Products Facts (openproductsfacts.org) : base collaborative sous licence ODbL.",
+            "CosIng : la base européenne d'ingrédients cosmétiques publiée par la Commission européenne.",
             "Annexes du Règlement (CE) N° 1223/2009 sur les produits cosmétiques.",
             "Base d'ingrédients enrichie et catégorisée par l'équipe éditoriale de Cosme Check.",
           ],

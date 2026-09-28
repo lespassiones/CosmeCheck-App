@@ -10,10 +10,11 @@
  */
 
 import { type FC, useState } from 'react'
-import { LayoutAnimation, Platform, Pressable, StyleSheet, Text, UIManager, View } from 'react-native'
+import { LayoutAnimation, Platform, StyleSheet, Text, UIManager, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
 import { WhiteCard } from '@/components/design/WhiteCard'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'

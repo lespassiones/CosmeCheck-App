@@ -24,12 +24,12 @@ export const gradients = {
   advisorCard:    { colors: ['#6C3FD8', '#4F46E5', '#7C3AED'], locations: [0, 0.55, 1], start: { x: 0, y: 0 }, end: { x: 1, y: 1 } },
   promessesCard:  { colors: ['#D6F5D6', '#E8FAE8', '#C8F0C8'], locations: [0, 0.5, 1], start: { x: 0, y: 0 }, end: { x: 1, y: 1 } },
   bottomNavPill:  { colors: ['rgba(255,228,230,0.85)', 'rgba(255,209,220,0.75)'], start: { x: 0, y: 0 }, end: { x: 0, y: 1 } }, // #FFE4E6/85→#FFD1DC/75
-  ratingVert:     { colors: ['#10B981', '#22C55E', '#14B8A6'], start: { x: 0, y: 0 }, end: { x: 1, y: 1 } },
+  ratingVert:     { colors: ['#22C55E', '#16A34A', '#15803D'], start: { x: 0, y: 0 }, end: { x: 1, y: 1 } },
   ratingJaune:    { colors: ['#FBBF24', '#EAB308', '#FB923C'], start: { x: 0, y: 0 }, end: { x: 1, y: 1 } },
   ratingOrange:   { colors: ['#F97316', '#EA580C', '#EF4444'], start: { x: 0, y: 0 }, end: { x: 1, y: 1 } },
   ratingRouge:    { colors: ['#EF4444', '#E11D48', '#DB2777'], start: { x: 0, y: 0 }, end: { x: 1, y: 1 } },
   verdictDonutTrack: { colors: ['#FB7185', '#E11D48'], start: { x: 0, y: 0 }, end: { x: 1, y: 1 } },
-  verdictDonutFill:  { colors: ['#34D399', '#059669'], start: { x: 0, y: 0 }, end: { x: 1, y: 1 } },
+  verdictDonutFill:  { colors: ['#22C55E', '#16A34A'], start: { x: 0, y: 0 }, end: { x: 1, y: 1 } },
 } as const
 
 export type GradientKey = keyof typeof gradients

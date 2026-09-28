@@ -1,19 +1,20 @@
 /**
- * ScreenHeader — en-tête commun aux onglets (Accueil, Routine, Historique,
- * Promesses). Aligne visuellement les écrans :
+ * ScreenHeader — en-tête commun aux onglets (Accueil, Routine, Historique).
+ * Aligne visuellement les écrans :
  *   - même paddingTop (safe-area + spacing.base)
  *   - titre à gauche (typography.h3) avec ornement optionnel (icône, emoji)
- *   - CreditsPill à droite (visible sur tous les onglets)
+ *   - CreditsPill à droite, sauf si `right` la remplace (Historique : « Comparer »)
+ *   - `below` : bloc optionnel sous le titre (sélecteur d'onglets de l'Historique)
  *   - filet hairline (#c5ccd6) qui déborde la marge horizontale
- *   - réserve `paddingRight: 36` pour ne pas écraser le bouton "3 points"
- *     flottant en haut-droite (rendu par le layout des tabs).
+ *   - plus de place réservée à droite : le bouton menu flottant a disparu avec
+ *     le menu latéral (28/09/2026), la CreditsPill se cale au bord.
  *
  * Le conteneur a `backgroundColor: colors.bg` et `zIndex: 20` pour rester
  * au-dessus du contenu qui défile dessous (effet sticky).
  */
 
 import type { FC, ReactNode } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -21,6 +22,7 @@ import { colors } from '@/constants/colors'
 import { spacing, radius } from '@/constants/spacing'
 import { typography } from '@/constants/typography'
 import { CreditsPill } from '@/components/shared/CreditsPill'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 
 interface Props {
   title: string
@@ -29,9 +31,25 @@ interface Props {
   /** Si fourni, affiche un chevron retour à gauche du titre (ex. onglet ouvert
    *  depuis une autre page qui doit pouvoir y revenir). */
   onBack?: () => void
+  /** Contenu à droite du titre À LA PLACE de la CreditsPill (ex. « Comparer »
+   *  sur l'Historique). */
+  right?: ReactNode
+  /** Contenu sous la ligne de titre, avant le filet (ex. sélecteur d'onglets),
+   *  sticky avec le reste de l'en-tête. */
+  below?: ReactNode
+  /** Obsolète depuis la suppression du menu latéral (28/09/2026) : ne réserve
+   *  plus rien par défaut. Gardé pour compatibilité des appels existants. */
+  menuSpace?: boolean
 }
 
-export const ScreenHeader: FC<Props> = ({ title, titleAdornment, onBack }) => {
+export const ScreenHeader: FC<Props> = ({
+  title,
+  titleAdornment,
+  onBack,
+  right,
+  below,
+  menuSpace = false,
+}) => {
   const insets = useSafeAreaInsets()
   return (
     <View
@@ -40,7 +58,7 @@ export const ScreenHeader: FC<Props> = ({ title, titleAdornment, onBack }) => {
         { paddingTop: insets.top + spacing.base },
       ]}
     >
-      <View style={styles.row}>
+      <View style={[styles.row, menuSpace && styles.rowWithMenu]}>
         <View style={styles.titleRow}>
           {onBack ? (
             <Pressable
@@ -59,9 +77,10 @@ export const ScreenHeader: FC<Props> = ({ title, titleAdornment, onBack }) => {
           {titleAdornment}
         </View>
         <View style={styles.creditsWrap}>
-          <CreditsPill />
+          {right ?? <CreditsPill />}
         </View>
       </View>
+      {below ? <View style={styles.below}>{below}</View> : null}
       <View style={styles.hairline} />
     </View>
   )
@@ -78,10 +97,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
-    // Réserve la place du bouton menu (3 points) flottant en haut-droite.
-    paddingRight: 36,
     minHeight: 32,
   },
+  // Ancienne réserve pour le bouton menu flottant (`menuSpace`), plus utilisée par défaut.
+  rowWithMenu: { paddingRight: 36 },
+  below: { marginTop: spacing.md },
   titleRow: {
     flex: 1,
     flexDirection: 'row',

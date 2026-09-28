@@ -12,7 +12,6 @@ import { useEffect, useState, type FC } from 'react'
 import {
   ActivityIndicator,
   Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,6 +20,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
 import { radius, spacing } from '@/constants/spacing'
@@ -115,6 +115,7 @@ export const AdvisorHistorySheet: FC<Props> = ({ visible, onClose, onSelect }) =
                 </Pressable>
                 <Pressable
                   onPress={() => void handleDelete(r.id)}
+                  haptic="warning"
                   hitSlop={8}
                   accessibilityRole="button"
                   accessibilityLabel="Supprimer la conversation"

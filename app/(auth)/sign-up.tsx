@@ -1,13 +1,12 @@
 /**
- * SignUpScreen — inscription (Google + nom + email + mot de passe).
+ * SignUpScreen (A23) : « Crée ton compte ».
  *
- * En haut : raccourci « S'inscrire avec Google », séparateur « ou », puis le
- * formulaire e-mail complet.
+ * Les connexions Apple et Google vivent sur l'écran précédent (welcome) : ici,
+ * seulement l'e-mail. Le prénom vient du parcours d'onboarding s'il existe.
  */
 
-import { type FC } from 'react'
+import { useSyncExternalStore, type FC } from 'react'
 import {
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -15,160 +14,93 @@ import {
   Text,
   View,
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { keyboardPadding, useKeyboardAwareScroll } from '@/hooks/useKeyboardHeight'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 
 import { colors } from '@/constants/colors'
-import { spacing } from '@/constants/spacing'
-import { typography } from '@/constants/typography'
+import { fontFamilies } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
-import { BackgroundGlow } from '@/components/design/BackgroundGlow'
-import { LogoMark } from '@/components/shared/Logo'
+import { getDraft, subscribeDraft } from '@/lib/onboarding/draft'
 import { SignUpForm } from '@/components/auth/SignUpForm'
-import { GoogleAuthButton } from '@/components/auth/GoogleAuthButton'
-import { useAppConfig } from '@/hooks/useAppConfig'
+import { FLOW_MAX_WIDTH } from '@/components/onboarding/flow/ui'
 
 const SignUpScreen: FC = () => {
-  const { config: appConfig } = useAppConfig()
+  const draft = useSyncExternalStore(subscribeDraft, getDraft, getDraft)
+  const name = draft?.firstName?.trim()
+  const hasCard = Boolean(draft?.completed)
+  const insets = useSafeAreaInsets()
+  // Clavier : le formulaire remonte et garde le champ actif ET le bouton en vue.
+  const { scrollRef, keyboardHeight, onScroll, onContentSizeChange } = useKeyboardAwareScroll(140)
 
   return (
-    <View style={styles.root}>
-      <BackgroundGlow variant="auth" />
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <KeyboardAvoidingView
-          style={styles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <ScrollView
-            contentContainerStyle={styles.content}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.topBar}>
-              <Pressable
-                hitSlop={10}
-                onPress={() =>
-                  router.canGoBack()
-                    ? router.back()
-                    : router.replace(ROUTES.AUTH.WELCOME)
-                }
-                accessibilityLabel="Retour"
-                style={styles.backBtn}
-              >
-                <Ionicons name="chevron-back" size={22} color={colors.ink} />
-              </Pressable>
-              <View style={styles.topLogo} pointerEvents="none">
-                <LogoMark size={18} />
-              </View>
-            </View>
-
-            <View style={styles.header}>
-              <Text style={styles.title}>Crée ton compte</Text>
-              <Text style={styles.subtitle}>
-                {appConfig.signups_open
-                  ? 'Rejoins Cosme Check gratuitement.'
-                  : 'Les inscriptions sont temporairement fermées.'}
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <View style={[styles.flex, keyboardHeight > 0 && { paddingBottom: keyboardPadding(keyboardHeight, insets.bottom, true) }]}>
+        <ScrollView
+        ref={scrollRef}
+        onScroll={onScroll}
+        scrollEventThrottle={32}
+        onContentSizeChange={onContentSizeChange}
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+          <View style={styles.column}>
+            <Pressable
+              hitSlop={8}
+              onPress={() => (router.canGoBack() ? router.back() : router.replace(ROUTES.AUTH.WELCOME))}
+              accessibilityRole="button"
+              accessibilityLabel="Retour"
+              style={styles.back}
+            >
+              <Ionicons name="arrow-back" size={22} color={colors.ink} />
+            </Pressable>
+            <Text style={styles.title} accessibilityRole="header">
+              Crée ton compte
+            </Text>
+            <Text style={styles.subtitle}>
+              {hasCard ? 'Une minute, et ta carte de peau est sauvegardée.' : 'Une minute, et CosmeCheck est à toi.'}
+            </Text>
+            <SignUpForm knownFirstName={name} />
+            <Text style={styles.switch}>
+              Déjà un compte ?{' '}
+              <Text style={styles.switchLink} onPress={() => router.replace(ROUTES.AUTH.SIGN_IN)} accessibilityRole="link">
+                Me connecter
               </Text>
-            </View>
-
-            {!appConfig.signups_open ? (
-              <Text style={styles.closedText}>
-                La création de compte est momentanément désactivée. Reviens un peu plus tard,
-                ou connecte-toi si tu as déjà un compte.
-              </Text>
-            ) : (
-              <>
-                <GoogleAuthButton label="S'inscrire avec Google" />
-                <View style={styles.separator}>
-                  <View style={styles.line} />
-                  <Text style={styles.separatorText}>ou</Text>
-                  <View style={styles.line} />
-                </View>
-                <SignUpForm />
-              </>
-            )}
-
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>Déjà un compte ?</Text>
-              <Pressable hitSlop={6} onPress={() => router.replace(ROUTES.AUTH.SIGN_IN)}>
-                <Text style={styles.footerLink}>Se connecter</Text>
-              </Pressable>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    </View>
+            </Text>
+          </View>
+        </ScrollView>
+      </View>
+    </SafeAreaView>
   )
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  safe: { flex: 1 },
-  flex: { flex: 1 },
-  content: {
-    flexGrow: 1,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing['2xl'],
-    gap: spacing.lg,
-  },
-  topBar: {
-    height: 32,
-    justifyContent: 'center',
-    marginTop: spacing.sm,
-  },
-  backBtn: {
-    position: 'absolute',
-    left: 0,
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topLogo: {
-    alignItems: 'center',
-  },
-  header: {
-    gap: spacing.sm,
-  },
-  title: {
-    ...typography.h1,
-    color: colors.ink,
-    textAlign: 'center',
-  },
-  subtitle: {
-    ...typography.body,
-    color: colors.inkMuted,
-    textAlign: 'center',
-  },
-  closedText: {
-    ...typography.body,
-    color: colors.inkMuted,
-    textAlign: 'center',
-  },
-  separator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  line: { flex: 1, height: 1, backgroundColor: colors.border },
-  separatorText: { ...typography.small, color: colors.inkLight },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: spacing.xs,
-    marginTop: spacing.sm,
-  },
-  footerText: {
-    ...typography.small,
-    color: colors.inkMuted,
-  },
-  footerLink: {
-    ...typography.smallSemiBold,
-    color: colors.rose,
-  },
-})
-
 export default SignUpScreen
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.bg },
+  flex: { flex: 1 },
+  scroll: { flexGrow: 1, paddingHorizontal: 22, paddingTop: 8, paddingBottom: 28 },
+  column: { width: '100%', maxWidth: FLOW_MAX_WIDTH, alignSelf: 'center' },
+  back: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.gray100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  title: { fontFamily: fontFamilies.bold, fontSize: 32, lineHeight: 38, letterSpacing: -0.6, color: colors.ink },
+  subtitle: {
+    fontFamily: fontFamilies.regular,
+    fontSize: 17,
+    lineHeight: 24,
+    color: colors.inkMuted,
+    marginTop: 6,
+    marginBottom: 24,
+  },
+  switch: { fontFamily: fontFamilies.regular, fontSize: 15, color: colors.inkMuted, textAlign: 'center', marginTop: 18 },
+  switchLink: { color: colors.rose, fontFamily: fontFamilies.semiBold, textDecorationLine: 'underline' },
+})

@@ -51,6 +51,11 @@ const RULES: Rule[] = [
   // ── MAINS ────────────────────────────────────────────────────────────────
   { match: /\bmains?\b/i,                                                  form: "mains" },
 
+  // ── FRISOTTIS (avant le bloc sérum : « sérum anti-frisottis » doit viser le
+  // segment "soin-anti-frisottis", pas les sérums capillaires génériques). Un
+  // shampooing anti-frisottis reste un shampooing (règle cheveux plus bas). ──
+  { match: /^(?!.*shamp).*(frisott|frizz)/i,                               form: "frisottis" },
+
   // ── ANTI-RIDES / ANTI-ÂGE VISAGE — avant le bloc sérum générique ────────
   { match: /anti.?ride|anti.?[aâ]ge|vieilliss|rides?.{0,10}visage/i,      form: "serum visage" },
 

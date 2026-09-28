@@ -200,3 +200,87 @@ describe('normalizeType', () => {
     expect(normalizeType(null)).toBe('')
   })
 })
+
+/**
+ * Non-régression des corrections de règles (sept 2026, retour bêta « alternatives
+ * sans rapport ») : chaque cas ci-dessous tombait dans une MAUVAISE famille avant.
+ */
+describe('règles corrigées (sept 2026)', () => {
+  const fam = (s: string) => productTypeToCategoryPrefix(s)?.replace(/\/%$/, '') ?? null
+  const famName = (s: string) => productNameToCategoryPrefix(s)?.replace(/\/%$/, '') ?? null
+
+  it('« sans parfum » / « fragrance-free » ne sont PAS des parfums', () => {
+    expect(fam('Crème sans parfum')).toBe('soin-du-corps-et-visage/creme-hydratante')
+    expect(fam('Fragrance-free moisturizer')).toBe('soin-du-corps-et-visage/creme-hydratante')
+    expect(fam('Lait corps non parfumé')).toBe('soin-du-corps-et-visage/creme-hydratante')
+    expect(fam('Gel douche 0% parfum')).toBe('hygiene-du-corps/produit-de-bain')
+  })
+
+  it('un soin ou un lavant PARFUMÉ reste un soin ou un lavant', () => {
+    expect(fam('Lait corps parfumé')).toBe('soin-du-corps-et-visage/creme-hydratante')
+    expect(fam('Gel douche parfum vanille')).toBe('hygiene-du-corps/produit-de-bain')
+    expect(fam('Savon parfumé à la rose')).toBe('hygiene-du-corps/produit-de-bain')
+  })
+
+  it('les vrais parfums restent des parfums', () => {
+    expect(fam('Eau de toilette')).toBe('parfum')
+    expect(fam('Eau de parfum')).toBe('parfum')
+    expect(fam('Parfum')).toBe('parfum')
+    expect(fam('Angel Eau de Parfum')).toBe('parfum')
+    expect(fam('Brume Parfumée Corps & Cheveux')).toBe('parfum')
+  })
+
+  it('baume lèvres à la cire d abeille : lèvres, pas épilation', () => {
+    expect(fam("Baume lèvres à la cire d'abeille")).toBe('soin-du-corps-et-visage/soin-des-levres')
+    expect(famName("Stick lèvres cire d'abeille bio")).toBe('soin-du-corps-et-visage/soin-des-levres')
+    // la vraie épilation reste reconnue
+    expect(fam('Cire froide épilation jambes')).toBe('rasage-et-epilation/epilation-et-cire')
+    expect(fam('Crème dépilatoire')).toBe('rasage-et-epilation/epilation-et-cire')
+    expect(fam('Bandes de cire')).toBe('rasage-et-epilation/epilation-et-cire')
+  })
+
+  it('lavant VISAGE explicite : nettoyant visage, pas bain corps', () => {
+    expect(fam('Gel lavant visage')).toBe('soin-du-corps-et-visage/nettoyant-visage')
+    expect(fam('Savon visage')).toBe('soin-du-corps-et-visage/nettoyant-visage')
+    expect(famName('CeraVe Gel Moussant Visage')).toBe('soin-du-corps-et-visage/nettoyant-visage')
+    // le lavant corps reste un lavant corps
+    expect(fam('Gel lavant')).toBe('hygiene-du-corps/produit-de-bain')
+    expect(fam('Savon')).toBe('hygiene-du-corps/produit-de-bain')
+  })
+
+  it('nettoyant CORPS explicite : bain corps, pas nettoyant visage', () => {
+    expect(fam('Gel nettoyant corps')).toBe('hygiene-du-corps/produit-de-bain')
+    expect(fam('Gel nettoyant mains')).toBe('hygiene-du-corps/produit-de-bain')
+    expect(fam('Gel nettoyant')).toBe('soin-du-corps-et-visage/nettoyant-visage')
+  })
+
+  it('mains / pieds en mots entiers (« Domaine » n est pas « main »)', () => {
+    expect(fam('Crème Domaine de Provence')).toBe('soin-du-corps-et-visage/creme-hydratante')
+    expect(famName('Domaine Nature Crème')).toBeNull()
+    expect(fam('Crème pour les mains')).toBe('soin-du-corps-et-visage/soin-des-mains')
+    expect(fam('Crème pieds secs')).toBe('soin-du-corps-et-visage/soin-des-pieds-et-jambes')
+  })
+
+  it('marqueurs capillaires complétés : cheveux, pas visage ni corps', () => {
+    for (const s of [
+      'Curl cream',
+      'Hair mask',
+      'Sérum pointes',
+      'Masque cheveux',
+      'Huile cuir chevelu',
+      'Leave-in',
+      'Hair mist',
+      'Crème anti-frisottis',
+      'Soin cheveux crépus',
+    ]) {
+      expect(fam(s)).toBe('coiffure/soin-capillaire')
+    }
+    expect(famName('Mixa Hair Mask Réparateur')).toBe('coiffure/soin-capillaire')
+  })
+
+  it('rouge à lèvres / gloss : maquillage, pas soin des lèvres', () => {
+    expect(fam('Rouge à lèvres mat')).toBe('maquillage')
+    expect(fam('Lip gloss')).toBe('maquillage')
+    expect(fam('Baume à lèvres')).toBe('soin-du-corps-et-visage/soin-des-levres')
+  })
+})

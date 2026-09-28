@@ -16,8 +16,8 @@ import { spacing, radius } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 import type { CoherencePromise } from '@/lib/coherence/types'
 
-const EMERALD_SOFT = '#ECFDF5'
-const EMERALD_TEXT = '#047857'
+const EMERALD_SOFT = '#F0FDF4'
+const EMERALD_TEXT = '#15803D'
 
 export const InferredPromisesCard: FC<{ promises: CoherencePromise[] }> = ({ promises }) => {
   const inferred = promises.filter((p) => p.inferred)
@@ -83,12 +83,12 @@ const styles = StyleSheet.create({
   list: { gap: spacing.sm },
   item: { backgroundColor: EMERALD_SOFT, borderRadius: radius.md, padding: spacing.md },
   itemHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginBottom: 6 },
-  itemLabel: { flex: 1, fontFamily: fontFamilies.semiBold, fontSize: 14, color: '#065F46' },
-  deducedChip: { backgroundColor: '#D1FAE5', borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 2 },
-  deducedChipText: { fontFamily: fontFamilies.semiBold, fontSize: 10, color: '#065F46' },
+  itemLabel: { flex: 1, fontFamily: fontFamilies.semiBold, fontSize: 14, color: '#166534' },
+  deducedChip: { backgroundColor: '#DCFCE7', borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 2 },
+  deducedChipText: { fontFamily: fontFamilies.semiBold, fontSize: 10, color: '#166534' },
   support: { fontFamily: fontFamilies.regular, fontSize: 12, color: EMERALD_TEXT },
   supportName: { fontFamily: fontFamilies.medium },
-  supportPos: { fontFamily: fontFamilies.regular, fontSize: 11, color: '#059669' },
+  supportPos: { fontFamily: fontFamilies.regular, fontSize: 11, color: '#16A34A' },
   excerpt: {
     fontFamily: fontFamilies.regular,
     fontSize: 12,

@@ -45,32 +45,29 @@ export function scoreToneFromScore(score: number): ScoreBandTone {
 }
 
 /**
- * Réconciliation score catalogue ↔ couleurs AFFICHÉES — miroir client de
- * `analyser/score.ts` reconcileScore (et du web `lib/inciParser.ts`).
+ * SCORE AFFICHÉ = LE SCORE CATALOGUE, POINT. Miroir client de
+ * `analyser/score.ts` resolveDisplayScore.
  *
- * Pourquoi côté client aussi : l'Edge Function applique déjà cette règle et
- * persiste sa décision dans `result_json.score`. Mais l'écran d'analyse
- * re-résolvait `catalog.score` à l'affichage et l'imposait aux étoiles, ce qui
- * ANNULAIT la décision serveur. Cas vu en bêta (Yepoda The Calm Balm) : analyse
- * servie 16,55 « Bien » avec un top5 tout vert, catalogue 12,9 → le mobile
- * affichait 3 étoiles ambres quand le web en affichait 4 vertes, et les étoiles
- * contredisaient les couleurs juste en dessous.
+ * Règle produit (14 sept 2026, arbitrage bêta) : l'app LIT les notes déjà
+ * calculées, elle n'en recalcule aucune à l'affichage. Le catalogue gagne dès
+ * qu'il porte une note ; le score servi par l'analyse (result_json) ne sert que
+ * pour un produit ABSENT du catalogue ou catalogué sans note.
  *
- * On sert le score catalogue (curation = source de vérité) UNIQUEMENT s'il tombe
- * dans la même bande que le score servi ; sinon on garde ce dernier, pour que la
- * note corresponde toujours aux couleurs affichées. Garde : ≥50 % d'ingrédients
- * identifiés, sinon le coloriage n'est pas fiable et le catalogue reste maître.
+ * Ce que ça remplace : l'ancien `reconcileScore` gardait le score servi quand il
+ * tombait dans une autre bande que le catalogue. Résultat vu en bêta (Stela,
+ * 12 sept) : Anua Azelaic Acid 10 affiché « Moyen » (œil jaune) dans la
+ * recherche et « 4 étoiles vertes » sur sa fiche. Une note unique partout prime
+ * sur une note « plus juste » sur un seul écran : `routine-smart-suggest`
+ * qualifie les produits sur la note catalogue, donc diverger cassait aussi les
+ * recommandations.
+ *
+ * Si le catalogue est faux, on corrige LA LIGNE CATALOGUE (re-score hors ligne),
+ * on ne diverge pas à l'affichage.
  */
-export function reconcileScore(
-  catalogScore: number,
+export function resolveDisplayScore(
+  catalogScore: number | null | undefined,
   servedScore: number | null | undefined,
-  matched: number,
-  total: number,
-): number {
-  if (servedScore == null || Number.isNaN(servedScore)) return catalogScore
-  const identRatio = total > 0 ? matched / total : 0
-  if (identRatio < 0.5) return catalogScore
-  return scoreToneFromScore(catalogScore) === scoreToneFromScore(servedScore)
-    ? catalogScore
-    : servedScore
+): number | null {
+  if (catalogScore != null && !Number.isNaN(catalogScore)) return catalogScore
+  return servedScore != null && !Number.isNaN(servedScore) ? servedScore : null
 }

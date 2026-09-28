@@ -20,12 +20,12 @@
 import { useMemo, type FC } from 'react'
 import {
   ActivityIndicator,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -70,7 +70,7 @@ const RATING_DESCRIPTION: Record<ColorRating, (n: string) => string> = {
   orange: (n) =>
     `${n} fait l'objet d'une pénalité moyenne. Souvent issu de la pétrochimie ou de la chimie lourde, avec un impact non négligeable sur l'environnement. Préférer des alternatives quand la formule le permet.`,
   rouge: (n) =>
-    `${n} est fortement déconseillé ou réglementé. Une controverse sérieuse existe autour de cet ingrédient — à éviter dans la mesure du possible.`,
+    `${n} est fortement déconseillé ou réglementé. Une controverse sérieuse existe autour de cet ingrédient : à éviter dans la mesure du possible.`,
 }
 
 /** Capitalise chaque mot d'un nom INCI ("aqua" → "Aqua"). */
@@ -278,7 +278,7 @@ const ReadyView: FC<{ ing: IngredientDetail; products: IngredientProductHit[] }>
                   <Text style={styles.statBig}>{RATING_LABEL[rating]}</Text>
                 </View>
               ) : (
-                <Text style={styles.statBig}>—</Text>
+                <Text style={styles.statBig}>-</Text>
               )}
             </StatCard>
 
@@ -423,6 +423,7 @@ const NotFound: FC<{ onRetry: () => void }> = ({ onRetry }) => (
       <View style={styles.errorActions}>
         <Pressable
           onPress={onRetry}
+          haptic="primary"
           style={({ pressed }) => [styles.retryBtn, pressed && styles.btnPressed]}
           accessibilityRole="button"
         >
