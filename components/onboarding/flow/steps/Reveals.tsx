@@ -51,7 +51,10 @@ import {
   RevealAt,
   StepLayout,
   Title,
+  fitFont,
+  fitSize,
   selfAnimated,
+  useFit,
   useRevealDelay,
 } from '@/components/onboarding/flow/ui'
 import type { StepProps } from '@/components/onboarding/flow/types'
@@ -64,6 +67,27 @@ function restrictionShorts(keys: readonly string[]): string[] {
 }
 
 // ── A8 : ce que ça dit de ta peau ────────────────────────────────────────
+
+/** Carte « À surveiller pour toi » : ingrédient en pastille orange, et pourquoi. */
+const WatchCard: FC<{ watch: readonly { inci: string; why: string }[] }> = ({ watch }) => {
+  const fit = useFit()
+  const text = { fontSize: fitFont(15, fit) }
+  return (
+    <View style={[styles.card, { padding: fitSize(18, fit) }]}>
+      <Text style={[styles.cardLabel, { marginBottom: fitSize(12, fit) }]}>À SURVEILLER POUR TOI</Text>
+      <Cascade from="right" step={140}>
+        {watch.map((w, i) => (
+          <View key={w.inci} style={[styles.watchRow, { paddingVertical: fitSize(10, fit) }, i > 0 && styles.divider]}>
+            <View style={[styles.orangePill, { paddingVertical: fitSize(9, fit) }]}>
+              <Text style={[styles.orangePillText, text]}>{w.inci}</Text>
+            </View>
+            <Text style={[styles.watchWhy, text]}>{w.why}</Text>
+          </View>
+        ))}
+      </Cascade>
+    </View>
+  )
+}
 
 export const SkinRevealStep: FC<StepProps> = ({ draft, next }) => {
   const answer = draft.skinTest ?? 'inconnu'
@@ -79,21 +103,9 @@ export const SkinRevealStep: FC<StepProps> = ({ draft, next }) => {
       <Gap h={12} />
       <Body>{v.text}</Body>
       <Gap h={24} />
-      <View style={styles.card}>
-        <Text style={styles.cardLabel}>À SURVEILLER POUR TOI</Text>
-        <Cascade from="right" step={140}>
-          {v.watch.map((w, i) => (
-            <View key={w.inci} style={[styles.watchRow, i > 0 && styles.divider]}>
-              <View style={styles.orangePill}>
-                <Text style={styles.orangePillText}>{w.inci}</Text>
-              </View>
-              <Text style={styles.watchWhy}>{w.why}</Text>
-            </View>
-          ))}
-        </Cascade>
-      </View>
+      <WatchCard watch={v.watch} />
       <Gap h={24} />
-      <PerleBubble size={60}>Je le note. Je vérifierai ça sur chaque produit que tu scannes.</PerleBubble>
+      <PerleBubble size={50}>Je le note. Je vérifierai ça sur chaque produit que tu scannes.</PerleBubble>
     </StepLayout>
   )
 }
@@ -103,6 +115,7 @@ export const SkinRevealStep: FC<StepProps> = ({ draft, next }) => {
 /** Les soucis arrivent un par un, comme des messages envoyés, avec un petit tap. */
 const SentBubbles = selfAnimated<FC<{ items: typeof CONCERN_OPTIONS }>>(({ items }) => {
   const base = useRevealDelay()
+  const fit = useFit()
   useEffect(() => {
     const timers = items.map((_, i) => setTimeout(haptic.tick, base + 200 + i * 300))
     return () => timers.forEach(clearTimeout)
@@ -114,9 +127,15 @@ const SentBubbles = selfAnimated<FC<{ items: typeof CONCERN_OPTIONS }>>(({ items
           key={c.key}
           entering={fadeSide('right', base + 120 + i * 300, 420)}
         >
-          <View style={[styles.sent, i === items.length - 1 && items.length > 1 && styles.sentFaded]}>
+          <View
+            style={[
+              styles.sent,
+              { paddingVertical: fitSize(14, fit) },
+              i === items.length - 1 && items.length > 1 && styles.sentFaded,
+            ]}
+          >
             <ConcernIcon name={c.icon} color={colors.rose} size={22} />
-            <Text style={styles.sentText}>{c.mine}</Text>
+            <Text style={[styles.sentText, { fontSize: fitFont(17, fit) }]}>{c.mine}</Text>
           </View>
         </Animated.View>
       ))}
@@ -456,7 +475,6 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderRadius: 20,
-    padding: 18,
     shadowColor: '#0F172A',
     shadowOpacity: 0.06,
     shadowRadius: 20,
@@ -468,18 +486,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 1.8,
     color: colors.inkMuted,
-    marginBottom: 12,
   },
-  watchRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 10, flexWrap: 'wrap' },
+  watchRow: { flexDirection: 'row', alignItems: 'center', gap: 14, flexWrap: 'wrap' },
   divider: { borderTopWidth: 1, borderTopColor: colors.border },
   orangePill: {
     backgroundColor: colors.rating.orange.bg,
     borderRadius: 999,
     paddingHorizontal: 16,
-    paddingVertical: 9,
   },
-  orangePillText: { fontFamily: fontFamilies.bold, fontSize: 15, color: colors.rating.orange.DEFAULT },
-  watchWhy: { fontFamily: fontFamilies.regular, fontSize: 15, color: colors.inkMuted, flexShrink: 1 },
+  orangePillText: { fontFamily: fontFamilies.bold, color: colors.rating.orange.DEFAULT },
+  watchWhy: { fontFamily: fontFamilies.regular, color: colors.inkMuted, flexShrink: 1 },
 
   truthBody: { color: colors.inkLight },
   sentStack: { alignItems: 'flex-end', gap: 10 },
@@ -490,12 +506,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gray100,
     borderRadius: 20,
     paddingHorizontal: 18,
-    paddingVertical: 14,
     borderWidth: 1,
     borderColor: colors.border,
   },
   sentFaded: { opacity: 0.75 },
-  sentText: { fontFamily: fontFamilies.semiBold, fontSize: 17, color: colors.ink },
+  sentText: { fontFamily: fontFamilies.semiBold, color: colors.ink },
 
   sparkTop: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 60, marginBottom: 6 },
   bigRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', flexWrap: 'wrap', columnGap: 8 },

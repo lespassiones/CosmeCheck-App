@@ -12,8 +12,10 @@
  */
 
 import { useEffect, useState, useSyncExternalStore } from 'react'
+import { AppState } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { focusManager } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -37,6 +39,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
 import { initRevenueCat, loginUser } from '@/lib/revenucat/client'
 import { CreditsExhaustedModal } from '@/components/shared/CreditsExhaustedModal'
+import { BackgroundPollers } from '@/components/shared/BackgroundPollers'
 import { MaintenanceGate } from '@/components/shared/MaintenanceGate'
 import {
   QUERY_PERSIST_BUSTER,
@@ -55,6 +58,7 @@ import {
   subscribeSignInPending,
 } from '@/lib/auth/signInPending'
 import { queryClient } from '@/lib/storage/queryClient'
+import { startQueryCacheJanitor } from '@/lib/storage/queryJanitorRuntime'
 import { AppErrorBoundary } from '@/components/shared/AppErrorBoundary'
 import { AnimatedSplash } from '@/components/shared/AnimatedSplash'
 import { ToastHost } from '@/components/shared/Toast'
@@ -112,7 +116,23 @@ try {
 const asyncStoragePersister = createAsyncStoragePersister({
   storage: AsyncStorage,
   key: QUERY_PERSIST_KEY,
+  // Défaut 1 s : à chaque évènement de cache, tout le cache était sérialisé et
+  // réécrit (jusqu'à ~1-2 Mo) une fois par seconde pendant la navigation.
+  throttleTime: 5000,
 })
+
+// App en arrière-plan = hors « focus » pour React Query : les rafraîchissements
+// périodiques (crédits toutes les 60 s, config…) se mettent en pause. Aucun
+// rechargement en rafale au retour : refetchOnWindowFocus est désactivé
+// (lib/storage/queryClient.ts).
+focusManager.setEventListener((handleFocus) => {
+  const sub = AppState.addEventListener('change', (state) => handleFocus(state === 'active'))
+  return () => sub.remove()
+})
+
+// Ménage mémoire automatique du cache (transitoires libérés après 5 min,
+// 100 requêtes persistées inactives max, alerte mémoire = tout le non affiché).
+startQueryCacheJanitor(queryClient)
 
 /**
  * AuthGuard — redirections en fonction de l'état d'authentification et du
@@ -168,6 +188,10 @@ function AuthGuard() {
   // dès que le navigateur est prêt, elle est aussi ce qui REJOUE la décision
   // au bon moment, au lieu de la perdre pour de bon.
   const navKey = useRootNavigationState()?.key
+  // Seul le GROUPE (1er segment) entre dans la décision : dépendre de tout le
+  // tableau `segments` rejouait la garde à CHAQUE navigation (et, pour certains
+  // profils, un replace à chaque écran).
+  const group = segments[0]
 
   useEffect(() => {
     if (!navKey) return
@@ -183,7 +207,7 @@ function AuthGuard() {
       paywallShown,
       draftPending,
       preOnbSeen,
-      group: segments[0],
+      group,
     })
     switch (target) {
       case 'welcome':
@@ -204,7 +228,9 @@ function AuthGuard() {
         })
         break
       case 'home':
-        router.replace(ROUTES.TABS.HOME)
+        // dismissTo : revient aux onglets existants (ou les ouvre s'ils ne sont
+        // pas dans la pile) ; replace en empilait une 2e copie complète.
+        router.dismissTo(ROUTES.TABS.HOME)
         break
       default:
         break // null → on laisse passer / on attend
@@ -221,7 +247,7 @@ function AuthGuard() {
     paywallShown,
     draftPending,
     preOnbSeen,
-    segments,
+    group,
     router,
   ])
 
@@ -274,6 +300,9 @@ function RootNavigator() {
       <Stack.Screen name="(preonboarding)" options={{ animation: 'fade' }} />
       <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
       <Stack.Screen name="(onboarding)" />
+      {/* Jamais de freezeOnBlur dans l'app (retiré le 29/09/2026) : gel dans le
+          même rendu que la désactivation (react-native-screens #4518), écran
+          figé ou blanc sans retour possible sur iPhone. */}
       <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
       {/* Fondu court (iOS : 500 ms par défaut) : ouvert depuis Perle, la page
           arrive en fondu sur la fin des vagues d'AdvisorReveal. */}
@@ -283,10 +312,8 @@ function RootNavigator() {
       <Stack.Screen name="routine/exposition" />
       <Stack.Screen name="routine/produits" />
       <Stack.Screen name="routine/item/[id]" />
-      {/* freezeOnBlur : un écran recouvert (analyse sous le tableau, tableau sous
-          la fiche ingrédient) ne se re-rend plus tant qu'il est caché. */}
-      <Stack.Screen name="analyse/[id]" options={{ freezeOnBlur: true }} />
-      <Stack.Screen name="analyse/ingredients/[id]" options={{ freezeOnBlur: true }} />
+      <Stack.Screen name="analyse/[id]" />
+      <Stack.Screen name="analyse/ingredients/[id]" />
       <Stack.Screen name="alternatives/[ean]" />
       <Stack.Screen name="promesses/nouvelle" options={{ presentation: 'modal' }} />
       <Stack.Screen name="promesses/[id]" />
@@ -362,6 +389,7 @@ export default function RootLayout() {
               donc l'élargir ne coûte rien. */}
           <AppErrorBoundary>
             <CacheJanitor />
+            <BackgroundPollers />
             <OnboardingDraftFlusher />
             <RevenueCatInit />
             <NotificationsInit />

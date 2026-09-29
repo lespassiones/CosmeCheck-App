@@ -32,6 +32,7 @@ import { spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 import { WhiteCard } from '@/components/design/WhiteCard'
 import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
+import { useScreenActive } from '@/hooks/useScreenActive'
 
 /** Flèches : chevron noir seul, sans cercle ni fond. */
 const ARROW_INK = '#111111'
@@ -52,6 +53,8 @@ export const TipCarousel: FC<Props> = ({ tips }) => {
   const scrollRef = useRef<ScrollView>(null)
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
+  // Pas d'autorotation quand l'accueil est recouvert ou l'app en arrière-plan.
+  const active = useScreenActive()
   const [width, setWidth] = useState(0)
   const reduceMotionRef = useRef(false)
   const resumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -83,10 +86,10 @@ export const TipCarousel: FC<Props> = ({ tips }) => {
 
   // Autorotation toutes les 10 s, en pause si l'utilisateur interagit.
   useEffect(() => {
-    if (paused || total <= 1 || width === 0) return
+    if (paused || !active || total <= 1 || width === 0) return
     const t = setTimeout(() => goTo(index + 1), AUTO_ROTATE_MS)
     return () => clearTimeout(t)
-  }, [index, paused, total, width, goTo])
+  }, [index, paused, active, total, width, goTo])
 
   // Nettoyage du timer de reprise au démontage.
   useEffect(

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Cosme Check",
     "slug": "cosme-check",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "scheme": "cosmecheck",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -19,7 +19,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.cosmecheck.app",
-      "buildNumber": "8",
+      "buildNumber": "11",
       "usesAppleSignIn": true,
       "infoPlist": {
         "NSCameraUsageDescription": "CosmeCheck utilise la caméra pour scanner les codes-barres et photographier les listes d'ingrédients.",
@@ -63,7 +63,7 @@
     "android": {
       "package": "com.cosmecheck.app",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 28,
+      "versionCode": 32,
       "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
@@ -123,7 +123,8 @@
           "color": "#E11D48"
         }
       ],
-      "expo-localization"
+      "expo-localization",
+      "./plugins/withFreshUpdatesResources"
     ],
     "experiments": {
       "typedRoutes": true

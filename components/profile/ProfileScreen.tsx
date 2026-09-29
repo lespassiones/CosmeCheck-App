@@ -25,7 +25,6 @@ import {
   Alert,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from 'react-native'
@@ -50,10 +49,12 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { fireHaptic, type HapticLevel } from '@/lib/pressFeedback'
 import { supabase } from '@/lib/supabase/client'
+import { runAfterModalClose, waitForModalClose } from '@/lib/navigation/afterModalClose'
 import { BeautyProfileForm, type SaveStatus } from '@/components/profile/BeautyProfileForm'
 import { useNotificationToggle } from '@/components/profile/NotificationSettings'
 import { ReportSheet } from '@/components/profile/ReportSheet'
-import { TAB_BAR_HEIGHT } from '@/components/navigation/BottomTabBar'
+import { TAB_CONTENT_BOTTOM } from '@/components/navigation/BottomTabBar'
+import { ToggleSwitch } from '@/components/design/ToggleSwitch'
 
 type IoniconName = keyof typeof Ionicons.glyphMap
 
@@ -146,8 +147,11 @@ export const ProfileScreen: FC<{ inTab?: boolean }> = ({ inTab = false }) => {
 
   const handleSignOut = useCallback(async () => {
     setConfirmSignOut(false)
+    // Le guard racine redirige dès la déconnexion : on attend que la fenêtre de
+    // confirmation (Modal) soit sortie, sinon les onglets sont démontés sous une
+    // Modal en pleine fermeture (calque qui peut rester sur iPhone).
+    await waitForModalClose()
     await signOut()
-    // Le guard racine redirige vers l'authentification.
   }, [signOut])
 
   // DEV uniquement : rearme le carrousel puis déconnecte. `signOut` le rearme
@@ -177,15 +181,22 @@ export const ProfileScreen: FC<{ inTab?: boolean }> = ({ inTab = false }) => {
       if (error) {
         setDeleting(false)
         setConfirmDelete(false)
-        Alert.alert('Suppression impossible', 'Une erreur est survenue. Réessaie dans un instant.')
+        // iOS refuse une alerte présentée pendant la sortie d'une Modal.
+        runAfterModalClose(() =>
+          Alert.alert('Suppression impossible', 'Une erreur est survenue. Réessaie dans un instant.'),
+        )
         return
       }
-      // Succès → déconnexion (le guard racine redirige vers l'authentification).
+      // Succès → fenêtre fermée PUIS déconnexion (le guard racine redirige).
+      setConfirmDelete(false)
+      await waitForModalClose()
       await signOut()
     } catch {
       setDeleting(false)
       setConfirmDelete(false)
-      Alert.alert('Suppression impossible', 'Vérifie ta connexion et réessaie.')
+      runAfterModalClose(() =>
+        Alert.alert('Suppression impossible', 'Vérifie ta connexion et réessaie.'),
+      )
     }
   }, [deleting, signOut])
 
@@ -238,7 +249,7 @@ export const ProfileScreen: FC<{ inTab?: boolean }> = ({ inTab = false }) => {
         <ScrollView
           contentContainerStyle={[
             styles.content,
-            { paddingBottom: insets.bottom + spacing['2xl'] + (inTab ? TAB_BAR_HEIGHT : 0) },
+            { paddingBottom: insets.bottom + (inTab ? TAB_CONTENT_BOTTOM : spacing['2xl']) },
           ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -385,16 +396,13 @@ export const ProfileScreen: FC<{ inTab?: boolean }> = ({ inTab = false }) => {
                   icon={icon('notifications-outline')}
                   label="Notifications"
                   right={
-                    <Switch
+                    <ToggleSwitch
                       value={notif.enabled}
                       onValueChange={(v) => {
                         fireHaptic('selection')
                         void notif.toggle(v)
                       }}
                       disabled={notif.busy || !notif.available}
-                      trackColor={{ true: colors.gray900, false: colors.gray300 }}
-                      ios_backgroundColor={colors.gray300}
-                      thumbColor="#FFFFFF"
                       accessibilityLabel="Notifications"
                     />
                   }

@@ -96,8 +96,13 @@ export function usePaywallCheckout(options?: {
         options.onPurchased?.()
         return true
       }
-      await updateProfile({ paywall_shown: true }).catch(() => {})
-      void queryClient.invalidateQueries({ queryKey: ['profile'] })
+      // Sans attendre le réseau (écriture optimiste, cache à jour tout de suite) :
+      // sur un réseau lent, la personne qui venait de PAYER restait sur le
+      // paywall, bouton réactivé, et pouvait racheter. Le profil est relu une
+      // fois l'écriture faite (le relire avant la ramènerait à « non vu »).
+      void updateProfile({ paywall_shown: true }, { keepOnError: true })
+        .catch(() => {})
+        .finally(() => void queryClient.invalidateQueries({ queryKey: ['profile'] }))
       void queryClient.invalidateQueries({ queryKey: ['credits'] })
       options?.onPurchased?.()
       router.replace(ROUTES.PREMIUM.WELCOME as never)

@@ -237,7 +237,9 @@ export const MontageStep: FC<StepProps> = ({ draft, next }) => {
       <View style={styles.proof}>
         <Image source={LAUREL_L} style={styles.laurel} contentFit="contain" />
         <View style={styles.proofCol}>
-          <Text style={styles.proofNum}>{CATALOG_SIZE_LABEL}</Text>
+          <Text style={styles.proofNum} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                {CATALOG_SIZE_LABEL}
+              </Text>
           <Text style={styles.proofLabel}>produits déjà décryptés pour toi</Text>
         </View>
         <Image source={LAUREL_R} style={styles.laurel} contentFit="contain" />

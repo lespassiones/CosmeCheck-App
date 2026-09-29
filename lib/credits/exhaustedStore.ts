@@ -66,9 +66,28 @@ export async function handleNoCreditsResponse(
   error: unknown,
   response?: Response,
 ): Promise<boolean> {
+  const refusal = await readNoCreditsRefusal(error, response)
+  if (!refusal) return false
+  showCreditsExhausted(refusal)
+  return true
+}
+
+/**
+ * Même détection, SANS ouvrir la feuille : pour les chargements automatiques
+ * (bloc verrouillé, pas de feuille) et les écrans déjà dans une fenêtre
+ * (pageSheet, modal natif), où iOS refuserait de présenter la feuille.
+ */
+export async function isNoCreditsResponse(error: unknown, response?: Response): Promise<boolean> {
+  return (await readNoCreditsRefusal(error, response)) !== null
+}
+
+async function readNoCreditsRefusal(
+  error: unknown,
+  response?: Response,
+): Promise<CreditsExhaustedPayload | null> {
   const res: Response | undefined =
     response ?? ((error as { context?: Response } | null)?.context as Response | undefined)
-  if (res?.status !== 429) return false
+  if (res?.status !== 429) return null
   let body: unknown = null
   try {
     // clone() : le corps d'une Response ne se lit qu'une fois.
@@ -76,7 +95,6 @@ export async function handleNoCreditsResponse(
   } catch {
     /* corps illisible : on ne peut pas affirmer que ce sont les crédits */
   }
-  if (!isNoCreditsRefusal(res.status, body)) return false
-  showCreditsExhausted(creditsFromBody(body))
-  return true
+  if (!isNoCreditsRefusal(res.status, body)) return null
+  return creditsFromBody(body)
 }

@@ -51,29 +51,38 @@ function rootKey(queryKey: unknown): string | null {
 export function shouldPersistQueryKey(queryKey: unknown): boolean {
   const k = rootKey(queryKey)
   if (k == null) return false
-  const BLACKLIST = new Set<string>([
-    // Le profil pilote la porte d'onboarding (AuthGuard). Le persister sur
-    // disque risque de router sur un `onboardingShown` PÉRIMÉ au cold start
-    // (flash dashboard → retour onboarding). On le recharge frais à chaque
-    // lancement (1 requête, négligeable) plutôt que de servir un état stale.
-    'profile',
-    'credits',
-    'ingredient-explain',
-    'compare-insights',
-    'routine-suggest',
-    'catalog-search',
-    'alternatives',
-    'eanAnalysis',
-    'productByEan',
-    'ingredientsAlpha',
-    'ingredientsSearch',
-    'appConfig',
-    // URLs signées de photos de visage : expirent (1h) ; ne jamais persister
-    // sur disque, sinon vignettes cassées au cold start.
-    'skinPhotoUrl',
-  ])
-  return !BLACKLIST.has(k)
+  return !NON_PERSISTED_ROOT_KEYS.has(k)
 }
+
+/**
+ * Clés racines JAMAIS persistées (voir la liste commentée ci-dessus). Exportées
+ * pour le ménage mémoire (`lib/storage/queryJanitor`) : ces requêtes sont
+ * transitoires, elles peuvent quitter la mémoire peu après leur dernier usage.
+ */
+export const NON_PERSISTED_ROOT_KEYS: ReadonlySet<string> = new Set<string>([
+  // Le profil pilote la porte d'onboarding (AuthGuard). Le persister sur
+  // disque risque de router sur un `onboardingShown` PÉRIMÉ au cold start
+  // (flash dashboard → retour onboarding). On le recharge frais à chaque
+  // lancement (1 requête, négligeable) plutôt que de servir un état stale.
+  'profile',
+  'credits',
+  'ingredient-explain',
+  'compare-insights',
+  'routine-suggest',
+  'catalog-search',
+  'alternatives',
+  'eanAnalysis',
+  'productByEan',
+  'ingredientsAlpha',
+  'ingredientsSearch',
+  'appConfig',
+  // 50 analyses AVEC result_json (feuille « Ajouter à ma routine ») : ~1 Mo
+  // réécrit à chaque persist, rechargé au cold start pour rien.
+  'routine-eligible-analyses',
+  // URLs signées de photos de visage : expirent (1h) ; ne jamais persister
+  // sur disque, sinon vignettes cassées au cold start.
+  'skinPhotoUrl',
+])
 
 /** Predicate `dehydrateOptions.shouldDehydrateQuery` attendue par react-query. */
 export function shouldDehydrateQuery(query: Query): boolean {

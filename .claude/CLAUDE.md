@@ -230,6 +230,17 @@ L'ancien `BurgerMenu` (icône silhouette en haut à droite + tiroir) n'existe pl
 - Les disques RESTENT déployés sous la page Advisor : au retour (bouton, geste, retour Android), la fin de transition de la route `(tabs)` (`transitionEnd`, filet de 900 ms au focus) les rétracte dans Perle. Pas de `transparentModal` exprès : il ferait passer `advisor/recommendations` en feuille modale sur iOS et supprimerait le geste retour.
 - Géométrie pure testée : `lib/navigation/advisorReveal.ts` (`advisorReveal.test.ts`). Disques = transformations seulement (pas de masque, pas de relayout). « Réduire les animations » : navigation directe. L'entrée par la carte de l'accueil garde le simple fondu.
 
+### Stabilité iOS (29 sept 2026, NE PAS DÉROGER)
+Audit après « pages blanches, barre sur Accueil mais contenu de Routine figé » sur le build iOS 10.
+- **Jamais `freezeOnBlur` ni `enableFreeze`** : react-native-screens 4.16 gèle un écran dans le même rendu que sa désactivation si deux navigations se suivent (issue #4518). Garde-fou : `lib/__tests__/noFreezeOnBlur.test.ts`. Boucles décoratives : `useScreenActive`.
+- **Plafond réseau par défaut** (`lib/supabase/fetchTimeout.ts`, branché dans `client.ts`) : fonctions 60 s, REST 30 s, `/auth/v1/logout` 8 s, seulement si l'appel n'a pas son propre `signal`/`timeout`. IA enchaînées (coherence, promesse) : `timeout: LONG_AI_TIMEOUT_MS`. Advisor : `ADVISOR_TIMEOUT_MS`, et aucune relance bloquante après une réponse 200 (le crédit est déjà débité).
+- **Toute nouvelle page** : `export { RouteErrorBoundary as ErrorBoundary } from '@/components/shared/RouteErrorBoundary'` (une erreur remplace la page, pas toute l'app).
+- **Feuille crédits globale interdite dans une fenêtre** (pageSheet, `presentation: 'modal'`) et pour les chargements automatiques : iOS refuse de la présenter. Utiliser `isNoCreditsResponse` (`lib/credits/exhaustedStore.ts`) + message et « Voir Premium » locaux. `CreditsExhaustedModal` se referme seule si iOS refuse (surveillance `onShow` 1,5 s).
+- **Anti double appui** : `HapticPressable` et `PressableScale` ignorent un 2e appui sur le même bouton sous 400 ms (sauf `selection`, rôles case/radio/interrupteur/onglet). `useAndroidBack` suit le focus : jamais de `BackHandler` global.
+- **`updateProfile`** : optimiste, retour arrière si l'écriture échoue (sauf `keepOnError`, réservé à `paywall_shown`), refus si le profil n'est pas chargé (sinon l'upsert remplacerait toutes les préférences).
+- **Listes d'analyses** : `invalidateAnalysisLists` après création, renommage, suppression. Historique : retour sur « Analyses » seulement au tap de l'onglet.
+- **Parcours invité** : « Se connecter » fait `replace` (le parcours ne reste plus monté sous les onglets). Sorties vers les onglets : `dismissTo`, jamais `<Redirect>`/`replace` depuis la pile.
+
 ### Crédits épuisés (28 sept 2026)
 - Feuille du bas `components/shared/CreditsExhaustedModal.tsx` (montée à la racine) : « Plus de crédits aujourd'hui », quota lu (`useCredits` / `credit_tiers`), heure de retour RÉELLE (minuit UTC en heure locale, `lib/credits/resetLabel.ts` : « à 2 h » l'été en France), « Voir Premium » → /offre, « Plus tard ». Premium : « Compris ».
 - Ouvrir via `showCreditsExhausted()` ou `handleNoCreditsResponse(error, response)` (`lib/credits/exhaustedStore.ts`). Un 429 n'est un refus de crédits QUE s'il porte `code: 'no_credits'` ou `credits` (`lib/credits/noCreditsCore.ts`) : le rate-limit IP du gate répond aussi 429, sans l'un ni l'autre.

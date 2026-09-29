@@ -21,6 +21,7 @@ import { fontFamilies } from '@/constants/typography'
 import { radius, spacing } from '@/constants/spacing'
 import { PressableScale, StaggerItem } from '@/components/design/motion'
 import type { RestrictionGroup } from '@/lib/restrictions/group'
+import { runAfterModalClose } from '@/lib/navigation/afterModalClose'
 
 interface Props {
   visible: boolean
@@ -50,9 +51,11 @@ export const RestrictionsSheet: FC<Props> = ({
     if (!visible) setExpanded(null)
   }, [visible])
 
+  // Naviguer APRÈS la sortie de la feuille (Modal) : pousser un écran pendant
+  // qu'elle se ferme peut laisser un calque invisible qui bloque tout (iOS).
   const openIngredient = (slug: string) => {
     onClose()
-    onIngredientPress(slug)
+    runAfterModalClose(() => onIngredientPress(slug))
   }
 
   return (
@@ -96,7 +99,7 @@ export const RestrictionsSheet: FC<Props> = ({
             style={styles.manageButton}
             onPress={() => {
               onClose()
-              onManage()
+              runAfterModalClose(onManage)
             }}
             haptic="primary"
             accessibilityRole="button"

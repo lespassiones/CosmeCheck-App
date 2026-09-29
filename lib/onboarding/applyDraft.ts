@@ -30,11 +30,14 @@ async function readProfile(
 ): Promise<UserProfileRow | null> {
   const cached = queryClient.getQueryData<UserProfileRow | null>(['profile', userId])
   if (cached) return cached
-  const { data } = await db()
+  const { data, error } = await db()
     .from('user_profiles')
     .select('*')
     .eq('id', userId)
     .maybeSingle()
+  // Lecture ratée ≠ profil vide : continuer écraserait TOUTES les préférences
+  // d'un compte existant (restrictions, notifications…) par le seul brouillon.
+  if (error) throw error
   return (data as UserProfileRow | null) ?? null
 }
 
@@ -53,6 +56,7 @@ export async function applyOnboardingDraft(params: {
   const firstName = draft.firstName?.trim() || null
   const nextPreferences = next as UserProfileRow['preferences']
 
+  const previous = queryClient.getQueryData<UserProfileRow | null>(['profile', userId])
   queryClient.setQueryData<UserProfileRow | null>(['profile', userId], (old) =>
     old
       ? { ...old, preferences: nextPreferences, first_name: firstName ?? old.first_name }
@@ -64,7 +68,15 @@ export async function applyOnboardingDraft(params: {
   const { error } = await db()
     .from('user_profiles')
     .upsert(payload as never)
-  if (error) throw error
+  if (error) {
+    // Écriture ratée : on retire l'optimisme. Sinon le cache disait « parcours
+    // fait » et le serveur non, et la relecture suivante du profil renvoyait la
+    // personne au questionnaire en pleine session. Le parcours connecté
+    // reprendra depuis ce même brouillon.
+    if (previous !== undefined) queryClient.setQueryData(['profile', userId], previous)
+    else void queryClient.invalidateQueries({ queryKey: ['profile', userId] })
+    throw error
+  }
 
   // Effets de bord best-effort : aucun ne doit faire échouer la fin du parcours.
   if (draft.notifications === 'granted') void registerPushToken().catch(() => {})

@@ -16,16 +16,23 @@ import { fontFamilies } from '@/constants/typography'
 import { radius } from '@/constants/spacing'
 import { PRODUCT_TICKER } from '@/constants/productTicker'
 import { useTypewriter } from '@/hooks/useTypewriter'
+import { useScreenActive } from '@/hooks/useScreenActive'
 
 interface Props {
   onPress: () => void
 }
 
 export const SearchPromptBar: FC<Props> = ({ onPress }) => {
-  const typed = useTypewriter(PRODUCT_TICKER)
+  // En pause hors écran (accueil recouvert, app en arrière-plan).
+  const active = useScreenActive()
+  const typed = useTypewriter(PRODUCT_TICKER, { enabled: active })
   const caret = useRef(new Animated.Value(1)).current
 
   useEffect(() => {
+    if (!active) {
+      caret.setValue(1)
+      return
+    }
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(caret, { toValue: 0, duration: 480, useNativeDriver: true }),
@@ -34,7 +41,7 @@ export const SearchPromptBar: FC<Props> = ({ onPress }) => {
     )
     loop.start()
     return () => loop.stop()
-  }, [caret])
+  }, [caret, active])
 
   return (
     <Pressable

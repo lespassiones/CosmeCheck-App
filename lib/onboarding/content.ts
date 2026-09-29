@@ -27,7 +27,9 @@ import type {
 export const INGREDIENTS_PER_PRODUCT = 25
 
 /** Produits notés avec leur liste d'ingrédients (478 532 le 28/09/2026). */
-export const CATALOG_SIZE_LABEL = '470 000+'
+// Espace INSÉCABLE ( ) : avec une espace simple, Android coupait « 470 » / « 000+ »
+// sur deux lignes (police un peu plus large qu'iOS).
+export const CATALOG_SIZE_LABEL = '470 000+'
 
 // ── A5 : scènes vécues ───────────────────────────────────────────────────
 export const PAIN_CARDS = [

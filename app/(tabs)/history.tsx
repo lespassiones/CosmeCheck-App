@@ -17,7 +17,7 @@
  *   analyse de cohérence existe déjà, sinon /promesses/nouvelle.
  */
 
-import { type FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type FC, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   FlatList,
@@ -26,7 +26,9 @@ import {
   View,
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { router, useLocalSearchParams, useNavigation } from 'expo-router'
+import type { ParamListBase } from '@react-navigation/native'
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -59,6 +61,8 @@ import { PromessesList } from '@/components/promesses/PromessesList'
 import { HistoryRowCard, type HistoryItemView } from '@/components/history/HistoryRowCard'
 import { HistoryItemActions } from '@/components/history/HistoryItemActions'
 import { PromesseFlowModal } from '@/components/promesses/PromesseFlowModal'
+import { TAB_CONTENT_BOTTOM } from '@/components/navigation/BottomTabBar'
+import { invalidateAnalysisLists } from '@/lib/analysis/invalidateLists'
 
 interface AnalysisRow {
   id: string
@@ -193,24 +197,20 @@ const HistoryScreen: FC = () => {
   const [promesseModalFor, setPromesseModalFor] = useState<HistoryItem | null>(null)
   const [actionsFor, setActionsFor] = useState<HistoryItem | null>(null)
 
-  // À CHAQUE arrivée sur l'écran : « Analyses » par défaut. Un onglet de la
-  // barre du bas reste monté, donc sans ça le dernier choix (Favoris,
-  // Promesses) survivait au retour. Seul un lien explicite (?tab=promesses,
-  // cf. ROUTES.TABS.PROMESSES) choisit un autre onglet, et il est CONSOMMÉ :
-  // on l'efface des paramètres, sinon il resterait collé à la route et
-  // ramènerait sur Promesses aux arrivées suivantes. Lu via une ref pour que
-  // l'effacement ne relance pas l'effet pendant que l'écran est affiché.
-  const tabParamRef = useRef(tabParam)
-  tabParamRef.current = tabParam
-  useFocusEffect(
-    useCallback(() => {
-      const requested = tabParamRef.current
-      setTab(parseTab(requested))
-      if (requested) router.setParams({ tab: undefined })
-    }, []),
+  // Arrivée par la barre du bas : « Analyses » par défaut. Un onglet reste
+  // monté, donc sans ça le dernier choix (Favoris, Promesses) survivait. Mais
+  // SEULEMENT au tap sur l'onglet : au retour d'une fiche ouverte depuis
+  // Favoris ou Promesses, on reste sur la liste d'où l'on venait (le reset à
+  // chaque focus renvoyait sur « Analyses » après chaque fiche consultée).
+  const navigation = useNavigation<BottomTabNavigationProp<ParamListBase>>()
+  useEffect(
+    () => navigation.addListener('tabPress', () => setTab('analyses')),
+    [navigation],
   )
 
-  // Lien reçu alors que l'écran est DÉJÀ affiché (pas de nouveau focus).
+  // Lien explicite (?tab=promesses, cf. ROUTES.TABS.PROMESSES) : il choisit la
+  // liste et il est CONSOMMÉ (effacé des paramètres), sinon il resterait collé
+  // à la route et ramènerait sur Promesses aux arrivées suivantes.
   useEffect(() => {
     if (!tabParam) return
     setTab(parseTab(tabParam))
@@ -305,7 +305,7 @@ const HistoryScreen: FC = () => {
     onSuccess: (_data, vars) => {
       // Invalide aussi le cache local row (le titre a changé).
       void invalidateCachedAnalysisRow(vars.id).catch(() => {})
-      void queryClient.invalidateQueries({ queryKey })
+      invalidateAnalysisLists(queryClient)
     },
     onError: () => showToast('Renommage impossible. Réessaie.', 'error'),
   })
@@ -319,7 +319,8 @@ const HistoryScreen: FC = () => {
       // Retire aussi la ligne de la sélection si besoin.
       setSelected((prev) => prev.filter((x) => x !== id))
       void invalidateCachedAnalysisRow(id).catch(() => {})
-      void queryClient.invalidateQueries({ queryKey })
+      // Accueil (« Dernière analyse »), Favoris, Routine : plus de produit disparu.
+      invalidateAnalysisLists(queryClient, { routine: true })
     },
     onError: () => showToast('Suppression impossible. Réessaie.', 'error'),
   })
@@ -552,7 +553,7 @@ const HistoryScreen: FC = () => {
             ListEmptyComponent={listEmpty}
             contentContainerStyle={[
               styles.listContent,
-              { paddingBottom: insets.bottom + 64 + spacing.xl },
+              { paddingBottom: insets.bottom + TAB_CONTENT_BOTTOM },
               listData.length === 0 && styles.listContentEmpty,
             ]}
             ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
@@ -637,3 +638,6 @@ const styles = StyleSheet.create({
 })
 
 export default HistoryScreen
+
+// Erreur de rendu : seule cette page est remplacée (pas toute l'app).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/shared/RouteErrorBoundary'

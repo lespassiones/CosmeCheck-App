@@ -17,7 +17,7 @@
  *
  * Un bouton désactivé ne vibre pas (`Pressable` n'appelle pas `onPress`).
  */
-import { forwardRef, type ElementRef } from 'react'
+import { forwardRef, useRef, type ElementRef } from 'react'
 import {
   Pressable as RNPressable,
   type GestureResponderEvent,
@@ -35,6 +35,8 @@ import Animated, {
 import {
   DEFAULT_PRESS_SCALE,
   fireHaptic,
+  isGuardedRepeatPress,
+  repeatGuardLevel,
   shouldAnimatePress,
   type HapticLevel,
 } from '@/lib/pressFeedback'
@@ -72,9 +74,15 @@ export const HapticPressable = forwardRef<ElementRef<typeof RNPressable>, Haptic
   ) {
     const scale = useSharedValue(1)
     const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }))
+    const lastPressAt = useRef(0)
 
     const handlePress = onPress
       ? (e: GestureResponderEvent) => {
+          // Anti double appui (écran empilé deux fois), sauf choix rapides.
+          const now = Date.now()
+          const level = repeatGuardLevel(haptic, rest.accessibilityRole ?? rest.role)
+          if (isGuardedRepeatPress(level, lastPressAt.current, now)) return
+          lastPressAt.current = now
           fireHaptic(haptic)
           onPress(e)
         }

@@ -134,3 +134,6 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl },
   message: { ...typography.small, color: colors.inkMuted, textAlign: 'center' },
 })
+
+// Erreur de rendu : seule cette page est remplacée (pas toute l'app).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/shared/RouteErrorBoundary'

@@ -41,6 +41,7 @@ import { cacheProductImage } from '@/lib/storage/productImageCache'
 import { clearPendingInci, getPendingInci } from '@/lib/storage/session'
 import { BackgroundGlow } from '@/components/design/BackgroundGlow'
 import { ProcessingOverlay } from '@/components/shared/ProcessingOverlay'
+import { showToast } from '@/components/shared/Toast'
 import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { ScanFrame } from '@/components/scan/ScanFrame'
 import { BarcodeScanner } from '@/components/scan/BarcodeScanner'
@@ -75,10 +76,19 @@ const ScanScreen: FC = () => {
 
   const { user } = useAuth()
   const { restrictions } = useProfile()
-  const { runAnalysis, isAnalyzing, error } = useAnalysis()
+  const { runAnalysis, isAnalyzing, error, reset: resetAnalysis } = useAnalysis()
 
   const lastParamsRef = useRef<RunAnalysisParams | null>(null)
   const [failed, setFailed] = useState(false)
+
+  // L'onglet Scan reste monté : l'échec d'un produit (et son « Réessayer »)
+  // réapparaissait plus tard dans un autre mode et relançait l'ANCIEN produit.
+  useEffect(() => {
+    setFailed(false)
+    lastParamsRef.current = null
+    resetAnalysis()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode])
 
   /** Lance l'analyse Edge Function puis navigue vers /analyse/[id]. */
   const launch = useCallback(
@@ -153,6 +163,10 @@ const ScanScreen: FC = () => {
 
   const resumePending = useCallback(() => {
     if (!pending) return
+    // La carte disparaît dès la reprise : restée affichée, un 2e tap créait un
+    // doublon dans l'historique. En cas d'échec, l'INCI reste stocké et la
+    // carte revient au prochain passage sur l'accueil du scan.
+    setPending(null)
     void launch(pending.source, pending.inci, {
       productName: pending.productName ?? undefined,
     })
@@ -169,7 +183,9 @@ const ScanScreen: FC = () => {
     setFailed(false)
     void (async () => {
       const result = await runAnalysis(last)
-      if (result) router.replace(ROUTES.ANALYSE.DETAIL(result.analysisId))
+      // push comme le chemin principal (l.121) : replace depuis un onglet remplaçait
+      // TOUT le navigateur d'onglets (reconstruits au retour, animations rejouées).
+      if (result) router.push(ROUTES.ANALYSE.DETAIL(result.analysisId))
       else setFailed(true)
     })()
   }, [runAnalysis, router])
@@ -191,6 +207,12 @@ const ScanScreen: FC = () => {
   // Crédits épuisés → modale globale gère l'upsell, on masque la bannière.
   const isCreditError = error?.toLowerCase().includes('crédit') ?? false
   const showErrorBanner = failed && !!error && !isCreditError && !isAnalyzing
+
+  // Code-barres : pas de bannière sur la caméra plein écran. Sans ce message,
+  // un échec (délai, serveur) faisait juste disparaître l'overlay.
+  useEffect(() => {
+    if (mode === 'barcode' && showErrorBanner && error) showToast(error, 'error')
+  }, [mode, showErrorBanner, error])
 
   const errorBanner = showErrorBanner ? (
     <View style={styles.errorBanner}>
@@ -468,3 +490,6 @@ const styles = StyleSheet.create({
 })
 
 export default ScanScreen
+
+// Erreur de rendu : seule cette page est remplacée (pas toute l'app).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/shared/RouteErrorBoundary'

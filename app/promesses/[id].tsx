@@ -154,7 +154,7 @@ const PromesseDetailScreen: FC = () => {
                 <Text style={styles.retryText}>Réessayer</Text>
               </Pressable>
               <Pressable
-                onPress={() => router.replace({ pathname: ROUTES.TABS.HISTORY, params: { tab: 'promesses' } })}
+                onPress={() => router.dismissTo({ pathname: ROUTES.TABS.HISTORY, params: { tab: 'promesses' } })}
                 style={({ pressed }) => [styles.homeBtn, pressed && styles.btnPressed]}
               >
                 <Text style={styles.homeText}>Promesses</Text>
@@ -296,3 +296,6 @@ const styles = StyleSheet.create({
   },
   showMoreText: { ...typography.button, color: colors.accent },
 })
+
+// Erreur de rendu : seule cette page est remplacée (pas toute l'app).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/shared/RouteErrorBoundary'

@@ -47,6 +47,7 @@ import { PromesseChooserSheet } from '@/components/promesses/PromesseChooserShee
 import { useAppConfig } from '@/hooks/useAppConfig'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
+import { TAB_CONTENT_BOTTOM } from '@/components/navigation/BottomTabBar'
 
 const EMPTY_COUNTS: BlobCounts = { vert: 0, jaune: 0, orange: 0, rouge: 0 }
 
@@ -193,7 +194,7 @@ const DashboardScreen: FC = () => {
         ref={scrollRef}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: spacing.md, paddingBottom: insets.bottom + 96 },
+          { paddingTop: spacing.md, paddingBottom: insets.bottom + TAB_CONTENT_BOTTOM },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -365,3 +366,6 @@ const styles = StyleSheet.create({
     height: 82,
   },
 })
+
+// Erreur de rendu : seule cette page est remplacée (pas toute l'app).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/shared/RouteErrorBoundary'

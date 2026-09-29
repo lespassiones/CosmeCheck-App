@@ -255,7 +255,7 @@ const ProduitsScreen: FC = () => {
       <AddProductModal
         visible={addOpen}
         onClose={() => setAddOpen(false)}
-        onOpenScanner={() => router.push(ROUTES.TABS.SCAN)}
+        onOpenScanner={() => router.dismissTo(ROUTES.TABS.SCAN)}
         onSelectFromHistory={handleAddFromHistory}
         isInRoutine={isInRoutine}
       />
@@ -361,3 +361,6 @@ const styles = StyleSheet.create({
   },
   emptyText: { ...typography.small, color: colors.inkMuted, textAlign: 'center' },
 })
+
+// Erreur de rendu : seule cette page est remplacée (pas toute l'app).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/shared/RouteErrorBoundary'

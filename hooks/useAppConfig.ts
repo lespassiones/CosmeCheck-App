@@ -16,7 +16,7 @@
  */
 
 import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { queryOptions, useQuery } from '@tanstack/react-query'
 
 import { supabase } from '@/lib/supabase/client'
 
@@ -96,28 +96,28 @@ interface UseAppConfigReturn {
   refresh: () => void
 }
 
+/**
+ * Requête de la config (clé globale, la même pour tout le monde). SANS
+ * `refetchInterval` : React Query le gère PAR OBSERVATEUR, et ce hook est lu à
+ * 7 endroits (chacun relançait son minuteur de 5 min). Le relevé périodique est
+ * fait une seule fois par `BackgroundPollers`.
+ */
+export const appConfigQueryOptions = queryOptions<AppConfig>({
+  queryKey: ['appConfig'],
+  staleTime: 30 * 1000,
+  gcTime: 5 * 60 * 1000,
+  queryFn: async () => {
+    const { data: row, error } = await supabase.rpc('cosme_check_get_app_config')
+    if (error) throw error
+    return coerce(row)
+  },
+})
+
+/** Intervalle du relevé unique (maintenance, flags : changements admin rares). */
+export const APP_CONFIG_POLL_MS = 5 * 60 * 1000
+
 export function useAppConfig(): UseAppConfigReturn {
-  const {
-    data,
-    isLoading,
-    refetch,
-  } = useQuery<AppConfig>({
-    // Clé globale (pas par-user) : la config est la même pour tout le monde.
-    queryKey: ['appConfig'],
-    staleTime: 30 * 1000,
-    gcTime: 5 * 60 * 1000,
-    // Polling 5 min pour capter les changements admin (maintenance, flags). La
-    // config est GLOBALE et change très rarement. `refetchInterval` est géré PAR
-    // QUERY par React Query (pas par instance) : le hook étant monté sur
-    // plusieurs écrans en même temps (MaintenanceGate + onglets), un setInterval
-    // par instance multipliait le trafic de fond.
-    refetchInterval: 5 * 60 * 1000,
-    queryFn: async () => {
-      const { data: row, error } = await supabase.rpc('cosme_check_get_app_config')
-      if (error) throw error
-      return coerce(row)
-    },
-  })
+  const { data, isLoading, refetch } = useQuery(appConfigQueryOptions)
 
   const config = useMemo(() => data ?? DEFAULT_APP_CONFIG, [data])
 

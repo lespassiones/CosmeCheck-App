@@ -36,7 +36,7 @@
 
 import { useEffect, useState, type FC } from 'react'
 import { ActivityIndicator, StyleSheet, View } from 'react-native'
-import { Redirect, Stack } from 'expo-router'
+import { Redirect, Stack, router } from 'expo-router'
 
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
@@ -61,6 +61,19 @@ const Loader: FC = () => (
     <ActivityIndicator color={colors.accent} />
   </View>
 )
+
+/**
+ * Sortie vers l'accueil par dismissTo, pas <Redirect> (= replace) : quand ce
+ * parcours a été ouvert AU-DESSUS des onglets (profil relu en pleine session),
+ * un replace empilait une 2e copie complète des onglets. dismissTo revient aux
+ * onglets existants, ou les ouvre à la place de cet écran s'il n'y en a pas.
+ */
+const RedirectHome: FC = () => {
+  useEffect(() => {
+    router.dismissTo(ROUTES.TABS.HOME)
+  }, [])
+  return <Loader />
+}
 
 const OnboardingLayout: FC = () => {
   const { isAuthenticated, isLoading } = useAuth()
@@ -106,7 +119,7 @@ const OnboardingLayout: FC = () => {
         />
       )
     case 'home':
-      return <Redirect href={ROUTES.TABS.HOME} />
+      return <RedirectHome />
     case 'wizard':
     default:
       return (

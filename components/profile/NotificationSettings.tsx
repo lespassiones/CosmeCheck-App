@@ -16,8 +16,8 @@
  * enregistre le token push (alertes de routine).
  */
 
-import { useCallback, useEffect, useState } from 'react'
-import { Linking } from 'react-native'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { AppState, Linking } from 'react-native'
 
 import { useProfile } from '@/hooks/useProfile'
 import { readNotificationPrefs } from '@/lib/notifications/prefs'
@@ -42,16 +42,34 @@ export function useNotificationToggle() {
       | undefined,
   )
 
+  // Relu au montage ET à chaque retour au premier plan : l'onglet Profil ne se
+  // démonte jamais, et la personne autorise souvent les notifications dans les
+  // Réglages du téléphone (le lien « Autoriser » restait affiché, sans jeton push).
+  const lastStatus = useRef<PermissionStatus | null>(null)
   useEffect(() => {
     let alive = true
-    void (async () => {
+    const read = async () => {
       const s = await getPermissionStatus()
-      if (alive) setStatus(s)
-    })()
+      if (!alive) return
+      setStatus(s)
+      // Autorisation qui vient d'arriver (depuis les Réglages) : jeton push tout
+      // de suite. Au premier relevé, NotificationsInit s'en charge déjà.
+      const was = lastStatus.current
+      lastStatus.current = s
+      if (was !== null && was !== 'granted' && s === 'granted' && prefs.enabled) {
+        void registerPushToken().catch(() => {})
+      }
+    }
+    void read()
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void read()
+    })
     return () => {
       alive = false
+      sub.remove()
     }
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefs.enabled])
 
   const available = status !== 'unavailable'
 

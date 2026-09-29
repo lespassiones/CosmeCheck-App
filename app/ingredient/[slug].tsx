@@ -137,7 +137,11 @@ const IngredientDetailScreen: FC = () => {
         callRpc<IngredientDetail[]>('cosme_check_get_ingredient', { p_slug: slug }),
         RPC_TIMEOUT_MS,
       )
-      if (res.error || !res.data || res.data.length === 0) return null
+      // Délai dépassé ou erreur : on LÈVE. Rendre `null` en faisait un succès
+      // gardé 24 h (et persisté sur disque) : une seule lenteur affichait
+      // « introuvable » à chaque réouverture, même après redémarrage.
+      if (res.error) throw new Error(res.error)
+      if (!res.data || res.data.length === 0) return null
       return res.data[0]
     },
   })
@@ -160,7 +164,9 @@ const IngredientDetailScreen: FC = () => {
         }),
         RPC_TIMEOUT_MS,
       )
-      return res.error || !res.data ? [] : res.data
+      // Même règle : une erreur n'est pas une liste vide gardée 1 h.
+      if (res.error) throw new Error(res.error)
+      return res.data ?? []
     },
   })
 
@@ -430,7 +436,7 @@ const NotFound: FC<{ onRetry: () => void }> = ({ onRetry }) => (
           <Text style={styles.retryText}>Réessayer</Text>
         </Pressable>
         <Pressable
-          onPress={() => router.replace(ROUTES.TABS.HOME)}
+          onPress={() => router.dismissTo(ROUTES.TABS.HOME)}
           style={({ pressed }) => [styles.homeBtn, pressed && styles.btnPressed]}
           accessibilityRole="button"
         >
@@ -763,3 +769,6 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
 })
+
+// Erreur de rendu : seule cette page est remplacée (pas toute l'app).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/shared/RouteErrorBoundary'

@@ -47,6 +47,15 @@ import { withTimeout } from '@/lib/utils/withTimeout'
  */
 export const PROFILE_TIMEOUT_MS = 6000
 
+export interface UpdateProfileOptions {
+  /**
+   * Garder la valeur optimiste même si l'écriture échoue. Pour `paywall_shown` :
+   * revenir en arrière renverrait au paywall en boucle ; le prochain lancement
+   * relira la vérité du serveur.
+   */
+  keepOnError?: boolean
+}
+
 interface UseProfileReturn {
   profile: UserProfileRow | null
   skin: SkinProfile
@@ -80,7 +89,7 @@ interface UseProfileReturn {
    * consentement pendant que la requête réseau est en vol.
    */
   giveDataConsent: () => Promise<void>
-  updateProfile: (updates: Record<string, unknown>) => Promise<void>
+  updateProfile: (updates: Record<string, unknown>, opts?: UpdateProfileOptions) => Promise<void>
   refresh: () => void
 }
 
@@ -304,16 +313,32 @@ export function useProfile(): UseProfileReturn {
   }, [userId, queryClient, queryKey, profile?.preferences, mutation])
 
   const updateProfile = useCallback(
-    async (updates: Record<string, unknown>) => {
+    async (updates: Record<string, unknown>, opts: UpdateProfileOptions = {}) => {
       if (!userId) return
-      const current = asPrefsObject(
-        queryClient.getQueryData<UserProfileRow | null>(queryKey)?.preferences ??
-          profile?.preferences,
+      const previous = queryClient.getQueryData<UserProfileRow | null>(queryKey) ?? profile ?? null
+      // Profil pas encore lu (ou illisible) : écrire maintenant REMPLACERAIT
+      // toutes les préférences du serveur par ces seules clés (upsert du jsonb
+      // complet), et le cache inventé ferait croire à un profil vide
+      // (retour au questionnaire, compte Premium affiché Gratuit).
+      if (!previous) throw new Error('Profil pas encore chargé')
+      const next: Record<string, unknown> = { ...asPrefsObject(previous.preferences), ...updates }
+      // Optimiste + SYNCHRONE (comme completeOnboarding) : l'AuthGuard lit le
+      // nouveau drapeau tout de suite. Sans ça, « Plus tard » du paywall
+      // attendait le réseau, et un échec d'écriture renvoyait au paywall en boucle.
+      const nextPreferences = next as UserProfileRow['preferences']
+      queryClient.setQueryData<UserProfileRow | null>(queryKey, (old) =>
+        old ? { ...old, preferences: nextPreferences } : { ...previous, preferences: nextPreferences },
       )
-      const next: Record<string, unknown> = { ...current, ...updates }
-      await mutation.mutateAsync(next)
+      try {
+        await mutation.mutateAsync(next)
+      } catch (err) {
+        // Échec : l'écran ne doit pas afficher comme enregistré ce qui ne l'est
+        // pas (ex. une restriction allergène). Sauf `keepOnError` (paywall vu).
+        if (!opts.keepOnError) queryClient.setQueryData(queryKey, previous)
+        throw err
+      }
     },
-    [userId, queryClient, queryKey, profile?.preferences, mutation],
+    [userId, queryClient, queryKey, profile, mutation],
   )
 
   const refresh = useCallback(() => {

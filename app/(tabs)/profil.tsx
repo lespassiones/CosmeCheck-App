@@ -10,3 +10,6 @@ import { ProfileScreen } from '@/components/profile/ProfileScreen'
 const ProfilTab: FC = () => <ProfileScreen inTab />
 
 export default ProfilTab
+
+// Erreur de rendu : seule cette page est remplacée (pas toute l'app).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/shared/RouteErrorBoundary'

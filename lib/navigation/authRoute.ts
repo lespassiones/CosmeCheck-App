@@ -135,10 +135,13 @@ export function resolveAuthRoute(input: AuthRouteInput): AuthRouteTarget {
   //        Renvoyer au questionnaire ferait refaire son onboarding à quelqu'un
   //        pour un simple réseau muet ; laisser `null` figerait l'écran qui
   //        attend cette décision. La seule issue saine est une destination.
+  //        Mais SEULEMENT pour les écrans qui l'attendent (démarrage, connexion,
+  //        parcours) : le guard rejoue à chaque changement de groupe, et toute
+  //        autre page (analyse, Advisor, fiche, compare…) était renvoyée à
+  //        l'accueil dès son ouverture, en pleine animation d'entrée (29/09/2026).
   if (profileUnavailable) {
-    const surUnePageOrdinaire =
-      group === '(tabs)' || inOffre || inPremiumWelcome
-    return surUnePageOrdinaire ? null : 'home'
+    const ecranEnAttente = group === undefined || inAuthGroup || inPreOnboarding || inOnboarding
+    return ecranEnAttente ? 'home' : null
   }
 
   const needsOnboarding = !onboardingShown && !isProfileComplete

@@ -50,7 +50,7 @@ export default function NotFound() {
           ) : null}
 
           <Pressable
-            onPress={() => router.replace(ROUTES.TABS.HOME)}
+            onPress={() => router.dismissTo(ROUTES.TABS.HOME)}
             style={({ pressed }) => [styles.homeBtn, pressed && styles.homeBtnPressed]}
             accessibilityRole="button"
           >

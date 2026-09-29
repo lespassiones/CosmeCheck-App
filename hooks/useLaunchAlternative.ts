@@ -11,8 +11,7 @@
  * CHEMIN NORMAL (produit non caché) : analyse complète via l'Edge Function `analyser`
  * (`source: 'search'`), identique à un scan classique.
  */
-import { useCallback } from 'react'
-import { useRouter } from 'expo-router'
+import { useCallback, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 
 import { ROUTES } from '@/constants/routes'
@@ -23,7 +22,9 @@ import { db } from '@/lib/supabase/client'
 import type { AlternativeProduct } from '@/lib/analysis/alternativesFilter'
 import type { AnalysisRow } from '@/lib/supabase/types'
 import { ensureEanAnalysis } from '@/lib/analysis/eanAnalysisPrefetch'
+import { useCappedPush } from '@/lib/navigation/useCappedPush'
 import { alignCachedResult } from '@/lib/analysis/fastPathRow'
+import { invalidateAnalysisLists } from '@/lib/analysis/invalidateLists'
 import { cacheProductImage } from '@/lib/storage/productImageCache'
 import { cacheAnalysisRow } from '@/lib/storage/session'
 
@@ -31,18 +32,18 @@ export function useLaunchAlternative(): {
   analyze: (product: AlternativeProduct) => Promise<void>
   isAnalyzing: boolean
 } {
-  const router = useRouter()
   const { user } = useAuth()
   const { restrictions } = useProfile()
   const { runAnalysis, isAnalyzing } = useAnalysis()
   const qc = useQueryClient()
+  // Fiche → alternative → fiche… : pile plafonnée (lib/navigation/stackCap).
+  const cappedPush = useCappedPush()
+  // Verrou anti double tap : le chemin rapide ne passe pas par `isAnalyzing`,
+  // deux taps rapprochés inséraient deux analyses et empilaient deux fiches.
+  const launching = useRef(false)
 
-  const analyze = useCallback(
-    async (product: AlternativeProduct) => {
-      const userId = user?.id
-      const inci = product.ingredientsText?.trim()
-      if (!userId || !inci || inci.length < 10) return
-
+  const launch = useCallback(
+    async (product: AlternativeProduct, userId: string, inci: string) => {
       // ── CHEMIN RAPIDE : analyse déjà cachée → insert direct + nav instantanée ──
       try {
         const cached = product.ean ? await ensureEanAnalysis(qc, product.ean) : null
@@ -70,8 +71,10 @@ export function useLaunchAlternative(): {
           const row = inserted as AnalysisRow | null
           if (row?.id) {
             void cacheAnalysisRow(row).catch(() => {})
+            // Nouvelle analyse insérée ici sans passer par useAnalysis.
+            invalidateAnalysisLists(qc)
             if (product.imageUrl) void cacheProductImage(row.id, product.imageUrl).catch(() => {})
-            router.push(ROUTES.ANALYSE.DETAIL(row.id))
+            cappedPush(ROUTES.ANALYSE.DETAIL(row.id))
             return
           }
         }
@@ -93,10 +96,27 @@ export function useLaunchAlternative(): {
         if (product.imageUrl) {
           void cacheProductImage(result.analysisId, product.imageUrl).catch(() => {})
         }
-        router.push(ROUTES.ANALYSE.DETAIL(result.analysisId))
+        cappedPush(ROUTES.ANALYSE.DETAIL(result.analysisId))
       }
     },
-    [user?.id, restrictions, runAnalysis, router, qc],
+    [restrictions, runAnalysis, cappedPush, qc],
+  )
+
+
+  const analyze = useCallback(
+    async (product: AlternativeProduct) => {
+      const userId = user?.id
+      const inci = product.ingredientsText?.trim()
+      if (!userId || !inci || inci.length < 10) return
+      if (launching.current) return
+      launching.current = true
+      try {
+        await launch(product, userId, inci)
+      } finally {
+        launching.current = false
+      }
+    },
+    [user?.id, launch],
   )
 
   return { analyze, isAnalyzing }

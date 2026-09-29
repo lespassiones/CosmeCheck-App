@@ -28,12 +28,27 @@ import { registerPushToken } from '@/lib/notifications/pushToken'
 import { readNotificationPrefs } from '@/lib/notifications/prefs'
 import { routeForNotificationData } from '@/lib/notifications/deepLink'
 
-/** Navigue si le payload data porte une route interne autorisée. */
-function navigateFromData(data: unknown): void {
-  const route = routeForNotificationData(data)
-  if (route) {
-    router.push(route as never)
+/**
+ * Identifiants des taps déjà traités : à froid, le listener ET
+ * getLastNotificationResponseAsync peuvent livrer le même tap (double
+ * navigation). Un tap = une navigation.
+ */
+const handledResponses = new Set<string>()
+
+/** Navigue si la notification tapée porte une route interne autorisée. */
+function navigateFromResponse(response: unknown): void {
+  const id = responseIdentifier(response)
+  if (id) {
+    if (handledResponses.has(id)) return
+    handledResponses.add(id)
   }
+  const route = routeForNotificationData(extractData(response))
+  if (!route) return
+  // Onglet : revenir à l'onglet EXISTANT. push/navigate/replace vers /(tabs)/…
+  // depuis un écran situé au-dessus empilent une 2e copie complète des onglets
+  // (écrans superposés qui continuent de tourner en dessous).
+  if (route.startsWith('/(tabs)')) router.dismissTo(route as never)
+  else router.push(route as never)
 }
 
 export function NotificationsInit(): null {
@@ -56,8 +71,7 @@ export function NotificationsInit(): null {
     try {
       subscription = Notifications.addNotificationResponseReceivedListener(
         (response: unknown) => {
-          const data = extractData(response)
-          navigateFromData(data)
+          navigateFromResponse(response)
         },
       )
     } catch {
@@ -68,7 +82,7 @@ export function NotificationsInit(): null {
     void (async () => {
       try {
         const last = await Notifications.getLastNotificationResponseAsync()
-        if (last) navigateFromData(extractData(last))
+        if (last) navigateFromResponse(last)
       } catch {
         // best-effort
       }
@@ -111,6 +125,13 @@ export function NotificationsInit(): null {
 }
 
 /** Extrait `content.data` d'une réponse de notification (forme tolérante). */
+function responseIdentifier(response: unknown): string | null {
+  if (!response || typeof response !== 'object') return null
+  const r = response as { notification?: { request?: { identifier?: unknown } } }
+  const id = r.notification?.request?.identifier
+  return typeof id === 'string' && id ? id : null
+}
+
 function extractData(response: unknown): unknown {
   if (!response || typeof response !== 'object') return null
   const r = response as { notification?: { request?: { content?: { data?: unknown } } } }

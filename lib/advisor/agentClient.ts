@@ -58,9 +58,18 @@ export class AdvisorNoCreditsError extends Error {
 }
 export class AdvisorRateLimitError extends Error {}
 export class AdvisorUnavailableError extends Error {}
-/** Le runtime ne sait pas lire le flux (pas de getReader) OU le flux s'est
- *  interrompu sans résultat exploitable → le caller retombe sur le mode bloquant. */
+/** Aucune réponse du serveur (échec réseau AVANT toute réponse) ou runtime qui
+ *  ne sait pas lire le flux → le caller retombe sur le mode bloquant. */
 export class AdvisorStreamUnsupportedError extends Error {}
+/**
+ * Réponse commencée puis coupée (app en arrière-plan, réseau perdu) ou délai
+ * dépassé. Le serveur a DÉJÀ débité le crédit : on ne relance PAS l'appel
+ * bloquant (2e débit + 2e attente), on affiche « Connexion interrompue ».
+ */
+export class AdvisorStreamInterruptedError extends Error {}
+
+/** Plafond d'une question (l'agent répond en 3 à 17 s d'habitude). */
+export const ADVISOR_TIMEOUT_MS = 90_000
 
 /** Mappe un produit vérifié par l'agent vers la forme carrousel `AlternativeProduct`.
  *  Le score renvoyé par la RPC est DÉJÀ plafonné (sidecar product_score_cap) →
@@ -90,6 +99,24 @@ export async function askAdvisorAgent(
   token: string,
   seenEans: string[] = [],
 ): Promise<AdvisorAgentResult> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), ADVISOR_TIMEOUT_MS)
+  try {
+    return await askAdvisorAgentOnce(messages, token, seenEans, controller.signal)
+  } catch (err) {
+    if (controller.signal.aborted) throw new AdvisorStreamInterruptedError()
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function askAdvisorAgentOnce(
+  messages: AdvisorApiMessage[],
+  token: string,
+  seenEans: string[],
+  signal: AbortSignal,
+): Promise<AdvisorAgentResult> {
   const res = await expoFetch(`${SUPABASE_URL}/functions/v1/advisor-agent`, {
     method: 'POST',
     headers: {
@@ -98,6 +125,7 @@ export async function askAdvisorAgent(
       apikey: SUPABASE_ANON,
     },
     body: JSON.stringify({ messages, seen_eans: seenEans }),
+    signal,
   })
 
   if (!res.ok) {
@@ -143,14 +171,32 @@ export type AdvisorStreamStatus = {
  * dont le contenu est IDENTIQUE à la réponse bloquante (mêmes produits vérifiés).
  *
  * La logique de l'agent est la même côté serveur : seul le transport change.
- * Lève `AdvisorStreamUnsupportedError` si le flux ne peut pas être lu ou se coupe
- * sans résultat → le caller retombe alors proprement sur {@link askAdvisorAgent}.
+ * Lève `AdvisorStreamUnsupportedError` si aucune réponse n'arrive ou si le flux
+ * ne peut pas être lu → le caller retombe alors sur {@link askAdvisorAgent}.
+ * Lève `AdvisorStreamInterruptedError` si le flux se coupe après la réponse du
+ * serveur (crédit déjà débité) ou après ADVISOR_TIMEOUT_MS : pas de 2e appel.
  * Les 429 (crédits / rate-limit) et 502 sont typés comme en mode bloquant.
  */
 export async function askAdvisorAgentStreaming(
   messages: AdvisorApiMessage[],
   token: string,
   seenEans: string[] = [],
+  onStatus?: (s: AdvisorStreamStatus) => void,
+): Promise<AdvisorAgentResult> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), ADVISOR_TIMEOUT_MS)
+  try {
+    return await readAdvisorStream(messages, token, seenEans, controller.signal, onStatus)
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function readAdvisorStream(
+  messages: AdvisorApiMessage[],
+  token: string,
+  seenEans: string[],
+  signal: AbortSignal,
   onStatus?: (s: AdvisorStreamStatus) => void,
 ): Promise<AdvisorAgentResult> {
   let res: Response
@@ -163,8 +209,11 @@ export async function askAdvisorAgentStreaming(
         apikey: SUPABASE_ANON,
       },
       body: JSON.stringify({ messages, seen_eans: seenEans, stream: true }),
+      signal,
     })) as unknown as Response
   } catch {
+    // Délai dépassé : on a déjà attendu le plafond, pas de 2e attente.
+    if (signal.aborted) throw new AdvisorStreamInterruptedError()
     // Échec réseau AVANT toute réponse : rien n'a été consommé côté serveur de
     // façon exploitable → on laisse le caller retomber sur le mode bloquant.
     throw new AdvisorStreamUnsupportedError()
@@ -244,17 +293,17 @@ export async function askAdvisorAgentStreaming(
       }
     }
   } catch {
-    // Coupure en cours de flux : si on avait déjà le résultat on le renvoie,
-    // sinon on bascule sur le mode bloquant.
+    // Coupure en cours de flux : si on avait déjà le résultat on le renvoie.
+    // Sinon PAS de repli bloquant : le serveur a déjà débité (réponse 200 reçue).
     if (result) return result
-    throw new AdvisorStreamUnsupportedError()
+    throw new AdvisorStreamInterruptedError()
   }
 
   if (result) return result
-  // Flux terminé sans `result` : erreur serveur explicite → indispo ; sinon on
-  // considère le flux inexploitable et on laisse le caller retomber sur bloquant.
+  // Flux terminé sans `result` : erreur serveur explicite → indispo ; sinon
+  // coupure (même règle : crédit déjà débité, pas de 2e appel).
   if (serverError) throw new AdvisorUnavailableError()
-  throw new AdvisorStreamUnsupportedError()
+  throw new AdvisorStreamInterruptedError()
 }
 
 /**

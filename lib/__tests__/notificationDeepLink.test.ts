@@ -34,8 +34,25 @@ describe('routeForNotificationData : refus strict', () => {
     expect(routeForNotificationData({ url: 'https://evil.com' })).toBeNull()
   })
 
+  it('accepte les destinations du planner v2 (fiche analyse, ingrédient, advisor, offre)', () => {
+    const uuid = '16acc76b-7a3c-4fb0-9e9e-a51cc49938f2'
+    expect(routeForNotificationData({ url: `/analyse/${uuid}` })).toBe(`/analyse/${uuid}`)
+    expect(routeForNotificationData({ url: '/ingredient/caprylyl-glycol' })).toBe('/ingredient/caprylyl-glycol')
+    expect(routeForNotificationData({ url: '/advisor' })).toBe('/advisor')
+    expect(routeForNotificationData({ url: '/offre' })).toBe('/offre')
+  })
+
+  it('refuse les routes dynamiques mal formées', () => {
+    expect(routeForNotificationData({ url: '/analyse/123' })).toBeNull()
+    expect(routeForNotificationData({ url: '/analyse/16acc76b-7a3c-4fb0-9e9e-a51cc49938f2/edit' })).toBeNull()
+    expect(routeForNotificationData({ url: '/ingredient/' })).toBeNull()
+    expect(routeForNotificationData({ url: '/ingredient/Caprylyl-Glycol' })).toBeNull()
+    expect(routeForNotificationData({ url: '/ingredient/a?x=1' })).toBeNull()
+    expect(routeForNotificationData({ url: '/ingredient/../offre' })).toBeNull()
+  })
+
   it('refuse une route interne hors allowlist', () => {
-    expect(routeForNotificationData({ url: '/offre' })).toBeNull()
+    expect(routeForNotificationData({ url: '/profile/restrictions' })).toBeNull()
     // /peau retiré : la feature « score de peau » a été supprimée de l'app.
     expect(routeForNotificationData({ url: '/peau' })).toBeNull()
   })

@@ -235,3 +235,6 @@ const styles = StyleSheet.create({
   saveBtnDisabled: { backgroundColor: colors.gray300 },
   saveText: { fontFamily: fontFamilies.semiBold, fontSize: 16, color: colors.surface },
 })
+
+// Erreur de rendu : seule cette page est remplacée (pas toute l'app).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/shared/RouteErrorBoundary'

@@ -148,10 +148,16 @@ describe('profil illisible : on n\'en deduit rien', () => {
     }
     expect(resolveAuthRoute(base)).toBe('home')
     expect(resolveAuthRoute({ ...base, group: '(onboarding)' })).toBe('home')
-    expect(resolveAuthRoute({ ...base, group: 'consent' })).toBe('home')
+    expect(resolveAuthRoute({ ...base, group: '(auth)' })).toBe('home')
+    expect(resolveAuthRoute({ ...base, group: '(preonboarding)' })).toBe('home')
     // Deja sur une page ordinaire : on ne la lui reprend pas.
     expect(resolveAuthRoute({ ...base, group: '(tabs)' })).toBeNull()
     expect(resolveAuthRoute({ ...base, group: 'offre' })).toBeNull()
     expect(resolveAuthRoute({ ...base, group: 'premium' })).toBeNull()
+    // Ni une page de la pile : chaque ouverture d'ecran rejoue le garde, et la
+    // personne etait renvoyee a l'accueil des qu'elle ouvrait une analyse.
+    for (const group of ['analyse', 'advisor', 'compare', 'ingredient', 'routine', 'promesses', 'alternatives']) {
+      expect(resolveAuthRoute({ ...base, group })).toBeNull()
+    }
   })
 })

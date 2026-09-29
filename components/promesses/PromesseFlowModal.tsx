@@ -42,27 +42,33 @@ import { radius, spacing } from '@/constants/spacing'
 import { fontFamilies, typography } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
 import { supabase } from '@/lib/supabase/client'
-import { handleNoCreditsResponse } from '@/lib/credits/exhaustedStore'
+import { isNoCreditsResponse } from '@/lib/credits/exhaustedStore'
 import { StepChecklist } from '@/components/shared/StepChecklist'
 import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
+import { runAfterModalClose } from '@/lib/navigation/afterModalClose'
+import { LONG_AI_TIMEOUT_MS } from '@/lib/supabase/fetchTimeout'
+
+/** Une feuille pageSheet iOS met un peu plus longtemps à se retirer. */
+const PAGE_SHEET_DISMISS_MS = 550
 
 const MIN_MANUAL_DESC = 30
 const MAX_MANUAL_DESC = 4000
 
 /**
- * Détecte un 429 « crédits épuisés » sur une réponse d'Edge Function et ouvre
- * la modale globale (→ /offre). Renvoie true si c'était bien un épuisement de
- * crédits (l'appelant affiche alors un message dédié plutôt qu'une erreur
- * générique). Les 3 étapes du flow (identify / fetch-description / coherence)
- * débitent chacune 1 crédit côté Edge.
+ * Détecte un 429 « crédits épuisés » sur une réponse d'Edge Function. Les 3
+ * étapes du flow (identify / fetch-description / coherence) débitent chacune
+ * 1 crédit côté Edge.
+ *
+ * N'ouvre PAS la feuille globale « Plus de crédits » : cette feuille-ci est
+ * une pageSheet, iOS refuse d'en présenter une autre par-dessus (et sur Android
+ * son « Voir Premium » poussait /offre SOUS cette feuille). Le refus s'affiche
+ * donc ici, avec son propre bouton « Voir Premium ».
  */
-async function maybeCreditsExhausted(
-  error: unknown,
-  response: Response | undefined,
-): Promise<boolean> {
+const isCreditsRefusal = (error: unknown, response: Response | undefined): Promise<boolean> =>
   // Un 429 de rate-limit (sans `code`/`credits`) n'est PAS un épuisement.
-  return handleNoCreditsResponse(error, response)
-}
+  isNoCreditsResponse(error, response)
+
+const NO_CREDITS_MSG = "Plus de crédits pour l'instant. Premium en donne davantage chaque jour."
 
 /**
  * Étapes cochées pendant chaque attente (28/09/2026, à la place du spinner et
@@ -129,6 +135,15 @@ export const PromesseFlowModal: FC<Props> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [manualDescription, setManualDescription] = useState('')
   const [notFoundReason, setNotFoundReason] = useState<string | null>(null)
+  // Refus faute de crédits : « Voir Premium » au lieu de « Réessayer » (qui
+  // reboucherait sur le même refus).
+  const [noCredits, setNoCredits] = useState(false)
+  // Une session par ouverture : une réponse arrivée après la fermeture (ou
+  // pendant une session suivante) est ignorée, sinon elle pouvait cocher la
+  // liste suivante et pousser la promesse d'un autre produit.
+  const sessionRef = useRef(0)
+  // « Réessayer » relance l'étape qui a échoué, pas toujours l'identification.
+  const retryRef = useRef<(() => void) | null>(null)
   // La réponse du serveur est arrivée : la checklist coche le reste, PUIS on
   // passe à la suite (`nextRef`), pour qu'on la voie entièrement cochée.
   const [phaseDone, setPhaseDone] = useState(false)
@@ -152,25 +167,31 @@ export const PromesseFlowModal: FC<Props> = ({
       // Sans analysisId on ne peut pas lier la cohérence → bascule wizard
       if (!analysisId) {
         onClose()
-        router.push({
-          pathname: ROUTES.PROMESSES.NOUVELLE,
-          params: { description: desc },
-        })
+        runAfterModalClose(() =>
+          router.push({
+            pathname: ROUTES.PROMESSES.NOUVELLE,
+            params: { description: desc },
+          }),
+        PAGE_SHEET_DISMISS_MS)
         return
       }
+      const sid = sessionRef.current
+      retryRef.current = () => void runCoherence(description, cacheable)
       setPhaseDone(false)
       setStep('runningCoherence')
       setErrorMsg(null)
+      setNoCredits(false)
       try {
         const { data, error, response } = await supabase.functions.invoke('coherence-analyze', {
           body: { analysis_id: analysisId, description: desc, cacheable },
+          timeout: LONG_AI_TIMEOUT_MS,
         })
+        if (sid !== sessionRef.current) return
         if (error) {
-          setErrorMsg(
-            (await maybeCreditsExhausted(error, response))
-              ? 'Crédits épuisés. Passe Premium pour continuer.'
-              : "Échec de l'analyse de cohérence.",
-          )
+          const refused = await isCreditsRefusal(error, response)
+          if (sid !== sessionRef.current) return
+          setNoCredits(refused)
+          setErrorMsg(refused ? NO_CREDITS_MSG : "Échec de l'analyse de cohérence.")
           setStep('error')
           return
         }
@@ -184,9 +205,10 @@ export const PromesseFlowModal: FC<Props> = ({
         finishPhase(() => {
           setStep('redirecting')
           onClose()
-          router.push(ROUTES.PROMESSES.DETAIL(id))
+          runAfterModalClose(() => router.push(ROUTES.PROMESSES.DETAIL(id)), PAGE_SHEET_DISMISS_MS)
         })
       } catch {
+        if (sid !== sessionRef.current) return
         setErrorMsg('Connexion impossible.')
         setStep('error')
       }
@@ -196,17 +218,25 @@ export const PromesseFlowModal: FC<Props> = ({
 
   // ── 1. Identification automatique au montage ─────────────────────────
   const identify = useCallback(async () => {
+    const sid = sessionRef.current
+    retryRef.current = null // défaut de « Réessayer » : l'identification
     setPhaseDone(false)
     setStep('identifying')
     setErrorMsg(null)
+    setNoCredits(false)
     try {
       const { data, error, response } = await supabase.functions.invoke('promesse-identify', {
         body: { inci, productLabel, brand, productType },
+        timeout: LONG_AI_TIMEOUT_MS,
       })
+      if (sid !== sessionRef.current) return
       if (error) {
+        const refused = await isCreditsRefusal(error, response)
+        if (sid !== sessionRef.current) return
+        setNoCredits(refused)
         setErrorMsg(
-          (await maybeCreditsExhausted(error, response))
-            ? 'Crédits épuisés. Passe Premium pour continuer.'
+          refused
+            ? NO_CREDITS_MSG
             : 'Identification impossible. Réessaie ou saisis la promesse manuellement.',
         )
         setStep('error')
@@ -230,27 +260,38 @@ export const PromesseFlowModal: FC<Props> = ({
         setStep('pickCandidate')
       })
     } catch {
+      if (sid !== sessionRef.current) return
       setErrorMsg('Connexion impossible.')
       setStep('error')
     }
   }, [inci, productLabel, brand, productType, finishPhase])
 
-  // Réinitialise et identifie à chaque ouverture
+  // Réinitialise et identifie à chaque OUVERTURE seulement. Dépendre de
+  // `identify` relançait l'identification (et un débit) dès que la fiche
+  // analyse se revalidait pendant que la feuille était ouverte.
+  const identifyRef = useRef(identify)
+  identifyRef.current = identify
   useEffect(() => {
+    sessionRef.current += 1
+    nextRef.current = null
     if (!visible) return
     setCandidates([])
     setErrorMsg(null)
+    setNoCredits(false)
     setManualDescription('')
     setNotFoundReason(null)
-    void identify()
-  }, [visible, identify])
+    void identifyRef.current()
+  }, [visible])
 
   // ── 2. Choix d'un candidat → fetch description → coherence ────────────
   const pickCandidate = useCallback(
     async (c: Candidate) => {
+      const sid = sessionRef.current
+      retryRef.current = () => void pickCandidate(c)
       setPhaseDone(false)
       setStep('fetchingDescription')
       setErrorMsg(null)
+      setNoCredits(false)
       try {
         const { data, error, response } = await supabase.functions.invoke(
           'promesse-fetch-description',
@@ -262,12 +303,17 @@ export const PromesseFlowModal: FC<Props> = ({
               productType: c.productType,
               analysisId,
             },
+            timeout: LONG_AI_TIMEOUT_MS,
           },
         )
+        if (sid !== sessionRef.current) return
         if (error) {
+          const refused = await isCreditsRefusal(error, response)
+          if (sid !== sessionRef.current) return
+          setNoCredits(refused)
           setErrorMsg(
-            (await maybeCreditsExhausted(error, response))
-              ? 'Crédits épuisés. Passe Premium pour continuer.'
+            refused
+              ? NO_CREDITS_MSG
               : 'Impossible de récupérer la description du produit. Tu peux la saisir manuellement.',
           )
           setStep('error')
@@ -284,10 +330,12 @@ export const PromesseFlowModal: FC<Props> = ({
         const description = res.description
         finishPhase(() => void runCoherence(description))
       } catch {
+        if (sid !== sessionRef.current) return
         setErrorMsg('Connexion impossible pendant la récupération.')
         setStep('error')
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [analysisId, runCoherence, finishPhase],
   )
 
@@ -440,18 +488,42 @@ export const PromesseFlowModal: FC<Props> = ({
       <Ionicons name="alert-circle-outline" size={44} color={colors.warning} />
       <Text style={styles.loadingTitle}>Oups</Text>
       <Text style={styles.loadingHint}>{errorMsg ?? 'Une erreur est survenue.'}</Text>
-      <Pressable style={styles.cta} onPress={() => void identify()} haptic="primary">
-        <Text style={styles.ctaText}>Réessayer</Text>
-      </Pressable>
-      <Pressable
-        style={styles.linkBtn}
-        onPress={() => {
-          onClose()
-          router.push(ROUTES.PROMESSES.NOUVELLE)
-        }}
-      >
-        <Text style={styles.linkText}>Saisir la promesse manuellement</Text>
-      </Pressable>
+      {noCredits ? (
+        <>
+          <Pressable
+            style={styles.cta}
+            onPress={() => {
+              onClose()
+              runAfterModalClose(() => router.push(ROUTES.OFFRE.INDEX), PAGE_SHEET_DISMISS_MS)
+            }}
+            haptic="primary"
+          >
+            <Text style={styles.ctaText}>Voir Premium</Text>
+          </Pressable>
+          <Pressable style={styles.linkBtn} onPress={onClose}>
+            <Text style={styles.linkText}>Plus tard</Text>
+          </Pressable>
+        </>
+      ) : (
+        <>
+          <Pressable
+            style={styles.cta}
+            onPress={() => (retryRef.current ? retryRef.current() : void identify())}
+            haptic="primary"
+          >
+            <Text style={styles.ctaText}>Réessayer</Text>
+          </Pressable>
+          <Pressable
+            style={styles.linkBtn}
+            onPress={() => {
+              onClose()
+              runAfterModalClose(() => router.push(ROUTES.PROMESSES.NOUVELLE), PAGE_SHEET_DISMISS_MS)
+            }}
+          >
+            <Text style={styles.linkText}>Saisir la promesse manuellement</Text>
+          </Pressable>
+        </>
+      )}
     </View>
   )
 

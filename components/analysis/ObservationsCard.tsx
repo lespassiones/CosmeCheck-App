@@ -84,8 +84,11 @@ const ObservationsCardBase: FC<Props> = ({ observations, slugByName, onIngredien
 
       <View style={styles.list}>
         {visible.map((o) => {
-          const v = STATUS_VISUAL[o.status]
-          const items = o.items ?? []
+          // Gardes : une analyse ancienne ou une réponse d'IA hors format (statut
+          // inconnu, items qui ne sont pas une liste) ne doit pas faire planter
+          // tout l'écran.
+          const v = STATUS_VISUAL[o.status] ?? STATUS_VISUAL.info
+          const items = Array.isArray(o.items) ? o.items : []
           const expandable = o.count > 0 && items.length > 0
           const isOpen = openTags.has(o.tag)
           const showCount = expandable && (o.status === 'present' || o.status === 'warn')

@@ -241,3 +241,6 @@ const styles = StyleSheet.create({
   allergenPillText: { fontFamily: fontFamilies.medium, fontSize: 12, color: colors.rating.jaune.ink },
   allergenPillCount: { fontFamily: fontFamilies.regular, fontSize: 10, color: colors.warning },
 })
+
+// Erreur de rendu : seule cette page est remplacée (pas toute l'app).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/shared/RouteErrorBoundary'

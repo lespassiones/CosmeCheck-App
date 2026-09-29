@@ -23,6 +23,7 @@ import {
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
+import { useQueryClient } from '@tanstack/react-query'
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 
@@ -75,7 +76,8 @@ const RestrictionsScreen: FC = () => {
   const insets = useSafeAreaInsets()
   const { user } = useAuth()
   const userId = user?.id ?? null
-  const { profile, restrictions, refresh } = useProfile()
+  const { profile, restrictions, updateProfile } = useProfile()
+  const queryClient = useQueryClient()
 
   const [tab, setTab] = useState<Tab>('families')
   const [isSaving, setIsSaving] = useState(false)
@@ -166,23 +168,21 @@ const RestrictionsScreen: FC = () => {
       setIsSaving(true)
       setError(null)
       try {
-        const prefs = asPrefsObject(profile?.preferences)
-        const current = readRestrictions(prefs)
-        const next = transform(current)
-        const preferences: Record<string, unknown> = { ...prefs, restrictions: next }
-        const { error: updateError } = await db()
-          .from('user_profiles')
-          .update({ preferences })
-          .eq('id', userId)
-        if (updateError) throw updateError
-        refresh()
+        // Part du DERNIER état connu (cache, mis à jour de façon optimiste par
+        // updateProfile), pas du profil de ce rendu : deux cases cochées à
+        // quelques centaines de ms d'écart s'écrasaient l'une l'autre, et
+        // l'interrupteur attendait l'écriture + la relecture pour bouger.
+        const latest = queryClient.getQueryData<UserProfileRow | null>(['profile', userId])
+        const prefs = asPrefsObject(latest?.preferences ?? profile?.preferences)
+        const next = transform(readRestrictions(prefs))
+        await updateProfile({ restrictions: next })
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Une erreur est survenue.')
       } finally {
         setIsSaving(false)
       }
     },
-    [userId, profile?.preferences, refresh],
+    [userId, profile?.preferences, queryClient, updateProfile],
   )
 
   const toggleFamily = useCallback(
@@ -702,3 +702,6 @@ const styles = StyleSheet.create({
 })
 
 export default RestrictionsScreen
+
+// Erreur de rendu : seule cette page est remplacée (pas toute l'app).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/shared/RouteErrorBoundary'

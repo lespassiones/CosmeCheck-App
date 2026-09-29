@@ -63,3 +63,30 @@ export function shouldAnimatePress(args: {
 
 /** Échelle au toucher par défaut : perceptible sans déformer la mise en page. */
 export const DEFAULT_PRESS_SCALE = 0.97
+
+/** Sous ce délai, un 2e appui sur le MÊME bouton d'action est ignoré. */
+export const REPEAT_PRESS_GUARD_MS = 400
+
+/**
+ * Double appui : faut-il ignorer cet appui ? Un double tap sur une ligne, une
+ * tuile ou un bouton « Voir Premium » empilait DEUX fois le même écran (deux
+ * fiches, deux fenêtres /offre). Les choix rapides d'un ensemble (`selection` :
+ * onglet, filtre, puce, case) et les zones passives (`none`) ne sont jamais
+ * freinés : on doit pouvoir les enchaîner vite.
+ */
+export function isGuardedRepeatPress(level: HapticLevel, lastPressAt: number, now: number): boolean {
+  if (level === 'selection' || level === 'none') return false
+  return now - lastPressAt < REPEAT_PRESS_GUARD_MS
+}
+
+/** Rôles d'accessibilité des choix qu'on coche / décoche vite (jamais freinés). */
+const RAPID_CHOICE_ROLES = new Set(['checkbox', 'radio', 'switch', 'tab', 'togglebutton', 'adjustable'])
+
+/**
+ * Niveau à utiliser pour l'anti double appui : un bouton déclaré comme case,
+ * bouton radio, interrupteur ou onglet se comporte comme `selection`, quel que
+ * soit son niveau haptique (ex. OptionCard de l'onboarding, sans `haptic`).
+ */
+export function repeatGuardLevel(level: HapticLevel, role: string | null | undefined): HapticLevel {
+  return role && RAPID_CHOICE_ROLES.has(role) ? 'selection' : level
+}

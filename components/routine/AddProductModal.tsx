@@ -38,6 +38,7 @@ import type { BlobCounts } from '@/components/design/IngredientBlob'
 import { SearchBar } from '@/components/shared/SearchBar'
 import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { displayTitle } from '@/lib/analysis/displayTitle'
+import { runAfterModalClose } from '@/lib/navigation/afterModalClose'
 
 interface AnalysisRow {
   id: string
@@ -174,7 +175,7 @@ export const AddProductModal = memo(function AddProductModal({
                 style={({ pressed }) => [styles.choiceCard, pressed && styles.choicePressed]}
                 onPress={() => {
                   close()
-                  onOpenScanner()
+                  runAfterModalClose(onOpenScanner)
                 }}
               >
                 <View style={styles.choiceIcon}>

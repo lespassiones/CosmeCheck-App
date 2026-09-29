@@ -32,6 +32,8 @@ import {
   setLastAnalysisId,
 } from '@/lib/storage/session'
 import { useAuth } from '@/hooks/useAuth'
+import { runAfterModalClose } from '@/lib/navigation/afterModalClose'
+import { invalidateAnalysisLists } from '@/lib/analysis/invalidateLists'
 
 /** Nom de l'événement global écouté par WORKSTREAM 3 (modale crédits). */
 export const CREDITS_EXHAUSTED_EVENT = 'cosmecheck:credits-exhausted'
@@ -65,21 +67,30 @@ export function useAnalysis(): UseAnalysisReturn {
       return runAnalysis(params)
     },
     onSuccess: async (result) => {
-      // Cache local + dernier id, puis purge le pending.
-      await Promise.all([
-        cacheAnalysis(result.analysisId, result.response),
-        setLastAnalysisId(result.analysisId),
-      ])
-      await clearPendingInci()
+      // Cache local + dernier id, puis purge le pending. Best-effort : l'analyse
+      // est déjà enregistrée côté serveur ; un échec d'écriture locale (stockage
+      // plein) la faisait passer pour ratée, et « Réessayer » créait un doublon.
+      try {
+        await Promise.all([
+          cacheAnalysis(result.analysisId, result.response),
+          setLastAnalysisId(result.analysisId),
+        ])
+        await clearPendingInci()
+      } catch {
+        /* cache local seulement */
+      }
 
-      // Rafraîchit crédits + dashboard.
+      // Rafraîchit crédits + toutes les listes d'analyses (Historique compris).
       void queryClient.invalidateQueries({ queryKey: ['credits', userId] })
-      void queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      invalidateAnalysisLists(queryClient)
     },
     onError: (err) => {
       if (err instanceof CreditExhaustedError) {
-        // Signal global → WORKSTREAM 3 ouvre la modale d'upsell.
-        DeviceEventEmitter.emit(CREDITS_EXHAUSTED_EVENT, err.credits ?? null)
+        // Signal global → WORKSTREAM 3 ouvre la modale d'upsell. Différé : l'overlay
+        // de traitement du scan (une Modal) est en train de se fermer, et deux
+        // Modals en transition peuvent laisser un calque qui bloque tout (iOS).
+        const credits = err.credits ?? null
+        runAfterModalClose(() => DeviceEventEmitter.emit(CREDITS_EXHAUSTED_EVENT, credits))
         // Les crédits ont changé côté serveur : on rafraîchit le solde.
         void queryClient.invalidateQueries({ queryKey: ['credits', userId] })
       }

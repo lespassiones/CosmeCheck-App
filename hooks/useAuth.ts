@@ -154,7 +154,13 @@ export function useAuth(): UseAuthReturn {
     // renvoyait vers l'écran de bienvenue au lieu du carrousel. Vérifié sur
     // émulateur le 28/08/2026 : on atterrissait bien sur « Bienvenue ».
     resetPreOnboarding()
-    await supabase.auth.signOut()
+    // Sans réseau, signOut() (révocation serveur) renvoie une erreur SANS
+    // retirer la session stockée : la personne était reconnectée au lancement
+    // suivant. Échec (ou délai de 8 s, voir fetchTimeout) → déconnexion locale.
+    const { error: signOutError } = await supabase.auth
+      .signOut()
+      .catch((e: unknown) => ({ error: e }))
+    if (signOutError) await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
     // Rendre son identité à RevenueCat : sans ça, le SDK garde l'`appUserID`
     // du compte précédent après la déconnexion, et l'appareil reste porteur de
     // ses droits jusqu'à la prochaine connexion. Best-effort, ne bloque rien.

@@ -19,12 +19,17 @@ import Animated from 'react-native-reanimated'
 import { Tabs, useRouter, usePathname } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { BottomTabBar, TAB_BAR_HEIGHT } from '@/components/navigation/BottomTabBar'
+import {
+  ADVISOR_FAB_GAP,
+  ADVISOR_FAB_SIZE,
+  BottomTabBar,
+  TAB_BAR_HEIGHT,
+} from '@/components/navigation/BottomTabBar'
 import { AdvisorFAB } from '@/components/navigation/AdvisorFAB'
 import { AdvisorRevealOverlay, useAdvisorReveal } from '@/components/navigation/AdvisorReveal'
 import { ROUTES } from '@/constants/routes'
 
-const FAB_SIZE = 56
+const FAB_SIZE = ADVISOR_FAB_SIZE
 const FAB_RIGHT = 16
 
 const TabsLayout: FC = () => {
@@ -34,7 +39,7 @@ const TabsLayout: FC = () => {
   // Masqué pendant le scan (caméra plein écran, recherche, saisie) : il ne doit pas gêner.
   const onScan = pathname?.includes('/scan') ?? false
   // Bouton flottant calé 16 px au-dessus de la barre d'onglets.
-  const fabBottom = Math.max(insets.bottom, 8) + TAB_BAR_HEIGHT + 16
+  const fabBottom = Math.max(insets.bottom, 8) + TAB_BAR_HEIGHT + ADVISOR_FAB_GAP
 
   const openAdvisor = useCallback(() => router.push(ROUTES.ADVISOR.INDEX), [router])
   const reveal = useAdvisorReveal({
@@ -48,6 +53,11 @@ const TabsLayout: FC = () => {
     <View style={styles.root} onLayout={reveal.onLayout}>
       <Tabs
         tabBar={(props) => <BottomTabBar {...props} />}
+        // PAS de freezeOnBlur (retiré le 29/09/2026) : react-native-screens 4.16
+        // peut geler un onglet dans le même rendu que sa désactivation (deux taps
+        // rapprochés), la vue native reste « au premier plan » et la barre affiche
+        // Accueil sur le contenu de Routine, sans retour possible (issue #4518).
+        // Les boucles décoratives se coupent via useScreenActive.
         screenOptions={{ headerShown: false }}
       >
         <Tabs.Screen name="index" options={{ title: 'Accueil' }} />

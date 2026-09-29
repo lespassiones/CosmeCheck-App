@@ -15,7 +15,7 @@
  * neutralisées automatiquement si le réglage OS est actif.
  */
 
-import { useEffect, useState, type FC, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FC, type ReactNode } from 'react'
 import { Pressable, type PressableProps, type StyleProp, type ViewStyle } from 'react-native'
 import Animated, {
   Easing,
@@ -28,7 +28,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated'
 
-import { fireHaptic, type HapticLevel } from '@/lib/pressFeedback'
+import { fireHaptic, isGuardedRepeatPress, repeatGuardLevel, type HapticLevel } from '@/lib/pressFeedback'
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
 
@@ -96,6 +96,7 @@ export const PressableScale: FC<PressableScaleProps> = ({
 }) => {
   const scale = useSharedValue(1)
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }))
+  const lastPressAt = useRef(0)
 
   return (
     <AnimatedPressable
@@ -103,6 +104,16 @@ export const PressableScale: FC<PressableScaleProps> = ({
       onPress={
         onPress
           ? (e) => {
+              // Anti double appui (tuile de l'accueil qui empilait 2 écrans).
+              // Ici `none` veut dire « l'écran vibre lui-même », pas « zone
+              // passive » : seul un choix rapide (`selection`) n'est pas freiné.
+              const now = Date.now()
+              const level = repeatGuardLevel(
+                haptic === 'selection' ? 'selection' : 'secondary',
+                rest.accessibilityRole ?? rest.role,
+              )
+              if (isGuardedRepeatPress(level, lastPressAt.current, now)) return
+              lastPressAt.current = now
               fireHaptic(haptic)
               onPress(e)
             }

@@ -43,6 +43,7 @@ import { Step2Concerns } from '@/components/onboarding/Step2Concerns'
 import { Step3Goals } from '@/components/onboarding/Step3Goals'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { FormSection } from '@/components/profile/ProfileFormKit'
+import { runAfterModalClose } from '@/lib/navigation/afterModalClose'
 
 interface Props {
   initialSkin: SkinProfile
@@ -120,10 +121,18 @@ export const BeautyProfileForm: FC<Props> = ({
     onStatusChange?.(status)
   }, [status, onStatusChange])
 
-  // Nettoyage des timers au démontage.
+  // Nettoyage des timers au démontage. Une sauvegarde encore en attente (tap
+  // puis retour en moins de 800 ms) part tout de suite au lieu d'être perdue,
+  // sauf si la personne vient de choisir « Abandonner ».
+  const onSaveRef = useRef(onSave)
+  onSaveRef.current = onSave
+  const discardRef = useRef(false)
   useEffect(
     () => () => {
-      if (autosaveRef.current) clearTimeout(autosaveRef.current)
+      if (autosaveRef.current) {
+        clearTimeout(autosaveRef.current)
+        if (!discardRef.current) void onSaveRef.current(latestSkin.current).catch(() => {})
+      }
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
       if (btnTimerRef.current) clearTimeout(btnTimerRef.current)
     },
@@ -158,6 +167,8 @@ export const BeautyProfileForm: FC<Props> = ({
       setHasChanges(true)
       if (autosaveRef.current) clearTimeout(autosaveRef.current)
       autosaveRef.current = setTimeout(() => {
+        // Plus rien en attente : le démontage ne doit pas ré-enregistrer.
+        autosaveRef.current = null
         void runSave(latestSkin.current)
       }, AUTOSAVE_MS)
     },
@@ -181,6 +192,7 @@ export const BeautyProfileForm: FC<Props> = ({
   const handleSaveNow = useCallback(() => {
     if (btnState === 'saving' || btnState === 'done') return
     if (autosaveRef.current) clearTimeout(autosaveRef.current)
+    autosaveRef.current = null
     if (btnTimerRef.current) clearTimeout(btnTimerRef.current)
     setBtnState('saving')
     void (async () => {
@@ -262,8 +274,15 @@ export const BeautyProfileForm: FC<Props> = ({
         cancelLabel="Continuer l'édition"
         destructive
         onConfirm={() => {
+          // « Abandonner » : la sauvegarde en attente est annulée TOUT DE SUITE
+          // (sinon elle pouvait partir pendant la sortie de la fenêtre).
+          discardRef.current = true
+          if (autosaveRef.current) clearTimeout(autosaveRef.current)
+          autosaveRef.current = null
           setConfirmCancel(false)
-          onCancel()
+          // Le formulaire (et cette fenêtre) disparaît APRÈS la sortie de la
+          // fenêtre : démontée en plein fondu, elle pouvait laisser un calque (iOS).
+          runAfterModalClose(onCancel)
         }}
         onCancel={() => setConfirmCancel(false)}
       />

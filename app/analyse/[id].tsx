@@ -187,6 +187,14 @@ const AnalyseDetailScreen: FC = () => {
     }
   }, [isReady, productEan, productBrand, productName])
 
+  // Restrictions stables PAR CONTENU : useProfile renvoie un nouvel objet à chaque
+  // écriture de `preferences` (notifications, profil beauté…), ce qui relançait
+  // tout le chargement de la fiche (squelette puis animations rejouées), y compris
+  // pour les fiches restées dans la pile sous l'écran courant.
+  const restrictionsKey = JSON.stringify(restrictions ?? null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stableRestrictions = useMemo(() => restrictions, [restrictionsKey])
+
   const buildReadyState = useCallback(
     (row: AnalysisRow): LoadState => {
       const parsed = parseAnalyseResponse(row.result_json)
@@ -195,7 +203,7 @@ const AnalyseDetailScreen: FC = () => {
       }
       // Applique les restrictions de l'utilisateur (is_restricted sur chaque item).
       // Nécessaire au rechargement depuis la BD car le flag n'est pas persisté.
-      const result = applyRestrictions(parsed, restrictions) as AnalyseResponse
+      const result = applyRestrictions(parsed, stableRestrictions) as AnalyseResponse
       const category = isProductCategory(result.category) ? result.category : null
       const essentiel = computeEssentiel(result, {
         category,
@@ -221,8 +229,14 @@ const AnalyseDetailScreen: FC = () => {
         ean: (row as { ean?: string | null }).ean ?? null,
       }
     },
-    [restrictions],
+    [stableRestrictions],
   )
+
+  // Le chargement ne dépend que de l'analyse (id) ; il lit la dernière version
+  // de buildReadyState via une ref et garde la ligne pour la réappliquer.
+  const buildRef = useRef(buildReadyState)
+  buildRef.current = buildReadyState
+  const lastRowRef = useRef<AnalysisRow | null>(null)
 
   const load = useCallback(async () => {
     if (!id) {
@@ -235,7 +249,8 @@ const AnalyseDetailScreen: FC = () => {
     try {
       const cached = await getCachedAnalysisRow(id)
       if (cached) {
-        setState(buildReadyState(cached))
+        lastRowRef.current = cached
+        setState(buildRef.current(cached))
         servedFromCache = true
         // PAS de return : on revalide en arrière-plan. Le serveur a pu enrichir
         // la ligne après coup (ex. backfill de l'EAN d'une analyse créée sur web)
@@ -255,7 +270,8 @@ const AnalyseDetailScreen: FC = () => {
         }
         return
       }
-      const ready = buildReadyState(row)
+      lastRowRef.current = row
+      const ready = buildRef.current(row)
       setState(ready)
       if (ready.status === 'ready') {
         // Best-effort : on n'attend pas la fin de l'écriture pour répondre.
@@ -270,11 +286,23 @@ const AnalyseDetailScreen: FC = () => {
         })
       }
     }
-  }, [id, buildReadyState])
+  }, [id])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  // Restrictions réellement modifiées : on les réapplique sur la ligne déjà
+  // chargée, sans repasser par « chargement » (pas de squelette ni de remontage).
+  const skipFirstBuild = useRef(true)
+  useEffect(() => {
+    if (skipFirstBuild.current) {
+      skipFirstBuild.current = false
+      return
+    }
+    const row = lastRowRef.current
+    if (row) setState(buildReadyState(row))
+  }, [buildReadyState])
 
   const handleIngredientPress = useCallback((slug: string) => {
     router.push(ROUTES.INGREDIENT.DETAIL(slug))
@@ -945,3 +973,6 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
 })
+
+// Erreur de rendu : seule cette page est remplacée (pas toute l'app).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/shared/RouteErrorBoundary'

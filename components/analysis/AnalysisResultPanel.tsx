@@ -74,6 +74,7 @@ import { useLaunchAlternative } from '@/hooks/useLaunchAlternative'
 import { useProfile } from '@/hooks/useProfile'
 import { useIngredientFamilies } from '@/hooks/useIngredientFamilies'
 import type { EssentielData } from '@/lib/essentiel/engine'
+import { useCappedPush } from '@/lib/navigation/useCappedPush'
 
 interface Props {
   /** ID de l'analyse Supabase — nécessaire pour générer la synthèse lazy. */
@@ -229,6 +230,8 @@ export const AnalysisResultPanel: FC<Props> = ({
     step: 10,
   })
   const { analyze, isAnalyzing } = useLaunchAlternative()
+  // « Voir tout » fait partie de la chaîne fiche → alternatives → fiche : plafonnée.
+  const cappedPush = useCappedPush()
 
   // Synthèse SUPPRIMÉE : remplacée par les 3 blocs IA personnalisés
   // (<PersonalInsightsCards/>, rendus juste sous L'ESSENTIEL). « Voir l'analyse
@@ -348,7 +351,7 @@ export const AnalysisResultPanel: FC<Props> = ({
       onSeeAll={() => {
         if (alternatives.currentEan) {
           // Forme objet (idiome expo-router pour route dynamique) — robuste vs typegen.
-          router.push({
+          cappedPush({
             pathname: '/alternatives/[ean]',
             params: { ean: alternatives.currentEan },
           })

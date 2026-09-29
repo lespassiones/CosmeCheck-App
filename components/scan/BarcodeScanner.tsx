@@ -65,6 +65,14 @@ export const BarcodeScanner: FC<Props> = ({
 }) => {
   const [permission, requestPermission] = useCameraPermissions()
   const [state, setState] = useState<ScanState>({ kind: 'scanning' })
+  // Écran de scan réellement affiché (faux dès qu'une fiche est poussée par-dessus).
+  const [screenFocused, setScreenFocused] = useState(true)
+  useFocusEffect(
+    useCallback(() => {
+      setScreenFocused(true)
+      return () => setScreenFocused(false)
+    }, []),
+  )
   // EAN pour lequel la modale « Ajouter ce produit » est ouverte (contribution).
   const [contributeEan, setContributeEan] = useState<string | null>(null)
   // Verrou : empêche les détections multiples d'un même cadre.
@@ -204,7 +212,10 @@ export const BarcodeScanner: FC<Props> = ({
 
   // Caméra ON aussi pendant l'aperçu → scan CONTINU (comme INCI Beauty) :
   // la fiche s'affiche par-dessus la caméra, un autre code est scanné direct.
-  const showCamera = state.kind === 'scanning' || state.kind === 'looking-up' || state.kind === 'preview'
+  // Et SEULEMENT quand l'écran de scan est affiché : l'onglet reste monté sous la
+  // fiche d'analyse, et expo-camera (iOS) ne coupe sa session qu'au démontage.
+  const showCamera =
+    screenFocused && (state.kind === 'scanning' || state.kind === 'looking-up' || state.kind === 'preview')
 
   return (
     <View style={styles.root}>

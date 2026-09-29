@@ -14,15 +14,22 @@
  *   - AUCUN rebond : tout passe par `motion.ts` (fondus, glissements doux).
  *   - le clavier remonte tout ce qui est en bas (`useKeyboardAwareScroll`).
  * Toutes les animations respectent le réglage « réduire les animations ».
+ *
+ * Tout doit tenir au-dessus du bouton, sans défiler, quel que soit l'appareil
+ * (29/09/2026, retour sur un iPhone 6,1") : `StepLayout` resserre l'écran
+ * (`useFit`) tant que son contenu dépasse, y compris ce qui apparaît après une
+ * réponse (réaction de Perle).
  */
 
 import {
   Children,
   createContext,
   isValidElement,
+  useCallback,
   useContext,
   useEffect,
   useRef,
+  useState,
   type FC,
   type ReactNode,
 } from 'react'
@@ -33,6 +40,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type LayoutChangeEvent,
   type StyleProp,
   type TextStyle,
   type ViewStyle,
@@ -80,6 +88,25 @@ export const RevealAt: FC<{ delay: number; children: ReactNode }> = ({ delay, ch
   <RevealDelay.Provider value={delay}>{children}</RevealDelay.Provider>
 )
 
+// ── Resserrement (petits écrans) ─────────────────────────────────────────
+
+/**
+ * Resserrement maximal des espaces et hauteurs (textes à 70 %). Au-delà, tout
+ * le contenu est réduit à l'échelle (voir StepLayout) : il tient toujours.
+ */
+const FIT_MIN = 0.62
+
+const StepFit = createContext(1)
+
+/** Resserrement de l'écran en cours : 1 à l'aise, jusqu'à `FIT_MIN` quand la place manque. */
+export const useFit = (): number => useContext(StepFit)
+
+/** Un espace ou une hauteur, resserré. */
+export const fitSize = (value: number, fit: number): number => Math.round(value * fit)
+
+/** Une taille de texte, resserrée presque autant que les espaces (demande du 29/09/2026). */
+export const fitFont = (size: number, fit: number): number => Math.round(size * (1 - (1 - fit) * 0.8) * 2) / 2
+
 // ── En-tête : retour + barre ─────────────────────────────────────────────
 
 export const FlowHeader: FC<{
@@ -120,35 +147,48 @@ export const Eyebrow: FC<{ children: string; align?: 'center' | 'left'; color?: 
   children,
   align = 'center',
   color = colors.rose,
-}) => (
-  <Text style={[styles.eyebrow, { textAlign: align, color }]} accessibilityRole="header">
-    {children}
-  </Text>
-)
+}) => {
+  const fit = useFit()
+  return (
+    <Text style={[styles.eyebrow, { textAlign: align, color, marginBottom: fitSize(8, fit) }]} accessibilityRole="header">
+      {children}
+    </Text>
+  )
+}
 
 export const Title: FC<{
   children: ReactNode
   align?: 'center' | 'left'
   size?: number
   style?: StyleProp<TextStyle>
-}> = ({ children, align = 'center', size = 30, style }) => (
-  <Text
-    style={[
-      styles.title,
-      { textAlign: align, fontSize: size, lineHeight: Math.round(size * 1.18) },
-      style,
-    ]}
-    accessibilityRole="header"
-  >
-    {children}
-  </Text>
-)
+}> = ({ children, align = 'center', size = 30, style }) => {
+  const fitted = fitFont(size, useFit())
+  return (
+    <Text
+      style={[
+        styles.title,
+        { textAlign: align, fontSize: fitted, lineHeight: Math.round(fitted * 1.18) },
+        style,
+      ]}
+      accessibilityRole="header"
+    >
+      {children}
+    </Text>
+  )
+}
 
 export const Body: FC<{ children: ReactNode; align?: 'center' | 'left'; style?: StyleProp<TextStyle> }> = ({
   children,
   align = 'center',
   style,
-}) => <Text style={[styles.body, { textAlign: align }, style]}>{children}</Text>
+}) => {
+  const size = fitFont(16, useFit())
+  return (
+    <Text style={[styles.body, { textAlign: align, fontSize: size, lineHeight: Math.round(size * 1.47) }, style]}>
+      {children}
+    </Text>
+  )
+}
 
 // ── Bulle de Perle ───────────────────────────────────────────────────────
 
@@ -182,29 +222,32 @@ export const PerleBubble: FC<{
   size?: number
   highlight?: boolean
   style?: StyleProp<ViewStyle>
-}> = ({ children, size = 64, highlight = false, style }) => {
+}> = ({ children, size = 52, highlight = false, style }) => {
   const base = useRevealDelay()
+  const fit = useFit()
+  const avatar = fitSize(size, fit)
   return (
     <View style={[styles.bubbleRow, style]}>
       <Animated.View
         entering={softScaleIn(base, 0.85, 420)}
-        style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}
+        style={[styles.avatar, { width: avatar, height: avatar, borderRadius: avatar / 2 }]}
       >
-        <BreathingAvatar size={size} />
+        <BreathingAvatar size={avatar} />
       </Animated.View>
       <Animated.View entering={fadeSide('left', base + 160, 440)} style={styles.bubbleWrap}>
         <View style={[styles.pointer, highlight && styles.pointerHighlight]} />
-        <View style={[styles.bubble, highlight && styles.bubbleHighlight]}>
-          {typeof children === 'string' ? <Text style={styles.bubbleText}>{children}</Text> : children}
+        <View style={[styles.bubble, { paddingVertical: fitSize(11, fit) }, highlight && styles.bubbleHighlight]}>
+          {typeof children === 'string' ? <BubbleText>{children}</BubbleText> : children}
         </View>
       </Animated.View>
     </View>
   )
 }
 
-export const BubbleText: FC<{ children: ReactNode }> = ({ children }) => (
-  <Text style={styles.bubbleText}>{children}</Text>
-)
+export const BubbleText: FC<{ children: ReactNode }> = ({ children }) => {
+  const size = fitFont(16, useFit())
+  return <Text style={[styles.bubbleText, { fontSize: size, lineHeight: Math.round(size * 1.33) }]}>{children}</Text>
+}
 
 export const Accent: FC<{ children: ReactNode }> = ({ children }) => (
   <Text style={styles.accent}>{children}</Text>
@@ -280,19 +323,22 @@ export const TextLink: FC<{ label: string; onPress: () => void; color?: string }
   label,
   onPress,
   color = colors.inkMuted,
-}) => (
-  <Pressable
-    onPress={() => {
-      haptic.selection()
-      onPress()
-    }}
-    hitSlop={10}
-    accessibilityRole="link"
-    style={styles.linkWrap}
-  >
-    <Text style={[styles.link, { color }]}>{label}</Text>
-  </Pressable>
-)
+}) => {
+  const fit = useFit()
+  return (
+    <Pressable
+      onPress={() => {
+        haptic.selection()
+        onPress()
+      }}
+      hitSlop={10}
+      accessibilityRole="link"
+      style={[styles.linkWrap, { paddingVertical: fitSize(8, fit) }]}
+    >
+      <Text style={[styles.link, { color }]}>{label}</Text>
+    </Pressable>
+  )
+}
 
 // ── Choix ────────────────────────────────────────────────────────────────
 
@@ -311,7 +357,10 @@ export const OptionCard: FC<{
   multi?: boolean
   outlined?: boolean
   minHeight?: number
-}> = ({ label, sub, selected = false, onPress, left, multi = false, outlined = false, minHeight = 60 }) => {
+}> = ({ label, sub, selected = false, onPress, left, multi = false, outlined = false, minHeight = 52 }) => {
+  const fit = useFit()
+  const labelSize = fitFont(15.5, fit)
+  const subSize = fitFont(13.5, fit)
   return (
     <View>
       <PressableScale
@@ -326,15 +375,25 @@ export const OptionCard: FC<{
         accessibilityLabel={sub ? `${label}. ${sub}` : label}
         style={[
           styles.option,
-          { minHeight },
+          { minHeight: fitSize(minHeight, fit), paddingVertical: fitSize(10, fit) },
           outlined && styles.optionOutlined,
           selected && styles.optionOn,
         ]}
       >
         {left ? <View style={styles.optionLeft}>{left}</View> : null}
         <View style={styles.optionTexts}>
-          <Text style={[styles.optionLabel, sub ? styles.optionLabelStrong : null]}>{label}</Text>
-          {sub ? <Text style={styles.optionSub}>{sub}</Text> : null}
+          <Text
+            style={[
+              styles.optionLabel,
+              { fontSize: labelSize, lineHeight: Math.round(labelSize * 1.33) },
+              sub ? styles.optionLabelStrong : null,
+            ]}
+          >
+            {label}
+          </Text>
+          {sub ? (
+            <Text style={[styles.optionSub, { fontSize: subSize, lineHeight: Math.round(subSize * 1.36) }]}>{sub}</Text>
+          ) : null}
         </View>
         {selected ? <CheckDot /> : null}
       </PressableScale>
@@ -351,6 +410,7 @@ export const Chip: FC<{
   /** Occupe toute sa case (grille à deux colonnes). */
   fill?: boolean
 }> = ({ label, selected = false, onPress, icon, dashed = false, fill = false }) => {
+  const fit = useFit()
   return (
     <View style={fill ? styles.fill : undefined}>
       <PressableScale
@@ -363,11 +423,22 @@ export const Chip: FC<{
         accessibilityRole="checkbox"
         accessibilityState={{ checked: selected }}
         accessibilityLabel={label}
-        style={[styles.chip, fill && styles.chipFill, dashed && styles.chipDashed, selected && styles.chipOn]}
+        style={[
+          styles.chip,
+          { minHeight: fitSize(46, fit) },
+          fill && [styles.chipFill, { minHeight: fitSize(54, fit), paddingVertical: fitSize(8, fit) }],
+          dashed && styles.chipDashed,
+          selected && styles.chipOn,
+        ]}
       >
         {icon}
         <Text
-          style={[styles.chipText, fill && styles.chipTextFill, selected && styles.chipTextOn]}
+          style={[
+            styles.chipText,
+            { fontSize: fitFont(16, fit) },
+            fill && [styles.chipTextFill, { fontSize: fitFont(15, fit), lineHeight: Math.round(fitFont(15, fit) * 1.27) }],
+            selected && styles.chipTextOn,
+          ]}
           numberOfLines={fill ? 2 : undefined}
         >
           {label}
@@ -377,7 +448,10 @@ export const Chip: FC<{
   )
 }
 
-export const Hint: FC<{ children: string }> = ({ children }) => <Text style={styles.hint}>{children}</Text>
+export const Hint: FC<{ children: string }> = ({ children }) => {
+  const fit = useFit()
+  return <Text style={[styles.hint, { marginTop: fitSize(10, fit) }]}>{children}</Text>
+}
 
 // ── Entrées progressives ─────────────────────────────────────────────────
 
@@ -404,15 +478,18 @@ export const Cascade: FC<{
   children: ReactNode
   from?: CascadeFrom
   step?: number
+  /** Écart vertical entre les éléments, resserré avec l'écran. */
+  gap?: number
   style?: StyleProp<ViewStyle>
   itemStyle?: StyleProp<ViewStyle>
-}> = ({ children, from = 'down', step = 60, style, itemStyle }) => {
+}> = ({ children, from = 'down', step = 60, gap, style, itemStyle }) => {
   const base = useRevealDelay()
+  const fit = useFit()
   const mountedAt = useRef(Date.now())
   const fresh = Date.now() - mountedAt.current < REVEAL_WINDOW
   let i = 0
   return (
-    <View style={style}>
+    <View style={[gap !== undefined && { gap: fitSize(gap, fit) }, style]}>
       {Children.toArray(children).map((child) => {
         if (!isValidElement(child)) return child
         const delay = fresh ? base + Math.min(i++, 12) * step : 0
@@ -468,12 +545,23 @@ function blockEntrance(type: unknown, delay: number) {
 // ── Mise en page d'une étape ─────────────────────────────────────────────
 
 /**
- * Corps défilant + barre d'actions fixe en bas.
+ * Corps + barre d'actions fixe en bas.
  *
  *   - Les blocs entrent un par un (`animate`, actif par défaut).
  *   - Clavier ouvert : la barre du bas remonte au-dessus du clavier et la zone
  *     défile pour garder le champ actif visible. Rien n'est jamais recouvert.
- *   - Le défilement reste un filet de sécurité sur les petits écrans.
+ *   - Tout tient au-dessus du bouton, sans défiler, quel que soit l'appareil
+ *     (demande du 29/09/2026) : si le contenu dépasse à l'arrivée, l'écran se
+ *     resserre (`useFit`, espaces ET textes, jusqu'à `FIT_MIN`), puis en dernier
+ *     recours tout le contenu est réduit à l'échelle. Mesuré, pas deviné : la
+ *     même règle vaut pour un iPhone SE, une tablette ou un texte agrandi par
+ *     l'accessibilité.
+ *   - Ce resserrement se fait À L'ABRI des regards, puis le contenu est remonté
+ *     et ses entrées jouent sur la mise en page finale. Sur Android (Reanimated
+ *     4), un bloc dont la place change pendant son animation d'entrée garde son
+ *     ancienne position : de grands trous apparaissaient (constaté le 29/09).
+ *     Pour la même raison, ce qui apparaît après une réponse (réaction de
+ *     Perle) a sa place réservée dès l'arrivée : rien ne bouge ensuite.
  */
 export const StepLayout: FC<{
   children: ReactNode
@@ -494,6 +582,77 @@ export const StepLayout: FC<{
   const mountedAt = useRef(Date.now())
   const fresh = Date.now() - mountedAt.current < REVEAL_WINDOW
   const keyboardOpen = keyboardHeight > 0
+  const keyboardOpenRef = useRef(keyboardOpen)
+  keyboardOpenRef.current = keyboardOpen
+
+  // Hauteur naturelle de la colonne (avant mise à l'échelle), sa position et
+  // la zone visible. Réglé une fois, à l'arrivée ; clavier ouvert, on ne touche
+  // à rien. `pass` remonte le contenu une fois réglé (entrées rejouées à neuf).
+  const [fit, setFit] = useState({ fit: 1, zoom: 1, natural: 0, hidden: false, pass: 0 })
+  // `measuredAt` : le resserrement auquel la hauteur a été mesurée. Tant que la
+  // colonne n'a pas été remesurée au dernier réglage, on attend : sinon une
+  // mesure de la zone visible arrivée entre-temps resserrait deux fois.
+  const measure = useRef({ fit: 1, zoom: 1, natural: 0, top: 0, viewport: 0, measuredAt: 1, fitting: false, settled: false })
+  const settle = useCallback(() => {
+    const m = measure.current
+    if (m.settled) return
+    m.settled = true
+    if (m.fitting) setFit((f) => ({ ...f, hidden: false, pass: f.pass + 1 }))
+  }, [])
+  const adjustFit = useCallback(() => {
+    const m = measure.current
+    if (m.settled || keyboardOpenRef.current || m.viewport <= 0 || m.natural <= 0 || m.measuredAt !== m.fit) return
+    const room = m.viewport - m.top - fitSize(24, m.fit)
+    if (m.natural * m.zoom <= room + 1) {
+      settle()
+      return
+    }
+    m.fitting = true
+    if (m.fit > FIT_MIN) {
+      // Par petits pas : un texte qui perd une ligne libère d'un coup plus que
+      // prévu, et on ne desserre jamais. La mesure suivante enchaîne si besoin.
+      const overflow = 1 - room / (m.natural * m.zoom)
+      m.fit = Math.max(FIT_MIN, m.fit - Math.max(0.015, overflow * m.fit * 0.6))
+    } else {
+      // Tient par construction : c'est réglé.
+      m.zoom = room / m.natural
+      m.settled = true
+    }
+    setFit((f) => ({
+      fit: m.fit,
+      zoom: m.zoom,
+      natural: m.natural,
+      hidden: !m.settled,
+      pass: m.settled ? f.pass + 1 : f.pass,
+    }))
+  }, [settle])
+  // Resserrement de ce rendu : une mesure de la colonne le reflète, pas un réglage à venir.
+  const renderedFit = useRef(1)
+  renderedFit.current = fit.fit
+  // Filet : quoi qu'il arrive (clavier ouvert d'emblée, mesure absente), on montre.
+  useEffect(() => {
+    const t = setTimeout(settle, 600)
+    return () => clearTimeout(t)
+  }, [settle])
+  const onViewportLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      measure.current.viewport = e.nativeEvent.layout.height
+      adjustFit()
+    },
+    [adjustFit],
+  )
+  const onColumnLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      const m = measure.current
+      m.natural = e.nativeEvent.layout.height
+      m.measuredAt = renderedFit.current
+      m.top = e.nativeEvent.layout.y
+      // Mise à l'échelle en cours : la marge qui la compense suit la hauteur.
+      if (m.zoom < 1) setFit((f) => (f.natural === m.natural ? f : { ...f, natural: m.natural }))
+      adjustFit()
+    },
+    [adjustFit],
+  )
 
   let order = 0
   const blocks = Children.toArray(children).map((child) => {
@@ -508,49 +667,71 @@ export const StepLayout: FC<{
   const footerDelay = footerAt ?? (fresh ? Math.min(order, 5) * REVEAL_STEP : 0)
 
   return (
-    <View style={[styles.flex, keyboardOpen && { paddingBottom: keyboardPadding(keyboardHeight, insets.bottom, false) }]}>
-      <ScrollView
-        ref={scrollRef}
-        style={styles.flex}
-        contentContainerStyle={[
-          styles.content,
-          contentStyle,
-          // De la place pour pouvoir faire remonter le champ au-dessus des suggestions.
-          keyboardOpen && focusSpace > 28 ? { paddingBottom: focusSpace } : null,
-        ]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        onScroll={onScroll}
-        scrollEventThrottle={32}
-        onContentSizeChange={onContentSizeChange}
-      >
-        <View style={styles.column}>{blocks}</View>
-      </ScrollView>
-      {footer ? (
-        <Animated.View
-          entering={
-            animate || footerAt !== undefined
-              ? FadeInUp.delay(footerDelay).duration(420).easing(EASE_OUT).reduceMotion(RM)
-              : undefined
-          }
-          style={[styles.footer, { paddingBottom: keyboardOpen ? 12 : Math.max(insets.bottom, 12) + 4 }]}
+    <StepFit.Provider value={fit.fit}>
+      <View style={[styles.flex, keyboardOpen && { paddingBottom: keyboardPadding(keyboardHeight, insets.bottom, false) }]}>
+        <ScrollView
+          ref={scrollRef}
+          style={styles.flex}
+          contentContainerStyle={[
+            styles.content,
+            { paddingTop: fitSize(4, fit.fit), paddingBottom: fitSize(24, fit.fit) },
+            contentStyle,
+            // De la place pour pouvoir faire remonter le champ au-dessus des suggestions.
+            keyboardOpen && focusSpace > 28 ? { paddingBottom: focusSpace } : null,
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          onScroll={onScroll}
+          scrollEventThrottle={32}
+          onLayout={onViewportLayout}
+          onContentSizeChange={onContentSizeChange}
         >
-          <View style={[styles.column, styles.footerColumn]}>{footer}</View>
-        </Animated.View>
-      ) : null}
-    </View>
+          <View
+            key={fit.pass}
+            onLayout={onColumnLayout}
+            pointerEvents={fit.hidden ? 'none' : 'auto'}
+            style={[
+              styles.column,
+              fit.hidden && styles.hidden,
+              // Dernier recours : réduit depuis le haut, la marge négative rend la place gagnée.
+              fit.zoom < 1 && {
+                transform: [{ scale: fit.zoom }],
+                transformOrigin: 'top',
+                marginBottom: -fit.natural * (1 - fit.zoom),
+              },
+            ]}
+          >
+            {blocks}
+          </View>
+        </ScrollView>
+        {footer ? (
+          <Animated.View
+            entering={
+              animate || footerAt !== undefined
+                ? FadeInUp.delay(footerDelay).duration(420).easing(EASE_OUT).reduceMotion(RM)
+                : undefined
+            }
+            style={[styles.footer, { paddingBottom: keyboardOpen ? 12 : Math.max(insets.bottom, 12) + 4 }]}
+          >
+            <View style={[styles.column, styles.footerColumn]}>{footer}</View>
+          </Animated.View>
+        ) : null}
+      </View>
+    </StepFit.Provider>
   )
 }
 
-export const Gap: FC<{ h: number }> = ({ h }) => <View style={{ height: h }} />
+export const Gap: FC<{ h: number }> = ({ h }) => <View style={{ height: fitSize(h, useFit()) }} />
 
 // ── Styles ───────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  hidden: { opacity: 0 },
   fill: { width: '100%' },
   column: { width: '100%', maxWidth: FLOW_MAX_WIDTH, alignSelf: 'center' },
-  content: { paddingHorizontal: GUTTER, paddingTop: 8, paddingBottom: 24, flexGrow: 1 },
+  /** Haut et bas : resserrés avec l'écran (voir StepLayout). */
+  content: { paddingHorizontal: GUTTER, flexGrow: 1 },
   footer: { paddingHorizontal: GUTTER, paddingTop: 10, backgroundColor: colors.bg },
   /** Écart entre les boutons empilés de la barre du bas. */
   footerColumn: { gap: 12 },
@@ -560,21 +741,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
     paddingHorizontal: GUTTER,
-    paddingTop: 6,
-    paddingBottom: 10,
+    paddingTop: 4,
+    paddingBottom: 6,
     width: '100%',
     maxWidth: FLOW_MAX_WIDTH + GUTTER * 2,
     alignSelf: 'center',
   },
   back: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: colors.gray100,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backPlaceholder: { width: 44, height: 44 },
+  backPlaceholder: { width: 40, height: 40 },
   track: {
     flex: 1,
     height: 6,
@@ -588,7 +769,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     letterSpacing: 2,
     textTransform: 'uppercase',
-    marginBottom: 10,
   },
   title: {
     fontFamily: fontFamilies.bold,
@@ -597,12 +777,10 @@ const styles = StyleSheet.create({
   },
   body: {
     fontFamily: fontFamilies.regular,
-    fontSize: 17,
-    lineHeight: 25,
     color: colors.inkMuted,
   },
 
-  bubbleRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  bubbleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatar: {
     backgroundColor: colors.roseSoft,
     alignItems: 'center',
@@ -627,11 +805,10 @@ const styles = StyleSheet.create({
   pointerHighlight: { borderColor: colors.rose, borderLeftWidth: 1.5, borderBottomWidth: 1.5 },
   bubble: {
     backgroundColor: colors.surface,
-    borderRadius: 24,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    paddingHorizontal: 15,
     shadowColor: '#0F172A',
     shadowOpacity: 0.05,
     shadowRadius: 14,
@@ -641,8 +818,6 @@ const styles = StyleSheet.create({
   bubbleHighlight: { borderColor: colors.rose, borderWidth: 1.5 },
   bubbleText: {
     fontFamily: fontFamilies.semiBold,
-    fontSize: 18,
-    lineHeight: 25,
     color: colors.ink,
   },
   accent: { color: colors.rose, fontFamily: fontFamilies.bold },
@@ -675,7 +850,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   secondaryText: { fontFamily: fontFamilies.semiBold, fontSize: 17, color: colors.ink },
-  linkWrap: { alignSelf: 'center', paddingVertical: 8 },
+  linkWrap: { alignSelf: 'center' },
   link: {
     fontFamily: fontFamilies.medium,
     fontSize: 15,
@@ -691,16 +866,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     paddingHorizontal: 16,
-    paddingVertical: 12,
     gap: 14,
   },
   optionOutlined: { borderWidth: 1.5, borderColor: colors.ink },
   optionOn: { backgroundColor: colors.roseSoft, borderColor: colors.rose, borderWidth: 1.5 },
   optionLeft: { alignItems: 'center', justifyContent: 'center' },
   optionTexts: { flex: 1, gap: 3 },
-  optionLabel: { fontFamily: fontFamilies.regular, fontSize: 17, lineHeight: 23, color: colors.ink },
+  optionLabel: { fontFamily: fontFamilies.regular, color: colors.ink },
   optionLabelStrong: { fontFamily: fontFamilies.semiBold },
-  optionSub: { fontFamily: fontFamilies.regular, fontSize: 15, lineHeight: 20, color: colors.inkLight },
+  optionSub: { fontFamily: fontFamilies.regular, color: colors.inkLight },
   checkDot: {
     width: 24,
     height: 24,
@@ -714,7 +888,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    minHeight: 46,
     paddingHorizontal: 16,
     borderRadius: 999,
     borderWidth: 1,
@@ -724,15 +897,13 @@ const styles = StyleSheet.create({
   chipFill: {
     width: '100%',
     justifyContent: 'center',
-    minHeight: 54,
     borderRadius: 18,
     paddingHorizontal: 10,
-    paddingVertical: 8,
   },
   chipDashed: { borderStyle: 'dashed', borderColor: colors.inkLight },
   chipOn: { backgroundColor: colors.roseSoft, borderColor: colors.rose, borderWidth: 1.5 },
-  chipText: { fontFamily: fontFamilies.regular, fontSize: 16, color: colors.ink },
-  chipTextFill: { fontSize: 15, lineHeight: 19, textAlign: 'center', flexShrink: 1 },
+  chipText: { fontFamily: fontFamilies.regular, color: colors.ink },
+  chipTextFill: { textAlign: 'center', flexShrink: 1 },
   chipTextOn: { color: colors.roseDeep, fontFamily: fontFamilies.medium },
 
   hint: {
@@ -740,6 +911,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.inkLight,
     textAlign: 'center',
-    marginTop: 14,
   },
 })

@@ -286,7 +286,7 @@ const CompareScreen: FC = () => {
             <Text style={styles.errorTitle}>Comparaison indisponible</Text>
             <Text style={styles.errorMsg}>{state.message}</Text>
             <Pressable
-              onPress={() => router.replace(ROUTES.TABS.HISTORY)}
+              onPress={() => router.dismissTo(ROUTES.TABS.HISTORY)}
               style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
               accessibilityRole="button"
             >
@@ -741,3 +741,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.base,
   },
 })
+
+// Erreur de rendu : seule cette page est remplacée (pas toute l'app).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/shared/RouteErrorBoundary'

@@ -66,7 +66,9 @@ export const SignInForm: FC = () => {
       return
     }
     if (isDraftPendingFlush()) return
-    router.replace(ROUTES.TABS.HOME)
+    // dismissTo : revient aux onglets s'ils sont dans la pile, sinon les ouvre à
+    // la place de l'écran de connexion (même méthode que le reste de l'app).
+    router.dismissTo(ROUTES.TABS.HOME)
   })
 
   return (

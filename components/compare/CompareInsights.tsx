@@ -14,13 +14,16 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, type FC, type ReactNode } from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
+import { router } from 'expo-router'
 
 import { GlassCard } from '@/components/design/GlassCard'
+import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
+import { ROUTES } from '@/constants/routes'
 import { colors } from '@/constants/colors'
 import { spacing } from '@/constants/spacing'
 import { fontFamilies } from '@/constants/typography'
 import { supabase } from '@/lib/supabase/client'
-import { handleNoCreditsResponse } from '@/lib/credits/exhaustedStore'
+import { isNoCreditsResponse } from '@/lib/credits/exhaustedStore'
 import {
   compareInsightsKey,
   readAiCache,
@@ -35,6 +38,19 @@ type Insights = {
   howToChoose: string
   /** Produit conseillé (badge vert). Absent des caches < v8 → fallback score. */
   winner?: 'A' | 'B'
+}
+
+/** Les 4 textes sont requis : un cache local ancien ou incomplet faisait planter
+ *  le post-traitement (`split` sur undefined). */
+function isValidInsights(x: unknown): x is Insights {
+  if (!x || typeof x !== 'object') return false
+  const i = x as Record<string, unknown>
+  return (
+    typeof i.portraitA === 'string' &&
+    typeof i.portraitB === 'string' &&
+    typeof i.common === 'string' &&
+    typeof i.howToChoose === 'string'
+  )
 }
 
 /** Statut remonté au parent : pilote le badge (winner) + l'affichage du bouton
@@ -70,6 +86,7 @@ export const CompareInsights: FC<Props> = ({
 }) => {
   const [data, setData] = useState<Insights | null>(null)
   const [error, setError] = useState(false)
+  const [noCredits, setNoCredits] = useState(false)
   const mounted = useRef(true)
 
   // Remonte le statut au parent (badge winner + visibilité bouton/blocs).
@@ -85,6 +102,7 @@ export const CompareInsights: FC<Props> = ({
     mounted.current = true
     setData(null)
     setError(false)
+    setNoCredits(false)
     const cacheKey = compareInsightsKey(aId, bId)
     void (async () => {
       try {
@@ -94,7 +112,7 @@ export const CompareInsights: FC<Props> = ({
           cacheKey,
           TTL_COMPARE_INSIGHTS_MS,
         )
-        if (cached && typeof cached.portraitA === 'string') {
+        if (isValidInsights(cached)) {
           if (mounted.current) setData(cached)
           return
         }
@@ -105,9 +123,13 @@ export const CompareInsights: FC<Props> = ({
           { body: { aId, bId } },
         )
         if (!mounted.current) return
-        if (invokeError || !res || typeof res.portraitA !== 'string') {
-          // Refus faute de crédits → feuille « Plus de crédits » (pas sur un rate-limit).
-          await handleNoCreditsResponse(invokeError, response)
+        if (invokeError || !isValidInsights(res)) {
+          // Refus faute de crédits : bloc verrouillé ici, PAS la feuille. Ce
+          // chargement part tout seul à l'ouverture de la page, et la règle de
+          // l'app est « chargement automatique = bloc verrouillé ».
+          const refused = await isNoCreditsResponse(invokeError, response)
+          if (!mounted.current) return
+          setNoCredits(refused)
           setError(true)
           return
         }
@@ -139,6 +161,27 @@ export const CompareInsights: FC<Props> = ({
       howToChoose: fix(data.howToChoose),
     }
   }, [data, nameA, nameB, shortNameA, shortNameB])
+
+  // Plus de crédits : bloc verrouillé discret (le reste de la page s'affiche).
+  if (noCredits) {
+    return (
+      <GlassCard style={styles.block} padding={spacing.lg} opacity={0.8}>
+        <Text style={[styles.blockLabel, { color: '#0369A1' }]}>COMMENT CHOISIR ?</Text>
+        <Text style={styles.body}>
+          Plus de crédits pour la comparaison détaillée aujourd&apos;hui. Le reste de la
+          comparaison reste disponible.
+        </Text>
+        <Pressable
+          onPress={() => router.push(ROUTES.OFFRE.INDEX)}
+          accessibilityRole="button"
+          hitSlop={8}
+          style={styles.lockedCta}
+        >
+          <Text style={styles.lockedCtaText}>Voir Premium</Text>
+        </Pressable>
+      </GlassCard>
+    )
+  }
 
   // Soft-fail : fonction indisponible → on masque le bloc.
   if (error) return null
@@ -339,6 +382,8 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: colors.ink,
   },
+  lockedCta: { alignSelf: 'flex-start', marginTop: spacing.sm, paddingVertical: spacing.xs },
+  lockedCtaText: { fontFamily: fontFamilies.semiBold, fontSize: 14, color: colors.roseDeep },
   bold: {
     fontFamily: fontFamilies.semiBold,
     color: colors.ink,

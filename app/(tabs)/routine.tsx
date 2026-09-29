@@ -39,6 +39,7 @@ import { ExposureSummaryCard } from '@/components/routine/ExposureSummaryCard'
 import { RoutineProductsCard } from '@/components/routine/RoutineProductsCard'
 import { GoalsCoverageCard } from '@/components/routine/GoalsCoverageCard'
 import { displayTitle } from '@/lib/analysis/displayTitle'
+import { TAB_CONTENT_BOTTOM } from '@/components/navigation/BottomTabBar'
 
 /** Colonne d'icône commune aux cartes « Routine produit » et « Mes favoris » :
  *  même largeur = titres alignés l'un sous l'autre. */
@@ -108,7 +109,7 @@ const RoutineScreen: FC = () => {
           </View>
         ) : (
           <ScrollView
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 64 + spacing.xl }]}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + TAB_CONTENT_BOTTOM }]}
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.chipRow}>
@@ -245,3 +246,6 @@ const styles = StyleSheet.create({
 })
 
 export default RoutineScreen
+
+// Erreur de rendu : seule cette page est remplacée (pas toute l'app).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/shared/RouteErrorBoundary'

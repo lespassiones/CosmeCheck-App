@@ -21,6 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { createClient } from '@supabase/supabase-js'
 
 import type { Database } from './types'
+import { withDefaultTimeout } from './fetchTimeout'
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
@@ -38,6 +39,9 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: false,
   },
+  // Plafond par défaut (fonctions 60 s, base 30 s) : plus de chargement sans
+  // fin quand le réseau ou le serveur ne répond pas. Voir fetchTimeout.ts.
+  global: { fetch: withDefaultTimeout((input, init) => fetch(input, init)) },
 })
 
 /** Accès typé au schéma applicatif `cosme_check`. */

@@ -99,7 +99,17 @@ export const PromesseChooserSheet: FC<Props> = ({ visible, onClose, returnTo }) 
     action?.()
   }, [])
 
+  // Démonte à la fin de la fermeture MÊME interrompue (et par un minuteur de
+  // secours) : démonter seulement sur `finished` laissait la Modal transparente
+  // montée au-dessus de toute l'app, et son fond n'y pouvait rien (`visible`
+  // déjà faux). Même règle que CreditsExhaustedModal.
+  const visibleRef = useRef(visible)
+  visibleRef.current = visible
+  const closedRef = useRef(!visible)
+
   const finishClose = useCallback(() => {
+    if (visibleRef.current || closedRef.current) return
+    closedRef.current = true
     setMounted(false)
     // iOS : la navigation part dans onDismiss (Modal réellement retirée).
     // Android : pas de conflit de présentation, on enchaîne tout de suite.
@@ -109,6 +119,7 @@ export const PromesseChooserSheet: FC<Props> = ({ visible, onClose, returnTo }) 
 
   useEffect(() => {
     if (visible) {
+      closedRef.current = false
       setMounted(true)
       backdrop.value = withTiming(1, { duration: 180, reduceMotion: ReduceMotion.System })
       translateY.value = withTiming(0, {
@@ -121,11 +132,14 @@ export const PromesseChooserSheet: FC<Props> = ({ visible, onClose, returnTo }) 
       translateY.value = withTiming(
         OFFSCREEN,
         { duration: 240, easing: Easing.in(Easing.cubic), reduceMotion: ReduceMotion.System },
-        (finished) => {
-          if (finished) runOnJS(finishClose)()
+        () => {
+          runOnJS(finishClose)()
         },
       )
+      const fallback = setTimeout(finishClose, 340)
+      return () => clearTimeout(fallback)
     }
+    return undefined
   }, [visible, backdrop, translateY, finishClose])
 
   const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: translateY.value }] }))

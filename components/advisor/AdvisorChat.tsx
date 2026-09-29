@@ -135,6 +135,8 @@ interface AdvisorChatProps {
   initialMessages?: StoredMessage[] | null
   /** Notifie le parent quand une nouvelle conversation est créée (1er message). */
   onConversationCreated?: (id: string) => void
+  /** Une réponse est en cours : le parent bloque « Nouvelle conversation » et « Historique ». */
+  onBusyChange?: (busy: boolean) => void
   /**
    * Rang du chat dans l'entrée échelonnée de la page : la conversation, puis
    * les suggestions, puis la saisie arrivent à la suite (rangs n, n+1, n+2).
@@ -157,6 +159,7 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
   conversationId = null,
   initialMessages = null,
   onConversationCreated,
+  onBusyChange,
   entranceIndex = 0,
 }) => {
   const [messages, setMessages] = useState<ChatMsg[]>(() =>
@@ -234,7 +237,9 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
       // Persistance historique (best-effort) : conversation créée au 1er message.
       let convId = convIdRef.current
       if (!convId) {
-        convId = await createConversation(text)
+        // Hors du try plus bas : une erreur ici laissait `streaming` à vrai et la
+        // saisie grisée pour de bon. Historique = best-effort.
+        convId = await createConversation(text).catch(() => null)
         if (convId) {
           convIdRef.current = convId
           onConversationCreated?.(convId)
@@ -374,6 +379,14 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
   // produits) : relance l'agent avec l'historique + une demande de reco explicite.
   // Le texte de la bulle ne change pas ; seul le carrousel du message se remplit.
   const [recoRequesting, setRecoRequesting] = useState(false)
+
+  // Changer de conversation pendant une réponse (ou une demande de
+  // recommandations) remontait le chat en pleine animation et faisait
+  // disparaître un résultat déjà payé.
+  useEffect(() => {
+    onBusyChange?.(streaming || recoRequesting)
+  }, [streaming, recoRequesting, onBusyChange])
+
   const requestReco = useCallback(
     async (index: number) => {
       if (streaming || recoRequesting) return

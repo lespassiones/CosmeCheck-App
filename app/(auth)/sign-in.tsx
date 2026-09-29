@@ -6,7 +6,7 @@
  * compte ») ou depuis l'inscription.
  */
 
-import { type FC } from 'react'
+import { type FC, useCallback } from 'react'
 import {
   Platform,
   Pressable,
@@ -17,6 +17,7 @@ import {
 } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { keyboardPadding, useKeyboardAwareScroll } from '@/hooks/useKeyboardHeight'
+import { useAndroidBack } from '@/hooks/useAndroidBack'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 
@@ -31,6 +32,15 @@ const SignInScreen: FC = () => {
   const insets = useSafeAreaInsets()
   // Clavier : le formulaire remonte et garde le champ actif ET le bouton en vue.
   const { scrollRef, keyboardHeight, onScroll, onContentSizeChange } = useKeyboardAwareScroll(120)
+  // Retour Android sans écran dessous (ouverte par replace depuis les accroches) :
+  // retour aux accroches, comme le bouton à l'écran, au lieu de fermer l'app.
+  useAndroidBack(
+    useCallback(() => {
+      if (router.canGoBack()) return false
+      router.replace(ROUTES.PREONBOARDING.INDEX)
+      return true
+    }, []),
+  )
   return (
   <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
     <View style={[styles.flex, keyboardHeight > 0 && { paddingBottom: keyboardPadding(keyboardHeight, insets.bottom, true) }]}>
@@ -46,7 +56,9 @@ const SignInScreen: FC = () => {
         <View style={styles.column}>
           <Pressable
             hitSlop={8}
-            onPress={() => (router.canGoBack() ? router.back() : router.replace(ROUTES.AUTH.WELCOME))}
+            // Sans écran dessous (ouverte par replace depuis les accroches du
+            // parcours invité) : retour aux accroches, pas à « On garde tout ça ? ».
+            onPress={() => (router.canGoBack() ? router.back() : router.replace(ROUTES.PREONBOARDING.INDEX))}
             accessibilityRole="button"
             accessibilityLabel="Retour"
             style={styles.back}

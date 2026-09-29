@@ -21,7 +21,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react'
 import {
   ActivityIndicator,
-  BackHandler,
   StyleSheet,
   Text,
   View,
@@ -35,6 +34,7 @@ import Animated, { FadeInLeft, FadeInRight, ReduceMotion } from 'react-native-re
 import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
 import { ROUTES } from '@/constants/routes'
+import { useAndroidBack } from '@/hooks/useAndroidBack'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
 import { markPreOnboardingDone } from '@/lib/storage/preOnboarding'
@@ -82,6 +82,9 @@ import { draftRestrictionFamilies } from '@/lib/onboarding/buildPreferences'
 import type { StepProps } from '@/components/onboarding/flow/types'
 
 type Direction = 'forward' | 'back'
+
+/** Délai minimal entre deux avances (anti double appui sur « Continuer »). */
+const ADVANCE_LOCK_MS = 400
 
 /**
  * Paywall du parcours invité, au pic de motivation, AVANT le compte (comme
@@ -224,9 +227,15 @@ export const OnboardingFlow: FC<{ mode: FlowMode }> = ({ mode }) => {
     }
   }, [mode, knownName, user?.id, queryClient])
 
+  // Deux appuis rapprochés sur « Continuer » avançaient de DEUX étapes (prénom
+  // ou question obligatoire sautés) : une avance au plus par 400 ms.
+  const lastAdvanceAt = useRef(0)
   const next = useCallback(() => {
     const current = stepRef.current
     if (!current) return
+    const now = Date.now()
+    if (now - lastAdvanceAt.current < ADVANCE_LOCK_MS) return
+    lastAdvanceAt.current = now
     const steps = visibleSteps(contextFor(draftRef.current))
     const target = nextStep(current, steps)
     if (target) goTo(target, 'forward')
@@ -246,10 +255,9 @@ export const OnboardingFlow: FC<{ mode: FlowMode }> = ({ mode }) => {
   }, [contextFor, goTo])
 
   // Geste / bouton retour Android : écran précédent, sinon comportement normal.
-  useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => back())
-    return () => sub.remove()
-  }, [back])
+  // Seulement quand le parcours est affiché (useAndroidBack suit le focus) :
+  // un écouteur global avalait le retour des écrans ouverts par-dessus.
+  useAndroidBack(back)
 
   const steps = useMemo(() => visibleSteps(contextFor(draft)), [contextFor, draft])
   const firstName = draft.firstName?.trim() || knownName
@@ -267,7 +275,11 @@ export const OnboardingFlow: FC<{ mode: FlowMode }> = ({ mode }) => {
   const chrome = !NO_CHROME.has(step)
   const signIn = () => {
     markPreOnboardingDone()
-    router.push(ROUTES.AUTH.SIGN_IN)
+    // replace, pas push : poussée par-dessus, cette page restait montée SOUS les
+    // onglets toute la session après la connexion (dismissTo garde ce qui est
+    // dessous) : retour Android avalé, geste retour iPhone qui ramenait ici,
+    // animations qui tournaient dessous. Le retour de la connexion y revient.
+    router.replace(ROUTES.AUTH.SIGN_IN)
   }
 
   const renderStep = () => {

@@ -35,6 +35,7 @@ import { FrequencySelect } from '@/components/routine/FrequencySelect'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { displayTitle } from '@/lib/analysis/displayTitle'
+import { runAfterModalClose, waitForModalClose } from '@/lib/navigation/afterModalClose'
 
 function titleFor(item: RoutineItem): string {
   return decodeHtml(displayTitle(item.analysis ?? {}, '')) || 'Produit'
@@ -78,11 +79,15 @@ const RoutineItemScreen: FC = () => {
   const confirmRemove = useCallback(() => {
     setConfirmOpen(false)
     if (!item) return
-    void removeFromRoutine(item.id)
+    // Retour et alerte APRÈS la sortie de la fenêtre de confirmation : l'écran
+    // quittait la pile (ou l'alerte se présentait) pendant son fondu (iOS).
+    void Promise.all([removeFromRoutine(item.id), waitForModalClose()])
       .then(() => {
         if (router.canGoBack()) router.back()
       })
-      .catch(() => Alert.alert('Erreur', 'La suppression a échoué.'))
+      .catch(() =>
+        runAfterModalClose(() => Alert.alert('Erreur', 'La suppression a échoué.')),
+      )
   }, [item, removeFromRoutine])
 
   return (
@@ -281,3 +286,6 @@ const styles = StyleSheet.create({
   },
   deleteBtnText: { fontFamily: fontFamilies.semiBold, fontSize: 13, color: colors.rose },
 })
+
+// Erreur de rendu : seule cette page est remplacée (pas toute l'app).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/shared/RouteErrorBoundary'

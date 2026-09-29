@@ -16,6 +16,7 @@ import {
   FlatList,
   Linking,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -58,10 +59,30 @@ import {
   SecondaryButton,
   StepLayout,
   TextLink,
+  fitSize,
+  useFit,
 } from '@/components/onboarding/flow/ui'
 import type { StepProps } from '@/components/onboarding/flow/types'
 
 const PRODUCT_BLUR = require('../../../../assets/images/onboarding/scan-product-blur.webp')
+
+/** Carte « Vise le code-barres » : sa hauteur se resserre avec l'écran (petits appareils). */
+const CameraCard: FC<{ onPress: () => void }> = ({ onPress }) => {
+  const fit = useFit()
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Ouvrir la caméra pour scanner le code-barres"
+      style={[styles.card, { height: fitSize(300, fit) }]}
+    >
+      <Image source={PRODUCT_BLUR} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <View style={styles.cardShade} />
+      <Viewfinder size={fitSize(170, fit)} />
+      <Text style={styles.cardCaption}>Vise le code-barres</Text>
+    </Pressable>
+  )
+}
 
 // ── Ligne de scan animée ─────────────────────────────────────────────────
 
@@ -101,7 +122,9 @@ const CameraSheet: FC<{
   onClose: () => void
   onFound: (p: ScannedProduct) => void
   onSearch: () => void
-}> = ({ visible, onClose, onFound, onSearch }) => {
+  /** iOS : fin RÉELLE de la fermeture (plus aucune animation en cours). */
+  onDismissed?: () => void
+}> = ({ visible, onClose, onFound, onSearch, onDismissed }) => {
   const [permission, requestPermission] = useCameraPermissions()
   const [state, setState] = useState<CamState>({ kind: 'scanning' })
   const locked = useRef(false)
@@ -137,7 +160,13 @@ const CameraSheet: FC<{
   }
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      onRequestClose={onClose}
+      onDismiss={onDismissed}
+      statusBarTranslucent
+    >
       <View style={styles.camRoot}>
         {permission?.granted && state.kind === 'scanning' ? (
           <CameraView
@@ -321,6 +350,16 @@ const PickerSheet: FC<{
 export const ScanStep: FC<StepProps> = ({ update, next, firstName }) => {
   const [camera, setCamera] = useState(false)
   const [picker, setPicker] = useState<null | 'search' | 'popular'>(null)
+  // Recherche demandée depuis la caméra : ouverte quand la caméra a FINI de se
+  // fermer. iOS refuse en silence une fenêtre présentée pendant la sortie d'une
+  // autre (l'ancien délai de 350 ms était trop court) : la liste restait
+  // invisible et « Chercher par son nom » ne faisait plus rien.
+  const searchAfterCamera = useRef(false)
+  const openPendingSearch = useCallback(() => {
+    if (!searchAfterCamera.current) return
+    searchAfterCamera.current = false
+    setPicker('search')
+  }, [])
 
   const choose = useCallback(
     (p: ScannedProduct) => {
@@ -359,26 +398,20 @@ export const ScanStep: FC<StepProps> = ({ update, next, firstName }) => {
         {`À toi${firstName ? `, ${firstName}` : ''}. Attrape un produit que tu utilises, n'importe lequel. On le lit ensemble.`}
       </PerleBubble>
       <Gap h={18} />
-      <Pressable
-        onPress={() => setCamera(true)}
-        accessibilityRole="button"
-        accessibilityLabel="Ouvrir la caméra pour scanner le code-barres"
-        style={styles.card}
-      >
-        <Image source={PRODUCT_BLUR} style={StyleSheet.absoluteFill} contentFit="cover" />
-        <View style={styles.cardShade} />
-        <Viewfinder />
-        <Text style={styles.cardCaption}>Vise le code-barres</Text>
-      </Pressable>
+      <CameraCard onPress={() => setCamera(true)} />
 
       <CameraSheet
         visible={camera}
         onClose={() => setCamera(false)}
         onFound={choose}
         onSearch={() => {
+          searchAfterCamera.current = true
           setCamera(false)
-          setTimeout(() => setPicker('search'), 350)
+          // Android : pas d'onDismiss fiable, et pas de refus de présentation.
+          // iOS : filet si onDismiss ne venait pas (le premier des deux gagne).
+          setTimeout(openPendingSearch, Platform.OS === 'ios' ? 1200 : 0)
         }}
+        onDismissed={openPendingSearch}
       />
       <PickerSheet
         visible={picker !== null}
@@ -395,7 +428,6 @@ const CORNER = 30
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   card: {
-    height: 300,
     borderRadius: 24,
     overflow: 'hidden',
     alignItems: 'center',

@@ -12,11 +12,12 @@
  * États : loading | no_goals | empty_routine | needs_eval | ready.
  */
 
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { db, supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
+import { useCredits } from '@/hooks/useCredits'
 import { useProfile } from '@/hooks/useProfile'
 import { useRoutine } from '@/hooks/useRoutine'
 import { handleNoCreditsResponse } from '@/lib/credits/exhaustedStore'
@@ -159,6 +160,22 @@ export function useGoalsCoverage(): UseGoalsCoverage {
 
   const noCredits = (mutation.error as (Error & { code?: string }) | null)?.code === 'no_credits'
   const errored = mutation.isError && !noCredits
+
+  // L'onglet Routine ne se démonte jamais : sans ça, la carte restait
+  // verrouillée (« Voir l'offre » seul) après la recharge de minuit ou un achat
+  // Premium, jusqu'au redémarrage de l'app. Solde remonté depuis le refus →
+  // on rend le bouton d'évaluation.
+  const { remaining } = useCredits()
+  const refusedAt = useRef<number | null>(null)
+  const { reset } = mutation
+  useEffect(() => {
+    if (!noCredits) {
+      refusedAt.current = null
+      return
+    }
+    if (refusedAt.current === null) refusedAt.current = remaining
+    else if (remaining > refusedAt.current) reset()
+  }, [noCredits, remaining, reset])
 
   const evaluate = useCallback(
     async (force = false) => {

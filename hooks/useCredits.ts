@@ -5,13 +5,14 @@
  * via la RPC publique `cosme_check_get_credits` (résultat jsonb). Supporte:
  * - Périodes de renouvellement flexibles (daily, weekly, monthly, yearly, one_time)
  * - Surcharges individuelles par utilisateur via user_credits_override
- * - Polling automatique toutes les 10s pour détecter les changements admin
+ * - Relevé périodique (60 s) fait par UN SEUL observateur pour toute l'app :
+ *   `BackgroundPollers` (monté à la racine), pas par chaque lecteur.
  *
  * Interface consommée par CreditsPill et les écrans qui affichent le solde.
  */
 
 import { useCallback, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { queryOptions, useQuery } from '@tanstack/react-query'
 
 import { supabase } from '@/lib/supabase/client'
 import type { Credits, RenewalPeriod } from '@/lib/supabase/types'
@@ -31,6 +32,28 @@ interface UseCreditsReturn {
   refresh: () => void
 }
 
+/**
+ * Requête du solde, partagée par tous les lecteurs. SANS `refetchInterval` :
+ * React Query gère l'intervalle PAR OBSERVATEUR (et non par requête), donc
+ * chaque pastille / écran qui lisait les crédits relançait son propre minuteur
+ * de 60 s. Le relevé périodique est fait une seule fois par `BackgroundPollers`.
+ */
+export function creditsQueryOptions(userId: string | null) {
+  return queryOptions<Credits | null>({
+    queryKey: ['credits', userId],
+    staleTime: 30 * 1000,
+    gcTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('cosme_check_get_credits')
+      if (error) throw error
+      return (data as unknown as Credits) ?? null
+    },
+  })
+}
+
+/** Intervalle du relevé unique (changements admin, rares ; le débit d'un crédit est invalidé en direct). */
+export const CREDITS_POLL_MS = 60 * 1000
+
 export function useCredits(): UseCreditsReturn {
   const { user, isAuthenticated } = useAuth()
   const userId = user?.id ?? null
@@ -40,24 +63,7 @@ export function useCredits(): UseCreditsReturn {
     isLoading,
     error: queryError,
     refetch,
-  } = useQuery<Credits | null>({
-    queryKey: ['credits', userId],
-    enabled: isAuthenticated,
-    staleTime: 30 * 1000, // 30 s — réduit pour détecter plus vite les changements admin
-    gcTime: 5 * 60 * 1000, // 5 min
-    // Polling 60s pour capter les changements admin (rares). Le débit de crédit
-    // est déjà reflété en temps réel côté feature (invalidation sur retour 429 /
-    // event), donc pas besoin de sonder agressivement. `refetchInterval` est géré
-    // PAR QUERY par React Query (pas par instance de hook) : CreditsPill étant
-    // monté sur chaque onglet, un setInterval par instance multipliait le trafic
-    // de fond par 3-4x sur cosme_check_get_credits.
-    refetchInterval: 60 * 1000,
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc('cosme_check_get_credits')
-      if (error) throw error
-      return (data as unknown as Credits) ?? null
-    },
-  })
+  } = useQuery({ ...creditsQueryOptions(userId), enabled: isAuthenticated })
 
   const refresh = useCallback(() => {
     void refetch()

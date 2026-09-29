@@ -11,7 +11,14 @@ jest.mock('expo-haptics', () => ({
 }))
 
 import * as Haptics from 'expo-haptics'
-import { fireHaptic, shouldAnimatePress, DEFAULT_PRESS_SCALE } from '@/lib/pressFeedback'
+import {
+  fireHaptic,
+  isGuardedRepeatPress,
+  repeatGuardLevel,
+  shouldAnimatePress,
+  DEFAULT_PRESS_SCALE,
+  REPEAT_PRESS_GUARD_MS,
+} from '@/lib/pressFeedback'
 
 const h = Haptics as unknown as {
   selectionAsync: jest.Mock
@@ -77,5 +84,37 @@ describe('shouldAnimatePress : mini-transition seulement si le bouton n’a pas 
   it('échelle par défaut perceptible mais discrète', () => {
     expect(DEFAULT_PRESS_SCALE).toBeGreaterThan(0.9)
     expect(DEFAULT_PRESS_SCALE).toBeLessThan(1)
+  })
+})
+
+describe('isGuardedRepeatPress (anti double appui)', () => {
+  it("ignore un 2e appui rapproché sur un bouton d'action", () => {
+    expect(isGuardedRepeatPress('secondary', 1000, 1000 + REPEAT_PRESS_GUARD_MS - 1)).toBe(true)
+    expect(isGuardedRepeatPress('primary', 1000, 1200)).toBe(true)
+    expect(isGuardedRepeatPress('warning', 1000, 1100)).toBe(true)
+  })
+
+  it('laisse passer un appui espacé, et le tout premier', () => {
+    expect(isGuardedRepeatPress('secondary', 1000, 1000 + REPEAT_PRESS_GUARD_MS)).toBe(false)
+    expect(isGuardedRepeatPress('primary', 0, Date.now())).toBe(false)
+  })
+
+  it('ne freine jamais les choix rapides ni les zones passives', () => {
+    expect(isGuardedRepeatPress('selection', 1000, 1010)).toBe(false)
+    expect(isGuardedRepeatPress('none', 1000, 1010)).toBe(false)
+  })
+})
+
+describe('repeatGuardLevel (choix rapides par rôle)', () => {
+  it('case, radio, interrupteur, onglet : jamais freinés', () => {
+    for (const role of ['checkbox', 'radio', 'switch', 'tab']) {
+      expect(repeatGuardLevel('none', role)).toBe('selection')
+      expect(repeatGuardLevel('secondary', role)).toBe('selection')
+    }
+  })
+
+  it('bouton ordinaire : garde son niveau', () => {
+    expect(repeatGuardLevel('secondary', 'button')).toBe('secondary')
+    expect(repeatGuardLevel('primary', undefined)).toBe('primary')
   })
 })

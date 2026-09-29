@@ -225,7 +225,14 @@ export const PersonalInsightsCards: FC<Props> = ({
         </View>
 
         {/* Cadre flou + scrim qui encapsule les 3 blocs */}
-        <BlurView intensity={16} tint="light" style={styles.lockBlur} pointerEvents="none" />
+        <BlurView
+          intensity={45}
+          tint="light"
+          // Android : sans cette méthode, BlurView ne floute pas (simple voile).
+          experimentalBlurMethod="dimezisBlurView"
+          style={styles.lockBlur}
+          pointerEvents="none"
+        />
         <View style={styles.lockScrim} pointerEvents="none" />
 
         {/* Cadenas + CTA centrés */}

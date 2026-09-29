@@ -68,7 +68,10 @@ export const ReportSheet: FC<Props> = ({ visible, onClose, firstName }) => {
     setPhase(res.ok ? 'done' : 'error')
   }
 
-  const canSend = !!objectKey && message.trim().length >= 3 && phase === 'form'
+  // 'error' compris : après un échec d'envoi, le bouton restait grisé et le
+  // texte figé (impossible de réessayer sans refermer la feuille).
+  const canEdit = phase === 'form' || phase === 'error'
+  const canSend = !!objectKey && message.trim().length >= 3 && canEdit
 
   return (
     <Modal
@@ -158,7 +161,7 @@ export const ReportSheet: FC<Props> = ({ visible, onClose, firstName }) => {
                 multiline
                 maxLength={MAX}
                 textAlignVertical="top"
-                editable={phase === 'form'}
+                editable={canEdit}
               />
               <Text style={styles.counter}>
                 {message.length}/{MAX}

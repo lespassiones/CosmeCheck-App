@@ -11,7 +11,7 @@
  *     suivent ne se ressemblent pas.
  */
 
-import { useEffect, useRef, useState, type FC } from 'react'
+import { useEffect, useRef, useState, type FC, type ReactNode } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
@@ -59,6 +59,9 @@ import {
   PrimaryButton,
   StepLayout,
   TextLink,
+  fitFont,
+  fitSize,
+  useFit,
 } from '@/components/onboarding/flow/ui'
 import type { StepProps } from '@/components/onboarding/flow/types'
 
@@ -108,17 +111,80 @@ const OtherInput: FC<{
   </Animated.View>
 )
 
-/** Une bulle de réaction de Perle, qui se pose avec un petit tap haptique. */
+/** Une bulle de réaction de Perle, qui se pose avec un petit tap haptique, sous la dernière réponse. */
 const Reaction: FC<{ text: string }> = ({ text }) => {
+  const fit = useFit()
   useEffect(() => {
     haptic.tick()
   }, [text])
   return (
-    <Animated.View key={text} entering={fadeUp(0, 16, 380)} style={styles.reaction}>
-      <PerleBubble size={56} highlight>
+    <Animated.View key={text} entering={fadeUp(0, 16, 380)} style={{ marginTop: fitSize(14, fit) }}>
+      <PerleBubble size={46} highlight>
         {text}
       </PerleBubble>
     </Animated.View>
+  )
+}
+
+/** Le plus long des textes possibles : c'est lui qui réserve la place. */
+const longest = (texts: readonly string[]): string => texts.reduce((a, b) => (b.length > a.length ? b : a), '')
+
+/**
+ * Place gardée, invisible, pour ce qui n'apparaîtra qu'après une réponse. Elle
+ * compte dès l'arrivée : l'écran est déjà resserré quand la réponse arrive, et
+ * rien ne passe sous le bouton ni ne bouge (voir StepLayout).
+ */
+const Reserved: FC<{ children: ReactNode }> = ({ children }) => (
+  <View style={styles.reserved} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    {children}
+  </View>
+)
+
+/** Réaction de Perle, avec sa place réservée tant que la personne n'a pas répondu. */
+const ReactionSlot: FC<{ text: string | null; candidates: readonly string[] }> = ({ text, candidates }) => {
+  const fit = useFit()
+  if (text) return <Reaction key={text} text={text} />
+  return (
+    <Reserved>
+      <View style={{ marginTop: fitSize(14, fit) }}>
+        <PerleBubble size={46} highlight>
+          {longest(candidates)}
+        </PerleBubble>
+      </View>
+    </Reserved>
+  )
+}
+
+/** Une carte « ça t'est déjà arrivé ? ». */
+const PainCard: FC<(typeof PAIN_CARDS)[number]> = ({ icon, title, sub }) => {
+  const fit = useFit()
+  const titleSize = fitFont(15.5, fit)
+  const subSize = fitFont(13.5, fit)
+  return (
+    <View style={[styles.painCard, { paddingVertical: fitSize(11, fit) }]} accessible accessibilityLabel={`${title}. ${sub}`}>
+      <Ionicons name={icon} size={fitSize(24, fit)} color={colors.rose} />
+      <View style={styles.painTexts}>
+        <Text style={[styles.painTitle, { fontSize: titleSize, lineHeight: Math.round(titleSize * 1.32) }]}>{title}</Text>
+        <Text style={[styles.painSub, { fontSize: subSize, lineHeight: Math.round(subSize * 1.36) }]}>{sub}</Text>
+      </View>
+    </View>
+  )
+}
+
+/** Visage du petit test, à gauche de la réponse. */
+const FaceIcon: FC<{ answer: SkinTestAnswer }> = ({ answer }) => {
+  const size = fitSize(42, useFit())
+  return <Image source={FACES[answer]} style={{ width: size, height: size }} contentFit="contain" />
+}
+
+/** Étagère plus ou moins remplie, à gauche d'une réponse « produits par jour ». */
+const ShelfBadge: FC<{ filled: number }> = ({ filled }) => {
+  const fit = useFit()
+  const size = fitSize(52, fit)
+  return (
+    <View style={[styles.shelfBadge, { width: size, height: size, borderRadius: size / 2 }]}>
+      <Image source={SHELVES[filled - 1]} style={{ width: fitSize(46, fit), height: fitSize(20, fit) }} contentFit="contain" />
+    </View>
   )
 }
 
@@ -161,11 +227,16 @@ export const NameStep: FC<StepProps> = ({ draft, update, next }) => {
 
 // ── A5 : ça t'est déjà arrivé ? ──────────────────────────────────────────
 
+const PAIN_REACTIONS = {
+  yes: 'Rassure-toi, ça arrive à presque tout le monde.',
+  no: 'Tant mieux ! On vérifie quand même que tout va bien.',
+} as const
+
 export const PainStep: FC<StepProps> = ({ update, next, firstName }) => {
   const [reaction, setReaction] = useState<string | null>(null)
   const react = (yes: boolean) => {
     update({ painAck: yes })
-    setReaction(yes ? 'Rassure-toi, ça arrive à presque tout le monde.' : 'Tant mieux ! On vérifie quand même que tout va bien.')
+    setReaction(yes ? PAIN_REACTIONS.yes : PAIN_REACTIONS.no)
   }
   return (
     <StepLayout
@@ -181,20 +252,14 @@ export const PainStep: FC<StepProps> = ({ update, next, firstName }) => {
       }
     >
       <PerleBubble>{`Sois honnête${firstName ? `, ${firstName}` : ''}. Ça t'est déjà arrivé ?`}</PerleBubble>
-      <Gap h={18} />
-      <Cascade from="right" step={90} style={styles.stack}>
+      <Gap h={14} />
+      <Cascade from="right" step={90} gap={10}>
         {PAIN_CARDS.map((c) => (
-          <View key={c.title} style={styles.painCard} accessible accessibilityLabel={`${c.title}. ${c.sub}`}>
-            <Ionicons name={c.icon} size={26} color={colors.rose} />
-            <View style={styles.painTexts}>
-              <Text style={styles.painTitle}>{c.title}</Text>
-              <Text style={styles.painSub}>{c.sub}</Text>
-            </View>
-          </View>
+          <PainCard key={c.title} {...c} />
         ))}
       </Cascade>
       {/* La réaction de Perle se pose juste sous la dernière carte. */}
-      {reaction ? <Reaction text={reaction} /> : null}
+      <ReactionSlot text={reaction} candidates={Object.values(PAIN_REACTIONS)} />
     </StepLayout>
   )
 }
@@ -214,8 +279,8 @@ export const MotivationStep: FC<StepProps> = ({ draft, update, next }) => {
   return (
     <StepLayout footer={<PrimaryButton label="Continuer" onPress={next} disabled={selected.length === 0} />}>
       <PerleBubble>Qu'est-ce qui t'amène ici ?</PerleBubble>
-      <Gap h={18} />
-      <Cascade from="down" step={55} style={styles.stackTight}>
+      <Gap h={14} />
+      <Cascade from="down" step={55} gap={10}>
         {MOTIVATIONS.map((m) => (
           <OptionCard key={m.key} label={m.label} multi selected={selected.includes(m.key)} onPress={() => pick(m.key)} />
         ))}
@@ -239,17 +304,17 @@ export const SkinTestStep: FC<StepProps> = ({ draft, update, next }) => {
     <StepLayout footer={<PrimaryButton label="Continuer" onPress={next} disabled={!ok} />}>
       <Eyebrow>PETIT TEST</Eyebrow>
       <PerleBubble>Vers midi, sans retouche, ta peau du visage ressemble à quoi ?</PerleBubble>
-      <Gap h={18} />
-      <Cascade from="left" step={60} style={styles.stackTight}>
+      <Gap h={14} />
+      <Cascade from="left" step={60} gap={10}>
         {SKIN_TEST_OPTIONS.map((o) => (
           <OptionCard
             key={o.key}
             label={o.label}
-            minHeight={72}
+            minHeight={62}
             multi
             selected={draft.skinTests.includes(o.key)}
             onPress={() => choose(o.key)}
-            left={<Image source={FACES[o.key]} style={styles.face} contentFit="contain" />}
+            left={<FaceIcon answer={o.key} />}
           />
         ))}
       </Cascade>
@@ -281,8 +346,8 @@ export const BodySkinStep: FC<StepProps> = ({ draft, update, next, firstName }) 
     <StepLayout footer={<PrimaryButton label="Continuer" onPress={next} disabled={draft.bodySkins.length === 0} />}>
       <Eyebrow>ET TON CORPS ?</Eyebrow>
       <PerleBubble>{`Et la peau de ton corps${firstName ? `, ${firstName}` : ''}, elle est comment ?`}</PerleBubble>
-      <Gap h={18} />
-      <Cascade from="down" step={60} style={styles.stackTight}>
+      <Gap h={14} />
+      <Cascade from="down" step={60} gap={10}>
         {BODY_SKIN_OPTIONS.map((o) => (
           <OptionCard
             key={o.key}
@@ -320,7 +385,7 @@ export const ConcernsStep: FC<StepProps> = ({ draft, update, next, firstName }) 
   return (
     <StepLayout footer={<PrimaryButton label="Continuer" onPress={next} disabled={!ok} />}>
       <PerleBubble>{`Et qu'est-ce qui t'embête le plus${firstName ? `, ${firstName}` : ''} ?`}</PerleBubble>
-      <Gap h={20} />
+      <Gap h={16} />
       <Cascade from="pop" step={40} style={styles.chips}>
         {[
           ...CONCERN_OPTIONS.map((c) => {
@@ -534,6 +599,16 @@ const IngredientPicker: FC<{
   )
 }
 
+const ExplainBody: FC<{ title: string; text: string }> = ({ title, text }) => (
+  <>
+    <Ionicons name="bulb-outline" size={20} color={colors.rose} style={styles.explainIcon} />
+    <View style={styles.flex}>
+      <Text style={styles.explainTitle}>{title}</Text>
+      <Text style={styles.explainText}>{text}</Text>
+    </View>
+  </>
+)
+
 export const RestrictionsStep: FC<StepProps> = ({ draft, update, next }) => {
   const [last, setLast] = useState<RestrictionKey | 'none' | null>(
     draft.restrictions.length > 0 ? draft.restrictions[draft.restrictions.length - 1] : null,
@@ -553,8 +628,10 @@ export const RestrictionsStep: FC<StepProps> = ({ draft, update, next }) => {
       ? { title: 'Aucun', text: RESTRICTION_NONE_EXPLAIN }
       : last
         ? (() => {
-            const o = RESTRICTION_OPTIONS.find((r) => r.key === last)!
-            return { title: o.label, text: o.explain }
+            // Clé lue dans un brouillon gardé 7 jours : si une mise à jour l'a
+            // renommée, pas d'explication plutôt qu'un plantage de l'étape.
+            const o = RESTRICTION_OPTIONS.find((r) => r.key === last)
+            return o ? { title: o.label, text: o.explain } : null
           })()
         : null
   const ok =
@@ -568,7 +645,7 @@ export const RestrictionsStep: FC<StepProps> = ({ draft, update, next }) => {
       focusSpace={other ? SUGGESTIONS_SPACE : undefined}
     >
       <PerleBubble>Il y a des ingrédients que tu préfères éviter ?</PerleBubble>
-      <Gap h={20} />
+      <Gap h={16} />
       <Cascade from="pop" step={45} style={styles.chips}>
         {[
           ...RESTRICTION_OPTIONS.map((r) => (
@@ -580,13 +657,15 @@ export const RestrictionsStep: FC<StepProps> = ({ draft, update, next }) => {
       </Cascade>
       {explain ? (
         <Animated.View key={explain.title} entering={fadeUp(0, 12, 320)} style={styles.explain}>
-          <Ionicons name="bulb-outline" size={20} color={colors.rose} style={styles.explainIcon} />
-          <View style={styles.flex}>
-            <Text style={styles.explainTitle}>{explain.title}</Text>
-            <Text style={styles.explainText}>{explain.text}</Text>
-          </View>
+          <ExplainBody title={explain.title} text={explain.text} />
         </Animated.View>
-      ) : null}
+      ) : (
+        <Reserved>
+          <View style={styles.explain}>
+            <ExplainBody title="Aucun" text={longest([...RESTRICTION_OPTIONS.map((r) => r.explain), RESTRICTION_NONE_EXPLAIN])} />
+          </View>
+        </Reserved>
+      )}
       {other ? (
         <>
           <Gap h={14} />
@@ -618,20 +697,16 @@ export const VolumeStep: FC<StepProps> = ({ draft, update, next }) => (
     <PerleBubble>
       Sur une journée, tu utilises combien de produits ? Visage, corps, cheveux, maquillage : tout compte.
     </PerleBubble>
-    <Gap h={18} />
-    <Cascade from="right" step={70} style={styles.stackTight}>
+    <Gap h={14} />
+    <Cascade from="right" step={70} gap={10}>
       {VOLUME_OPTIONS.map((o) => (
         <OptionCard
           key={o.value}
           label={o.label}
-          minHeight={78}
+          minHeight={68}
           selected={draft.productsPerDay === o.value}
           onPress={() => update({ productsPerDay: o.value })}
-          left={
-            <View style={styles.shelfBadge}>
-              <Image source={SHELVES[o.filled - 1]} style={styles.shelf} contentFit="contain" />
-            </View>
-          }
+          left={<ShelfBadge filled={o.filled} />}
         />
       ))}
     </Cascade>
@@ -647,8 +722,8 @@ export const AbandonedStep: FC<StepProps> = ({ draft, update, next }) => {
       <PerleBubble>
         Et cette année, combien de produits as-tu arrêtés parce qu'ils ne te convenaient pas ?
       </PerleBubble>
-      <Gap h={18} />
-      <Cascade from="down" step={60} style={styles.stackTight}>
+      <Gap h={14} />
+      <Cascade from="down" step={60} gap={10}>
         {ABANDONED_OPTIONS.map((o) => (
           <OptionCard
             key={o.key}
@@ -658,12 +733,17 @@ export const AbandonedStep: FC<StepProps> = ({ draft, update, next }) => {
           />
         ))}
       </Cascade>
-      {chosen ? <Reaction key={chosen.key} text={chosen.reaction} /> : null}
+      <ReactionSlot text={chosen?.reaction ?? null} candidates={ABANDONED_OPTIONS.map((o) => o.reaction)} />
     </StepLayout>
   )
 }
 
 // ── A18 : cheveux ────────────────────────────────────────────────────────
+
+const HAIR_NOTED = {
+  ok: 'Parfait. Je garderai un œil sur ton shampoing quand même.',
+  concerns: 'Noté. Ton shampoing aussi passera au crible.',
+} as const
 
 export const HairStep: FC<StepProps> = ({ draft, update, next, firstName }) => {
   const pick = (key: HairConcern | 'ok') => {
@@ -685,7 +765,7 @@ export const HairStep: FC<StepProps> = ({ draft, update, next, firstName }) => {
     >
       <Eyebrow>UNE DERNIÈRE CHOSE</Eyebrow>
       <PerleBubble>{`Et tes cheveux${firstName ? `, ${firstName}` : ''}, ils sont plutôt comment ?`}</PerleBubble>
-      <Gap h={20} />
+      <Gap h={16} />
       <Cascade from="pop" step={45} style={styles.chips}>
         {HAIR_OPTIONS.map((h) => (
           <Chip
@@ -701,19 +781,23 @@ export const HairStep: FC<StepProps> = ({ draft, update, next, firstName }) => {
           <Animated.View entering={softScaleIn(120, 0.6, 240)} style={styles.notedDot}>
             <Ionicons name="checkmark" size={13} color={colors.surface} />
           </Animated.View>
-          <Text style={styles.notedText}>
-            {draft.hairOk ? 'Parfait. Je garderai un œil sur ton shampoing quand même.' : 'Noté. Ton shampoing aussi passera au crible.'}
-          </Text>
+          <Text style={styles.notedText}>{draft.hairOk ? HAIR_NOTED.ok : HAIR_NOTED.concerns}</Text>
         </Animated.View>
-      ) : null}
+      ) : (
+        <Reserved>
+          <View style={styles.noted}>
+            <View style={styles.notedDot} />
+            <Text style={styles.notedText}>{longest(Object.values(HAIR_NOTED))}</Text>
+          </View>
+        </Reserved>
+      )}
     </StepLayout>
   )
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  stack: { gap: 12 },
-  stackTight: { gap: 10 },
+  reserved: { opacity: 0 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10 },
   gridItem: { width: '48.5%' },
@@ -751,13 +835,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1.5,
     borderColor: colors.ink,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
   },
-  painTexts: { flex: 1, gap: 3 },
-  painTitle: { fontFamily: fontFamilies.semiBold, fontSize: 16.5, lineHeight: 22, color: colors.ink },
-  painSub: { fontFamily: fontFamilies.regular, fontSize: 15, lineHeight: 20, color: colors.inkLight },
-  face: { width: 48, height: 48 },
+  painTexts: { flex: 1, gap: 2 },
+  painTitle: { fontFamily: fontFamilies.semiBold, color: colors.ink },
+  painSub: { fontFamily: fontFamilies.regular, color: colors.inkLight },
   goalSection: { marginTop: 18, gap: 10 },
   sectionLabel: {
     fontFamily: fontFamilies.semiBold,
@@ -825,15 +907,10 @@ const styles = StyleSheet.create({
   },
   noMatch: { fontFamily: fontFamilies.regular, fontSize: 13.5, color: colors.inkMuted, marginTop: 8, textAlign: 'center' },
   shelfBadge: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
     backgroundColor: colors.gray100,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  shelf: { width: 54, height: 24 },
-  reaction: { marginTop: 18 },
   noted: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 18, justifyContent: 'center' },
   notedDot: {
     width: 22,

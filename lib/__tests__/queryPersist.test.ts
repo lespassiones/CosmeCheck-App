@@ -53,6 +53,7 @@ describe('shouldPersistQueryKey', () => {
 
   it('exclut la config app (flags + maintenance, toujours frais)', () => {
     expect(shouldPersistQueryKey(['appConfig'])).toBe(false)
+    expect(shouldPersistQueryKey(['routine-eligible-analyses', 'u1'])).toBe(false)
   })
 
   it('refuse les queryKey non-array / vides / non-string', () => {

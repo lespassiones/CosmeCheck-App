@@ -27,8 +27,10 @@ export interface StoredMessage {
 }
 
 async function currentUserId(): Promise<string | null> {
-  const { data } = await supabase.auth.getUser()
-  return data.user?.id ?? null
+  // Session locale, pas getUser() : ce dernier interroge le serveur d'auth (non
+  // plafonné) et retardait l'envoi de la question sur un réseau lent.
+  const { data } = await supabase.auth.getSession()
+  return data.session?.user?.id ?? null
 }
 
 /** Crée une conversation et renvoie son id (ou null si échec). */

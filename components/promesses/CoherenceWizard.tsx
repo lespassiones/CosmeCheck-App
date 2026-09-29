@@ -38,7 +38,13 @@ import { ROUTES } from '@/constants/routes'
 import { supabase } from '@/lib/supabase/client'
 import { runAnalysis } from '@/lib/analysis/analyser'
 import { useAuth } from '@/hooks/useAuth'
-import { handleNoCreditsResponse } from '@/lib/credits/exhaustedStore'
+import { isNoCreditsResponse } from '@/lib/credits/exhaustedStore'
+import { creditsResetLabel } from '@/lib/credits/resetLabel'
+import { runAfterModalClose } from '@/lib/navigation/afterModalClose'
+import { LONG_AI_TIMEOUT_MS } from '@/lib/supabase/fetchTimeout'
+
+/** Retrait d'une fenêtre native iOS (presentation 'modal'), animation comprise. */
+const MODAL_SCREEN_DISMISS_MS = 550
 
 export interface AnalysisOption {
   id: string
@@ -190,12 +196,17 @@ export const CoherenceWizard: FC<{ options: AnalysisOption[] }> = ({ options }) 
     try {
       const { data, error: fnError } = await supabase.functions.invoke('coherence-analyze', {
         body: { analysis_id: selected.id, description: description.trim() },
+        // Plusieurs appels IA enchaînés côté serveur : plus que le plafond par
+        // défaut de 60 s (sinon abandon alors que le serveur finit et débite).
+        timeout: LONG_AI_TIMEOUT_MS,
       })
       if (fnError) {
-        // Plus de crédits → feuille dédiée ; sinon Edge Function pas déployée /
-        // indisponible → dégradation gracieuse.
-        const noCredits = await handleNoCreditsResponse(fnError)
+        // Plus de crédits → message ICI, pas la feuille globale : cet écran est
+        // une fenêtre native, iOS refuserait de la présenter par-dessus. Sinon
+        // Edge Function indisponible → dégradation gracieuse.
+        const noCredits = await isNoCreditsResponse(fnError)
         if (!noCredits) setUnavailable(true)
+        else setError(`Plus de crédits pour analyser la promesse. Ils reviennent ${creditsResetLabel('daily')}.`)
         setStep('confirm')
         return
       }
@@ -206,7 +217,16 @@ export const CoherenceWizard: FC<{ options: AnalysisOption[] }> = ({ options }) 
         return
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
-      router.replace(ROUTES.PROMESSES.DETAIL(newId))
+      // Cet écran est une fenêtre native (presentation 'modal') : un replace
+      // vers un écran « carte » doit fermer la fenêtre ET pousser dans la même
+      // transaction iOS (écrans superposés possibles). On ferme, puis on pousse
+      // une fois la fenêtre retirée.
+      if (router.canGoBack()) {
+        router.back()
+        runAfterModalClose(() => router.push(ROUTES.PROMESSES.DETAIL(newId)), MODAL_SCREEN_DISMISS_MS)
+      } else {
+        router.replace(ROUTES.PROMESSES.DETAIL(newId))
+      }
     } catch {
       setUnavailable(true)
       setStep('confirm')

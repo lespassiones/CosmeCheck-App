@@ -49,6 +49,8 @@ const AdvisorScreen: FC = () => {
   const { config } = useAppConfig()
   const [summaryOpen, setSummaryOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  // Réponse en cours : pas de changement de conversation (voir AdvisorChat).
+  const [chatBusy, setChatBusy] = useState(false)
   // Conversation active : id (null = nouvelle) + messages chargés depuis l'historique.
   // chatKey force le remontage de AdvisorChat quand on change de conversation.
   const [activeConv, setActiveConv] = useState<{
@@ -105,19 +107,23 @@ const AdvisorScreen: FC = () => {
           <View style={styles.topActions}>
             <Pressable
               onPress={startNewConversation}
+              disabled={chatBusy}
               hitSlop={10}
-              style={styles.backBtn}
+              style={[styles.backBtn, chatBusy && styles.actionDisabled]}
               accessibilityRole="button"
               accessibilityLabel="Nouvelle conversation"
+              accessibilityState={{ disabled: chatBusy }}
             >
               <Ionicons name="create-outline" size={22} color={colors.ink} />
             </Pressable>
             <Pressable
               onPress={() => setHistoryOpen(true)}
+              disabled={chatBusy}
               hitSlop={10}
-              style={styles.backBtn}
+              style={[styles.backBtn, chatBusy && styles.actionDisabled]}
               accessibilityRole="button"
               accessibilityLabel="Historique des conversations"
+              accessibilityState={{ disabled: chatBusy }}
             >
               <Ionicons name="time-outline" size={22} color={colors.ink} />
             </Pressable>
@@ -150,7 +156,7 @@ const AdvisorScreen: FC = () => {
                 adapter les conseils. Tu peux modifier à tout moment.
               </Text>
               <PressableScale
-                onPress={() => router.push(ROUTES.PROFILE.INDEX)}
+                onPress={() => router.push(ROUTES.PROFILE.BEAUTY)}
                 haptic="primary"
                 style={styles.gateCta}
                 accessibilityRole="button"
@@ -177,7 +183,7 @@ const AdvisorScreen: FC = () => {
                     {skin.allergiesFreeform ? ` · sans : ${skin.allergiesFreeform}` : ''}
                   </Text>
                   <Pressable
-                    onPress={() => router.push(ROUTES.PROFILE.INDEX)}
+                    onPress={() => router.push(ROUTES.PROFILE.BEAUTY)}
                     hitSlop={8}
                     accessibilityRole="button"
                   >
@@ -193,6 +199,7 @@ const AdvisorScreen: FC = () => {
               conversationId={activeConv.id}
               initialMessages={activeConv.messages}
               onConversationCreated={(id) => setActiveConv((c) => ({ ...c, id }))}
+              onBusyChange={setChatBusy}
               entranceIndex={4}
             />
           </View>
@@ -230,6 +237,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   topActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  actionDisabled: { opacity: 0.35 },
   content: {
     flex: 1,
     paddingHorizontal: spacing.base,
@@ -301,3 +309,6 @@ const styles = StyleSheet.create({
     color: '#F43F5E',
   },
 })
+
+// Erreur de rendu : seule cette page est remplacée (pas toute l'app).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/shared/RouteErrorBoundary'

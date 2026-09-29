@@ -45,6 +45,15 @@ const INACTIVE = '#4B5563'
 
 /** Hauteur de la barre hors zone du geste système (le bouton flottant s'y cale). */
 export const TAB_BAR_HEIGHT = 66
+/** Bouton flottant Perle (Beauty Advisor), calé au-dessus de la barre. */
+export const ADVISOR_FAB_SIZE = 56
+export const ADVISOR_FAB_GAP = 16
+/**
+ * Marge basse d'un contenu d'onglet (à ajouter à insets.bottom) : barre +
+ * bouton Perle + respiration, pour que la fin de chaque page puisse remonter
+ * AU-DESSUS du bouton au lieu de rester cachée dessous.
+ */
+export const TAB_CONTENT_BOTTOM = TAB_BAR_HEIGHT + ADVISOR_FAB_GAP + ADVISOR_FAB_SIZE + 16
 
 export const BottomTabBar: FC<BottomTabBarProps> = ({ state, navigation }) => {
   const insets = useSafeAreaInsets()

@@ -482,15 +482,31 @@ export const CompatibilityCard: FC<Props> = ({
           accessibilityLabel="Débloquer ta compatibilité avec Premium"
           style={styles.lockedWrap}
         >
-          <View style={styles.row} pointerEvents="none">
-            <View style={styles.ringSkeleton} />
+          {/* Aperçu FACTICE en fond (anneau coloré + note + lignes), flouté :
+              donne envie sans rien révéler. Positionné en absolu : ce n'est
+              PAS lui qui fixe la hauteur du bloc. */}
+          <View style={styles.lockTeaser} pointerEvents="none">
+            <View style={styles.teaserRing}>
+              <Text style={styles.teaserScore}>82</Text>
+            </View>
             <View style={styles.rightCol}>
-              <View style={[styles.skelLine, { width: 110, height: 26, borderRadius: 13 }]} />
+              <View style={styles.teaserPill} />
               <View style={[styles.skelLine, { width: 150 }]} />
+              <View style={[styles.skelLine, { width: 110 }]} />
             </View>
           </View>
-          <BlurView intensity={16} tint="light" style={styles.lockBlur} pointerEvents="none" />
-          <View style={styles.lockOverlay} pointerEvents="none">
+          <BlurView
+            intensity={45}
+            tint="light"
+            // Android : sans cette méthode, BlurView ne floute pas (simple voile).
+            experimentalBlurMethod="dimezisBlurView"
+            style={styles.lockBlur}
+            pointerEvents="none"
+          />
+          <View style={styles.lockScrim} pointerEvents="none" />
+          {/* Contenu EN FLUX : c'est lui qui donne la hauteur du bloc, donc le
+              cadenas ne peut plus déborder sur le titre de la carte. */}
+          <View style={styles.lockContent} pointerEvents="none">
             <View style={styles.profileBadge}>
               <Ionicons name="lock-closed" size={20} color={colors.accent} />
             </View>
@@ -839,12 +855,31 @@ const styles = StyleSheet.create({
   ctaPillText: { fontFamily: fontFamilies.semiBold, fontSize: 14, color: colors.surface },
   reloadBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.md },
   reloadText: { fontFamily: fontFamilies.semiBold, fontSize: 13, color: colors.accent },
-  lockedWrap: { position: 'relative' },
-  lockBlur: { ...StyleSheet.absoluteFillObject, borderRadius: radius.lg, overflow: 'hidden' },
-  lockOverlay: {
+  lockedWrap: { position: 'relative', borderRadius: radius.lg, overflow: 'hidden' },
+  lockTeaser: {
     ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.base,
+    paddingHorizontal: spacing.sm,
+  },
+  teaserRing: {
+    width: RING_SIZE,
+    height: RING_SIZE,
+    borderRadius: RING_SIZE / 2,
+    borderWidth: RING_STROKE,
+    borderColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
+  },
+  teaserScore: { fontFamily: fontFamilies.bold, fontSize: 34, color: colors.accent },
+  teaserPill: { width: 110, height: 26, borderRadius: 13, backgroundColor: colors.accentSoft },
+  lockBlur: { ...StyleSheet.absoluteFillObject },
+  lockScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.4)' },
+  lockContent: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
     paddingHorizontal: spacing.lg,
   },
   // modal

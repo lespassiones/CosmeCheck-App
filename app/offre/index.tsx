@@ -40,12 +40,14 @@ const OffreScreen: FC = () => {
   const params = useLocalSearchParams<{ fromOnboarding?: string }>()
   const fromOnboarding = params.fromOnboarding === '1'
 
-  const dismissOnboardingPaywall = async () => {
-    try {
-      await updateProfile({ paywall_shown: true })
-    } finally {
-      router.replace(ROUTES.TABS.HOME)
-    }
+  const dismissOnboardingPaywall = () => {
+    // Le drapeau est écrit dans le cache tout de suite (updateProfile optimiste) :
+    // on part sans attendre le réseau, sinon « Plus tard » paraissait mort sur
+    // un réseau lent. Un échec d'écriture affiche déjà son toast.
+    void updateProfile({ paywall_shown: true }, { keepOnError: true }).catch(() => {})
+    // dismissTo : revient aux onglets existants (ou les ouvre s'il n'y en a pas),
+    // sans en empiler une 2e copie.
+    router.dismissTo(ROUTES.TABS.HOME)
   }
 
   // Compte de démonstration remis à Apple : il doit VOIR le paywall, sinon le
@@ -64,7 +66,7 @@ const OffreScreen: FC = () => {
   const leave = () => {
     if (fromOnboarding) void dismissOnboardingPaywall()
     else if (router.canGoBack()) router.back()
-    else router.replace(ROUTES.TABS.HOME)
+    else router.dismissTo(ROUTES.TABS.HOME)
   }
 
   if (!isPremium || isReviewAccount) {

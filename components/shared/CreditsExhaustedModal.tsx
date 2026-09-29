@@ -21,8 +21,8 @@
  * (app/_layout.tsx).
  */
 
-import { useEffect, useState, type FC } from 'react'
-import { Modal, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useEffect, useRef, useState, type FC } from 'react'
+import { Modal, Platform, StyleSheet, Text, View } from 'react-native'
 import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { Feather } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
@@ -48,6 +48,7 @@ import { useProfile } from '@/hooks/useProfile'
 import { haptic } from '@/lib/haptics'
 import { creditsResetLabel } from '@/lib/credits/resetLabel'
 import { useExhaustedStore } from '@/lib/credits/exhaustedStore'
+import { runAfterModalClose } from '@/lib/navigation/afterModalClose'
 
 /** Hors écran : assez pour cacher la feuille, quelle que soit sa hauteur. */
 const HIDDEN_Y = 520
@@ -55,6 +56,8 @@ const OPEN = { duration: 280, easing: Easing.out(Easing.cubic), reduceMotion: Re
 const CLOSE = { duration: 220, easing: Easing.in(Easing.cubic), reduceMotion: ReduceMotion.System }
 const DISMISS_DISTANCE = 90
 const DISMISS_VELOCITY = 900
+/** Sans animation native, iOS confirme la présentation (onShow) quasi tout de suite. */
+const SHOW_WATCHDOG_MS = 1500
 
 export const CreditsExhaustedModal: FC = () => {
   const router = useRouter()
@@ -72,6 +75,21 @@ export const CreditsExhaustedModal: FC = () => {
   const [mounted, setMounted] = useState(false)
   const translateY = useSharedValue(HIDDEN_Y)
   const backdrop = useSharedValue(0)
+  // iOS présente cette Modal depuis le contrôleur racine : si une autre fenêtre
+  // est déjà ouverte (feuille Promesses, /promesses/nouvelle, /offre), UIKit
+  // refuse EN SILENCE. Sans `onShow`, le store restait « ouvert » et plus aucun
+  // refus de crédits ne montrait la feuille jusqu'au redémarrage.
+  const shownRef = useRef(false)
+
+  // Démonte si la fenêtre est toujours censée être fermée (pas de réouverture
+  // entre-temps). Appelée à la fin de la fermeture, qu'elle soit allée au bout
+  // ou non, et par un minuteur de secours.
+  const finishClose = useCallback(() => {
+    if (useExhaustedStore.getState().open) return
+    setMounted(false)
+    // Démontée = plus présentée : la prochaine ouverture attendra un vrai onShow.
+    shownRef.current = false
+  }, [])
 
   useEffect(() => {
     if (open) {
@@ -82,13 +100,28 @@ export const CreditsExhaustedModal: FC = () => {
       translateY.value = HIDDEN_Y
       backdrop.value = withTiming(1, OPEN)
       translateY.value = withTiming(0, OPEN)
+      // Rouverte pendant sa fermeture : la Modal est restée présentée (pas de
+      // nouvel onShow à attendre), pas de surveillance.
+      if (Platform.OS !== 'ios' || shownRef.current) return undefined
+      // Présentation refusée (pas de `onShow`) : on referme, l'écran appelant
+      // garde son propre message, et la prochaine ouverture repart de zéro.
+      const watchdog = setTimeout(() => {
+        if (!shownRef.current && useExhaustedStore.getState().open) hide()
+      }, SHOW_WATCHDOG_MS)
+      return () => clearTimeout(watchdog)
     } else if (mounted) {
       backdrop.value = withTiming(0, CLOSE)
-      // Démonter seulement si la fermeture est allée au bout (pas si on rouvre).
-      translateY.value = withTiming(HIDDEN_Y, CLOSE, (finished) => {
-        if (finished) runOnJS(setMounted)(false)
+      // Démonter à la fin de la fermeture, MÊME interrompue : un doigt posé ou un
+      // glissé pendant les 220 ms annulait l'animation, `mounted` restait vrai et
+      // la Modal transparente restait au-dessus de toute l'app en avalant chaque
+      // toucher (app « figée » jusqu'à sa fermeture).
+      translateY.value = withTiming(HIDDEN_Y, CLOSE, () => {
+        runOnJS(finishClose)()
       })
+      const fallback = setTimeout(finishClose, 320)
+      return () => clearTimeout(fallback)
     }
+    return undefined
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -109,16 +142,21 @@ export const CreditsExhaustedModal: FC = () => {
   const premiumLine =
     !isPremium && premium ? `Premium en donne ${premium.amount}${premiumPer ? ` ${premiumPer}` : ''}.` : null
 
-  const close = () => hide()
+  // Déjà fermée côté store mais encore montée : on force le démontage.
+  const close = () => (useExhaustedStore.getState().open ? hide() : setMounted(false))
 
   const goPremium = () => {
     haptic.press()
     hide()
-    router.push(ROUTES.OFFRE.INDEX)
+    // /offre est un écran natif « modal » : l'ouvrir pendant la sortie de
+    // cette fenêtre (220 ms) peut laisser un calque qui bloque tout (iOS).
+    runAfterModalClose(() => router.push(ROUTES.OFFRE.INDEX))
   }
 
   // Glisser la feuille vers le bas pour la fermer.
+  // Désactivé pendant la fermeture : un glissé l'aurait interrompue.
   const pan = Gesture.Pan()
+    .enabled(open)
     .onUpdate((e) => {
       translateY.value = Math.max(0, e.translationY)
     })
@@ -136,7 +174,17 @@ export const CreditsExhaustedModal: FC = () => {
   if (!mounted) return null
 
   return (
-    <Modal visible transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={close}>
+    <Modal
+      visible
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      navigationBarTranslucent
+      onRequestClose={close}
+      onShow={() => {
+        shownRef.current = true
+      }}
+    >
       <GestureHandlerRootView style={styles.root}>
         <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]}>
           <Pressable

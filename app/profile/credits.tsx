@@ -316,3 +316,6 @@ const styles = StyleSheet.create({
 })
 
 export default CreditsInfoScreen
+
+// Erreur de rendu : seule cette page est remplacée (pas toute l'app).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/shared/RouteErrorBoundary'

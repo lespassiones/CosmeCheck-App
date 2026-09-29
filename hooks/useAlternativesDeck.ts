@@ -24,12 +24,14 @@ import { applyColorCap } from '@/lib/analysis/scoreCap'
 import { readAiCache, compareInsightsKey, TTL_COMPARE_INSIGHTS_MS } from '@/lib/storage/aiCache'
 import { showToast } from '@/components/shared/Toast'
 import { useAuth } from '@/hooks/useAuth'
+import { creditsQueryOptions } from '@/hooks/useCredits'
 import { useProfile } from '@/hooks/useProfile'
 import { useKeepFavorite } from '@/hooks/useKeepFavorite'
 import { useLaunchAlternative } from '@/hooks/useLaunchAlternative'
 import type { DeckSuggestion } from '@/components/routine/SuggestionsDeck'
 import type { RoutineItem } from '@/hooks/useRoutine'
 import { showCreditsExhausted } from '@/lib/credits/exhaustedStore'
+import { runAfterModalClose } from '@/lib/navigation/afterModalClose'
 
 function titleFor(item: RoutineItem): string {
   return decodeHtml(item.analysis?.product_label?.trim() || item.analysis?.name?.trim()) || 'Produit'
@@ -145,6 +147,10 @@ export function useAlternativesDeck(items: RoutineItem[]): UseAlternativesDeckRe
 
       const { data, error } = await supabase.functions.invoke('routine-smart-suggest', {
         body: { items: reqItems },
+        // Plafond : pendant l'appel, un overlay modal SANS bouton bloque tout
+        // l'écran. Réseau muet = « Suggestions indisponibles » au bout de 45 s
+        // au lieu d'une app figée jusqu'au délai réseau d'iOS.
+        timeout: 45_000,
       })
       if (error) {
         showToast('Suggestions indisponibles. Réessaie.', 'error')
@@ -181,7 +187,8 @@ export function useAlternativesDeck(items: RoutineItem[]): UseAlternativesDeckRe
         if (anyLocked) {
           // Des produits méritaient une suggestion mais les crédits sont épuisés
           // (le serveur n'a lancé AUCUNE IA : vérification du solde en amont).
-          showCreditsExhausted()
+          // Différé : l'overlay de chargement (une Modal) est en train de se fermer.
+          runAfterModalClose(showCreditsExhausted)
         } else if (suggestions.length === 0) {
           // AUCUN produit ne qualifie (pas d'orange/rouge, pas de restriction, vert ≥ jaune)
           // → la routine est réellement propre.
@@ -231,7 +238,10 @@ export function useAlternativesDeck(items: RoutineItem[]): UseAlternativesDeckRe
       })
       await seedKept(deckData)
       setDeck(deckData)
-      setDeckOpen(true)
+      // L'overlay de chargement (Modal) et le deck (Modal) ne doivent pas
+      // basculer dans le même rendu : sur iOS le deck ne s'affichait parfois pas.
+      setDeckLoading(false)
+      runAfterModalClose(() => setDeckOpen(true))
       if (anyLocked) showToast('Crédits épuisés pour certains produits. Reviens demain.', 'info')
     } catch {
       showToast('Suggestions indisponibles. Réessaie.', 'error')
@@ -257,7 +267,8 @@ export function useAlternativesDeck(items: RoutineItem[]): UseAlternativesDeckRe
 
   const handleOpenAlternative = useCallback(
     (s: DeckSuggestion) => {
-      void launchAlternative(s.alternative)
+      setDeckOpen(false)
+      runAfterModalClose(() => void launchAlternative(s.alternative))
     },
     [launchAlternative],
   )
@@ -279,24 +290,29 @@ export function useAlternativesDeck(items: RoutineItem[]): UseAlternativesDeckRe
           TTL_COMPARE_INSIGHTS_MS,
         )
         if (!already) {
-          const { data: credit } = await supabase.rpc(
-            'cosme_check_consume_credit' as never,
-            { p_feature: 'compare' } as never,
-          )
-          if ((credit as { ok?: boolean } | null)?.ok !== true) {
-            showCreditsExhausted()
+          // Solde LU, pas débité : `compare-insights` débite déjà 1 crédit côté
+          // serveur (gate). Débiter ici faisait payer la comparaison deux fois,
+          // et avec 1 seul crédit le serveur refusait juste après ce paiement.
+          const credits = await qc
+            .fetchQuery(creditsQueryOptions(user?.id ?? null))
+            .catch(() => null)
+          if (credits && (credits.remaining ?? 0) <= 0) {
+            setDeckOpen(false)
+            runAfterModalClose(showCreditsExhausted)
             return
           }
-          void qc.invalidateQueries({ queryKey: ['credits'] })
         }
-        router.push(`${ROUTES.COMPARE.INDEX}?ids=${routineId},${altId}` as never)
+        // Le deck est une Modal : naviguer pendant qu'elle est affichée peut
+        // laisser un calque invisible qui bloque tous les touchers (iOS).
+        setDeckOpen(false)
+        runAfterModalClose(() => router.push(`${ROUTES.COMPARE.INDEX}?ids=${routineId},${altId}` as never))
       } catch {
         showToast('Comparaison impossible. Réessaie.', 'error')
       } finally {
         setComparingKey(null)
       }
     },
-    [ensureAnalysisId, qc],
+    [ensureAnalysisId, qc, user?.id],
   )
 
   const closeDeck = useCallback(() => setDeckOpen(false), [])

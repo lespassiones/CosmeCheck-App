@@ -112,8 +112,9 @@ const PremiumWelcomeScreen: FC = () => {
 
   const goHome = () => {
     Haptics.selectionAsync().catch(() => {})
-    // `replace` et pas `back` : l'écran d'achat ne doit plus être derrière.
-    router.replace(ROUTES.TABS.HOME)
+    // Retour aux onglets EXISTANTS (l'écran d'achat ne reste pas derrière).
+    // `replace` vers /(tabs) empilait une 2e copie complète des onglets.
+    router.dismissTo(ROUTES.TABS.HOME)
   }
 
   return (
@@ -263,3 +264,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
 })
+
+// Erreur de rendu : seule cette page est remplacée (pas toute l'app).
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/shared/RouteErrorBoundary'

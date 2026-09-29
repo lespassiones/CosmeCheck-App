@@ -192,7 +192,9 @@ export const VerdictStep: FC<StepProps> = ({ draft, next }) => {
     : "Ce que dit l'étiquette.\nCe que dit la formule."
 
   return (
-    <StepLayout footer={<PrimaryButton label="Continuer" onPress={next} disabled={!verdict} />}>
+    // Le verdict arrive après la lecture de la liste : l'écran se remet en page
+    // (et se resserre) avec lui, pour tout garder au-dessus du bouton.
+    <StepLayout key={verdict ? 'verdict' : 'lecture'} footer={<PrimaryButton label="Continuer" onPress={next} disabled={!verdict} />}>
       <Eyebrow>LA DIFFÉRENCE</Eyebrow>
       <Title size={28}>{title}</Title>
       <Gap h={18} />
@@ -297,7 +299,7 @@ export const VerdictStep: FC<StepProps> = ({ draft, next }) => {
       <Gap h={20} />
       {bubble ? (
         <Animated.View entering={FadeIn.delay(250).duration(300)}>
-          <PerleBubble size={60}>{bubble}</PerleBubble>
+          <PerleBubble size={50}>{bubble}</PerleBubble>
         </Animated.View>
       ) : null}
     </StepLayout>
