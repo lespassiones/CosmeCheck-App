@@ -221,6 +221,22 @@ export async function loginUser(userId: string): Promise<void> {
   }
 }
 
+/**
+ * Intégration « Meta Ads » de RevenueCat : l'essai et les achats partent chez
+ * Meta côté serveur, reliés à la pub par ces identifiants. Appelé UNIQUEMENT
+ * après consentement (lib/ads/metaAds.ts). Rattachés à l'identifiant courant :
+ * à rejouer après `logIn`.
+ */
+export async function shareAdIdentifiers(fbAnonymousId: string | null): Promise<void> {
+  try {
+    if (!(await ensureConfigured())) return
+    await Purchases.collectDeviceIdentifiers()
+    if (fbAnonymousId) await Purchases.setFBAnonymousID(fbAnonymousId)
+  } catch (err) {
+    console.warn('[RevenueCat] identifiants publicitaires non transmis :', err)
+  }
+}
+
 export async function logoutUser(): Promise<void> {
   try {
     if (!(await ensureConfigured())) return

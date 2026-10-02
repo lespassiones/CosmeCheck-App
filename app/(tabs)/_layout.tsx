@@ -13,7 +13,7 @@
  *     cercle qui grandit depuis Perle (`AdvisorReveal`), et le retour s'y referme.
  */
 
-import { useCallback, type FC } from 'react'
+import { useCallback, useEffect, type FC } from 'react'
 import { StyleSheet, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 import { Tabs, useRouter, usePathname } from 'expo-router'
@@ -28,6 +28,11 @@ import {
 import { AdvisorFAB } from '@/components/navigation/AdvisorFAB'
 import { AdvisorRevealOverlay, useAdvisorReveal } from '@/components/navigation/AdvisorReveal'
 import { ROUTES } from '@/constants/routes'
+import { askAdsConsentOnce } from '@/lib/ads/metaAds'
+
+// Laisse l'accueil s'afficher avant la question (et une éventuelle page ouverte
+// par-dessus à la fin de l'onboarding).
+const ADS_CONSENT_DELAY_MS = 5000
 
 const FAB_SIZE = ADVISOR_FAB_SIZE
 const FAB_RIGHT = 16
@@ -40,6 +45,13 @@ const TabsLayout: FC = () => {
   const onScan = pathname?.includes('/scan') ?? false
   // Bouton flottant calé 16 px au-dessus de la barre d'onglets.
   const fabBottom = Math.max(insets.bottom, 8) + TAB_BAR_HEIGHT + ADVISOR_FAB_GAP
+
+  // Mesure publicitaire Meta : filet pour les comptes déjà inscrits qui ne
+  // repassent pas par l'onboarding. Sans effet si déjà répondu.
+  useEffect(() => {
+    const t = setTimeout(() => void askAdsConsentOnce(), ADS_CONSENT_DELAY_MS)
+    return () => clearTimeout(t)
+  }, [])
 
   const openAdvisor = useCallback(() => router.push(ROUTES.ADVISOR.INDEX), [router])
   const reveal = useAdvisorReveal({

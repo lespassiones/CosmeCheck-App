@@ -1,0 +1,123 @@
+import { FAUX, m, NUANCE, q, VRAI, type LocalPick } from './helpers'
+
+export const PACK_07: LocalPick[] = [
+  // Jour 1
+  q('À quoi sert surtout la glycérine dans une crème ?', 'Hydrater la peau', ['Exfolier la peau', 'Filtrer les UV', 'Parfumer la crème'], 'La glycérine est un humectant : elle attire l’eau et l’aide à rester dans les couches superficielles de la peau.', 'actifs'),
+  m('Le rétinol s’applique plutôt le soir.', VRAI, 'Vrai. Le rétinol se dégrade à la lumière et peut sensibiliser la peau au soleil, on le réserve donc à la routine du soir.', 'actifs'),
+  q('Quelle vitamine est connue pour donner de l’éclat au teint ?', 'La vitamine C', ['La vitamine D', 'La vitamine B12', 'La vitamine K'], 'La vitamine C est un antioxydant qui aide à unifier le teint et à lui redonner de l’éclat.', 'actifs'),
+  m('L’acide hyaluronique est un acide qui brûle la peau.', FAUX, 'Faux. Malgré son nom, c’est une molécule hydratante très douce, déjà présente naturellement dans notre peau.', 'idées reçues'),
+  q('Quel actif est souvent conseillé contre les points noirs ?', 'L’acide salicylique', ['Le beurre de karité', 'L’huile de coco', 'La vaseline'], 'L’acide salicylique se mêle au sébum et désobstrue les pores, ce qui aide contre les points noirs.', 'peau grasse'),
+  q('Que signifie SPF sur une crème de jour ?', 'Protection contre les UVB', ['Crème pour peau sèche', 'Produit sans parfum', 'Formule très hydratante'], 'Le SPF indique le niveau de protection contre les UVB, responsables des coups de soleil.', 'solaire'),
+  m('Le panthénol est aussi appelé provitamine B5.', VRAI, 'Vrai. Le panthénol est la provitamine B5 : il apaise et aide la peau abîmée à se réparer.', 'actifs'),
+  q('Dans quel type de crème trouve-t-on souvent de l’urée ?', 'Crème pour peau très sèche', ['Gel pour peau grasse', 'Démaquillant pour les yeux', 'Shampoing antipelliculaire'], 'L’urée hydrate et assouplit la peau rugueuse : on la retrouve surtout dans les crèmes pour pieds et peaux très sèches.', 'peau sèche'),
+  m('Mettre du collagène sur la peau remplace celui qu’on a perdu.', FAUX, 'Faux. Le collagène en crème est trop gros pour pénétrer dans le derme. Il hydrate en surface mais ne remplace pas le nôtre.', 'idées reçues'),
+  q('Qu’est-ce que la niacinamide ?', 'Une forme de vitamine B3', ['Une huile essentielle', 'Un filtre solaire', 'Un conservateur'], 'La niacinamide est une forme de vitamine B3, appréciée pour réguler le sébum et renforcer la barrière de la peau.', 'actifs'),
+
+  // Jour 2
+  q('Que sont les céramides ?', 'Des lipides de la barrière cutanée', ['Des pigments du maquillage', 'Des grains de gommage', 'Des minéraux de l’eau'], 'Les céramides sont des graisses naturelles qui soudent les cellules de la peau et limitent la perte d’eau.', 'actifs'),
+  m('Une femme enceinte peut utiliser du rétinol sans aucune précaution.', FAUX, 'Faux. Par précaution, les rétinoïdes sont déconseillés pendant la grossesse. Demande l’avis d’un médecin ou d’un pharmacien.', 'sécurité'),
+  q('Que veut dire AHA ?', 'Acides alpha-hydroxylés', ['Actifs hydratants avancés', 'Anti-âge hypoallergénique', 'Acides aminés hydratants'], 'AHA signifie acides alpha-hydroxylés, comme l’acide glycolique ou lactique. Ce sont des exfoliants.', 'actifs'),
+  m('La glycérine est un ingrédient rare et coûteux.', FAUX, 'Faux. La glycérine est l’un des ingrédients les plus courants et abordables, présente dans énormément de soins.', 'idées reçues'),
+  q('Quand appliquer une crème avec SPF ?', 'Le matin', ['Le soir au coucher', 'Après la douche du soir', 'Seulement en hiver'], 'Le SPF protège des UV de la journée : il s’applique le matin, en dernière étape de la routine.', 'solaire'),
+  q('Quel actif aide à apaiser une peau irritée ?', 'Le panthénol', ['L’acide glycolique', 'L’alcool dénaturé', 'Le rétinol'], 'Le panthénol apaise et aide la réparation de la peau, c’est un classique des baumes réparateurs.', 'peau sensible'),
+  m('La vitamine C pure s’abîme vite à l’air et à la lumière.', VRAI, 'Vrai. L’acide ascorbique s’oxyde facilement. Un flacon opaque et bien fermé aide à le garder efficace plus longtemps.', 'conservation'),
+  q('Quel est le rôle principal des AHA ?', 'Exfolier en douceur', ['Protéger du soleil', 'Colorer la peau', 'Nourrir les cheveux'], 'Les AHA décollent les cellules mortes en surface, ce qui lisse la peau et lui redonne de l’éclat.', 'actifs'),
+  m('La niacinamide convient à la plupart des types de peau.', VRAI, 'Vrai. La niacinamide est bien tolérée en général, que la peau soit grasse, sèche ou mixte.', 'actifs'),
+  q('L’acide salicylique fait partie de quelle famille ?', 'Les BHA', ['Les AHA', 'Les huiles', 'Les silicones'], 'L’acide salicylique est le BHA le plus connu : il agit aussi à l’intérieur des pores.', 'actifs'),
+
+  // Jour 3
+  q('Combien d’eau l’acide hyaluronique peut-il retenir, selon l’idée courante ?', 'Jusqu’à 1000 fois son poids', ['Juste son propre poids', 'Environ 2 fois son poids', 'Aucune eau du tout'], 'L’acide hyaluronique est célèbre pour retenir une grande quantité d’eau, ce qui en fait un excellent hydratant.', 'actifs'),
+  m('Il faut mettre du SPF même par temps nuageux.', VRAI, 'Vrai. Une bonne partie des UV traverse les nuages. La protection reste utile même quand le ciel est gris.', 'solaire'),
+  q('Que peut provoquer le rétinol au début ?', 'Rougeurs et petites peaux', ['Des cheveux plus épais', 'Un bronzage rapide', 'Une peau plus grasse'], 'En début d’utilisation, le rétinol peut assécher et faire peler légèrement. On commence doucement, quelques soirs par semaine.', 'actifs'),
+  m('Plus l’urée est concentrée, plus elle est douce.', FAUX, 'Faux. À faible dose, l’urée hydrate. À forte dose, elle exfolie davantage et peut piquer sur une peau abîmée.', 'actifs'),
+  q('Quel actif répare surtout la barrière de la peau ?', 'Les céramides', ['L’alcool', 'Le menthol', 'Le parfum'], 'Les céramides reconstituent le ciment entre les cellules : la peau retient mieux l’eau et résiste mieux aux agressions.', 'peau sèche'),
+  q('Après un AHA, que faut-il faire le lendemain ?', 'Mettre une protection solaire', ['Faire un gommage', 'S’exposer au soleil', 'Ne rien mettre du tout'], 'Les AHA rendent la peau plus sensible au soleil. Une protection solaire le lendemain est indispensable.', 'solaire'),
+  m('La glycérine convient aussi aux peaux grasses.', VRAI, 'Vrai. Une peau grasse peut manquer d’eau. La glycérine hydrate sans apporter de gras.', 'peau grasse'),
+  q('Quel ingrédient trouve-t-on souvent dans les baumes pour bébé ?', 'Le panthénol', ['L’acide salicylique', 'Le rétinol', 'L’acide glycolique'], 'Le panthénol est doux et apaisant, c’est pourquoi on le retrouve souvent dans les soins pour le change.', 'bébé'),
+  m('La vitamine C et le SPF font bon ménage le matin.', VRAI, 'Vrai. La vitamine C aide à lutter contre l’oxydation et le SPF bloque les UV. Les deux se complètent bien le matin.', 'routine'),
+  q('Quel mot désigne un ingrédient qui attire l’eau ?', 'Humectant', ['Émulsifiant', 'Conservateur', 'Colorant'], 'Un humectant, comme la glycérine ou l’acide hyaluronique, capte l’eau et l’aide à rester dans la peau.', 'ingrédients'),
+
+  // Jour 4
+  q('Comment démarrer le rétinol ?', 'Peu, et quelques soirs par semaine', ['Tous les matins en couche épaisse', 'Matin et soir dès le départ', 'Juste avant d’aller au soleil'], 'Pour habituer la peau, on commence avec une petite quantité, 2 ou 3 soirs par semaine, puis on augmente.', 'routine'),
+  m('Le collagène en crème ne sert à rien.', NUANCE, 'Nuancé. Il ne rajeunit pas le derme, mais il forme un film qui hydrate et adoucit la surface de la peau.', 'idées reçues'),
+  q('Sur quelle zone l’acide salicylique est-il le plus utile ?', 'La zone T grasse', ['Le contour des yeux', 'Les lèvres', 'Les cils'], 'Front, nez et menton produisent souvent plus de sébum : c’est là que l’acide salicylique aide le plus.', 'peau grasse'),
+  m('Un SPF 50 permet de rester au soleil toute la journée sans remettre de crème.', FAUX, 'Faux. Quel que soit l’indice, il faut renouveler la crème environ toutes les 2 heures et après la baignade.', 'solaire'),
+  q('Quelle texture a souvent un sérum à l’acide hyaluronique ?', 'Fluide et un peu gélifiée', ['Pâteuse et granuleuse', 'Poudreuse et sèche', 'Cireuse et dure'], 'L’acide hyaluronique donne des textures fluides, légèrement gélifiées, qui pénètrent vite.', 'actifs'),
+  q('La niacinamide aide surtout à…', 'Réguler l’excès de sébum', ['Bronzer plus vite', 'Allonger les cils', 'Blanchir les dents'], 'La niacinamide aide à limiter l’aspect brillant et à resserrer visuellement les pores.', 'peau grasse'),
+  m('Les AHA conviennent à toutes les peaux sans exception.', NUANCE, 'Nuancé. Beaucoup de peaux les tolèrent, mais les peaux très sensibles ou réactives peuvent être irritées. On commence doucement.', 'peau sensible'),
+  q('Quel ingrédient trouve-t-on dans nos cellules et dans les crèmes pieds ?', 'L’urée', ['Le silicone', 'Le talc', 'Le mica'], 'L’urée fait partie des facteurs naturels d’hydratation de la peau, d’où son intérêt dans les crèmes.', 'peau sèche'),
+  q('Pourquoi les céramides plaisent aux peaux sèches ?', 'Elles limitent la perte d’eau', ['Elles font transpirer', 'Elles dessèchent le sébum', 'Elles colorent la peau'], 'En renforçant la barrière, les céramides empêchent l’eau de s’évaporer trop vite de la peau.', 'peau sèche'),
+  m('Le panthénol est aussi utilisé dans les soins cheveux.', VRAI, 'Vrai. Le panthénol aide à hydrater la fibre et à rendre les cheveux plus souples et brillants.', 'cheveux'),
+
+  // Jour 5
+  q('Quel geste protège le mieux l’effet d’un soin au rétinol ?', 'SPF le lendemain matin', ['Gommage le lendemain', 'Sauna juste après', 'Bain de soleil le jour même'], 'Le rétinol rend la peau plus sensible aux UV : la crème solaire du lendemain protège la peau et les résultats.', 'solaire'),
+  m('Une peau qui pique un peu avec un AHA est forcément allergique.', FAUX, 'Faux. Un léger picotement passager est fréquent. Mais si ça brûle, rougit fort ou dure, on rince et on arrête.', 'peau sensible'),
+  q('Que fait la vitamine C sur les taches ?', 'Elle aide à les atténuer', ['Elle les fait apparaître', 'Elle les colore en rose', 'Elle n’a aucun lien'], 'La vitamine C freine la production de pigment, ce qui aide à estomper progressivement les taches.', 'actifs'),
+  m('L’acide hyaluronique appliqué sur peau humide est plus agréable.', VRAI, 'Vrai. Sur peau légèrement humide, il s’étale mieux, et une crème par-dessus aide à garder l’eau.', 'routine'),
+  q('Quel actif est un exfoliant dérivé du lait ?', 'L’acide lactique', ['L’acide hyaluronique', 'L’acide folique', 'L’acide citrique'], 'L’acide lactique est un AHA doux, à l’origine tiré du lait, souvent choisi pour les peaux sensibles.', 'actifs'),
+  q('Quel actif est souvent associé aux boutons ?', 'L’acide salicylique', ['Le collagène', 'Le beurre de cacao', 'La cire d’abeille'], 'L’acide salicylique aide à désobstruer les pores et à limiter les imperfections.', 'peau grasse'),
+  m('On peut mélanger niacinamide et vitamine C.', NUANCE, 'Nuancé. Cette vieille crainte est surtout théorique. Beaucoup les utilisent ensemble, mais on peut aussi les séparer matin et soir si ça picote.', 'routine'),
+  q('Quel ingrédient donne souvent une texture riche aux crèmes aux céramides ?', 'Des lipides nourrissants', ['Des bulles de gaz', 'Du sable fin', 'De l’eau gazeuse'], 'Les céramides sont souvent associées à d’autres lipides, comme le cholestérol, pour une barrière complète.', 'ingrédients'),
+  m('La glycérine peut coller si elle est très concentrée.', VRAI, 'Vrai. À forte dose, la glycérine peut laisser un fini un peu collant. Les formules bien dosées l’évitent.', 'ingrédients'),
+  q('Quel indice SPF est souvent conseillé au quotidien ?', 'Au moins 30', ['Seulement 2', 'Exactement 5', 'Aucun indice'], 'Un SPF 30 ou plus est souvent conseillé pour une bonne protection au quotidien, surtout en extérieur.', 'solaire'),
+
+  // Jour 6
+  q('Le rétinol est une forme de quelle vitamine ?', 'La vitamine A', ['La vitamine C', 'La vitamine E', 'La vitamine B5'], 'Le rétinol est une forme de vitamine A. Il stimule le renouvellement de la peau.', 'actifs'),
+  m('Le SPF d’une crème de jour suffit pour une journée à la plage.', FAUX, 'Faux. À la plage, il faut une vraie crème solaire, en quantité généreuse et renouvelée souvent.', 'solaire'),
+  q('Que fait l’urée à faible dose ?', 'Elle hydrate', ['Elle décolore', 'Elle parfume', 'Elle filtre les UV'], 'À faible concentration, l’urée attire l’eau et hydrate la peau sèche.', 'actifs'),
+  m('La vitamine C peut picoter sur une peau sensible.', VRAI, 'Vrai. La vitamine C pure est acide et peut picoter. Il existe des formes plus douces pour les peaux sensibles.', 'peau sensible'),
+  q('L’acide hyaluronique est-il présent naturellement dans le corps ?', 'Oui, dans la peau', ['Non, jamais', 'Seulement dans les ongles', 'Seulement dans les cheveux'], 'Notre peau fabrique de l’acide hyaluronique. Sa quantité diminue avec l’âge.', 'actifs'),
+  q('Quel actif est connu pour renforcer la barrière et réduire les rougeurs ?', 'La niacinamide', ['L’alcool', 'Le menthol', 'Le camphre'], 'La niacinamide aide la peau à fabriquer ses propres céramides et peut atténuer certaines rougeurs.', 'peau sensible'),
+  m('Tous les AHA sont exactement pareils.', FAUX, 'Faux. L’acide glycolique pénètre plus vite, l’acide lactique ou mandélique est plus doux. Ils n’ont pas la même intensité.', 'actifs'),
+  q('Où appliquer la crème SPF le matin ?', 'Visage, cou et oreilles', ['Seulement le nez', 'Seulement le front', 'Seulement les joues'], 'Le cou et les oreilles sont souvent oubliés alors qu’ils sont exposés aussi.', 'solaire'),
+  m('Le panthénol convient souvent aux peaux sensibles.', VRAI, 'Vrai. Le panthénol est apaisant et en général bien toléré, même par les peaux réactives.', 'peau sensible'),
+  q('Quel geste accompagne bien un soin exfoliant ?', 'Une crème hydratante ensuite', ['Un second gommage', 'Un après-rasage alcoolisé', 'Un masque à l’argile'], 'Après exfoliation, la peau apprécie d’être hydratée et apaisée, pas d’être agressée à nouveau.', 'routine'),
+
+  // Jour 7
+  q('Quel actif est souvent cité pour lisser les ridules ?', 'Le rétinol', ['Le talc', 'La glycérine seule', 'Le parfum'], 'Le rétinol accélère le renouvellement cellulaire et aide à lisser les petites rides avec le temps.', 'actifs'),
+  m('Le collagène buvable ou en crème, c’est la même chose.', FAUX, 'Faux. Ce sont deux approches différentes. En crème, le collagène agit surtout en surface, comme un hydratant.', 'idées reçues'),
+  q('Quel type d’actif est la glycérine ?', 'Un humectant', ['Un exfoliant', 'Un filtre UV', 'Un colorant'], 'La glycérine capte l’eau : c’est le rôle d’un humectant.', 'ingrédients'),
+  m('Les céramides sont réservées aux peaux âgées.', FAUX, 'Faux. Toute peau à la barrière fragilisée en profite, quel que soit l’âge, y compris les peaux jeunes et sèches.', 'idées reçues'),
+  q('Quand l’acide salicylique est-il à éviter sans avis médical ?', 'En cas d’allergie à l’aspirine', ['Quand il fait froid', 'Quand on a les yeux bleus', 'Quand on porte du vernis'], 'L’acide salicylique est de la même famille que l’aspirine : en cas d’allergie connue, demande conseil.', 'sécurité'),
+  q('Quel actif peut aider les talons fendillés ?', 'L’urée', ['L’acide hyaluronique en spray', 'Le parfum', 'Le mica'], 'L’urée hydrate et assouplit les zones épaisses et rugueuses comme les talons.', 'corps'),
+  m('La vitamine C qui brunit dans le flacon est moins efficace.', VRAI, 'Vrai. Une vitamine C qui fonce s’est oxydée : elle perd de son efficacité.', 'conservation'),
+  q('À quoi sert l’acide glycolique ?', 'Exfolier et donner de l’éclat', ['Filtrer les UV', 'Épaissir les cheveux', 'Parfumer la peau'], 'L’acide glycolique est un AHA qui affine le grain de peau et ravive l’éclat.', 'actifs'),
+  m('La niacinamide fait disparaître les pores.', NUANCE, 'Nuancé. Elle peut les rendre moins visibles, mais on ne peut pas faire disparaître ses pores.', 'idées reçues'),
+  q('Quelle quantité de SPF pour le visage ?', 'Une noisette généreuse', ['Une minuscule goutte', 'Une trace invisible', 'Un seul point sur le nez'], 'On met souvent trop peu de SPF. Une quantité généreuse est nécessaire pour atteindre l’indice affiché.', 'solaire'),
+
+  // Jour 8
+  q('Quelle idée est juste sur le panthénol ?', 'Il aide la peau à se réparer', ['Il blanchit la peau', 'Il bronze la peau', 'Il assèche la peau'], 'Le panthénol soutient la réparation de la peau et l’hydrate, d’où sa présence dans les soins apaisants.', 'actifs'),
+  m('Le rétinol fait peler, donc c’est qu’il est mauvais pour la peau.', FAUX, 'Faux. C’est une phase d’adaptation fréquente. En espaçant les applications et en hydratant, cela passe souvent.', 'idées reçues'),
+  q('L’acide hyaluronique seul peut-il remplacer une crème pour peau sèche ?', 'Non, pas toujours', ['Oui, toujours', 'Oui, s’il est rouge', 'Non, il est interdit'], 'Il apporte de l’eau, mais une peau sèche a aussi besoin de lipides pour retenir cette eau.', 'peau sèche'),
+  m('Le SPF protège aussi contre une partie du vieillissement dû au soleil.', VRAI, 'Vrai. Les UV contribuent aux rides et aux taches. Une protection quotidienne aide à limiter ce photovieillissement.', 'solaire'),
+  q('Quelle peau profite le plus de l’acide salicylique ?', 'La peau grasse à imperfections', ['La peau très sèche et fine', 'La peau déjà irritée', 'La peau brûlée par le soleil'], 'Il agit dans les pores chargés de sébum, idéal pour les peaux grasses à imperfections.', 'peau grasse'),
+  q('Quel ingrédient appelle-t-on « facteur naturel d’hydratation » ?', 'L’urée', ['Le silicone', 'Le parabène', 'Le parfum'], 'L’urée fait partie des composants que la peau utilise elle-même pour garder son eau.', 'ingrédients'),
+  m('La glycérine est d’origine uniquement animale.', FAUX, 'Faux. La glycérine des cosmétiques est le plus souvent d’origine végétale ou synthétique.', 'idées reçues'),
+  q('Que faire si un actif brûle fortement la peau ?', 'Rincer et arrêter le produit', ['En remettre une couche', 'Mettre un gommage', 'S’exposer au soleil'], 'Une brûlure forte n’est pas normale : on rince à l’eau, on arrête et on demande conseil si ça persiste.', 'sécurité'),
+  m('Les AHA et le rétinol s’utilisent volontiers le même soir.', NUANCE, 'Nuancé. C’est possible pour certaines peaux habituées, mais le risque d’irritation augmente. Mieux vaut alterner les soirs.', 'routine'),
+  q('Quel actif est présent dans le ciment entre les cellules ?', 'Les céramides', ['Le mica', 'Le talc', 'Le menthol'], 'Les céramides forment une grande partie des lipides entre les cellules de la couche cornée.', 'actifs'),
+
+  // Jour 9
+  q('Quelle forme de vitamine C est la plus connue ?', 'L’acide ascorbique', ['L’acide salicylique', 'L’acide lactique', 'L’acide hyaluronique'], 'L’acide ascorbique est la forme pure de la vitamine C, efficace mais fragile.', 'actifs'),
+  m('Il faut arrêter le SPF dès l’automne.', FAUX, 'Faux. Les UV sont présents toute l’année, même moins forts. Un SPF quotidien reste utile, surtout avec des actifs exfoliants.', 'solaire'),
+  q('Pourquoi mettre une crème après l’acide hyaluronique ?', 'Pour garder l’eau dans la peau', ['Pour l’annuler', 'Pour le faire mousser', 'Pour le colorer'], 'Une crème par-dessus forme un voile qui limite l’évaporation de l’eau captée.', 'routine'),
+  m('Le rétinol agit dès la première nuit.', FAUX, 'Faux. Les effets visibles du rétinol demandent en général plusieurs semaines d’utilisation régulière.', 'idées reçues'),
+  q('Quel actif limite l’aspect brillant de la peau ?', 'La niacinamide', ['L’huile de coco', 'La vaseline', 'Le beurre de karité'], 'La niacinamide aide à réguler le sébum, ce qui réduit l’effet brillant.', 'peau grasse'),
+  q('Où trouve-t-on souvent du panthénol ?', 'Dans les baumes apaisants', ['Dans les dissolvants', 'Dans les teintures', 'Dans les laques'], 'Grâce à son effet apaisant, le panthénol est un pilier des baumes et crèmes réparatrices.', 'ingrédients'),
+  m('Une crème hydratante sans SPF protège quand même du soleil.', FAUX, 'Faux. Sans filtre UV, une crème hydrate mais ne protège pas du soleil.', 'solaire'),
+  q('Quel actif est déconseillé sur une peau fraîchement rasée ?', 'L’acide glycolique', ['Le panthénol', 'La glycérine', 'Les céramides'], 'Juste après le rasage, la peau est fragilisée : un exfoliant comme l’acide glycolique risque de piquer.', 'rasage'),
+  m('Les céramides peuvent aider en cas de peau qui tiraille.', VRAI, 'Vrai. Une peau qui tiraille a souvent une barrière affaiblie : les céramides aident à la renforcer.', 'peau sèche'),
+  q('Quand l’urée peut-elle piquer ?', 'Sur une peau abîmée ou fissurée', ['Sur les ongles', 'Dans les cheveux secs', 'Sur une peau saine et souple'], 'Sur une peau abîmée, l’urée peut provoquer des picotements, surtout à forte dose.', 'peau sensible'),
+
+  // Jour 10
+  q('Que signifie « photosensibilisant » ?', 'Qui rend sensible au soleil', ['Qui protège des photos', 'Qui brille à la lumière', 'Qui fait bronzer plus vite'], 'Un actif photosensibilisant, comme les AHA ou le rétinol, rend la peau plus vulnérable aux UV.', 'solaire'),
+  m('L’acide hyaluronique convient aussi aux peaux grasses.', VRAI, 'Vrai. Il hydrate sans graisser, ce qui convient bien aux peaux grasses qui manquent d’eau.', 'peau grasse'),
+  q('Quel actif est souvent dans les shampoings antipelliculaires doux ?', 'L’acide salicylique', ['Le rétinol', 'Le collagène', 'L’acide hyaluronique'], 'L’acide salicylique aide à décoller les squames sur le cuir chevelu.', 'cheveux'),
+  m('La vitamine C convient seulement aux peaux âgées.', FAUX, 'Faux. La vitamine C peut servir à tout âge pour l’éclat et comme antioxydant.', 'idées reçues'),
+  q('Où ranger un sérum à la vitamine C ?', 'À l’abri de la lumière', ['En plein soleil', 'Près du radiateur', 'Sans bouchon'], 'Lumière, chaleur et air accélèrent son oxydation. Un endroit frais et sombre le préserve.', 'conservation'),
+  q('Quel est l’intérêt du collagène dans une crème ?', 'Hydrater en surface', ['Remplacer le derme', 'Filtrer les UV', 'Épiler les poils'], 'En crème, le collagène retient l’eau à la surface et adoucit la peau.', 'actifs'),
+  m('Le rétinol s’utilise facilement autour des yeux.', NUANCE, 'Nuancé. Il existe des soins adaptés, mais la peau y est fine et réagit vite. On évite les produits visage classiques.', 'actifs'),
+  q('Quel actif se retrouve dans beaucoup de rouges à lèvres hydratants ?', 'Le panthénol', ['L’acide glycolique', 'Le rétinol', 'L’acide salicylique'], 'Le panthénol aide à garder les lèvres souples et hydratées.', 'lèvres'),
+  m('La niacinamide peut picoter chez certaines personnes.', NUANCE, 'Nuancé. Elle est en général douce, mais à forte concentration certaines peaux sensibles peuvent ressentir un picotement.', 'peau sensible'),
+  q('Quel est le meilleur réflexe avec un nouvel actif ?', 'Tester sur une petite zone', ['L’appliquer partout d’un coup', 'En mettre une couche épaisse', 'Le mélanger à tout'], 'Un test sur une petite zone pendant quelques jours permet de repérer une éventuelle réaction.', 'sécurité'),
+]

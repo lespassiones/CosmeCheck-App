@@ -37,6 +37,7 @@ import { ROUTES } from '@/constants/routes'
 import { useAndroidBack } from '@/hooks/useAndroidBack'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
+import { askAdsConsentOnce } from '@/lib/ads/metaAds'
 import { markPreOnboardingDone } from '@/lib/storage/preOnboarding'
 import { applyOnboardingDraft } from '@/lib/onboarding/applyDraft'
 import {
@@ -238,6 +239,9 @@ export const OnboardingFlow: FC<{ mode: FlowMode }> = ({ mode }) => {
     lastAdvanceAt.current = now
     const steps = visibleSteps(contextFor(draftRef.current))
     const target = nextStep(current, steps)
+    // Mesure publicitaire Meta : demandée après le premier scan réel (la
+    // personne a vu ce que fait l'app), une seule fois, jamais bloquante.
+    if (current === 'verdict') void askAdsConsentOnce()
     if (target) goTo(target, 'forward')
     else void finish()
   }, [contextFor, goTo, finish])

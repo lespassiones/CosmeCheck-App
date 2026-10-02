@@ -1,0 +1,123 @@
+import { FAUX, m, NUANCE, q, VRAI, type LocalPick } from './helpers'
+
+export const PACK_09: LocalPick[] = [
+  // Jour 1
+  q('Quelle est la différence principale d’un anti-transpirant ?', 'Il réduit la sueur', ['Il parfume plus fort', 'Il hydrate les aisselles', 'Il tue tous les poils'], 'L’anti-transpirant resserre temporairement les pores sudoraux. Le déodorant, lui, limite surtout les odeurs sans bloquer la sueur.', 'corps'),
+  m('Une douche très chaude est idéale pour la peau.', FAUX, 'Faux. L’eau très chaude dissout les lipides protecteurs de la peau et la dessèche. Une eau tiède est plus douce.', 'idées reçues'),
+  q('Quel geste aide le plus des lèvres gercées ?', 'Appliquer un baume gras', ['Les lécher souvent', 'Arracher les peaux', 'Les frotter au savon'], 'Un baume riche forme un film qui protège et limite la perte d’eau. La salive, elle, s’évapore et assèche encore plus.', 'lèvres'),
+  q('Quand appliquer une crème pour les mains ?', 'Après chaque lavage', ['Seulement le soir', 'Une fois par semaine', 'Jamais en hiver'], 'Le lavage retire le film protecteur de la peau. Remettre un peu de crème juste après aide à éviter les mains sèches.', 'mains'),
+  m('Les vergetures peuvent apparaître chez les hommes aussi.', VRAI, 'Vrai. Elles viennent d’un étirement rapide de la peau : croissance, prise de muscle ou de poids. Elles ne concernent pas que les femmes.', 'corps'),
+  q('Pour un bébé, quel soin est conseillé ?', 'Un soin doux sans parfum', ['Une huile essentielle', 'Un gel très moussant', 'Un produit alcoolisé'], 'La peau des bébés est fine et réactive. On privilégie des soins simples, doux et sans parfum.', 'bébé'),
+  m('On peut mettre des huiles essentielles sur la peau d’un bébé.', FAUX, 'Faux. Les huiles essentielles sont déconseillées chez le bébé : elles peuvent irriter la peau et certaines sont dangereuses à cet âge.', 'bébé'),
+  q('Dans quel sens raser pour limiter les irritations ?', 'Dans le sens du poil', ['À contre-poil', 'En cercles', 'Au hasard'], 'Raser dans le sens du poil tire moins sur la peau et réduit les poils incarnés et le feu du rasoir.', 'rasage'),
+  q('Quelle zone a souvent la peau épaisse et sèche ?', 'Les talons', ['Les paupières', 'Les joues', 'Le dessus du nez'], 'Les talons supportent tout le poids du corps. Leur peau s’épaissit et se dessèche facilement, d’où les crevasses.', 'pieds'),
+  m('Le déodorant bouche les pores et empêche toute transpiration.', FAUX, 'Faux. C’est l’anti-transpirant qui réduit la sueur. Un déodorant classique agit sur les odeurs, pas sur la quantité de sueur.', 'idées reçues'),
+
+  // Jour 2
+  q('Pourquoi utiliser une mousse ou un gel de rasage ?', 'Pour faire glisser la lame', ['Pour faire repousser moins', 'Pour colorer la peau', 'Pour épaissir le poil'], 'Le gel ou la mousse ramollit le poil et aide la lame à glisser, ce qui limite coupures et rougeurs.', 'rasage'),
+  m('Raser les poils les fait repousser plus épais.', FAUX, 'Faux. Le rasage coupe le poil sans toucher la racine. La pointe coupée paraît juste plus drue au toucher.', 'idées reçues'),
+  q('Qu’aime-t-on retrouver dans une crème pour pieds secs ?', 'De l’urée', ['Du sucre', 'De l’alcool pur', 'Du vinaigre'], 'L’urée hydrate et assouplit les zones épaisses comme les talons. On la trouve souvent dans les crèmes pour pieds.', 'pieds'),
+  q('Un après-rasage sert surtout à…', 'Apaiser la peau', ['Faire pousser la barbe', 'Blanchir les dents', 'Remplacer la douche'], 'Après le passage de la lame, la peau est sensibilisée. Un soin après-rasage doux l’apaise et l’hydrate.', 'rasage'),
+  m('Un après-rasage très alcoolisé est ce qu’il y a de plus doux.', FAUX, 'Faux. L’alcool en grande quantité pique et peut dessécher. Une formule sans alcool ou un baume est plus doux.', 'rasage'),
+  q('Pour l’épilation à la cire, les poils doivent mesurer environ…', 'Quelques millimètres', ['Plusieurs centimètres', 'Zéro millimètre', 'Un mètre'], 'La cire a besoin d’une petite longueur, autour de quelques millimètres, pour bien attraper le poil.', 'épilation'),
+  q('Quel est le rôle d’un gel douche ?', 'Laver la peau', ['La bronzer', 'La protéger du soleil', 'Faire maigrir'], 'Un gel douche contient des agents lavants qui retirent sueur, sébum et impuretés. Il ne soigne pas au-delà de ça.', 'hygiène'),
+  m('Les coudes secs ont besoin d’une crème plus riche.', VRAI, 'Vrai. La peau des coudes est épaisse et sèche. Une crème riche, parfois avec de l’urée, aide à l’assouplir.', 'corps'),
+  q('Que faire si la peau brûle après une crème dépilatoire ?', 'Rincer à l’eau fraîche', ['Remettre une couche', 'Frotter fort', 'Ajouter du parfum'], 'On rince tout de suite à l’eau fraîche. Si la brûlure persiste, on demande conseil à un professionnel de santé.', 'épilation'),
+  m('Il faut faire un test sur une petite zone avant une crème dépilatoire.', VRAI, 'Vrai. Ces crèmes attaquent le poil chimiquement et peuvent irriter. Un test sur une petite zone permet de vérifier la tolérance.', 'épilation'),
+
+  // Jour 3
+  q('Quelle eau pour se laver les mains en douceur ?', 'Tiède', ['Bouillante', 'Glacée obligatoire', 'Salée'], 'L’eau tiède lave bien sans trop dessécher. L’eau très chaude abîme davantage la barrière de la peau.', 'mains'),
+  m('Se laver trop souvent peut dessécher la peau.', VRAI, 'Vrai. Chaque lavage retire un peu du film protecteur. Des lavages très fréquents, sans crème, finissent par assécher.', 'hygiène'),
+  q('Quel moment est idéal pour appliquer un lait corps ?', 'Juste après la douche', ['Avant de se mouiller', 'Au réveil sans douche', 'Pendant le repas'], 'Sur une peau encore légèrement humide, le lait corps aide à garder l’eau dans la peau.', 'corps'),
+  q('Les lèvres ont peu de…', 'Glandes sébacées', ['Vaisseaux sanguins', 'Cellules', 'Nerfs'], 'Les lèvres produisent très peu de sébum. Elles se dessèchent donc vite et aiment les baumes protecteurs.', 'lèvres'),
+  m('Changer de lame de rasoir régulièrement limite les irritations.', VRAI, 'Vrai. Une lame usée accroche et oblige à repasser. Elle irrite plus et peut garder des bactéries.', 'rasage'),
+  q('Pour laver un bébé, on privilégie…', 'Un nettoyant doux', ['Un savon parfumé fort', 'Un gommage', 'De l’alcool'], 'Un nettoyant doux, sans parfum, respecte la peau fine du bébé. Pas besoin de frotter ni de gommer.', 'bébé'),
+  q('Qu’est-ce qu’une vergeture ?', 'Une cicatrice d’étirement', ['Un grain de beauté', 'Une allergie', 'Un coup de soleil'], 'La vergeture apparaît quand la peau s’étire trop vite et que ses fibres se rompent. C’est une forme de cicatrice.', 'corps'),
+  m('Une crème fait disparaître totalement les vergetures anciennes.', FAUX, 'Faux. Les vergetures blanches et anciennes sont des cicatrices. Une crème peut assouplir la peau, pas les effacer.', 'idées reçues'),
+  q('Après une épilation, on évite plutôt…', 'Le soleil direct', ['L’eau tiède', 'Les vêtements', 'Le sommeil'], 'La peau fraîchement épilée est sensible. Le soleil peut l’irriter et favoriser des taches, on attend un peu.', 'épilation'),
+  m('Le gel douche doit mousser beaucoup pour bien laver.', FAUX, 'Faux. La mousse n’indique pas l’efficacité du lavage. Un nettoyant peu moussant peut très bien laver, et souvent plus doucement.', 'idées reçues'),
+
+  // Jour 4
+  q('Que signifie une peau craquelée au talon ?', 'Une peau très sèche', ['Un bronzage', 'Une peau grasse', 'Trop de crème'], 'Les crevasses aux talons viennent surtout d’un manque d’hydratation et de l’épaississement de la peau.', 'pieds'),
+  m('Mettre des chaussettes après la crème pieds aide le soin.', VRAI, 'Vrai. Les chaussettes gardent la crème en place, surtout la nuit, et évitent de glisser. Pratique pour les talons secs.', 'pieds'),
+  q('Quel ingrédient est courant dans un baume à lèvres ?', 'De la cire', ['Du sel', 'Du menthol pur', 'Du vinaigre'], 'La cire, les beurres et les huiles forment une couche protectrice qui garde les lèvres souples.', 'lèvres'),
+  q('Où sent-on le plus souvent la transpiration ?', 'Aux aisselles', ['Aux ongles', 'Aux cheveux', 'Aux genoux'], 'Les aisselles ont des glandes dont la sueur, transformée par les bactéries de la peau, produit l’odeur.', 'corps'),
+  m('La sueur elle-même sent mauvais.', FAUX, 'Faux. La sueur fraîche n’a presque pas d’odeur. Ce sont les bactéries de la peau qui la dégradent et créent l’odeur.', 'idées reçues'),
+  q('Pourquoi rincer le rasoir pendant le rasage ?', 'Pour retirer les poils', ['Pour l’affûter', 'Pour le colorer', 'Pour le sécher'], 'Les poils et la mousse bouchent les lames. Rincer souvent garde une coupe nette et plus douce pour la peau.', 'rasage'),
+  q('Une bonne habitude pour des mains douces en hiver ?', 'Porter des gants', ['Laver à l’eau chaude', 'Éviter toute crème', 'Frotter à l’alcool'], 'Le froid et le vent assèchent les mains. Les gants les protègent et limitent gerçures et crevasses.', 'mains'),
+  m('Hydrater les vergetures récentes peut aider.', NUANCE, 'Nuancé. Hydrater garde la peau souple et confortable, mais aucune crème ne garantit d’éviter ou d’effacer les vergetures.', 'corps'),
+  q('Un gommage du corps, c’est plutôt…', 'Une à deux fois par semaine', ['Trois fois par jour', 'Jamais de la vie', 'Chaque heure'], 'Un gommage retire les cellules mortes. Trop fréquent, il irrite. Une à deux fois par semaine suffit en général.', 'corps'),
+  m('Les bébés ont besoin d’un bain moussant parfumé.', FAUX, 'Faux. Le parfum et la mousse n’apportent rien au bébé et peuvent irriter. Un bain court avec un nettoyant doux suffit.', 'bébé'),
+
+  // Jour 5
+  q('Le feu du rasoir, c’est…', 'Une irritation après rasage', ['Une barbe rousse', 'Un rasoir chaud', 'Une coupure profonde'], 'Le feu du rasoir désigne rougeurs et picotements après le rasage. Une lame propre et un geste doux le limitent.', 'rasage'),
+  m('Un poil incarné est un poil qui repousse sous la peau.', VRAI, 'Vrai. Le poil se recourbe et repousse dans la peau, ce qui crée un petit bouton. Il est fréquent après rasage ou épilation.', 'épilation'),
+  q('Qu’aide à prévenir les poils incarnés ?', 'Un gommage doux régulier', ['Arracher avec les ongles', 'Raser à sec', 'Serrer les vêtements'], 'Un gommage doux, pas le jour même de l’épilation, aide le poil à sortir. On évite de percer avec les ongles.', 'épilation'),
+  q('Quel produit protège aussi les lèvres du soleil ?', 'Un stick lèvres avec SPF', ['Un rouge sans filtre', 'De l’eau', 'Un gloss pailleté'], 'Les lèvres brûlent aussi au soleil. Un stick avec indice de protection est utile à la montagne ou à la plage.', 'lèvres'),
+  m('Les lèvres ne peuvent pas prendre de coup de soleil.', FAUX, 'Faux. Les lèvres ont très peu de mélanine et brûlent facilement. Un stick avec SPF les protège.', 'idées reçues'),
+  q('Pour la toilette du siège de bébé, on utilise…', 'De l’eau ou un liniment', ['De l’alcool', 'Un parfum', 'Un gommage'], 'L’eau, un nettoyant doux ou le liniment oléo-calcaire suffisent pour changer bébé sans irriter la peau.', 'bébé'),
+  q('Combien de temps idéalement sous la douche ?', 'Quelques minutes', ['Une heure', 'Toute la matinée', 'Au moins 45 minutes'], 'Une douche courte, de quelques minutes, suffit pour se laver et abîme moins la barrière de la peau.', 'hygiène'),
+  m('Il faut se laver tout le corps au savon chaque jour.', NUANCE, 'Nuancé. Les zones qui transpirent méritent un lavage quotidien. Le reste du corps peut souvent se contenter d’eau pour éviter de dessécher.', 'hygiène'),
+  q('Un anti-transpirant s’applique idéalement…', 'Sur peau sèche, le soir', ['Sur peau mouillée', 'Juste après l’épilation', 'Sur les vêtements'], 'Appliqué le soir sur peau bien sèche, il agit pendant la nuit quand on transpire moins. Il reste efficace le lendemain.', 'corps'),
+  m('Un déodorant juste après l’épilation peut piquer.', VRAI, 'Vrai. La peau fraîchement épilée est sensibilisée. Mieux vaut attendre quelques heures avant d’appliquer un déodorant.', 'épilation'),
+
+  // Jour 6
+  q('Qu’est-ce que la crème dépilatoire dissout ?', 'Le poil', ['La peau', 'Les ongles', 'Les os'], 'La crème dépilatoire casse la structure du poil au ras de la peau. On respecte bien le temps de pose indiqué.', 'épilation'),
+  m('La cire arrache le poil avec sa racine.', VRAI, 'Vrai. La cire retire le poil depuis le bulbe. C’est pourquoi la repousse est plus lente qu’avec un rasoir.', 'épilation'),
+  q('Quelle crème pour des mains très abîmées ?', 'Une crème riche et réparatrice', ['Un gel à l’alcool', 'Un savon parfumé', 'Une lotion tonique'], 'Des mains très sèches aiment les textures riches, avec glycérine ou beurres, qui réparent le film protecteur.', 'mains'),
+  q('Un gel hydroalcoolique répété peut…', 'Assécher les mains', ['Rendre la peau grasse', 'Bronzer les mains', 'Faire pousser les ongles'], 'L’alcool assèche à force d’usage. Une crème pour les mains de temps en temps compense ce dessèchement.', 'mains'),
+  m('Le talc est indispensable pour les fesses des bébés.', FAUX, 'Faux. Le talc n’est plus conseillé chez le bébé : la poudre peut être inhalée. Une crème protectrice suffit.', 'bébé'),
+  q('Pourquoi mouiller la barbe avant de raser ?', 'Pour ramollir le poil', ['Pour le colorer', 'Pour le durcir', 'Pour le faire pousser'], 'L’eau tiède gonfle et ramollit le poil. Il se coupe plus facilement et la peau est moins agressée.', 'rasage'),
+  q('Les vergetures récentes sont souvent de couleur…', 'Rouge ou violette', ['Verte', 'Bleu vif', 'Dorée'], 'Récentes, elles sont rouges ou violacées. Avec le temps, elles pâlissent et deviennent blanches ou nacrées.', 'corps'),
+  m('Mordiller ses lèvres sèches les aide à guérir.', FAUX, 'Faux. Mordiller ou arracher les peaux abîme les lèvres et peut les faire saigner. Un baume est bien plus efficace.', 'lèvres'),
+  q('Un pied d’athlète est surtout lié à…', 'Un champignon', ['Un coup de soleil', 'Un manque de sport', 'Une allergie au cuir'], 'Le pied d’athlète est une mycose qui aime l’humidité. Bien sécher entre les orteils aide à l’éviter.', 'pieds'),
+  m('Bien sécher entre les orteils après la douche est utile.', VRAI, 'Vrai. L’humidité entre les orteils favorise les champignons. Un séchage soigneux est un geste simple de prévention.', 'pieds'),
+
+  // Jour 7
+  q('Que choisir si l’on a la peau sensible sous les bras ?', 'Un déodorant sans alcool', ['Un parfum pur', 'Un gel à la menthe forte', 'Un vinaigre'], 'L’alcool et le parfum peuvent piquer une peau sensible. Une formule douce, sans alcool, est mieux tolérée.', 'corps'),
+  m('Les sels d’aluminium des anti-transpirants sont interdits en Europe.', FAUX, 'Faux. Ils sont autorisés, avec des concentrations encadrées. Il est conseillé de ne pas en mettre sur une peau lésée.', 'sécurité'),
+  q('Le baume à lèvres idéal en hiver est plutôt…', 'Riche et gras', ['Très mentholé', 'Pailleté', 'À base d’alcool'], 'Le froid assèche les lèvres. Un baume riche protège mieux. Le menthol en excès peut au contraire irriter.', 'lèvres'),
+  q('Qu’indique « pH neutre » sur un gel douche ?', 'Une douceur recherchée', ['Un effet bronzant', 'Une odeur forte', 'Un produit solaire'], 'Cette mention vise à indiquer un lavage doux. En pratique, la peau préfère un pH légèrement acide, autour de 5.', 'étiquette'),
+  q('Un soin des cuticules sert à…', 'Garder le contour de l’ongle souple', ['Colorer l’ongle', 'Faire tomber l’ongle', 'Durcir la peau'], 'Une huile ou crème pour cuticules les nourrit. Elles restent souples et se fendillent moins.', 'mains'),
+  m('Il faut couper ses cuticules à chaque manucure.', FAUX, 'Faux. Les cuticules protègent l’ongle des microbes. On peut les repousser doucement, mais les couper expose aux infections.', 'idées reçues'),
+  q('Pour raser des jambes, mieux vaut…', 'Une lame propre et affûtée', ['Une lame rouillée', 'Un couteau', 'Une lame partagée'], 'Une lame propre et bien affûtée coupe net et irrite moins. On évite de prêter son rasoir.', 'rasage'),
+  q('Pourquoi hydrater le ventre pendant la grossesse ?', 'Pour le confort de la peau', ['Pour faire grandir bébé', 'Pour bronzer', 'Pour maigrir'], 'L’hydratation limite tiraillements et démangeaisons. Pour le choix du produit, on demande conseil à un professionnel.', 'corps'),
+  m('Prendre du poids rapidement favorise les vergetures.', VRAI, 'Vrai. Un étirement rapide de la peau, prise de poids ou de muscle, favorise leur apparition. La génétique joue aussi.', 'corps'),
+  m('La crème mains s’applique juste sur la paume.', FAUX, 'Faux. Le dos des mains et le contour des ongles sont les zones qui sèchent le plus. On masse bien partout.', 'mains'),
+
+  // Jour 8
+  q('Quel geste réduit les gerçures des mains ?', 'Bien les sécher après lavage', ['Les laisser mouillées', 'Les laver à l’eau chaude', 'Les frotter à l’alcool'], 'Des mains laissées humides sèchent au froid et gercent. On les essuie bien, puis on met un peu de crème.', 'mains'),
+  m('Un gommage juste avant l’épilation à la cire est conseillé.', NUANCE, 'Nuancé. Un gommage doux un ou deux jours avant aide. Le jour même, la peau serait trop sensibilisée pour la cire.', 'épilation'),
+  q('Pour un bébé, le bain dure idéalement…', 'Quelques minutes', ['Une heure', 'Toute la matinée', 'Trente minutes minimum'], 'Un bain court, à eau tiède autour de 37 °C, suffit et évite de dessécher la peau fragile du bébé.', 'bébé'),
+  q('Qu’est-ce qui dessèche le plus les lèvres ?', 'Le froid et le vent', ['Le sommeil', 'Boire de l’eau', 'Le baume'], 'Froid, vent et air sec assèchent les lèvres. Un baume protecteur limite ces effets.', 'lèvres'),
+  m('Un gel douche parfumé convient toujours aux peaux sensibles.', FAUX, 'Faux. Le parfum est une cause fréquente d’irritation. Les peaux sensibles tolèrent mieux les formules sans parfum.', 'peau sensible'),
+  q('Quel est l’intérêt d’une huile de douche ?', 'Laver sans trop dessécher', ['Bronzer sous la douche', 'Faire fondre la graisse', 'Colorer la peau'], 'L’huile lavante laisse un léger film sur la peau. Elle convient bien aux peaux sèches.', 'peau sèche'),
+  q('Qu’utiliser pour adoucir des coudes rugueux ?', 'Un gommage doux puis crème', ['Une râpe métallique', 'De l’alcool', 'Rien du tout'], 'Un gommage doux retire les peaux mortes, puis une crème riche les assouplit. Pas besoin d’outil agressif.', 'corps'),
+  m('La pierre ponce s’utilise sur les talons secs.', VRAI, 'Vrai. Utilisée doucement sur peau humide, elle affine la corne. On évite de frotter trop fort ni trop souvent.', 'pieds'),
+  q('Que faire en cas de petite coupure en se rasant ?', 'Appuyer avec un linge propre', ['Frotter fort', 'Mettre du parfum', 'Raser encore'], 'Une pression douce avec un linge propre arrête vite le saignement. On désinfecte si besoin.', 'rasage'),
+  m('Le rasoir électrique irrite toujours moins que la lame.', NUANCE, 'Nuancé. Il coupe moins près et irrite souvent moins les peaux sensibles, mais tout dépend de la peau et du geste.', 'rasage'),
+
+  // Jour 9
+  q('Quel soin est adapté aux mains de jardinier ?', 'Gants puis crème réparatrice', ['Savon parfumé seul', 'Eau très chaude', 'Rien du tout'], 'Les gants protègent de la terre et des frottements. Une crème réparatrice ensuite apaise la peau.', 'mains'),
+  m('Il faut attendre après une épilation avant d’aller à la piscine.', VRAI, 'Vrai. Le chlore peut irriter une peau fraîchement épilée. Attendre environ un jour limite les rougeurs.', 'épilation'),
+  q('Que favorise une douche trop longue et chaude ?', 'Les démangeaisons', ['Une peau plus grasse', 'La repousse des cheveux', 'Le bronzage'], 'La peau se dessèche et peut démanger. Une douche courte et tiède, suivie d’une crème, est plus douce.', 'hygiène'),
+  q('Un lait corps s’applique plutôt…', 'En massant jusqu’à pénétration', ['En couche épaisse sans masser', 'Sur les vêtements', 'Sous l’eau'], 'On masse doucement pour bien répartir le produit. La peau l’absorbe et reste souple.', 'corps'),
+  m('Les pieds transpirent peu.', FAUX, 'Faux. Les pieds ont beaucoup de glandes sudorales. Des chaussettes adaptées et des chaussures aérées aident.', 'pieds'),
+  q('Quand changer la couche d’un bébé pour limiter les rougeurs ?', 'Dès qu’elle est souillée', ['Une fois par jour', 'Seulement le soir', 'Tous les deux jours'], 'L’humidité et les selles irritent la peau. Changer souvent la couche limite l’érythème fessier.', 'bébé'),
+  q('Qu’est-ce qu’un déodorant « sans aluminium » ?', 'Un déo sans sels d’aluminium', ['Un déo sans flacon', 'Un anti-transpirant fort', 'Un déo sans odeur'], 'Il agit sur les odeurs sans réduire la sueur. Il ne contient pas les sels d’aluminium des anti-transpirants.', 'étiquette'),
+  m('Un déodorant sans aluminium empêche de transpirer.', FAUX, 'Faux. Sans sels d’aluminium, il ne réduit pas la sueur. Il limite les odeurs, souvent grâce à des agents antibactériens.', 'idées reçues'),
+  q('La peau des lèvres se renouvelle…', 'Plutôt vite', ['Jamais', 'Une fois par an', 'Seulement l’été'], 'La peau des lèvres est fine et se renouvelle rapidement. Avec un baume, des lèvres gercées vont vite mieux.', 'lèvres'),
+  m('Le baume à lèvres rend dépendant.', NUANCE, 'Nuancé. Il n’y a pas de vraie dépendance. Mais certains baumes parfumés ou mentholés irritent et donnent envie d’en remettre.', 'lèvres'),
+
+  // Jour 10
+  q('Après un rasage, on évite plutôt…', 'Un produit très parfumé', ['Un baume doux', 'De l’eau fraîche', 'Une crème neutre'], 'La peau vient d’être agressée par la lame. Un produit très parfumé peut piquer et irriter.', 'rasage'),
+  m('Se raser le soir peut limiter les irritations.', NUANCE, 'Nuancé. Le soir, la peau a la nuit pour récupérer, ce qui aide certains. Le bon geste compte toutefois plus que l’heure.', 'rasage'),
+  q('Quelle est la zone la plus fine de la peau du corps ?', 'Les paupières', ['Les talons', 'Le dos', 'Les genoux'], 'La peau des paupières est la plus fine du corps. Celle des talons, au contraire, est parmi les plus épaisses.', 'corps'),
+  q('À quoi sert un savon surgras ?', 'À laver en nourrissant', ['À dégraisser fort', 'À décaper la peau', 'À bronzer'], 'Un savon surgras contient un excès de corps gras. Il lave plus doucement et convient aux peaux sèches.', 'peau sèche'),
+  m('L’épilation à la cire fait moins repousser au fil du temps.', NUANCE, 'Nuancé. Chez certaines personnes, les poils repoussent plus fins et moins nombreux, mais ce n’est pas garanti ni définitif.', 'épilation'),
+  q('Pourquoi aérer ses chaussures ?', 'Pour limiter odeurs et humidité', ['Pour les agrandir', 'Pour les colorer', 'Pour les durcir'], 'L’humidité favorise bactéries et champignons. Aérer et alterner ses chaussures limite odeurs et mycoses.', 'pieds'),
+  q('Un bébé de moins de six mois au soleil ?', 'Il reste à l’ombre', ['Crème et plein soleil', 'Juste un chapeau', 'Une heure maximum'], 'Avant six mois, on évite toute exposition directe au soleil. Ombre, vêtements et chapeau sont la règle.', 'bébé'),
+  m('La main gauche et la main droite ont souvent le même niveau de sécheresse.', NUANCE, 'Nuancé. Souvent oui, mais la main la plus utilisée, ou celle exposée au volant au soleil, peut être plus abîmée.', 'mains'),
+  q('Que faire si un poil incarné s’infecte ?', 'Demander conseil à un pro', ['Percer avec une aiguille sale', 'Le presser fort', 'Mettre du parfum'], 'Un bouton rouge, chaud et douloureux doit être montré à un pharmacien ou médecin. On évite de le triturer.', 'épilation'),
+  m('Un déodorant s’applique sur une peau propre.', VRAI, 'Vrai. Sur une peau propre et sèche, le déodorant agit mieux. Sur la sueur de la veille, il masque sans vraiment traiter.', 'hygiène'),
+]

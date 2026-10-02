@@ -24,8 +24,16 @@ import { fontFamilies } from '@/constants/typography'
 import { radius, spacing } from '@/constants/spacing'
 import { db } from '@/lib/supabase/client'
 import { pickTodaysItems, todayKey, type DailyPickItem } from '@/lib/dailyPicks/select'
+import { getLocalCatalog } from '@/lib/dailyPicks/local'
 
 const STORAGE_PREFIX = 'cw:dailyPicks'
+
+/** Catalogue serveur suivi des 1000 questions embarquées (100 jours).
+ *  Référence stable : react-query ne recalcule la sélection que si les
+ *  données changent. */
+function selectToday(rows: DailyPickItem[]): DailyPickItem[] {
+  return pickTodaysItems([...rows, ...getLocalCatalog()])
+}
 
 interface DailyState {
   index: number
@@ -102,7 +110,7 @@ export const DailyPicksCard: FC<Props> = ({ onReveal }) => {
   // le persister AsyncStorage (cf. `lib/storage/queryPersist`). Le slicing
   // « 10 items du jour » est dérivé en local via `select`, donc la rotation
   // quotidienne ne déclenche aucun nouveau fetch.
-  const { data, isLoading, error } = useQuery<DailyPickItem[], Error, DailyPickItem[]>({
+  const { data: serverData, isLoading, error } = useQuery<DailyPickItem[], Error, DailyPickItem[]>({
     queryKey: ['dailyPicksCatalog'],
     staleTime: 24 * 60 * 60 * 1000, // 24h — catalogue quasi-statique
     queryFn: async () => {
@@ -113,8 +121,11 @@ export const DailyPicksCard: FC<Props> = ({ onReveal }) => {
       if (e) throw e
       return (rows as DailyPickItem[] | null) ?? []
     },
-    select: (rows) => pickTodaysItems(rows),
+    select: selectToday,
   })
+  // Hors ligne ou serveur en erreur : le quiz tourne sur les questions
+  // embarquées seules plutôt que d'afficher une erreur.
+  const data = serverData ?? (error ? selectToday([]) : undefined)
 
   function next(wasCorrect: boolean) {
     const newIndex = index + 1

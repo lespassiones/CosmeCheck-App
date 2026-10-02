@@ -42,12 +42,13 @@ const PRIVACY_SECTIONS: LegalSection[] = [
             "Sécuriser ton compte (authentification, anti-abus, limitation de débit).",
             "Améliorer le service (statistiques d'usage agrégées et anonymes).",
             "Te répondre quand tu nous contactes.",
+            "Mesurer l'efficacité de nos publicités sur Facebook et Instagram, uniquement si tu l'as accepté.",
           ],
         },
         {
           title: '4. Base légale',
           paragraphs: [
-            "Le traitement repose sur l'exécution du contrat qui te lie au service (art. 6.1.b RGPD) pour ce qui concerne la fourniture des fonctionnalités, et sur ton consentement (art. 6.1.a RGPD) pour les données sensibles que tu choisis volontairement d'inscrire (préoccupations cutanées, allergies).",
+            "Le traitement repose sur l'exécution du contrat qui te lie au service (art. 6.1.b RGPD) pour ce qui concerne la fourniture des fonctionnalités, et sur ton consentement (art. 6.1.a RGPD) pour les données sensibles que tu choisis volontairement d'inscrire (préoccupations cutanées, allergies) ainsi que pour la mesure publicitaire (voir la section 9).",
           ],
         },
         {
@@ -72,6 +73,7 @@ const PRIVACY_SECTIONS: LegalSection[] = [
             "PostHog (mesure d'audience anonyme, pour comprendre l'usage global de l'app) : serveurs situés dans l'Union européenne ; aucune donnée nominative ni enregistrement d'écran.",
             "Sentry (détection des plantages et erreurs techniques) : serveurs situés dans l'Union européenne (Allemagne).",
             "RevenueCat (gestion technique des abonnements) : identifiant technique d'abonnement, sans profil beauté ni contenu d'analyse.",
+            "Meta Platforms Ireland (Facebook, Instagram) : uniquement si tu as accepté la mesure des publicités ; reçoit l'installation et l'ouverture de l'app, le début d'un essai et les achats d'abonnement, avec un identifiant publicitaire de l'appareil. Jamais ton profil beauté, tes analyses ni aucune donnée de santé. Meta agit ici en responsable conjoint pour la mesure publicitaire.",
             "Expo (Expo Push, envoi des notifications) : uniquement si tu as activé les notifications ; un jeton technique d'appareil est transmis.",
             "Brevo (envoi des emails de service et, si tu y as consenti, de la newsletter) : hébergement dans l'Union européenne ; reçoit ton email et ton prénom.",
             `${STORE_NAME} (gestion et facturation des abonnements Premium).`,
@@ -106,7 +108,7 @@ const PRIVACY_SECTIONS: LegalSection[] = [
         {
           title: '9. Cookies et traceurs',
           paragraphs: [
-            "L'Application mobile n'utilise PAS de cookies publicitaires, ni de traceurs marketing tiers. Aucun identifiant publicitaire (IDFA, GAID) n'est lu ni transmis.",
+            "Mesure des publicités (Meta) : avec ton accord seulement, l'app utilise le kit de Meta pour savoir si tu l'as découverte grâce à une publicité Facebook ou Instagram. Sur iPhone, l'accord est la fenêtre « Autoriser le suivi » d'Apple ; sur Android, une question posée dans l'app. Sont transmis : l'installation et l'ouverture de l'app, le début d'un essai et les achats d'abonnement (ces deux derniers via RevenueCat), avec l'identifiant publicitaire de l'appareil (IDFA, GAID). Aucune donnée de peau, de santé ou de profil. Sans accord, rien n'est lu ni transmis. Tu peux retirer ton accord à tout moment : Profil, « Mesure des publicités » (sur iPhone, dans les Réglages du téléphone).",
             "Nous utilisons uniquement un outil de mesure d'audience anonyme (PostHog) pour comprendre l'usage global de l'app (nombre de scans, taux de complétion de l'onboarding). Cette mesure ne t'identifie pas nominativement, n'enregistre pas ton écran et ne recoupe pas ton activité avec d'autres services : elle est donc exemptée de consentement. Les autres informations stockées localement sont indispensables au fonctionnement de l'app (session, cache des analyses, préférences).",
           ],
         },
@@ -132,7 +134,7 @@ const PRIVACY_SECTIONS: LegalSection[] = [
 
 export const PRIVACY_CONTENT = {
   title: 'Confidentialité',
-  subtitle: 'Dernière mise à jour : 2 juin 2026',
+  subtitle: 'Dernière mise à jour : 29 septembre 2026',
   sections: PRIVACY_SECTIONS,
 }
 

@@ -55,6 +55,7 @@ import { useNotificationToggle } from '@/components/profile/NotificationSettings
 import { ReportSheet } from '@/components/profile/ReportSheet'
 import { TAB_CONTENT_BOTTOM } from '@/components/navigation/BottomTabBar'
 import { ToggleSwitch } from '@/components/design/ToggleSwitch'
+import { useAdsConsent } from '@/hooks/useAdsConsent'
 
 type IoniconName = keyof typeof Ionicons.glyphMap
 
@@ -128,6 +129,7 @@ export const ProfileScreen: FC<{ inTab?: boolean }> = ({ inTab = false }) => {
   const { profile, skin, firstName, restrictions, saveSkin, updateProfile, isSaving } = useProfile()
   const { remaining, limit, bonus, renewalPeriod, isLoading: creditsLoading } = useCredits()
   const notif = useNotificationToggle()
+  const ads = useAdsConsent()
 
   const [editing, setEditing] = useState(false)
   const [formStatus, setFormStatus] = useState<SaveStatus>('idle')
@@ -407,6 +409,25 @@ export const ProfileScreen: FC<{ inTab?: boolean }> = ({ inTab = false }) => {
                     />
                   }
                 />
+                {/* Retrait du consentement Meta (RGPD). Masqué tant que le SDK
+                    n'est pas dans le binaire ou que l'App ID n'est pas rempli. */}
+                {ads.available ? (
+                  <Row
+                    icon={icon('megaphone-outline')}
+                    label="Mesure des publicités"
+                    right={
+                      <ToggleSwitch
+                        value={ads.enabled}
+                        onValueChange={(v) => {
+                          fireHaptic('selection')
+                          void ads.toggle(v)
+                        }}
+                        disabled={ads.busy}
+                        accessibilityLabel="Mesure des publicités"
+                      />
+                    }
+                  />
+                ) : null}
               </Section>
 
               {/* ── Aide ── */}

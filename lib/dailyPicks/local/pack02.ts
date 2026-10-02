@@ -1,0 +1,123 @@
+import { FAUX, m, NUANCE, q, VRAI, type LocalPick } from './helpers'
+
+export const PACK_02: LocalPick[] = [
+  // Jour 1
+  q('Quelle eau est la plus douce pour se laver le visage ?', 'L’eau tiède', ['L’eau brûlante', 'L’eau glacée', 'L’eau très chaude'], 'L’eau tiède nettoie sans agresser. L’eau très chaude dessèche et peut accentuer les rougeurs.', 'hygiène'),
+  m('Il faut se démaquiller même quand on est très fatiguée.', VRAI, 'Vrai. Dormir maquillée laisse la peau encombrée toute la nuit, ce qui favorise imperfections et irritations des yeux.', 'maquillage'),
+  q('Qu’est-ce que l’eau micellaire ?', 'Une eau avec de petits agents nettoyants', ['Une eau minérale en bouteille', 'Un sérum hydratant pur', 'Une huile de massage'], 'Les micelles sont de minuscules amas de tensioactifs qui captent le maquillage et le sébum.', 'ingrédients'),
+  m('Se nettoyer le visage le matin est inutile.', NUANCE, 'Nuancé. Un simple rinçage à l’eau suffit à beaucoup de peaux le matin. Les peaux grasses apprécient souvent un nettoyant doux.', 'routine'),
+  q('Quelle eau utiliser pour se rincer le visage ?', 'De l’eau tiède', ['De l’eau brûlante', 'De l’eau glacée', 'De l’eau salée'], 'L’eau tiède rince bien sans agresser. L’eau très chaude dessèche la peau et peut accentuer les rougeurs.', 'hygiène'),
+  q('Comment sécher son visage après le lavage ?', 'En tamponnant doucement', ['En frottant fort', 'Au sèche-cheveux', 'Avec un mouchoir en papier sec'], 'Tamponner avec une serviette propre évite de frotter et d’irriter la peau.', 'hygiène'),
+  m('Plus un nettoyant mousse, mieux il lave.', FAUX, 'Faux. La mousse n’indique pas l’efficacité. Certains nettoyants très moussants sont même plus décapants.', 'idées reçues'),
+  q('Que faut-il faire après l’eau micellaire, surtout pour les peaux sensibles ?', 'Rincer ou passer une lotion douce', ['Appliquer du savon de Marseille', 'Frotter au gant de crin', 'Rien, jamais'], 'Rincer retire les résidus de tensioactifs qui peuvent irriter les peaux sensibles à la longue.', 'peau sensible'),
+  m('Un gommage tous les jours rend la peau plus belle.', FAUX, 'Faux. Exfolier trop souvent abîme la barrière cutanée. Une à deux fois par semaine suffit en général.', 'idées reçues'),
+  q('À quoi sert un masque visage en général ?', 'Offrir un soin ponctuel ciblé', ['Remplacer la crème chaque jour', 'Protéger du soleil', 'Démaquiller les yeux'], 'Le masque est un coup de pouce occasionnel : hydratant, purifiant ou apaisant selon les besoins.', 'routine'),
+
+  // Jour 2
+  q('Qu’est-ce que le double nettoyage ?', 'Un nettoyant huileux puis un nettoyant doux', ['Se laver deux fois à l’eau froide', 'Deux gommages de suite', 'Deux masques superposés'], 'L’huile dissout maquillage et filtres solaires, puis le nettoyant à l’eau élimine le reste.', 'routine'),
+  m('Le double nettoyage est obligatoire pour tout le monde.', FAUX, 'Faux. Il est utile le soir en cas de maquillage ou de crème solaire. Sans cela, un seul nettoyage suffit.', 'idées reçues'),
+  q('Quelle est la bonne fréquence pour changer sa serviette de visage ?', 'Tous les 2 à 3 jours', ['Une fois par mois', 'Tous les 6 mois', 'Jamais, si elle sèche'], 'Une serviette humide garde bactéries et résidus. La changer souvent limite les imperfections.', 'hygiène'),
+  m('Une peau grasse doit être lavée avec un produit très décapant.', FAUX, 'Faux. Décaper la peau grasse l’irrite et peut aggraver la brillance. Mieux vaut un nettoyant doux.', 'peau grasse'),
+  q('Que doit-on éviter sur le contour des yeux en se démaquillant ?', 'Frotter fort', ['Utiliser un coton', 'Laisser poser le produit', 'Faire des gestes doux'], 'La peau du contour de l’œil est très fine. On laisse poser puis on glisse sans frotter.', 'maquillage'),
+  q('Que signifie pH d’un nettoyant ?', 'Son niveau d’acidité', ['Son parfum', 'Sa couleur', 'Sa date de fabrication'], 'La peau est légèrement acide. Un nettoyant au pH proche du sien est en général mieux toléré.', 'ingrédients'),
+  m('Le savon classique peut dessécher le visage.', VRAI, 'Vrai. Beaucoup de savons ont un pH élevé qui fragilise le film protecteur de la peau, surtout si elle est sèche.', 'peau sèche'),
+  q('Pour une peau sèche, quel type de nettoyant choisir ?', 'Un lait ou une crème lavante', ['Un gel très moussant', 'Un savon à l’alcool', 'Un gommage quotidien'], 'Les textures riches nettoient en respectant les lipides de la peau sèche.', 'peau sèche'),
+  m('Les lingettes démaquillantes remplacent un vrai nettoyage.', NUANCE, 'Nuancé. Elles dépannent, mais frottent et laissent des résidus. Un vrai nettoyage reste préférable au quotidien.', 'maquillage'),
+  q('Combien de temps masser un nettoyant sur le visage ?', 'Environ 30 secondes à 1 minute', ['2 secondes', '10 minutes', 'Une demi-heure'], 'Un massage court mais complet laisse au produit le temps de dissoudre les impuretés.', 'routine'),
+
+  // Jour 3
+  q('Quelle est la fréquence conseillée d’un gommage pour la plupart des peaux ?', '1 à 2 fois par semaine', ['3 fois par jour', 'Une fois par an', 'Chaque matin et soir'], 'Cela suffit à éliminer les cellules mortes sans abîmer la barrière cutanée.', 'routine'),
+  m('Les peaux sensibles ne doivent jamais exfolier.', NUANCE, 'Nuancé. Elles peuvent exfolier rarement, avec un produit très doux et sans grains. Il faut surtout éviter l’excès.', 'peau sensible'),
+  q('Que fait un gommage à grains ?', 'Il retire les cellules mortes par frottement', ['Il hydrate en profondeur', 'Il protège du soleil', 'Il resserre les os du visage'], 'C’est une exfoliation mécanique : les grains décollent les cellules mortes en surface.', 'actifs'),
+  q('Que faire après un gommage ?', 'Appliquer une crème hydratante', ['Se mettre au soleil sans protection', 'Refaire un gommage', 'Appliquer de l’alcool pur'], 'La peau fraîchement exfoliée apprécie d’être hydratée et protégée.', 'routine'),
+  m('Les pores s’ouvrent à l’eau chaude et se ferment à l’eau froide.', FAUX, 'Faux. Les pores n’ont pas de muscle pour s’ouvrir ou se fermer. La chaleur ramollit juste le sébum.', 'idées reçues'),
+  q('Qu’est-ce qu’un exfoliant chimique ?', 'Un produit à base d’acides doux', ['Un gommage plein de sable', 'Une brosse électrique', 'Un savon au charbon'], 'Des acides comme l’acide glycolique ou salicylique dissolvent les liens entre cellules mortes.', 'actifs'),
+  m('Se laver les mains avant de nettoyer son visage est utile.', VRAI, 'Vrai. Des mains sales déposent bactéries et saletés sur le visage que l’on veut justement nettoyer.', 'hygiène'),
+  q('Avec quoi appliquer l’eau micellaire ?', 'Un coton ou un carré lavable', ['Une éponge à vaisselle', 'Un gant de crin', 'Une brosse à dents'], 'Un support doux imbibé retire le maquillage sans agresser la peau.', 'maquillage'),
+  m('Un masque à l’argile convient bien aux peaux grasses.', VRAI, 'Vrai. L’argile absorbe l’excès de sébum. Sur peau sèche, on l’utilise rarement et on ne la laisse pas craqueler.', 'peau grasse'),
+  q('Combien de temps garder un masque en général ?', 'Le temps indiqué, souvent 10 à 15 minutes', ['Toute la nuit toujours', '30 secondes', 'Deux jours'], 'Le dépasser n’apporte rien et peut dessécher, surtout avec l’argile.', 'routine'),
+
+  // Jour 4
+  q('Pourquoi démaquiller avant de dormir ?', 'Pour laisser la peau propre la nuit', ['Pour bronzer plus vite', 'Pour faire pousser les cils', 'Pour éviter de rêver'], 'Maquillage, sébum et pollution accumulés favorisent imperfections et teint terne.', 'maquillage'),
+  m('L’eau micellaire suffit pour enlever un mascara waterproof.', FAUX, 'Faux. Le waterproof résiste à l’eau. Un démaquillant biphasé ou huileux le retire bien plus facilement.', 'maquillage'),
+  q('Qu’est-ce qu’un démaquillant biphasé ?', 'Un mélange d’eau et d’huile à secouer', ['Un savon en deux morceaux', 'Un gel vendu en deux tubes', 'Une crème pour deux personnes'], 'On le secoue pour mélanger les deux phases : l’huile dissout le maquillage résistant.', 'maquillage'),
+  q('Qu’est-ce qu’une huile démaquillante ?', 'Une huile qui dissout le maquillage', ['Une huile pour la friture', 'Un soin pour les ongles', 'Un parfum concentré'], 'Elle capte le maquillage et le sébum, puis s’émulsionne souvent au contact de l’eau pour se rincer.', 'maquillage'),
+  m('Une huile démaquillante rend forcément la peau grasse.', FAUX, 'Faux. Bien rincée, elle ne laisse pas de film gras. Elle convient même à beaucoup de peaux grasses.', 'peau grasse'),
+  q('Que faire si un nettoyant pique ou brûle ?', 'Rincer et arrêter de l’utiliser', ['En remettre plus', 'Le laisser poser une heure', 'Frotter pour qu’il pénètre'], 'Une sensation de brûlure signale une irritation. On rince et on passe à un produit plus doux.', 'sécurité'),
+  m('Il faut rincer abondamment son nettoyant.', VRAI, 'Vrai. Des restes de nettoyant sur la peau peuvent la dessécher ou l’irriter, surtout sur les ailes du nez et la mâchoire.', 'hygiène'),
+  q('Où oublie-t-on souvent de rincer le nettoyant ?', 'Racine des cheveux et mâchoire', ['Le bout du nez', 'Le milieu du front', 'Le creux des joues'], 'Les bords du visage gardent souvent des résidus qui peuvent provoquer des boutons.', 'hygiène'),
+  m('Un visage qui tiraille après le lavage est bien propre.', FAUX, 'Faux. Les tiraillements indiquent que le nettoyant est trop décapant et a abîmé le film protecteur.', 'idées reçues'),
+  q('Quel geste suit en général le nettoyage du soir ?', 'L’hydratation', ['Le maquillage', 'La crème solaire', 'Le gommage quotidien'], 'Une peau propre reçoit mieux les soins. On termine par une crème adaptée.', 'routine'),
+
+  // Jour 5
+  q('Un gel nettoyant convient surtout à quelle peau ?', 'Peau mixte à grasse', ['Peau très sèche', 'Peau de bébé', 'Uniquement aux cheveux'], 'Les gels ont une texture légère et fraîche appréciée des peaux qui brillent.', 'peau grasse'),
+  m('Tous les savons sont mauvais pour le visage.', NUANCE, 'Nuancé. Les savons classiques peuvent dessécher, mais certains pains surgras ou syndets sont doux pour le visage.', 'idées reçues'),
+  q('Qu’est-ce qu’un pain surgras ?', 'Un pain lavant enrichi en corps gras', ['Un gâteau très gras', 'Un savon qui fait grossir', 'Un masque au beurre'], 'Il contient des corps gras en plus qui limitent le dessèchement de la peau.', 'ingrédients'),
+  q('Que faire avec les pinceaux et éponges de maquillage ?', 'Les laver régulièrement', ['Ne jamais les laver', 'Les prêter à tout le monde', 'Les ranger mouillés'], 'Ils accumulent sébum et bactéries. Un lavage régulier limite imperfections et irritations.', 'hygiène'),
+  m('Les bactéries d’une éponge sale peuvent donner des boutons.', VRAI, 'Vrai. Une éponge humide et sale est un terrain favorable aux microbes, qui se retrouvent ensuite sur la peau.', 'hygiène'),
+  q('Pourquoi éviter une eau très chaude sur le visage ?', 'Elle dessèche et rougit la peau', ['Elle fait tomber les cils', 'Elle rend la peau orange', 'Elle bouche le nez'], 'La chaleur retire les lipides protecteurs et dilate les petits vaisseaux.', 'peau sensible'),
+  m('Un gant de toilette peut s’utiliser une semaine sans lavage.', FAUX, 'Faux. Humide, il devient vite un nid à bactéries. On le change idéalement après chaque utilisation.', 'hygiène'),
+  q('Qu’est-ce qu’un syndet ?', 'Un nettoyant solide sans savon classique', ['Un sérum anti-âge', 'Une crème solaire', 'Un dissolvant à ongles'], 'Il lave avec des tensioactifs doux et un pH proche de celui de la peau.', 'ingrédients'),
+  m('Un masque tous les jours est toujours une bonne idée.', NUANCE, 'Nuancé. Un masque hydratant doux peut s’utiliser souvent, mais un masque purifiant quotidien risque de dessécher.', 'routine'),
+  q('Quel masque choisir pour une peau qui tiraille ?', 'Un masque hydratant', ['Un masque à l’argile pure', 'Un masque peel-off décapant', 'Aucun soin du tout'], 'La peau qui tiraille manque d’eau. Un masque hydratant apporte confort et souplesse.', 'peau sèche'),
+
+  // Jour 6
+  q('Que faire en premier le soir si on porte de la crème solaire ?', 'Bien la retirer au démaquillage', ['En remettre une couche', 'Aller dormir directement', 'Appliquer un masque dessus'], 'Les filtres solaires résistants s’éliminent mieux avec un premier nettoyage huileux.', 'solaire'),
+  m('La crème solaire doit être démaquillée le soir.', VRAI, 'Vrai. Les solaires sont faits pour tenir. Un nettoyage soigneux évite qu’ils encombrent la peau la nuit.', 'solaire'),
+  q('Quel coton est le plus écologique pour se démaquiller ?', 'Un carré lavable réutilisable', ['Un coton jetable par œil', 'Un rouleau de papier', 'Une lingette jetable'], 'Les carrés lavables se passent en machine et limitent les déchets.', 'maquillage'),
+  q('Pourquoi ne pas se laver le visage à l’eau salée de la mer ?', 'Le sel peut dessécher la peau', ['Elle rend la peau bleue', 'Elle fait pousser les poils', 'Elle remplace un soin'], 'Après la baignade, un rinçage à l’eau douce et une hydratation sont utiles.', 'corps'),
+  m('Se toucher souvent le visage peut favoriser les imperfections.', VRAI, 'Vrai. Les mains transportent sébum et bactéries. Moins les toucher aide à garder une peau nette.', 'peau grasse'),
+  q('Qu’est-ce qu’un gommage enzymatique ?', 'Une exfoliation douce par des enzymes', ['Un gommage au sable grossier', 'Un soin pour les dents', 'Un nettoyant au vinaigre'], 'Des enzymes, souvent issues de fruits, dissolvent les cellules mortes sans frotter.', 'actifs'),
+  m('Le gommage fait disparaître les points noirs pour toujours.', FAUX, 'Faux. Il aide à désencombrer, mais le sébum se reforme. Les points noirs reviennent sans entretien régulier.', 'idées reçues'),
+  q('Que faire si on a une peau abîmée ou une plaie ?', 'Éviter le gommage sur la zone', ['Gommer plus fort', 'Appliquer un masque à l’argile', 'Frotter au gant de crin'], 'Une peau lésée doit cicatriser. Le gommage l’irriterait davantage.', 'sécurité'),
+  m('Le lait démaquillant doit toujours être rincé.', NUANCE, 'Nuancé. Beaucoup se retirent avec un coton ou une lotion. Rincer reste conseillé si la peau réagit aux résidus.', 'maquillage'),
+  q('Que peut contenir un masque apaisant ?', 'Des ingrédients calmants', ['De l’alcool en grande quantité', 'Des grains très durs', 'Du détergent ménager'], 'Aloe vera, avoine ou panthénol sont des exemples d’ingrédients qui apaisent la peau.', 'peau sensible'),
+
+  // Jour 7
+  q('Quel est le rôle premier d’un nettoyant visage ?', 'Retirer impuretés et excès de sébum', ['Colorer la peau', 'Faire bronzer', 'Remplacer la crème'], 'Il nettoie la surface pour préparer la peau aux soins suivants.', 'hygiène'),
+  m('Se laver le visage sous la douche est une mauvaise idée.', NUANCE, 'Nuancé. C’est possible si l’eau n’est pas trop chaude et si le jet n’est pas dirigé fort sur le visage.', 'hygiène'),
+  q('Pour une peau sensible, quel nettoyant privilégier ?', 'Un nettoyant doux et sans parfum', ['Un savon très parfumé', 'Un gel à l’alcool', 'Un gommage à gros grains'], 'Moins d’ingrédients irritants, c’est moins de risques de rougeurs et de picotements.', 'peau sensible'),
+  q('Un masque peel-off, c’est quoi ?', 'Un masque qui sèche et se retire en film', ['Un masque à boire', 'Un pansement', 'Un démaquillant pour les yeux'], 'On le décolle une fois sec. Il peut tirer sur la peau, donc on l’évite si elle est sensible.', 'routine'),
+  m('On peut se démaquiller les yeux avec n’importe quel produit visage.', FAUX, 'Faux. Certains nettoyants piquent les yeux. Mieux vaut un démaquillant adapté au contour de l’œil.', 'maquillage'),
+  q('Que faut-il éviter avec un masque à l’argile ?', 'Le laisser sécher jusqu’à craqueler', ['L’appliquer en couche fine', 'Le rincer à l’eau tiède', 'Lire la notice'], 'Une argile trop sèche tire l’eau de la peau. On la rince avant qu’elle ne craquelle.', 'peau sèche'),
+  m('Un nettoyant peut être utilisé sur le visage et le cou.', VRAI, 'Vrai. Le cou mérite aussi d’être nettoyé et soigné avec les mêmes gestes doux que le visage.', 'routine'),
+  q('Où appliquer un gommage visage ?', 'Sur le visage en évitant le contour des yeux', ['Directement dans les yeux', 'Sur les lèvres gercées à vif', 'Sur une plaie'], 'La zone des yeux est trop fine et sensible pour un gommage.', 'sécurité'),
+  m('Utiliser une brosse nettoyante chaque jour convient à toutes les peaux.', FAUX, 'Faux. Pour les peaux sensibles ou fines, elle peut irriter. Un usage doux et espacé est plus prudent.', 'peau sensible'),
+  q('Comment savoir si un nettoyant nous convient ?', 'La peau est propre et confortable', ['La peau tiraille fort', 'La peau devient rouge', 'La peau pique longtemps'], 'Après un bon nettoyant, la peau est nette, sans sensation de tiraillement ni rougeur.', 'routine'),
+
+  // Jour 8
+  q('Quelle est la bonne pression pour laver son visage ?', 'Des gestes doux et circulaires', ['Frotter le plus fort possible', 'Pincer la peau', 'Gratter avec les ongles'], 'La douceur suffit à nettoyer. Frotter irrite et fragilise la peau.', 'hygiène'),
+  m('Laver son visage plus souvent réduit l’acné.', FAUX, 'Faux. Trop de lavages irritent la peau et peuvent aggraver l’acné. Deux fois par jour suffisent.', 'peau grasse'),
+  q('Qu’est-ce qu’une lotion tonique ?', 'Un liquide appliqué après le nettoyage', ['Une boisson énergisante', 'Un vernis pour ongles', 'Un shampoing sec'], 'Elle retire les dernières traces et prépare la peau. Elle reste facultative dans une routine.', 'routine'),
+  q('Faut-il choisir un tonique avec beaucoup d’alcool ?', 'Non, mieux vaut l’éviter', ['Oui, toujours', 'Seulement pour les bébés', 'Oui, pour les peaux sèches'], 'L’alcool en forte dose peut dessécher et irriter, surtout sur peau sensible ou sèche.', 'ingrédients'),
+  m('Le tonique est indispensable dans une routine.', FAUX, 'Faux. Il est facultatif. Un bon nettoyant et une crème adaptée suffisent à beaucoup de peaux.', 'idées reçues'),
+  q('Pourquoi changer souvent sa taie d’oreiller ?', 'Elle accumule sébum et résidus', ['Elle change de couleur', 'Elle fait tomber les cheveux', 'Elle devient trop douce'], 'La changer une à deux fois par semaine aide à limiter les imperfections.', 'hygiène'),
+  m('Un masque en tissu peut être réutilisé plusieurs fois.', FAUX, 'Faux. Il est prévu pour un seul usage. Le réutiliser expose à des bactéries.', 'hygiène'),
+  q('Combien de temps garder une serviette de visage humide pliée ?', 'Il vaut mieux la faire sécher à l’air', ['Plusieurs jours en boule', 'Dans un sac fermé', 'Au fond d’un tiroir'], 'Une serviette qui sèche bien développe moins de microbes.', 'hygiène'),
+  m('La peau grasse a aussi besoin d’hydratation après le nettoyage.', VRAI, 'Vrai. Grasse ne veut pas dire hydratée. Une crème légère aide la peau à rester équilibrée.', 'peau grasse'),
+  q('Que retire en priorité un démaquillant ?', 'Le maquillage et le sébum', ['Les taches de naissance', 'Les rides profondes', 'Les grains de beauté'], 'Il enlève ce qui se trouve à la surface, sans agir sur la structure de la peau.', 'maquillage'),
+
+  // Jour 9
+  q('Que faire si l’eau du robinet est très calcaire ?', 'Rincer ou apaiser avec un soin doux', ['Ne plus jamais se laver', 'Ajouter du vinaigre pur', 'Se frotter plus fort'], 'Le calcaire peut assécher les peaux sensibles. Une eau micellaire rincée à l’eau minérale peut aider.', 'peau sensible'),
+  m('Le calcaire de l’eau peut gêner certaines peaux sensibles.', VRAI, 'Vrai. Chez certaines personnes, l’eau calcaire accentue sécheresse et tiraillements.', 'peau sensible'),
+  q('Quel masque choisir pour une peau terne ?', 'Un masque éclat ou exfoliant doux', ['Un masque au dentifrice', 'Un masque à la farine', 'Aucun, jamais'], 'Il aide à éliminer les cellules mortes qui ternissent le teint.', 'routine'),
+  q('Pourquoi éviter le dentifrice sur un bouton ?', 'Il peut irriter et brûler la peau', ['Il donne un teint bronzé', 'Il hydrate trop', 'Il fait pousser les cils'], 'Le dentifrice n’est pas fait pour la peau. Un soin localisé adapté est plus sûr.', 'idées reçues'),
+  m('Le citron frais sur le visage nettoie sans risque.', FAUX, 'Faux. Il est très acide et peut irriter ou provoquer des taches brunes s’il est suivi d’une exposition au soleil.', 'sécurité'),
+  q('Quelle texture de nettoyant est la plus légère ?', 'Le gel', ['Le baume', 'La crème riche', 'Le beurre'], 'Le gel est frais et fin, alors que les baumes sont riches et fondants.', 'ingrédients'),
+  m('Un baume démaquillant fond au contact de la peau.', VRAI, 'Vrai. Sa texture solide devient huile au contact de la chaleur de la peau et dissout le maquillage.', 'maquillage'),
+  q('Qu’indique la mention « sans rinçage » ?', 'Le produit peut rester sur la peau', ['Il ne faut jamais l’ouvrir', 'Il est pour les cheveux', 'Il faut le boire'], 'Certaines eaux micellaires sont conçues ainsi, mais rincer reste utile pour les peaux réactives.', 'étiquette'),
+  m('Il faut toujours appliquer son masque sur une peau sale.', FAUX, 'Faux. Un masque s’applique sur une peau propre pour agir au mieux.', 'routine'),
+  q('Comment rincer un masque ?', 'À l’eau tiède avec douceur', ['En frottant avec une brosse', 'À l’eau bouillante', 'Avec de l’alcool'], 'L’eau tiède et des gestes doux retirent le masque sans agresser.', 'hygiène'),
+
+  // Jour 10
+  q('Le soir, quel est le bon ordre ?', 'Démaquiller, nettoyer, hydrater', ['Hydrater, démaquiller, nettoyer', 'Nettoyer, maquiller, dormir', 'Gommer, maquiller, hydrater'], 'On retire d’abord le maquillage, puis on lave et on termine par la crème.', 'routine'),
+  m('Le gommage aide les soins à mieux agir.', NUANCE, 'Nuancé. En retirant les cellules mortes, il facilite l’application des soins, à condition de ne pas en abuser.', 'actifs'),
+  q('Que faire avec un nettoyant périmé ou qui sent bizarre ?', 'Le jeter', ['Le chauffer', 'Le diluer dans l’eau', 'Le garder pour le corps'], 'Une odeur ou une texture qui change indique que le produit peut être altéré.', 'conservation'),
+  q('Que signifie le petit pot ouvert avec « 12M » ?', 'À utiliser 12 mois après ouverture', ['Contient 12 mg de produit', 'Pour les enfants de 12 mois', 'Fabriqué en décembre'], 'C’est la durée d’utilisation conseillée une fois le produit ouvert.', 'étiquette'),
+  m('Les exfoliants chimiques sont plus agressifs que les grains.', NUANCE, 'Nuancé. Tout dépend de la concentration. Un acide doux peut être mieux toléré qu’un gommage à gros grains.', 'actifs'),
+  q('Après un exfoliant aux acides, que faut-il faire le jour ?', 'Mettre une protection solaire', ['Bronzer sans crème', 'Refaire un gommage', 'Ne rien mettre du tout'], 'Les acides rendent la peau plus sensible au soleil. La crème solaire est essentielle.', 'solaire'),
+  m('Les hommes n’ont pas besoin de nettoyer leur visage.', FAUX, 'Faux. Toute peau accumule sébum, sueur et pollution. Le nettoyage est utile pour tous.', 'idées reçues'),
+  q('Quel geste préfère-t-on sur un visage acnéique ?', 'Nettoyer doucement sans percer', ['Percer tous les boutons', 'Gommer chaque jour fort', 'Frotter à l’alcool'], 'Percer ou frotter aggrave l’inflammation et peut laisser des marques.', 'peau grasse'),
+  m('Rincer son visage à l’eau froide resserre les pores durablement.', FAUX, 'Faux. L’eau froide donne un effet frais passager mais ne modifie pas durablement la taille des pores.', 'idées reçues'),
+  q('Où ranger ses produits de nettoyage ?', 'À l’abri de la chaleur et bien fermés', ['En plein soleil', 'Ouverts sur le rebord', 'Près du radiateur'], 'Chaleur et air peuvent altérer les produits et favoriser les microbes.', 'conservation'),
+]

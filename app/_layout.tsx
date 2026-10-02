@@ -38,6 +38,7 @@ import { OnboardingDraftFlusher } from '@/components/onboarding/flow/DraftFlushe
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
 import { initRevenueCat, loginUser } from '@/lib/revenucat/client'
+import { syncMetaAds } from '@/lib/ads/metaAds'
 import { CreditsExhaustedModal } from '@/components/shared/CreditsExhaustedModal'
 import { BackgroundPollers } from '@/components/shared/BackgroundPollers'
 import { MaintenanceGate } from '@/components/shared/MaintenanceGate'
@@ -273,15 +274,17 @@ function CacheJanitor() {
 function RevenueCatInit() {
   const { isAuthenticated, user } = useAuth()
 
-  // Boot SDK au startup
+  // Boot SDK au startup (+ SDK Meta si la mesure publicitaire est acceptée)
   useEffect(() => {
     void initRevenueCat()
+    void syncMetaAds()
   }, [])
 
-  // Login utilisateur quand authentifié
+  // Login utilisateur quand authentifié. Les identifiants publicitaires sont
+  // rattachés à l'identifiant RevenueCat courant : on les rejoue après logIn.
   useEffect(() => {
     if (isAuthenticated && user?.id) {
-      void loginUser(user.id)
+      void loginUser(user.id).then(() => syncMetaAds())
     }
   }, [isAuthenticated, user?.id])
 
