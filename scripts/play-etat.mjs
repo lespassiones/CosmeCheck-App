@@ -11,17 +11,25 @@
  * d'ou la fermeture systematique.
  *
  * Usage :  node scripts/play-etat.mjs
- * Requiert : ./play-service-account.json (gitignore, secret)
+ * Requiert : la cle du compte de service (secret, gitignore). Elle est cherchee,
+ * dans l'ordre, dans secrets/ (emplacement depuis le 07/09/2026, comme
+ * scripts/asc-etat.mjs) puis a la racine (ancien emplacement).
  */
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
 const PKG = 'com.cosmecheck.app'
-const KEY_PATH = path.resolve(process.cwd(), 'play-service-account.json')
+const CANDIDATS = [
+  'c:/Projet/CosmeCheck-App/secrets/play-service-account.json',
+  path.resolve(process.cwd(), 'secrets/play-service-account.json'),
+  // Ancien emplacement, garde pour ne pas casser un poste pas encore aligne.
+  path.resolve(process.cwd(), 'play-service-account.json'),
+]
+const KEY_PATH = CANDIDATS.find((p) => fs.existsSync(p))
 
-if (!fs.existsSync(KEY_PATH)) {
-  console.error(`Cle absente : ${KEY_PATH}`)
+if (!KEY_PATH) {
+  console.error(`Cle absente. Cherchee ici :\n  ${CANDIDATS.join('\n  ')}`)
   process.exit(1)
 }
 const key = JSON.parse(fs.readFileSync(KEY_PATH, 'utf8'))
