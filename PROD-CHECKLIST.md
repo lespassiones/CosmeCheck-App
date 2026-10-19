@@ -491,6 +491,41 @@ lancement suivant. Ce qui ne se livrera jamais en OTA : tout ce qui touche au na
 dépendance nouvelle, une permission, un changement de `version` (qui déplace la
 `runtimeVersion`).
 
+### 5.10 🔴 Version 1.0.4 (préparée le 19/10/2026) : deux faux qui partent dans le binaire
+
+**1. Le SDK Meta porte des identifiants factices, et ce contournement n'était listé nulle
+part.** Depuis le commit `5169c0a` (02/10/2026), `app.json` déclare
+`react-native-fbsdk-next` avec `appID: REMPLACER_PAR_APP_ID_META`,
+`clientToken: REMPLACER_PAR_CLIENT_TOKEN_META` et le schéma `fbREMPLACER_PAR_APP_ID_META`,
+plus `expo-tracking-transparency` et `NSPrivacyTracking: true`.
+
+| | |
+|---|---|
+| Ce que fait le code | rien : `isValidMetaAppId` refuse la valeur factice, `metaAdsAvailable()` rend faux, le réglage « Mesure des publicités » est masqué et la fenêtre ATT n'est **jamais** demandée |
+| Déjà passé chez Apple ? | **Non.** Le build iOS 11 (1.0.3, en vente) vient du commit `28ddb5e`, dont le `package.json` ne contient ni le SDK Meta ni l'ATT (vérifié par `eas build:list`). L'AAB 32 non plus (aucune entrée Facebook dans son manifeste). **La 1.0.4 est le premier binaire qui les embarque** |
+| Risque iOS | l'Info.plist porte `NSUserTrackingUsageDescription` et le manifeste de confidentialité dit « suivi : oui », mais l'app ne montre jamais la fenêtre ATT. Si la section « Confidentialité de l'app » d'App Store Connect déclare du suivi, l'examinateur cherchera la fenêtre et rejettera (5.1.2 / 2.1). `FacebookAppID` factice dans l'Info.plist : compile, à vérifier au lancement sur TestFlight |
+| Risque Android | le dossier `android/` n'étant pas régénéré, le plugin ne s'applique pas (pas d'App ID dans le manifeste), mais le SDK natif est lié automatiquement. Il peut ajouter `com.google.android.gms.permission.AD_ID` au manifeste fusionné : si la déclaration « Identifiant publicitaire » de la Play Console dit non, Google refuse la version au dépôt |
+| À faire avant la soumission | soit poser les vraies valeurs Meta (App ID et jeton client, depuis le gestionnaire d'apps Meta), soit retirer les deux plugins et repasser `NSPrivacyTracking` à `false` pour cette version. Ne pas soumettre en l'état sans avoir tranché |
+
+**2. La version du runtime Android s'écrit à la main, et la 1.0.3 l'a ratée.**
+`android/` est ignoré par git et jamais régénéré (il porte la signature, voir 5.1 et 5.9),
+donc `app.json` n'y descend pas. L'AAB 32 (1.0.3, en production) embarque
+`expo_runtime_version = 1.0.2` (lu dans `base/resources.pb` de l'AAB) : les téléphones
+Android en 1.0.3 téléchargent la mise à jour à distance publiée pour la 1.0.2, et font
+tourner ce code-là plutôt que celui de leur binaire. Une mise à jour publiée pour le
+runtime `1.0.3` ne les atteindra jamais.
+
+Pour la 1.0.4, corrigé **en local** le 19/10/2026 (fichiers non suivis) :
+
+| Fichier | Avant | Après |
+|---|---|---|
+| `android/app/build.gradle` | `versionCode 32`, `versionName "1.0.3"` | `versionCode 33`, `versionName "1.0.4"` |
+| `android/app/src/main/res/values/strings.xml` | `expo_runtime_version` = `1.0.2` | `1.0.4` |
+
+⚠️ **À chaque montée de version, ces trois valeurs changent avec `app.json`.** Contrôle
+après `bundleRelease` : la chaîne `expo_runtime_version` de l'AAB doit valoir la
+`version` d'`app.json`.
+
 ### 5.6 Le reste, par ordre décroissant
 
 | Quoi | Pourquoi |
