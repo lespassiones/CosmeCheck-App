@@ -4,7 +4,13 @@
  *
  * On maitrise nous-memes le timing et la frequence (cf. lib/review/prompt.ts) ;
  * le bouton d'acceptation delegue le VRAI dialogue de notation au module natif
- * (`requestStoreReview`, Google Play In-App Review), avec repli fiche store.
+ * (`requestStoreReview`, Google Play In-App Review), avec repli fiche Play.
+ *
+ * ⚠️ ANDROID SEULEMENT. Sur iPhone cette carte ne s'affiche jamais : Apple
+ * interdit toute invite maison avant sa fenetre de notation (regle 5.6.1).
+ * AnalysisResultPanel appelle alors `requestSystemReview` directement, au meme
+ * moment (cf. `reviewChannel` dans lib/review/prompt.ts). Le texte de la carte
+ * ne nomme donc aucun magasin.
  */
 
 import { type FC, useState } from 'react'

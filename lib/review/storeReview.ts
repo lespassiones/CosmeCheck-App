@@ -2,9 +2,12 @@
  * Acces au module natif `expo-store-review` (chargement PARESSEUX, OTA-safe).
  *
  * QUOI : declenche le flux de notation In-App (dialogue natif Google Play
- * In-App Review sur Android, SKStoreReviewController sur iOS). Repli sur
- * l'ouverture de la fiche store si l'API n'est pas disponible (module absent
- * du binaire avant le rebuild, ou quota Google atteint).
+ * In-App Review sur Android, SKStoreReviewController sur iOS). Sur Android
+ * SEULEMENT, repli sur l'ouverture de la fiche Play si l'API n'est pas
+ * disponible (module absent du binaire avant le rebuild, ou quota Google
+ * atteint). Sur iOS, jamais de repli vers l'App Store (regle 5.6.1, voir
+ * `allowsListingFallback` dans prompt.ts) : si la fenetre du systeme n'est pas
+ * disponible, il ne se passe rien.
  *
  * POURQUOI un require differe (comme lib/notifications/native.ts) : un import
  * top-level jetterait au boot si le module natif n'est pas dans le binaire
@@ -18,14 +21,14 @@
 
 import { Linking, Platform } from 'react-native'
 
+import { allowsListingFallback } from '@/lib/review/prompt'
+
 // Volontairement `any` : le package peut ne pas etre installe au typecheck.
 type StoreReviewModule = any // eslint-disable-line @typescript-eslint/no-explicit-any
 
 const ANDROID_PACKAGE = 'com.cosmecheck.app'
-// Apple ID de la fiche « Cosme Check: scan cosmetique » (App Store Connect).
-// C'etait un id0000000000 de remplissage : le repli ouvrait une page vide chez
-// quelqu'un a qui on venait de demander une note.
-const IOS_APP_STORE_URL = 'https://apps.apple.com/app/id6803527040'
+// Plus d'adresse App Store ici, volontairement : sur iOS, aucun repli vers la
+// fiche (regle 5.6.1). Seule la fiche Play sert de repli.
 const PLAY_STORE_URL = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE}`
 
 let cached: StoreReviewModule | null | undefined
@@ -46,11 +49,11 @@ export function isStoreReviewAvailable(): boolean {
   return getStoreReviewModule() !== null
 }
 
-/** Ouvre la fiche store en repli (jamais bloquant). */
+/** Ouvre la fiche Play en repli (jamais bloquant, et jamais sur iOS). */
 async function openStoreListing(): Promise<void> {
-  const url = Platform.OS === 'ios' ? IOS_APP_STORE_URL : PLAY_STORE_URL
+  if (!allowsListingFallback(Platform.OS)) return
   try {
-    await Linking.openURL(url)
+    await Linking.openURL(PLAY_STORE_URL)
   } catch {
     // best-effort
   }
@@ -58,7 +61,7 @@ async function openStoreListing(): Promise<void> {
 
 /**
  * Lance le flux de notation. Utilise le dialogue In-App natif s'il est
- * disponible, sinon ouvre la fiche store. Ne throw jamais.
+ * disponible, sinon ouvre la fiche Play (Android seulement). Ne throw jamais.
  */
 export async function requestStoreReview(): Promise<void> {
   const StoreReview = getStoreReviewModule()
@@ -80,5 +83,28 @@ export async function requestStoreReview(): Promise<void> {
     await openStoreListing()
   } catch {
     await openStoreListing()
+  }
+}
+
+/**
+ * iOS : la fenetre du systeme, et rien d'autre (regle 5.6.1).
+ *
+ * Appelee directement au moment opportun, sans carte maison avant et sans
+ * repli vers l'App Store apres. Si le module natif manque (mise a jour OTA sur
+ * un vieux binaire) ou si la fenetre n'est pas disponible, il ne se passe rien.
+ * Apple decide seul de l'afficher ou non (trois fois par an au plus). Ne throw
+ * jamais.
+ */
+export async function requestSystemReview(): Promise<void> {
+  const StoreReview = getStoreReviewModule()
+  if (!StoreReview || typeof StoreReview.requestReview !== 'function') return
+  try {
+    const available =
+      typeof StoreReview.isAvailableAsync === 'function'
+        ? await StoreReview.isAvailableAsync()
+        : false
+    if (available) await StoreReview.requestReview()
+  } catch {
+    // best-effort : rien a montrer, rien a ouvrir.
   }
 }

@@ -1,10 +1,12 @@
 import {
+  allowsListingFallback,
   DEFAULT_REVIEW_STATE,
   markDone,
   markShown,
   readReviewState,
   REVIEW_MAX_ASKS,
   REVIEW_REASK_MS,
+  reviewChannel,
   shouldAskReview,
   type ReviewState,
 } from '@/lib/review/prompt'
@@ -90,5 +92,37 @@ describe('transitions', () => {
     // L'utilisateur note : etat verrouille, plus jamais propose.
     st = markDone(st)
     expect(shouldAskReview(st, j1 + REVIEW_REASK_MS * 100)).toBe(false)
+  })
+})
+
+// Regle 5.6.1 d'Apple : rejet de RevealChat le 19/10/2026 pour ce schema exact.
+describe('par quelle porte passe la demande (5.6.1)', () => {
+  it('iOS : la fenetre du systeme directement, jamais notre carte avant', () => {
+    expect(reviewChannel('ios')).toBe('system')
+  })
+
+  it('Android : la carte reste (Google l autorise)', () => {
+    expect(reviewChannel('android')).toBe('card')
+  })
+
+  it('iOS : jamais de repli vers la fiche App Store', () => {
+    expect(allowsListingFallback('ios')).toBe(false)
+  })
+
+  it('Android : le repli vers la fiche Play reste', () => {
+    expect(allowsListingFallback('android')).toBe(true)
+  })
+
+  it('iOS garde le meme moment et la meme frequence que la carte Android', () => {
+    // La frequence ne depend pas de la plateforme : un iPhone suit la meme
+    // machine a etats, simplement sans carte (et sans markDone, faute d'action).
+    let st = DEFAULT_REVIEW_STATE
+    for (let i = 0; i < REVIEW_MAX_ASKS; i++) {
+      const t = NOW + i * REVIEW_REASK_MS
+      expect(shouldAskReview(st, t)).toBe(true)
+      expect(shouldAskReview(markShown(st, t), t + 60_000)).toBe(false)
+      st = markShown(st, t)
+    }
+    expect(shouldAskReview(st, NOW + REVIEW_REASK_MS * 100)).toBe(false)
   })
 })

@@ -21,7 +21,7 @@
  */
 
 import { useCallback, useMemo, useRef, useState, type FC } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { Platform, StyleSheet, Text, View } from 'react-native'
 import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
 import { Ionicons } from '@expo/vector-icons'
 import { useRouter, type Href } from 'expo-router'
@@ -54,7 +54,8 @@ import { type PersonalBlocks } from './PersonalInsightsCards'
 import { CompatibilityCard, type Compatibility } from './CompatibilityCard'
 import { ReviewPromptCard } from '@/components/review/ReviewPromptCard'
 import { loadReviewState, saveReviewState } from '@/lib/review/storage'
-import { markDone, markShown, shouldAskReview } from '@/lib/review/prompt'
+import { markDone, markShown, reviewChannel, shouldAskReview } from '@/lib/review/prompt'
+import { requestSystemReview } from '@/lib/review/storeReview'
 import { NotifPromptCard } from '@/components/notifications/NotifPromptCard'
 import {
   markNotifPromptGranted,
@@ -160,6 +161,12 @@ export const AnalysisResultPanel: FC<Props> = ({
       const st = await loadReviewState()
       if (!shouldAskReview(st, now)) return
       await saveReviewState(markShown(st, now))
+      // iOS : la fenetre du systeme directement, jamais notre carte avant
+      // (regle 5.6.1 d'Apple, cf. reviewChannel). Meme moment, meme frequence.
+      if (reviewChannel(Platform.OS) === 'system') {
+        void requestSystemReview()
+        return
+      }
       setShowReview(true)
     })()
   }, [profile?.preferences])

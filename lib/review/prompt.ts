@@ -94,3 +94,43 @@ export function markShown(state: ReviewState, now: number): ReviewState {
 export function markDone(state: ReviewState): ReviewState {
   return { ...state, status: 'done' }
 }
+
+// ── Par quelle porte passe la demande (regle 5.6.1 d'Apple) ──────────────────
+
+/**
+ * Comment la demande d'avis se presente a l'ecran.
+ *   - 'system' : la fenetre du systeme, appelee directement, sans rien avant ;
+ *   - 'card'   : notre carte « Tu aimes CosmeCheck ? », puis la fenetre native.
+ */
+export type ReviewChannel = 'system' | 'card'
+
+/**
+ * ⚠️ **Sur iPhone, aucune invite maison ne doit preceder la fenetre du systeme.**
+ *
+ * Apple interdit les demandes d'avis personnalisees (regle 5.6.1 : « we will
+ * disallow custom review prompts »). Une carte « Tu aimes CosmeCheck ? » en est
+ * une, meme neutre, meme suivie de l'API officielle : c'est exactement ce qui a
+ * valu un rejet a RevealChat le 19/10/2026. Sur iOS c'est Apple qui plafonne
+ * (trois affichages par an) et sa fenetre porte son propre « Pas maintenant ».
+ *
+ * Android garde la carte : Google l'autorise, et elle sert de filtre poli
+ * (l'API Play n'a pas de bouton d'annulation et chaque appel entame un quota).
+ *
+ * Le moment et la frequence ne changent pas d'une plateforme a l'autre : ils
+ * restent decides par `shouldAskReview` / `markShown` ci-dessus.
+ */
+export function reviewChannel(os: string): ReviewChannel {
+  return os === 'ios' ? 'system' : 'card'
+}
+
+/**
+ * Peut-on ouvrir la fiche du magasin quand la fenetre native est indisponible ?
+ *
+ * Jamais sur iOS : ouvrir l'App Store sans qu'on l'ait demande serait une autre
+ * facon de forcer la main (meme regle 5.6.1). Sur Android, le repli vers la
+ * fiche Play reste, parce qu'un « Oui, je note » qui ne produit rien se lit
+ * comme une app cassee.
+ */
+export function allowsListingFallback(os: string): boolean {
+  return os !== 'ios'
+}
