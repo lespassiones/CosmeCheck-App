@@ -39,30 +39,32 @@ const STORAGE_KEY = 'cosmecheck:ads_consent'
 // Volontairement `any` : les packages peuvent être absents du binaire.
 type AnyModule = any // eslint-disable-line @typescript-eslint/no-explicit-any
 
-let fbCached: AnyModule | null | undefined
-let attCached: AnyModule | null | undefined
+/**
+ * ⚠️ RETIRÉ DE LA 1.0.4 LE 19/10/2026 (PROD-CHECKLIST § 5.10).
+ *
+ * `react-native-fbsdk-next` et `expo-tracking-transparency` ne sont plus ni
+ * dans package.json ni dans app.json : sans les vrais identifiants Meta, le
+ * binaire aurait porté la phrase d'autorisation de suivi et un manifeste
+ * « suivi : oui » sans jamais montrer la fenêtre ATT (rejet 5.1.2 probable).
+ *
+ * Les deux `require` sont donc RETIRÉS, pas seulement entourés d'un try :
+ * Metro résout un `require` statique à la construction du bundle, même dans un
+ * try, et échouerait sur un paquet désinstallé. Les deux accesseurs rendent
+ * `null`, donc `metaAdsAvailable()` est faux, aucune question n'est posée,
+ * l'interrupteur du Profil est masqué et rien ne part chez Meta. Le reste du
+ * module est gardé tel quel pour le jour des publicités Meta.
+ *
+ * POUR REMETTRE : réinstaller les deux paquets, remettre leurs plugins dans
+ * app.json avec les vrais App ID et jeton client, `NSPrivacyTracking: true`,
+ * et rétablir les deux `require` ci-dessous (voir le commit 5169c0a).
+ */
 
 function fbsdk(): AnyModule | null {
-  if (fbCached !== undefined) return fbCached
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
-    const mod = require('react-native-fbsdk-next')
-    fbCached = mod?.Settings && mod?.AppEventsLogger ? mod : null
-  } catch {
-    fbCached = null
-  }
-  return fbCached
+  return null // SDK Meta retiré de la 1.0.4, voir plus haut.
 }
 
 function attModule(): AnyModule | null {
-  if (attCached !== undefined) return attCached
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
-    attCached = require('expo-tracking-transparency') ?? null
-  } catch {
-    attCached = null
-  }
-  return attCached
+  return null // expo-tracking-transparency retiré de la 1.0.4, voir plus haut.
 }
 
 /** App ID lu dans la config du plugin (un seul endroit à remplir : app.json). */

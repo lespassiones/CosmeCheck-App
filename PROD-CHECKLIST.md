@@ -491,21 +491,30 @@ lancement suivant. Ce qui ne se livrera jamais en OTA : tout ce qui touche au na
 dépendance nouvelle, une permission, un changement de `version` (qui déplace la
 `runtimeVersion`).
 
-### 5.10 🔴 Version 1.0.4 (préparée le 19/10/2026) : deux faux qui partent dans le binaire
+### 5.10 Version 1.0.4 (préparée le 19/10/2026) : Meta retiré, et le runtime Android
 
-**1. Le SDK Meta porte des identifiants factices, et ce contournement n'était listé nulle
-part.** Depuis le commit `5169c0a` (02/10/2026), `app.json` déclare
-`react-native-fbsdk-next` avec `appID: REMPLACER_PAR_APP_ID_META`,
-`clientToken: REMPLACER_PAR_CLIENT_TOKEN_META` et le schéma `fbREMPLACER_PAR_APP_ID_META`,
-plus `expo-tracking-transparency` et `NSPrivacyTracking: true`.
+**1. ✅ Le SDK Meta est retiré de la 1.0.4 (décision du 19/10/2026).** Depuis le commit
+`5169c0a` (02/10/2026), `app.json` déclarait `react-native-fbsdk-next` avec des
+identifiants factices (`REMPLACER_PAR_APP_ID_META`, `REMPLACER_PAR_CLIENT_TOKEN_META`),
+plus `expo-tracking-transparency` et `NSPrivacyTracking: true`. Ce contournement
+n'était listé nulle part, et la 1.0.4 aurait été le premier binaire à le porter (le
+build iOS 11 vient du commit `28ddb5e`, sans ces paquets ; l'AAB 32 non plus). Le
+binaire aurait affiché une phrase d'autorisation de suivi sans jamais demander l'ATT
+(rejet 5.1.2 probable), et le SDK Android pouvait ajouter la permission `AD_ID`.
 
-| | |
+| Ce qui a été fait | |
 |---|---|
-| Ce que fait le code | rien : `isValidMetaAppId` refuse la valeur factice, `metaAdsAvailable()` rend faux, le réglage « Mesure des publicités » est masqué et la fenêtre ATT n'est **jamais** demandée |
-| Déjà passé chez Apple ? | **Non.** Le build iOS 11 (1.0.3, en vente) vient du commit `28ddb5e`, dont le `package.json` ne contient ni le SDK Meta ni l'ATT (vérifié par `eas build:list`). L'AAB 32 non plus (aucune entrée Facebook dans son manifeste). **La 1.0.4 est le premier binaire qui les embarque** |
-| Risque iOS | l'Info.plist porte `NSUserTrackingUsageDescription` et le manifeste de confidentialité dit « suivi : oui », mais l'app ne montre jamais la fenêtre ATT. Si la section « Confidentialité de l'app » d'App Store Connect déclare du suivi, l'examinateur cherchera la fenêtre et rejettera (5.1.2 / 2.1). `FacebookAppID` factice dans l'Info.plist : compile, à vérifier au lancement sur TestFlight |
-| Risque Android | le dossier `android/` n'étant pas régénéré, le plugin ne s'applique pas (pas d'App ID dans le manifeste), mais le SDK natif est lié automatiquement. Il peut ajouter `com.google.android.gms.permission.AD_ID` au manifeste fusionné : si la déclaration « Identifiant publicitaire » de la Play Console dit non, Google refuse la version au dépôt |
-| À faire avant la soumission | soit poser les vraies valeurs Meta (App ID et jeton client, depuis le gestionnaire d'apps Meta), soit retirer les deux plugins et repasser `NSPrivacyTracking` à `false` pour cette version. Ne pas soumettre en l'état sans avoir tranché |
+| `package.json` | `react-native-fbsdk-next` et `expo-tracking-transparency` désinstallés |
+| `app.json` | les deux plugins retirés, `NSPrivacyTracking: false` ; vérifié par `expo config --type introspect` : aucune `NSUserTrackingUsageDescription`, aucune clé Facebook, aucun schéma `fb…` |
+| `lib/ads/metaAds.ts` | les deux `require` retirés (Metro échouerait sur un paquet absent, même dans un try) ; `metaAdsAvailable()` rend faux, donc aucune question, interrupteur du Profil masqué, rien ne part. Le reste du module est gardé. Sans risque pour la mise à jour à distance : les binaires déjà publiés n'ont pas ces paquets non plus |
+| `android/` local | aucune trace du SDK ni d'`AD_ID` ; l'autoliaison lit `node_modules` à chaque build, donc aucun `expo prebuild` n'est nécessaire |
+
+⚠️ **À remettre le jour des publicités Meta, avec les vrais identifiants** (App ID et
+jeton client du gestionnaire d'apps Meta) : réinstaller les deux paquets, remettre les
+deux plugins et `NSPrivacyTracking: true`, rétablir les deux `require` de
+`lib/ads/metaAds.ts` (voir `5169c0a`), déclarer le suivi dans « Confidentialité de
+l'app » chez Apple et l'identifiant publicitaire dans la Play Console. Nouveau binaire
+obligatoire (code natif), pas de mise à jour à distance possible.
 
 **2. La version du runtime Android s'écrit à la main, et la 1.0.3 l'a ratée.**
 `android/` est ignoré par git et jamais régénéré (il porte la signature, voir 5.1 et 5.9),

@@ -27,7 +27,7 @@
         "ITSAppUsesNonExemptEncryption": false
       },
       "privacyManifests": {
-        "NSPrivacyTracking": true,
+        "NSPrivacyTracking": false,
         "NSPrivacyTrackingDomains": [],
         "NSPrivacyAccessedAPITypes": [
           {
@@ -124,26 +124,7 @@
         }
       ],
       "expo-localization",
-      "./plugins/withFreshUpdatesResources",
-      [
-        "react-native-fbsdk-next",
-        {
-          "appID": "REMPLACER_PAR_APP_ID_META",
-          "clientToken": "REMPLACER_PAR_CLIENT_TOKEN_META",
-          "displayName": "Cosme Check",
-          "scheme": "fbREMPLACER_PAR_APP_ID_META",
-          "isAutoInitEnabled": false,
-          "autoLogAppEventsEnabled": false,
-          "advertiserIDCollectionEnabled": false,
-          "iosUserTrackingPermission": false
-        }
-      ],
-      [
-        "expo-tracking-transparency",
-        {
-          "userTrackingPermission": "Cosme Check utilise cette autorisation pour savoir quelles publicités Facebook et Instagram t'ont fait découvrir l'app. Aucune donnée de peau ni de santé n'est partagée."
-        }
-      ]
+      "./plugins/withFreshUpdatesResources"
     ],
     "experiments": {
       "typedRoutes": true
