@@ -1,9 +1,9 @@
 /**
- * AnalysisResultPanel — orchestrateur du résultat d'analyse INCI, port mobile
+ * AnalysisResultPanel : orchestrateur du résultat d'analyse INCI, port mobile
  * du web AnalyseResultPanel.tsx (CosmetWiki).
  *
  * Ordre des sections (miroir mobile du web) :
- *   1. EssentielView      (3 cartes déterministes — engine.computeEssentiel ;
+ *   1. EssentielView      (3 cartes déterministes : engine.computeEssentiel ;
  *                          la ligne « restrictions » vit dans la carte L'ESSENTIEL)
  *   2. BigScore           (IngredientBlob + ratio reconnu)
  *   4. PenaltyStrip       (le verdict en chiffres)
@@ -14,7 +14,7 @@
  *   9. Liste complète     (carte qui ouvre la page /analyse/ingredients/[id])
  *
  * Les primitives visuelles (IngredientBlob, VerdictGauge, IngredientSpectrum)
- * sont IMPORTÉES — non réimplémentées ici.
+ * sont IMPORTÉES : non réimplémentées ici.
  *
  * L'en-tête produit (titre + catégorie + VerdictGauge) est rendu par l'écran
  * parent (app/analyse/[id].tsx) au-dessus du panel.
@@ -78,7 +78,7 @@ import type { EssentielData } from '@/lib/essentiel/engine'
 import { useCappedPush } from '@/lib/navigation/useCappedPush'
 
 interface Props {
-  /** ID de l'analyse Supabase — nécessaire pour générer la synthèse lazy. */
+  /** ID de l'analyse Supabase : nécessaire pour générer la synthèse lazy. */
   analysisId?: string
   result: AnalyseResponse
   essentiel: EssentielData
@@ -86,25 +86,25 @@ interface Props {
   onIngredientPress: (slug: string) => void
   /** Navigue vers /profile/restrictions. */
   onViewRestrictionsPress: () => void
-  /** Le parent fournit un scroll vers une coordonnée Y (dans le panel) — utilisé
+  /** Le parent fournit un scroll vers une coordonnée Y (dans le panel) : utilisé
    *  par le spectre pour amener l'ingrédient ciblé à l'écran. */
   onRequestScrollTo?: (y: number) => void
   reduceMotion?: boolean
   /** URL de l'image produit (catalogue / OBF / web). Passée à BigScoreCard. */
   productImageUrl?: string | null
-  /** Marque + nom du produit — servent à résoudre les alternatives (catalogue). */
+  /** Marque + nom du produit : servent à résoudre les alternatives (catalogue). */
   brand?: string | null
   productName?: string | null
   /** Score global (notation propriétaire CosmeCheck) - pour que la pastille L'ESSENTIEL soit
    *  identique à la jauge du verdict. */
   verdictScore?: number | null
-  /** Nombre d'ingrédients pénalisants (orange + rouge) — affiché dans la phrase. */
+  /** Nombre d'ingrédients pénalisants (orange + rouge) : affiché dans la phrase. */
   penalizingCount?: number
   /** EAN catalogue du produit (pour la section Outils : signalement / photo). */
   productEan?: string | null
   /** Slug de catégorie catalogue (pour rattacher une photo soumise). */
   category?: string | null
-  /** Type de produit détecté par l'analyseur (ex. « Nettoyant visage ») — signal
+  /** Type de produit détecté par l'analyseur (ex. « Nettoyant visage ») : signal
    *  fonctionnel robuste pour cibler les alternatives de la bonne catégorie. */
   productType?: string | null
 }
@@ -255,7 +255,7 @@ export const AnalysisResultPanel: FC<Props> = ({
   // stocké) → la même pastille partout (analyse = reco = recherche = browse).
   const rating: ColorRating = getColorRatingFromScore(result.score)
 
-  // Items restreints — recalculés en temps réel depuis les restrictions actuelles
+  // Items restreints : recalculés en temps réel depuis les restrictions actuelles
   // du profil (pas le flag `is_restricted` stocké à l'analyse, qui peut être
   // périmé si l'utilisateur a modifié ses restrictions après l'analyse).
   // DÉTECTION PAR TAG (parité EXACTE avec le web + le backend analyser) : on
@@ -345,7 +345,7 @@ export const AnalysisResultPanel: FC<Props> = ({
 
   const counts = result.counts
 
-  // Carrousel d'alternatives — rendu soit replié (sous le bouton), soit déplié
+  // Carrousel d'alternatives : rendu soit replié (sous le bouton), soit déplié
   // (tout en bas après la liste d'ingrédients). Une seule branche monte à la fois.
   const altCarousel = (
     <AlternativesCarousel
@@ -357,7 +357,7 @@ export const AnalysisResultPanel: FC<Props> = ({
       onSelect={(p) => void analyze(p)}
       onSeeAll={() => {
         if (alternatives.currentEan) {
-          // Forme objet (idiome expo-router pour route dynamique) — robuste vs typegen.
+          // Forme objet (idiome expo-router pour route dynamique) : robuste vs typegen.
           cappedPush({
             pathname: '/alternatives/[ean]',
             params: { ean: alternatives.currentEan },
@@ -367,7 +367,7 @@ export const AnalysisResultPanel: FC<Props> = ({
     />
   )
 
-  // Bloc « Outils » — rendu tout en bas, APRÈS les alternatives (dans les deux
+  // Bloc « Outils » : rendu tout en bas, APRÈS les alternatives (dans les deux
   // états replié/déplié). hasImage masque l'outil photo si le produit a déjà
   // une image.
   const toolsSection = (
@@ -384,7 +384,7 @@ export const AnalysisResultPanel: FC<Props> = ({
 
   return (
     <View style={styles.root}>
-      {/* Score de compatibilité (« Pour toi ») — MÊME appel IA que les 3 blocs
+      {/* Score de compatibilité (« Pour toi ») : MÊME appel IA que les 3 blocs
           (1 crédit à la génération, gratuit en relecture). Le tap ouvre le modal
           « Ce qu'il faut retenir » (les 3 blocs). La ligne restrictions vit dans
           cette carte. Verrous : /offre si 0 crédit ; « compléter le profil »
@@ -440,7 +440,7 @@ export const AnalysisResultPanel: FC<Props> = ({
 
           {/* 3. (Restrictions désormais affichées dans L'ESSENTIEL en haut) */}
 
-          {/* 5. (Synthèse supprimée — remplacée par les blocs IA en haut) */}
+          {/* 5. (Synthèse supprimée : remplacée par les blocs IA en haut) */}
 
           {/* 6. Spectre positionnel */}
           {result.spectrum ? (
@@ -461,7 +461,7 @@ export const AnalysisResultPanel: FC<Props> = ({
           {/* 8. Allergènes de contact UE */}
           <EuAllergensCard allergens={euAllergens} />
 
-          {/* 9. Liste complète — carte qui ouvre la page dédiée */}
+          {/* 9. Liste complète : carte qui ouvre la page dédiée */}
           <Pressable
             onPress={() => openIngredientList()}
             style={({ pressed }) => pressed && styles.previewPressed}
@@ -489,7 +489,7 @@ export const AnalysisResultPanel: FC<Props> = ({
         </View>
       ) : null}
 
-      {/* 11. Outils — tout en bas, après les alternatives (les deux états) */}
+      {/* 11. Outils : tout en bas, après les alternatives (les deux états) */}
       {toolsSection}
 
       {/* Feuille : restrictions présentes dans le produit (familles + ingrédients) */}

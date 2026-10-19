@@ -1,5 +1,5 @@
 /**
- * ReviewPromptCard — carte "Tu aimes CosmeCheck ?" affichee au pic
+ * ReviewPromptCard : carte "Tu aimes CosmeCheck ?" affichee au pic
  * d'engagement (juste apres l'apparition des 3 blocs IA post-scan).
  *
  * On maitrise nous-memes le timing et la frequence (cf. lib/review/prompt.ts) ;
