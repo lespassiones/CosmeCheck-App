@@ -127,13 +127,12 @@ cosmecheck,routine,crème,visage,beauté,peau,bio,naturelle,allergène,ingrédie
 Une crème, un shampoing, un déo : scanne-le, lis sa composition INCI en clair, et vois s'il convient à ta peau et si ses promesses tiennent.
 ```
 
-### Nouveautés de la 1.0.4 (à relire)  ·  331 / 4000
+### Nouveautés de la 1.0.4 (à relire)  ·  186 / 4000
 
 ```
-Des notes plus cohérentes, et un quiz du jour bien plus riche.
+Un quiz du jour bien plus riche.
 
 • Le quiz du jour passe à 1 000 questions sur la peau et les soins, et il fonctionne même sans connexion.
-• La note d'un produit est calculée de la même façon dans le catalogue, dans ton analyse et dans tes alternatives.
 • Corrections et améliorations de performance.
 ```
 
