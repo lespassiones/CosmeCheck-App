@@ -37,6 +37,9 @@ import {
 import { CREDITS_EXHAUSTED_EVENT } from '@/lib/credits/exhaustedStore'
 import Animated, {
   Easing,
+  FadeIn,
+  FadeOut,
+  ReduceMotion,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -58,6 +61,8 @@ import { AlternativesCarousel } from '@/components/analysis/AlternativesCarousel
 import { ProcessingOverlay } from '@/components/shared/ProcessingOverlay'
 import { listEntering } from '@/components/design/motion'
 import { HapticPressable as Pressable } from '@/components/shared/HapticPressable'
+import { VoiceMicButton } from '@/components/advisor/VoiceMicButton'
+import { useVoiceDictation } from '@/hooks/useVoiceDictation'
 import {
   askAdvisorAgent,
   askAdvisorAgentStreaming,
@@ -174,6 +179,16 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
       : [greeting(firstName)],
   )
   const [input, setInput] = useState('')
+  // Dictée vocale : le texte s'écrit dans la saisie pendant qu'on parle.
+  const inputRef = useRef(input)
+  inputRef.current = input
+  const dictation = useVoiceDictation({
+    getText: () => inputRef.current,
+    setText: (t) => {
+      inputRef.current = t
+      setInput(t)
+    },
+  })
   const [streaming, setStreaming] = useState(false)
   // Statut de progression RÉEL remonté par le flux (« Je cherche… », « J'analyse
   // N produits… »). Quand il est renseigné, il remplace la phrase rotative.
@@ -447,6 +462,13 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
 
   const showSuggestions = messages.filter((m) => !m.uiOnly).length === 0
 
+  // Envoi depuis la saisie : si la dictée tourne encore, on l'arrête et on
+  // envoie tout ce qui a été dit (corrigé localement), sans attendre le moteur.
+  const submitInput = useCallback(() => {
+    const dictated = dictation.finishNow()
+    void send(dictated ?? input)
+  }, [dictation, send, input])
+
   return (
     <KeyboardAvoidingView
       style={styles.flex}
@@ -572,7 +594,10 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
             {SUGGESTED_PROMPTS.map((p) => (
               <Pressable
                 key={p}
-                onPress={() => void send(p)}
+                onPress={() => {
+                  dictation.finishNow()
+                  void send(p)
+                }}
                 disabled={streaming}
                 style={({ pressed }) => [
                   styles.chip,
@@ -588,6 +613,31 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
         </Animated.View>
       )}
 
+      {dictation.listening || dictation.status === 'correcting' || dictation.notice ? (
+        <Animated.View
+          entering={FadeIn.duration(180).reduceMotion(ReduceMotion.System)}
+          exiting={FadeOut.duration(140).reduceMotion(ReduceMotion.System)}
+          style={styles.dictationRow}
+          accessibilityLiveRegion="polite"
+        >
+          {dictation.notice ? (
+            <Text style={styles.dictationNotice}>{dictation.notice}</Text>
+          ) : dictation.listening ? (
+            <>
+              <View style={styles.dictationDot} />
+              <Text style={styles.dictationText}>
+                Je t'écoute… touche le carré pour terminer
+              </Text>
+            </>
+          ) : (
+            <>
+              <ActivityIndicator size="small" color={colors.inkMuted} />
+              <Text style={styles.dictationText}>Correction automatique du texte…</Text>
+            </>
+          )}
+        </Animated.View>
+      ) : null}
+
       <Animated.View
         entering={listEntering(entranceIndex + 2, ADVISOR_ENTER_STEP)}
         style={styles.inputBar}
@@ -595,19 +645,36 @@ export const AdvisorChat: FC<AdvisorChatProps> = ({
         <TextInput
           value={input}
           onChangeText={setInput}
-          placeholder={streaming ? 'Génération en cours…' : 'Pose ta question…'}
+          placeholder={
+            streaming
+              ? 'Génération en cours…'
+              : dictation.listening
+                ? 'Parle, je t’écris…'
+                : 'Pose ta question…'
+          }
           placeholderTextColor={colors.inkLight}
-          editable={!streaming}
+          // Pendant la dictée, le moteur écrit dans la saisie : pas de frappe
+          // en même temps (les deux se marcheraient dessus).
+          editable={!streaming && !dictation.listening}
           maxLength={500}
           selectionColor={colors.textSelection}
-          style={styles.input}
+          style={[styles.input, dictation.listening && styles.inputListening]}
           multiline
-          onSubmitEditing={() => void send(input)}
+          onSubmitEditing={submitInput}
           blurOnSubmit
           returnKeyType="send"
+          testID="advisor-input"
         />
+        {dictation.available ? (
+          <VoiceMicButton
+            listening={dictation.listening}
+            disabled={streaming}
+            level={dictation.level}
+            onPress={() => (dictation.listening ? dictation.stop() : void dictation.start())}
+          />
+        ) : null}
         <Pressable
-          onPress={() => void send(input)}
+          onPress={submitInput}
           disabled={streaming || input.trim().length === 0}
           haptic="primary"
           style={({ pressed }) => [
@@ -1073,4 +1140,32 @@ const styles = StyleSheet.create({
   },
   sendBtnDisabled: { opacity: 0.4 },
   sendBtnPressed: { opacity: 0.85 },
+  inputListening: {
+    borderColor: colors.rose,
+  },
+  dictationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  dictationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.rose,
+  },
+  dictationText: {
+    flex: 1,
+    fontFamily: fontFamilies.medium,
+    fontSize: 12,
+    color: colors.inkMuted,
+  },
+  dictationNotice: {
+    flex: 1,
+    fontFamily: fontFamilies.medium,
+    fontSize: 12,
+    color: colors.roseDeep,
+  },
 })

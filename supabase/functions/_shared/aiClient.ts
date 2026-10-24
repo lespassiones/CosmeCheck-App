@@ -166,7 +166,8 @@ export type AIFeature =
   | "routine_conflicts"
   | "routine_organize"
   | "goals_coverage"
-  | "face_scan";
+  | "face_scan"
+  | "voice_correct";
 
 export type AIProvider = "openai" | "mistral" | "tesseract" | "cache";
 

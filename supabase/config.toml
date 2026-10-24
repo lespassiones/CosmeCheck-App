@@ -60,6 +60,10 @@ verify_jwt = true
 verify_jwt = false
 [functions.routine-smart-suggest]
 verify_jwt = true
+# onboarding-goals : publique (personne pas encore connectée, onboarding).
+# Bornée par un rate-limit IP interne, aucun crédit, notes IA en cache pour tous.
+[functions.onboarding-goals]
+verify_jwt = false
 [functions.routine-conflicts-ai]
 verify_jwt = true
 [functions.newsletter-subscribe]
@@ -104,3 +108,8 @@ verify_jwt = true
 verify_jwt = true
 [functions.admin-ocr-submission]
 verify_jwt = true
+
+# voice-correct : verify_jwt=false (22 oct 2026). getUserFromRequest() authentifie le Bearer
+# dans le code (401 sinon) ; aucun crédit, rate-limit propre voice:<user_id>.
+[functions.voice-correct]
+verify_jwt = false
