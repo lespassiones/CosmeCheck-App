@@ -28,6 +28,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FC,
@@ -39,6 +40,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   type LayoutChangeEvent,
   type StyleProp,
@@ -177,12 +179,14 @@ export const Title: FC<{
   )
 }
 
-export const Body: FC<{ children: ReactNode; align?: 'center' | 'left'; style?: StyleProp<TextStyle> }> = ({
-  children,
-  align = 'center',
-  style,
-}) => {
-  const size = fitFont(16, useFit())
+export const Body: FC<{
+  children: ReactNode
+  align?: 'center' | 'left'
+  style?: StyleProp<TextStyle>
+  /** Taille avant resserrement : plus petite pour un texte d'appoint. */
+  size?: number
+}> = ({ children, align = 'center', style, size: base = 16 }) => {
+  const size = fitFont(base, useFit())
   return (
     <Text style={[styles.body, { textAlign: align, fontSize: size, lineHeight: Math.round(size * 1.47) }, style]}>
       {children}
@@ -348,6 +352,17 @@ const CheckDot: FC = () => (
   </Animated.View>
 )
 
+/** Case à cocher carrée, toujours visible : vide, puis remplie quand elle est cochée. */
+const CheckBox: FC<{ checked: boolean; size: number }> = ({ checked, size }) => (
+  <View style={[styles.checkBox, { width: size, height: size, borderRadius: Math.round(size * 0.28) }, checked && styles.checkBoxOn]}>
+    {checked ? (
+      <Animated.View entering={softScaleIn(0, 0.6, 200)}>
+        <Ionicons name="checkmark" size={Math.round(size * 0.7)} color={colors.surface} />
+      </Animated.View>
+    ) : null}
+  </View>
+)
+
 export const OptionCard: FC<{
   label: string
   sub?: string
@@ -357,9 +372,24 @@ export const OptionCard: FC<{
   multi?: boolean
   outlined?: boolean
   minHeight?: number
-}> = ({ label, sub, selected = false, onPress, left, multi = false, outlined = false, minHeight = 52 }) => {
+  /** Case à cocher visible même décochée (listes à choix multiple), à la place de la pastille. */
+  checkbox?: boolean
+  /** Taille du libellé avant resserrement. */
+  labelSize?: number
+}> = ({
+  label,
+  sub,
+  selected = false,
+  onPress,
+  left,
+  multi = false,
+  outlined = false,
+  minHeight = 52,
+  checkbox = false,
+  labelSize: labelBase = 15.5,
+}) => {
   const fit = useFit()
-  const labelSize = fitFont(15.5, fit)
+  const labelSize = fitFont(labelBase, fit)
   const subSize = fitFont(13.5, fit)
   return (
     <View>
@@ -370,12 +400,12 @@ export const OptionCard: FC<{
           onPress()
         }}
         scaleTo={0.985}
-        accessibilityRole={multi ? 'checkbox' : 'radio'}
+        accessibilityRole={multi || checkbox ? 'checkbox' : 'radio'}
         accessibilityState={{ checked: selected }}
         accessibilityLabel={sub ? `${label}. ${sub}` : label}
         style={[
           styles.option,
-          { minHeight: fitSize(minHeight, fit), paddingVertical: fitSize(10, fit) },
+          { minHeight: fitSize(minHeight, fit), paddingVertical: fitSize(checkbox ? 6 : 10, fit) },
           outlined && styles.optionOutlined,
           selected && styles.optionOn,
         ]}
@@ -395,7 +425,7 @@ export const OptionCard: FC<{
             <Text style={[styles.optionSub, { fontSize: subSize, lineHeight: Math.round(subSize * 1.36) }]}>{sub}</Text>
           ) : null}
         </View>
-        {selected ? <CheckDot /> : null}
+        {checkbox ? <CheckBox checked={selected} size={fitSize(22, fit)} /> : selected ? <CheckDot /> : null}
       </PressableScale>
     </View>
   )
@@ -545,6 +575,16 @@ function blockEntrance(type: unknown, delay: number) {
 // ── Mise en page d'une étape ─────────────────────────────────────────────
 
 /**
+ * Focus d'un champ placé bas dans l'écran (voir `prepareFocus` dans
+ * hooks/useKeyboardHeight.ts) : jamais `autoFocus` sur un champ « Autre ».
+ */
+const FieldFocus = createContext<{ prepareFocus: (input: TextInput | null) => void; prepareTouch: () => void }>({
+  prepareFocus: (input) => input?.focus(),
+  prepareTouch: () => {},
+})
+export const useFieldFocus = () => useContext(FieldFocus)
+
+/**
  * Corps + barre d'actions fixe en bas.
  *
  *   - Les blocs entrent un par un (`animate`, actif par défaut).
@@ -578,7 +618,9 @@ export const StepLayout: FC<{
   footerDelay?: number
 }> = ({ children, footer, contentStyle, animate = true, focusSpace = 28, footerDelay: footerAt }) => {
   const insets = useSafeAreaInsets()
-  const { scrollRef, keyboardHeight, onScroll, onContentSizeChange } = useKeyboardAwareScroll(focusSpace)
+  const { scrollRef, keyboardHeight, onScroll, onContentSizeChange, prepareFocus, prepareTouch } =
+    useKeyboardAwareScroll(focusSpace)
+  const fieldFocus = useMemo(() => ({ prepareFocus, prepareTouch }), [prepareFocus, prepareTouch])
   const mountedAt = useRef(Date.now())
   const fresh = Date.now() - mountedAt.current < REVEAL_WINDOW
   const keyboardOpen = keyboardHeight > 0
@@ -668,55 +710,57 @@ export const StepLayout: FC<{
 
   return (
     <StepFit.Provider value={fit.fit}>
-      <View style={[styles.flex, keyboardOpen && { paddingBottom: keyboardPadding(keyboardHeight, insets.bottom, false) }]}>
-        <ScrollView
-          ref={scrollRef}
-          style={styles.flex}
-          contentContainerStyle={[
-            styles.content,
-            { paddingTop: fitSize(4, fit.fit), paddingBottom: fitSize(24, fit.fit) },
-            contentStyle,
-            // De la place pour pouvoir faire remonter le champ au-dessus des suggestions.
-            keyboardOpen && focusSpace > 28 ? { paddingBottom: focusSpace } : null,
-          ]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          onScroll={onScroll}
-          scrollEventThrottle={32}
-          onLayout={onViewportLayout}
-          onContentSizeChange={onContentSizeChange}
-        >
-          <View
-            key={fit.pass}
-            onLayout={onColumnLayout}
-            pointerEvents={fit.hidden ? 'none' : 'auto'}
-            style={[
-              styles.column,
-              fit.hidden && styles.hidden,
-              // Dernier recours : réduit depuis le haut, la marge négative rend la place gagnée.
-              fit.zoom < 1 && {
-                transform: [{ scale: fit.zoom }],
-                transformOrigin: 'top',
-                marginBottom: -fit.natural * (1 - fit.zoom),
-              },
+      <FieldFocus.Provider value={fieldFocus}>
+        <View style={[styles.flex, keyboardOpen && { paddingBottom: keyboardPadding(keyboardHeight, insets.bottom, false) }]}>
+          <ScrollView
+            ref={scrollRef}
+            style={styles.flex}
+            contentContainerStyle={[
+              styles.content,
+              { paddingTop: fitSize(4, fit.fit), paddingBottom: fitSize(24, fit.fit) },
+              contentStyle,
+              // De la place pour pouvoir faire remonter le champ au-dessus des suggestions.
+              keyboardOpen && focusSpace > 28 ? { paddingBottom: focusSpace } : null,
             ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            onScroll={onScroll}
+            scrollEventThrottle={32}
+            onLayout={onViewportLayout}
+            onContentSizeChange={onContentSizeChange}
           >
-            {blocks}
-          </View>
-        </ScrollView>
-        {footer ? (
-          <Animated.View
-            entering={
-              animate || footerAt !== undefined
-                ? FadeInUp.delay(footerDelay).duration(420).easing(EASE_OUT).reduceMotion(RM)
-                : undefined
-            }
-            style={[styles.footer, { paddingBottom: keyboardOpen ? 12 : Math.max(insets.bottom, 12) + 4 }]}
-          >
-            <View style={[styles.column, styles.footerColumn]}>{footer}</View>
-          </Animated.View>
-        ) : null}
-      </View>
+            <View
+              key={fit.pass}
+              onLayout={onColumnLayout}
+              pointerEvents={fit.hidden ? 'none' : 'auto'}
+              style={[
+                styles.column,
+                fit.hidden && styles.hidden,
+                // Dernier recours : réduit depuis le haut, la marge négative rend la place gagnée.
+                fit.zoom < 1 && {
+                  transform: [{ scale: fit.zoom }],
+                  transformOrigin: 'top',
+                  marginBottom: -fit.natural * (1 - fit.zoom),
+                },
+              ]}
+            >
+              {blocks}
+            </View>
+          </ScrollView>
+          {footer ? (
+            <Animated.View
+              entering={
+                animate || footerAt !== undefined
+                  ? FadeInUp.delay(footerDelay).duration(420).easing(EASE_OUT).reduceMotion(RM)
+                  : undefined
+              }
+              style={[styles.footer, { paddingBottom: keyboardOpen ? 12 : Math.max(insets.bottom, 12) + 4 }]}
+            >
+              <View style={[styles.column, styles.footerColumn]}>{footer}</View>
+            </Animated.View>
+          ) : null}
+        </View>
+      </FieldFocus.Provider>
     </StepFit.Provider>
   )
 }
@@ -875,6 +919,14 @@ const styles = StyleSheet.create({
   optionLabel: { fontFamily: fontFamilies.regular, color: colors.ink },
   optionLabelStrong: { fontFamily: fontFamilies.semiBold },
   optionSub: { fontFamily: fontFamilies.regular, color: colors.inkLight },
+  checkBox: {
+    borderWidth: 1.5,
+    borderColor: colors.gray300,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkBoxOn: { backgroundColor: colors.rose, borderColor: colors.rose },
   checkDot: {
     width: 24,
     height: 24,

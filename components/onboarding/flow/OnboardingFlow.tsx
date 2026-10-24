@@ -77,6 +77,9 @@ import { PlanStep, ProjectionStep, SkinRevealStep, TruthStep } from '@/component
 import { ScanStep } from '@/components/onboarding/flow/steps/Scan'
 import { VerdictStep } from '@/components/onboarding/flow/steps/Verdict'
 import { MontageStep, NotificationsStep } from '@/components/onboarding/flow/steps/Final'
+import { CompatStep } from '@/components/onboarding/flow/steps/Compat'
+import { GoalsCoverageStep } from '@/components/onboarding/flow/steps/GoalsCoverage'
+import { hasGoalBasis } from '@/lib/onboarding/goalsCoverage'
 import { OnboardingPaywall, PREMIUM_CREAM } from '@/components/onboarding/flow/OnboardingPaywall'
 import { usePaywallCheckout } from '@/hooks/usePaywallCheckout'
 import { draftRestrictionFamilies } from '@/lib/onboarding/buildPreferences'
@@ -152,6 +155,8 @@ export const OnboardingFlow: FC<{ mode: FlowMode }> = ({ mode }) => {
       consentAlreadyGiven,
       hasKnownName: Boolean(knownName),
       hasScannedProduct: Boolean(d.scanned),
+      hasProductScore: typeof d.scanned?.score === 'number',
+      hasGoalBasis: hasGoalBasis(d),
     }),
     [mode, consentAlreadyGiven, knownName],
   )
@@ -249,8 +254,8 @@ export const OnboardingFlow: FC<{ mode: FlowMode }> = ({ mode }) => {
   const back = useCallback((): boolean => {
     const current = stepRef.current
     if (!current) return false
-    // Montage et paywall ne se rejouent pas en arrière : « Plus tard » est la sortie.
-    if (current === 'paywall' || current === 'montage') return true
+    // Montage, score et paywall ne se rejouent pas en arrière : « Plus tard » est la sortie.
+    if (current === 'paywall' || current === 'montage' || current === 'compat' || current === 'goalsCoverage') return true
     const steps = visibleSteps(contextFor(draftRef.current))
     const target = previousStep(current, steps)
     if (!target) return false
@@ -339,6 +344,10 @@ export const OnboardingFlow: FC<{ mode: FlowMode }> = ({ mode }) => {
         return <NotificationsStep {...props} />
       case 'montage':
         return <MontageStep {...props} />
+      case 'compat':
+        return <CompatStep {...props} />
+      case 'goalsCoverage':
+        return <GoalsCoverageStep {...props} />
       case 'paywall':
         return (
           <GuestPaywall

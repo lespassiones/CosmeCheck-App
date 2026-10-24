@@ -37,6 +37,8 @@ export type StepId =
   | 'hair'
   | 'notifications'
   | 'montage'
+  | 'compat'
+  | 'goalsCoverage'
   | 'paywall'
 
 export type FlowMode = 'guest' | 'member'
@@ -64,6 +66,13 @@ export const STEP_ORDER: readonly StepId[] = [
   'hair',
   'notifications',
   'montage',
+  // Score de compatibilité du produit scanné, juste après le montage (le
+  // profil est complet, cheveux compris) et juste AVANT le paywall : l'app a
+  // fait ses preuves sur un vrai produit (demande du 24/10/2026).
+  'compat',
+  // Couverture des objectifs par ce produit, puis le paywall : le bouton de
+  // cet écran est l'élan vers l'abonnement (demande du 24/10/2026).
+  'goalsCoverage',
   // Paywall au pic de motivation, AVANT le compte (mode invité seulement,
   // choix du 28/09/2026, comme MemoryPilot). Un achat fait ici part sous
   // l'identifiant anonyme de RevenueCat, puis `loginUser` (app/_layout.tsx)
@@ -84,6 +93,7 @@ export const HEALTH_STEPS: ReadonlySet<StepId> = new Set<StepId>([
   'goals',
   'restrictions',
   'hair',
+  'goalsCoverage',
 ])
 
 /** Écrans plein cadre, sans en-tête ni barre de progression. */
@@ -93,6 +103,8 @@ export const NO_CHROME: ReadonlySet<StepId> = new Set<StepId>([
   'consent',
   'plan',
   'montage',
+  'compat',
+  'goalsCoverage',
   'paywall',
 ])
 
@@ -106,6 +118,10 @@ export interface StepContext {
   hasKnownName: boolean
   /** Un produit a été choisi à l'étape scan : le verdict a de quoi s'afficher. */
   hasScannedProduct: boolean
+  /** Le produit scanné a une note catalogue : le score de compatibilité est calculable. */
+  hasProductScore?: boolean
+  /** Un objectif coché, ou un profil (peau, soucis, cheveux) dont on peut en tirer. */
+  hasGoalBasis?: boolean
 }
 
 export function visibleSteps(ctx: StepContext): StepId[] {
@@ -115,6 +131,8 @@ export function visibleSteps(ctx: StepContext): StepId[] {
     if (id === 'consent' && ctx.consentAlreadyGiven) return false
     if (HEALTH_STEPS.has(id) && ctx.consentGranted === false) return false
     if (id === 'verdict' && !ctx.hasScannedProduct) return false
+    if (id === 'compat' && (!ctx.hasScannedProduct || !ctx.hasProductScore)) return false
+    if (id === 'goalsCoverage' && (!ctx.hasScannedProduct || !ctx.hasGoalBasis)) return false
     // Connecté : le paywall vient après, via /offre (layout du groupe onboarding).
     if (id === 'paywall' && ctx.mode !== 'guest') return false
     return true

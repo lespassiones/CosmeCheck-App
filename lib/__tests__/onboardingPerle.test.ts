@@ -69,14 +69,21 @@ const NOW = '2026-09-28T10:05:00.000Z'
 
 describe('étapes visibles', () => {
   it('parcours invité complet : accroche, consentement, questions, scan, montage, paywall', () => {
-    const steps = visibleSteps({ ...guest, consentGranted: true, hasScannedProduct: true })
+    const steps = visibleSteps({ ...guest, consentGranted: true, hasScannedProduct: true, hasProductScore: true, hasGoalBasis: true })
     expect(steps[0]).toBe('hook1')
     expect(steps).toContain('consent')
     expect(steps).toContain('bodySkin')
     expect(steps).toContain('goals')
-    // Paywall au pic de motivation, juste après le montage et AVANT le compte.
-    expect(steps.slice(-2)).toEqual(['montage', 'paywall'])
+    // Score de compatibilité juste après le montage, puis le paywall, AVANT le compte.
+    expect(steps.slice(-4)).toEqual(['montage', 'compat', 'goalsCoverage', 'paywall'])
     expect(steps).toEqual(STEP_ORDER)
+  })
+
+  it("le score de compatibilité n'apparaît qu'avec un produit noté", () => {
+    expect(visibleSteps({ ...guest, consentGranted: true })).not.toContain('compat')
+    expect(visibleSteps({ ...guest, consentGranted: true, hasScannedProduct: true })).not.toContain('compat')
+    const member = visibleSteps({ ...guest, mode: 'member', consentGranted: true, hasScannedProduct: true, hasProductScore: true })
+    expect(member.slice(-2)).toEqual(['montage', 'compat'])
   })
 
   it('connecté : pas de paywall dans le parcours (il vient après, via /offre)', () => {

@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import { AppState } from 'react-native'
+import { AppState, LogBox } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { focusManager } from '@tanstack/react-query'
@@ -66,6 +66,11 @@ import { ToastHost } from '@/components/shared/Toast'
 import { OfflineBanner } from '@/components/shared/OfflineBanner'
 import { initSentry } from '@/lib/reporting/report'
 import { NotificationsInit } from '@/components/notifications/NotificationsInit'
+
+// Émulateur sans Google Play : RevenueCat signale « Billing unavailable » à
+// chaque lancement (attendu, cf. CLAUDE.md). En dev, ses bandeaux couvraient le
+// bas de l'écran et les boutons pendant les tests sur émulateur.
+if (__DEV__) LogBox.ignoreLogs([/BILLING_UNAVAILABLE/, /Billing is not available/, /setLayoutAnimationEnabledExperimental/])
 
 /**
  * Délai au bout duquel on affiche l'app même si les polices ne sont pas prêtes.

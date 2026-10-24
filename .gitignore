@@ -77,3 +77,24 @@ scripts/.backfill_checkpoint.json
 # Clés Apple/Google : jamais dans l'historique. Le dossier entier, pas seulement
 # les extensions connues — une clé oubliée sous un nom inattendu coûte une rotation.
 secrets/
+
+# Collecte EAN/INCI (donnees lourdes, locales)
+exports/collecte-sites-2026-10-22/images/
+exports/collecte-sites-2026-10-22/observations/
+exports/collecte-sites-2026-10-22/inventories/
+exports/collecte-sites-2026-10-22/raw/
+exports/collecte-sites-2026-10-22/quarantaine/
+exports/collecte-sites-2026-10-22/cache/
+exports/collecte-sites-2026-10-22/logs/
+exports/collecte-sites-2026-10-22/node_modules
+exports/collecte-sites-2026-10-22/__pycache__/
+exports/collecte-sites-2026-10-22/*.zip
+exports/collecte-sites-2026-10-22/export_rows.json
+exports/collecte-sites-2026-10-22/csv/
+
+# Audits et collecte EAN/INCI : locaux uniquement
+audits/
+exports/collecte-sites-2026-10-22/
+
+# Captures de tests sur appareil (locales, jamais versionnées)
+captures/

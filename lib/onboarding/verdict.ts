@@ -139,7 +139,7 @@ export function detectClaims(productName: string, max = 3): string[] {
   return out
 }
 
-function colorKey(rating: string | null): VerdictTone | null {
+export function colorKey(rating: string | null): VerdictTone | null {
   switch ((rating ?? '').toLowerCase()) {
     case 'vert':
       return 'vert'
@@ -154,6 +154,19 @@ function colorKey(rating: string | null): VerdictTone | null {
   }
 }
 
+/** Nom d'un ingrédient reconnu, en minuscules, pour les comparaisons. */
+export const matchedName = (m: MatchedIngredient): string => (m.name ?? m.input_token).toLowerCase().trim()
+
+/** Actifs appréciés réellement présents, dans l'ordre de `POSITIVES`. */
+export function findPositives(matches: readonly MatchedIngredient[], max = 2): { fr: string; does: string }[] {
+  const found: { fr: string; does: string }[] = []
+  for (const p of POSITIVES) {
+    if (matches.some((m) => p.match.test(matchedName(m)))) found.push(p)
+    if (found.length >= max) break
+  }
+  return found
+}
+
 export function buildQuickVerdict(input: VerdictInput): QuickVerdict {
   const counts = { vert: 0, jaune: 0, orange: 0, rouge: 0, total: Math.max(input.ingredientCount, input.matches.length) }
   for (const m of input.matches) {
@@ -161,7 +174,7 @@ export function buildQuickVerdict(input: VerdictInput): QuickVerdict {
     if (k) counts[k] += 1
   }
 
-  const lowerName = (m: MatchedIngredient) => (m.name ?? m.input_token).toLowerCase().trim()
+  const lowerName = matchedName
   const alerts: VerdictLine[] = []
   const skinWord = input.skin && input.skin !== 'inconnu' ? SKIN_TYPE_SHORT[input.skin] : null
 
@@ -220,11 +233,7 @@ export function buildQuickVerdict(input: VerdictInput): QuickVerdict {
   }
 
   // Ligne verte : au plus deux actifs appréciés réellement présents.
-  const found: { fr: string; does: string }[] = []
-  for (const p of POSITIVES) {
-    if (input.matches.some((m) => p.match.test(lowerName(m)))) found.push(p)
-    if (found.length >= 2) break
-  }
+  const found = findPositives(input.matches)
   const positives: VerdictLine[] = []
   if (found.length > 0) {
     const title =

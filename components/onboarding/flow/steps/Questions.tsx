@@ -40,6 +40,7 @@ import {
   resolveBodySkin,
   resolveFaceSkin,
   toggleAnswer,
+  type ConcernIconKey,
   type MotivationKey,
   type RestrictionKey,
   type SkinTestAnswer,
@@ -61,6 +62,7 @@ import {
   TextLink,
   fitFont,
   fitSize,
+  useFieldFocus,
   useFit,
 } from '@/components/onboarding/flow/ui'
 import type { StepProps } from '@/components/onboarding/flow/types'
@@ -88,28 +90,49 @@ function toggle<T>(list: readonly T[], key: T): T[] {
   return list.includes(key) ? list.filter((k) => k !== key) : [...list, key]
 }
 
+/**
+ * Focus à l'ouverture d'un champ « Autre », placé bas dans l'écran : la place
+ * du clavier est réservée avant le focus (voir `useFieldFocus`), sinon Android
+ * décalait toute la fenêtre en plus de notre remontée.
+ */
+function useFocusOnOpen() {
+  const ref = useRef<TextInput>(null)
+  const { prepareFocus, prepareTouch } = useFieldFocus()
+  useEffect(() => {
+    // Après l'entrée du champ : il doit être en page pour qu'on le mesure.
+    const t = setTimeout(() => prepareFocus(ref.current), 80)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return { ref, onPressIn: prepareTouch }
+}
+
 /** Champ libre « Autre », ouvert à la demande. */
 const OtherInput: FC<{
   value: string | undefined
   placeholder: string
   onChange: (t: string) => void
   multiline?: boolean
-}> = ({ value, placeholder, onChange, multiline = true }) => (
-  <Animated.View entering={fadeUp(0, 12, 320)}>
-    <TextInput
-      value={value ?? ''}
-      onChangeText={onChange}
-      placeholder={placeholder}
-      placeholderTextColor={colors.inkLight}
-      style={styles.otherInput}
-      multiline={multiline}
-      maxLength={300}
-      autoFocus
-      selectionColor={colors.textSelection}
-      accessibilityLabel={placeholder}
-    />
-  </Animated.View>
-)
+}> = ({ value, placeholder, onChange, multiline = true }) => {
+  const { ref, onPressIn } = useFocusOnOpen()
+  return (
+    <Animated.View entering={fadeUp(0, 12, 320)}>
+      <TextInput
+        ref={ref}
+        value={value ?? ''}
+        onChangeText={onChange}
+        onPressIn={onPressIn}
+        placeholder={placeholder}
+        placeholderTextColor={colors.inkLight}
+        style={styles.otherInput}
+        multiline={multiline}
+        maxLength={300}
+        selectionColor={colors.textSelection}
+        accessibilityLabel={placeholder}
+      />
+    </Animated.View>
+  )
+}
 
 /** Une bulle de réaction de Perle, qui se pose avec un petit tap haptique, sous la dernière réponse. */
 const Reaction: FC<{ text: string }> = ({ text }) => {
@@ -382,46 +405,66 @@ export const ConcernsStep: FC<StepProps> = ({ draft, update, next, firstName }) 
   const pick = (key: SkinConcern) => update({ concerns: toggle(draft.concerns, key), concernsNone: false })
   const none = () => update({ concerns: [], concernsNone: !draft.concernsNone })
   const ok = draft.concerns.length > 0 || draft.concernsNone || Boolean(draft.otherConcerns?.trim())
+  // Liste verticale de cases à cocher (demande du 24/10/2026), compacte : onze
+  // lignes doivent tenir au-dessus du bouton, StepLayout resserre le reste.
   return (
     <StepLayout footer={<PrimaryButton label="Continuer" onPress={next} disabled={!ok} />}>
       <PerleBubble>{`Et qu'est-ce qui t'embête le plus${firstName ? `, ${firstName}` : ''} ?`}</PerleBubble>
-      <Gap h={16} />
-      <Cascade from="pop" step={40} style={styles.chips}>
+      <Gap h={12} />
+      <Cascade from="down" step={35} gap={6}>
         {[
-          ...CONCERN_OPTIONS.map((c) => {
-            const on = draft.concerns.includes(c.key)
-            return (
-              <Chip
-                key={c.key}
-                label={c.label}
-                selected={on}
-                onPress={() => pick(c.key)}
-                icon={<ConcernIcon name={c.icon} color={on ? colors.roseDeep : colors.ink} />}
-              />
-            )
-          }),
-          <Chip
+          ...CONCERN_OPTIONS.map((c) => (
+            <ConcernRow
+              key={c.key}
+              label={c.label}
+              icon={c.icon}
+              selected={draft.concerns.includes(c.key)}
+              onPress={() => pick(c.key)}
+            />
+          )),
+          <ConcernRow
             key="none"
             label="Rien de spécial"
+            icon="rien"
             selected={Boolean(draft.concernsNone)}
             onPress={none}
-            icon={<ConcernIcon name="rien" color={draft.concernsNone ? colors.roseDeep : colors.ink} />}
           />,
-          other ? null : <Chip key="other" label="+ Autre" dashed onPress={() => setOther(true)} />,
         ]}
       </Cascade>
       {other ? (
         <>
-          <Gap h={12} />
+          <Gap h={10} />
           <OtherInput
             value={draft.otherConcerns}
             placeholder="Ce que les cases n'ont pas dit : tiraillements, allergie connue…"
             onChange={(t) => update({ otherConcerns: t })}
           />
         </>
-      ) : null}
-      <Hint>Tu peux en choisir plusieurs.</Hint>
+      ) : (
+        <TextLink label="+ Autre chose" onPress={() => setOther(true)} color={colors.roseDeep} />
+      )}
     </StepLayout>
+  )
+}
+
+/** Une ligne de la liste des soucis : icône, libellé, case à cocher. */
+const ConcernRow: FC<{
+  label: string
+  icon: ConcernIconKey
+  selected: boolean
+  onPress: () => void
+}> = ({ label, icon, selected, onPress }) => {
+  const fit = useFit()
+  return (
+    <OptionCard
+      label={label}
+      checkbox
+      minHeight={44}
+      labelSize={15}
+      selected={selected}
+      onPress={onPress}
+      left={<ConcernIcon name={icon} size={fitSize(19, fit)} color={selected ? colors.roseDeep : colors.ink} />}
+    />
   )
 }
 
@@ -492,7 +535,7 @@ const IngredientPicker: FC<{
   const [results, setResults] = useState<IngredientSuggestion[]>([])
   const [loading, setLoading] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const inputRef = useRef<TextInput>(null)
+  const { ref: inputRef, onPressIn } = useFocusOnOpen()
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current)
@@ -551,10 +594,10 @@ const IngredientPicker: FC<{
           ref={inputRef}
           value={text}
           onChangeText={onText}
+          onPressIn={onPressIn}
           placeholder="Un ingrédient précis, une allergie…"
           placeholderTextColor={colors.inkLight}
           style={styles.searchInput}
-          autoFocus
           autoCorrect={false}
           maxLength={120}
           selectionColor={colors.textSelection}

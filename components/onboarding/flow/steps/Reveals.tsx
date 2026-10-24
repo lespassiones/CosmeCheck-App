@@ -68,20 +68,26 @@ function restrictionShorts(keys: readonly string[]): string[] {
 
 // ── A8 : ce que ça dit de ta peau ────────────────────────────────────────
 
-/** Carte « À surveiller pour toi » : ingrédient en pastille orange, et pourquoi. */
+/**
+ * Carte « À surveiller pour toi ». Ce que la personne comprend (l'effet sur sa
+ * peau) est en grand et en orange ; le nom INCI, technique, en tout petit et en
+ * italique dessous (demande du 24/10/2026).
+ */
 const WatchCard: FC<{ watch: readonly { inci: string; why: string }[] }> = ({ watch }) => {
   const fit = useFit()
-  const text = { fontSize: fitFont(15, fit) }
+  const why = fitFont(18, fit)
+  const inci = fitFont(12.5, fit)
   return (
     <View style={[styles.card, { padding: fitSize(18, fit) }]}>
-      <Text style={[styles.cardLabel, { marginBottom: fitSize(12, fit) }]}>À SURVEILLER POUR TOI</Text>
+      <Text style={[styles.cardLabel, { marginBottom: fitSize(6, fit) }]}>À SURVEILLER POUR TOI</Text>
       <Cascade from="right" step={140}>
         {watch.map((w, i) => (
-          <View key={w.inci} style={[styles.watchRow, { paddingVertical: fitSize(10, fit) }, i > 0 && styles.divider]}>
-            <View style={[styles.orangePill, { paddingVertical: fitSize(9, fit) }]}>
-              <Text style={[styles.orangePillText, text]}>{w.inci}</Text>
+          <View key={w.inci} style={[styles.watchRow, { paddingVertical: fitSize(12, fit) }, i > 0 && styles.divider]}>
+            <Ionicons name="alert-circle" size={fitSize(20, fit)} color={colors.rating.orange.DEFAULT} />
+            <View style={styles.watchTexts}>
+              <Text style={[styles.watchWhy, { fontSize: why, lineHeight: Math.round(why * 1.25) }]}>{w.why}</Text>
+              <Text style={[styles.watchInci, { fontSize: inci, lineHeight: Math.round(inci * 1.35) }]}>{w.inci}</Text>
             </View>
-            <Text style={[styles.watchWhy, text]}>{w.why}</Text>
           </View>
         ))}
       </Cascade>
@@ -100,9 +106,9 @@ export const SkinRevealStep: FC<StepProps> = ({ draft, next }) => {
       <PopIn onShown={haptic.success}>
         <Title size={answer === 'inconnu' ? 32 : long ? 34 : 42}>{v.title}</Title>
       </PopIn>
-      <Gap h={12} />
-      <Body>{v.text}</Body>
-      <Gap h={24} />
+      <Gap h={10} />
+      <Body size={14}>{v.text}</Body>
+      <Gap h={22} />
       <WatchCard watch={v.watch} />
       <Gap h={24} />
       <PerleBubble size={50}>Je le note. Je vérifierai ça sur chaque produit que tu scannes.</PerleBubble>
@@ -130,7 +136,7 @@ const SentBubbles = selfAnimated<FC<{ items: typeof CONCERN_OPTIONS }>>(({ items
           <View
             style={[
               styles.sent,
-              { paddingVertical: fitSize(14, fit) },
+              { paddingVertical: fitSize(8, fit) },
               i === items.length - 1 && items.length > 1 && styles.sentFaded,
             ]}
           >
@@ -151,11 +157,7 @@ export const TruthStep: FC<StepProps> = ({ draft, next }) => {
       <Gap h={8} />
       <Eyebrow>LA VÉRITÉ</Eyebrow>
       <Title size={30}>{truthTitle(count).replace('problème. ', 'problème.\n')}</Title>
-      <Gap h={16} />
-      <Body align="left" style={styles.truthBody}>
-        Tu n'as pas une peau compliquée. Tu choisis sur ce qui est écrit devant. Ce qui compte est écrit derrière.
-      </Body>
-      <Gap h={18} />
+      <Gap h={22} />
       {picked.length > 0 ? <SentBubbles items={picked} /> : null}
       <Gap h={18} />
       <PerleBubble>{truthBubble(count)}</PerleBubble>
@@ -487,27 +489,18 @@ const styles = StyleSheet.create({
     letterSpacing: 1.8,
     color: colors.inkMuted,
   },
-  watchRow: { flexDirection: 'row', alignItems: 'center', gap: 14, flexWrap: 'wrap' },
+  watchRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  watchTexts: { flex: 1, gap: 3 },
   divider: { borderTopWidth: 1, borderTopColor: colors.border },
-  orangePill: {
-    backgroundColor: colors.rating.orange.bg,
-    borderRadius: 999,
-    paddingHorizontal: 16,
-  },
-  orangePillText: { fontFamily: fontFamilies.bold, color: colors.rating.orange.DEFAULT },
-  watchWhy: { fontFamily: fontFamilies.regular, color: colors.inkMuted, flexShrink: 1 },
+  watchWhy: { fontFamily: fontFamilies.semiBold, color: colors.rating.orange.DEFAULT },
+  watchInci: { fontFamily: fontFamilies.regular, fontStyle: 'italic', color: colors.ink },
 
-  truthBody: { color: colors.inkLight },
-  sentStack: { alignItems: 'flex-end', gap: 10 },
+  sentStack: { alignItems: 'flex-end', gap: 4 },
   sent: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: colors.gray100,
-    borderRadius: 20,
-    paddingHorizontal: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
+    paddingHorizontal: 6,
   },
   sentFaded: { opacity: 0.75 },
   sentText: { fontFamily: fontFamilies.semiBold, color: colors.ink },

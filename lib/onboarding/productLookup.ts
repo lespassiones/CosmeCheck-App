@@ -139,7 +139,19 @@ export async function fetchPopularProducts(max = 6): Promise<ScannedProduct[]> {
  * `ok: false` quand la lecture a échoué (réseau, délai du rôle anonyme) : le
  * verdict ne doit alors RIEN conclure, surtout pas « rien à signaler ».
  */
+/** Dernière lecture réussie : le score de compatibilité relit la même liste que le verdict. */
+let lastMatch: { text: string; result: { matches: MatchedIngredient[]; count: number; ok: boolean } } | null = null
+
 export async function matchIngredients(
+  ingredientsText: string,
+): Promise<{ matches: MatchedIngredient[]; count: number; ok: boolean }> {
+  if (lastMatch?.text === ingredientsText) return lastMatch.result
+  const result = await fetchMatches(ingredientsText)
+  if (result.ok) lastMatch = { text: ingredientsText, result }
+  return result
+}
+
+async function fetchMatches(
   ingredientsText: string,
 ): Promise<{ matches: MatchedIngredient[]; count: number; ok: boolean }> {
   const tokens = parseInciList(ingredientsText)
