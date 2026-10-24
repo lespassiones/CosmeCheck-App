@@ -91,10 +91,12 @@ const BREVE_PLAY = champ(
 )
 
 const NOUVEAUTES = champ(
-  'nouveautés 1.0.4 (Apple)',
-  `Un quiz du jour bien plus riche.
+  'nouveautés 1.0.5 (Apple)',
+  `Parle à Perle, et vois tout de suite ce qu'un produit fait pour toi.
 
-• Le quiz du jour passe à 1 000 questions sur la peau et les soins, et il fonctionne même sans connexion.
+• Dicte tes questions à Perle, ta conseillère beauté : appuie sur le micro et parle, elle écrit pour toi.
+• Dès ton premier scan, découvre ton score de compatibilité personnel et ce que le produit fait pour chacun de tes objectifs.
+• Questionnaire de départ plus clair : cases à cocher, textes plus lisibles, clavier qui ne cache plus rien.
 • Corrections et améliorations de performance.`,
   4000,
 )
@@ -340,7 +342,7 @@ function ecrireDoc() {
   bloc('sous-titre (Apple)', 'Sous-titre')
   bloc('mots-clés (Apple)', 'Mots-clés')
   bloc('texte promotionnel (Apple)', 'Texte promotionnel (modifiable sans vérification)')
-  bloc('nouveautés 1.0.4 (Apple)', 'Nouveautés de la 1.0.4 (à relire)')
+  bloc('nouveautés 1.0.5 (Apple)', 'Nouveautés de la 1.0.5 (à relire)')
   bloc('description (Apple)', 'Description')
   A('> ⚠️ **Aucun prix dans la description.** Les prix vivent dans les magasins et')
   A('> changent sans republication ; un montant recopié finit faux. La règle 3.1.2')
@@ -421,7 +423,7 @@ function ascJeton() {
   )
   const now = Math.floor(Date.now() / 1000)
   const h = b64url(JSON.stringify({ alg: 'ES256', kid: ASC_KEY_ID, typ: 'JWT' }))
-  const p = b64url(JSON.stringify({ iss: ASC_ISSUER, iat: now, exp: now + 1200, aud: 'appstoreconnect-v1' }))
+  const p = b64url(JSON.stringify({ iss: ASC_ISSUER, iat: now, exp: now + 900, aud: 'appstoreconnect-v1' }))
   const sig = crypto.sign('sha256', Buffer.from(`${h}.${p}`), { key: cle, dsaEncoding: 'ieee-p1363' })
   return `${h}.${p}.${b64url(sig)}`
 }
@@ -527,7 +529,7 @@ async function appStore() {
   console.log(
     cible
       ? `  version ${VERSION} trouvee (${etatVersion(cible)})`
-      : `  version ${VERSION} absente : comparaison avec la ${reference?.attributes.versionString} en vente${APPLIQUER ? ', creation de la 1.0.4' : ''}`,
+      : `  version ${VERSION} absente : comparaison avec la ${reference?.attributes.versionString} en vente${APPLIQUER ? `, creation de la ${VERSION}` : ''}`,
   )
 
   if (APPLIQUER && !cible) {

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Cosme Check",
     "slug": "cosme-check",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "scheme": "cosmecheck",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -19,7 +19,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.cosmecheck.app",
-      "buildNumber": "12",
+      "buildNumber": "13",
       "usesAppleSignIn": true,
       "infoPlist": {
         "NSCameraUsageDescription": "CosmeCheck utilise la caméra pour scanner les codes-barres et photographier les listes d'ingrédients.",
@@ -63,7 +63,7 @@
     "android": {
       "package": "com.cosmecheck.app",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 33,
+      "versionCode": 34,
       "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
@@ -106,6 +106,13 @@
         {
           "photosPermission": "CosmeCheck accède à vos photos pour analyser les emballages de produits.",
           "cameraPermission": "CosmeCheck utilise la caméra pour photographier les listes d'ingrédients."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "CosmeCheck utilise le micro pour que tu puisses dicter tes questions à Perle, la conseillère beauté.",
+          "speechRecognitionPermission": "CosmeCheck transforme ta voix en texte pour écrire tes questions à Perle pendant que tu parles."
         }
       ],
       [
