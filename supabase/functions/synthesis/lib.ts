@@ -38,7 +38,7 @@ import { buildPrompt, SYNTH_PROMPT_VERSION, type SynthesisInput } from "./prompt
 export { buildPrompt, SYNTH_PROMPT_VERSION } from "./prompt.ts";
 export type { ColorRating, SynthesisInput } from "./prompt.ts";
 
-const MISTRAL_MODEL = "mistral-small-latest";
+const MISTRAL_MODEL = "ministral-14b-latest";
 
 // ─── Skin profile (port de lib/skin/profile.ts, sous-ensemble nécessaire) ────
 

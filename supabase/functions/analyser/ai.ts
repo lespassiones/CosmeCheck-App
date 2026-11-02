@@ -31,7 +31,7 @@ import { NO_LONG_DASHES_RULE, stripLongDashes } from "../_shared/sanitize.ts";
 import type { ProductCategory } from "./engine.ts";
 import type { ColorRating } from "./score.ts";
 
-const MISTRAL_MODEL = "mistral-small-latest";
+const MISTRAL_MODEL = "ministral-14b-latest";
 
 // ─── parseInciWithAI ────────────────────────────────────────────────────────
 export type ParseInciResult = { ingredients: string[]; provider: "mistral" | "openai" | "cache" };

@@ -27,7 +27,7 @@ export const AI_MODEL = "gpt-4o-mini";
  * (`openaiWebSearch` ci-dessous), disponible sur les modèles standards.
  */
 export const AI_MODEL_SEARCH = "gpt-4o-mini";
-export const MISTRAL_MODEL = "mistral-small-latest";
+export const MISTRAL_MODEL = "ministral-14b-latest";
 // Modèle dédié à l'analyse de cohérence "Promesses vs Formule" (2 passes :
 // extraction + critique). gpt-4o-mini n'est pas assez fiable sur l'anti-
 // invention et le mapping INCI ; gpt-4.1 suit les consignes bien mieux.

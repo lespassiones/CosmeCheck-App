@@ -7,14 +7,15 @@
  *   2. enregistre le token push (notifications distantes) dès que profil +
  *      permission sont connus, et purge d'éventuels rappels locaux hérités ;
  *   3. deep link au tap d'une notification (à froid via getLastNotification
- *      ResponseAsync, à chaud via le listener).
+ *      ResponseAsync, à chaud via le listener) : la route est DÉPOSÉE dans
+ *      `lib/notifications/pendingRoute`, l'AuthGuard l'ouvre quand l'app est
+ *      posée (à froid, une navigation immédiate était perdue => accueil).
  *
  * JAMAIS de prompt de permission ici : l'opt-in se fait via les réglages du
  * profil (section Notifications).
  */
 
 import { useEffect } from 'react'
-import { router } from 'expo-router'
 
 import { useProfile } from '@/hooks/useProfile'
 import { getNotificationsModule, isNotificationsAvailable } from '@/lib/notifications/native'
@@ -27,6 +28,7 @@ import {
 import { registerPushToken } from '@/lib/notifications/pushToken'
 import { readNotificationPrefs } from '@/lib/notifications/prefs'
 import { routeForNotificationData } from '@/lib/notifications/deepLink'
+import { setPendingNotificationRoute } from '@/lib/notifications/pendingRoute'
 
 /**
  * Identifiants des taps déjà traités : à froid, le listener ET
@@ -35,7 +37,7 @@ import { routeForNotificationData } from '@/lib/notifications/deepLink'
  */
 const handledResponses = new Set<string>()
 
-/** Navigue si la notification tapée porte une route interne autorisée. */
+/** Dépose la route si la notification tapée porte une route interne autorisée. */
 function navigateFromResponse(response: unknown): void {
   const id = responseIdentifier(response)
   if (id) {
@@ -44,11 +46,8 @@ function navigateFromResponse(response: unknown): void {
   }
   const route = routeForNotificationData(extractData(response))
   if (!route) return
-  // Onglet : revenir à l'onglet EXISTANT. push/navigate/replace vers /(tabs)/…
-  // depuis un écran situé au-dessus empilent une 2e copie complète des onglets
-  // (écrans superposés qui continuent de tourner en dessous).
-  if (route.startsWith('/(tabs)')) router.dismissTo(route as never)
-  else router.push(route as never)
+  // La navigation elle-même est faite par l'AuthGuard (app/_layout.tsx).
+  setPendingNotificationRoute(route)
 }
 
 export function NotificationsInit(): null {
@@ -72,6 +71,7 @@ export function NotificationsInit(): null {
       subscription = Notifications.addNotificationResponseReceivedListener(
         (response: unknown) => {
           navigateFromResponse(response)
+          clearLastResponse(Notifications)
         },
       )
     } catch {
@@ -82,7 +82,13 @@ export function NotificationsInit(): null {
     void (async () => {
       try {
         const last = await Notifications.getLastNotificationResponseAsync()
-        if (last) navigateFromResponse(last)
+        if (last) {
+          navigateFromResponse(last)
+          // Sinon la même réponse revient aux lancements suivants : maintenant
+          // que la destination s'ouvre à coup sûr, l'app rouvrirait cette page
+          // à chaque démarrage.
+          clearLastResponse(Notifications)
+        }
       } catch {
         // best-effort
       }
@@ -122,6 +128,20 @@ export function NotificationsInit(): null {
   }, [isLoading, profile?.preferences])
 
   return null
+}
+
+/** Oublie la dernière réponse mémorisée par le module (API selon la version). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function clearLastResponse(Notifications: any): void {
+  try {
+    if (typeof Notifications.clearLastNotificationResponse === 'function') {
+      Notifications.clearLastNotificationResponse()
+    } else if (typeof Notifications.clearLastNotificationResponseAsync === 'function') {
+      void Notifications.clearLastNotificationResponseAsync().catch(() => {})
+    }
+  } catch {
+    // best-effort
+  }
 }
 
 /** Extrait `content.data` d'une réponse de notification (forme tolérante). */

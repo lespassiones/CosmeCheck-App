@@ -48,8 +48,6 @@ import { FLOW_MAX_WIDTH, PrimaryButton } from '@/components/onboarding/flow/ui'
 /** Fond crème réservé à l'offre Premium (règle du design system). */
 export const PREMIUM_CREAM = '#FDF6EC'
 const PRIX_INCONNU = '…'
-/** Essai des deux formules, sur les 175 territoires (App Store Connect, relevé du 04/09/2026). */
-const ADVERTISED_TRIAL = '3 jours'
 /** Espace insécable : « 3 jours » ne se coupe jamais en fin de ligne. */
 const NBSP = String.fromCharCode(0xa0)
 
@@ -236,12 +234,9 @@ export const OnboardingPaywall: FC<Props> = ({ checkout, onLater, person, embedd
 
   const trial = labels.trial
   const days = trialDays(selectedPkg)
-  // Titre : « 3 jours » affiché d'office (demande du 28/09/2026), même quand le
-  // magasin n'a pas encore répondu. Seule exception : le magasin a RÉPONDU et
-  // n'accorde pas l'essai à cette personne (ancien abonné). On ne lui promet
-  // pas un essai qu'elle n'aura pas : elle serait débitée tout de suite.
-  const storeAnswered = !isLoadingPrices && !isFallbackPrice
-  const titleTrial = storeAnswered ? trial : ADVERTISED_TRIAL
+  // Titre : l'essai n'y figure que si le magasin l'accorde. Plus d'essai annoncé
+  // d'office : l'essai de 3 jours est retiré des magasins (31/10/2026).
+  const titleTrial = trial
 
   // « Ton plan » : ce que le parcours vient d'écrire dans le profil.
   const chips: string[] = []

@@ -114,7 +114,7 @@ ${ctx}
   if (!hasMistral()) return null;
   try {
     const txt = (await mistralChat({
-      model: "mistral-small-latest",
+      model: "ministral-14b-latest",
       temperature: 0,
       maxTokens: 1500,
       messages: [{ role: "user", content: prompt }],

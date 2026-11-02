@@ -22,7 +22,7 @@ async function openaiChat(key, model, extraBody = {}) {
   return { ok: res.ok, status: res.status, content, raw: text.slice(0, 160) };
 }
 
-async function mistralChat(key, model = "mistral-small-latest") {
+async function mistralChat(key, model = "ministral-14b-latest") {
   const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
@@ -54,7 +54,7 @@ const line = (s) => console.log(s);
 
   // 3. Mistral (le fallback)
   const c = await mistralChat(MISTRAL);
-  line(`[3] Mistral small             → ${c.ok ? "OK ✅" : "KO ❌"}  (HTTP ${c.status})  réponse="${c.content ?? c.raw}"`);
+  line(`[3] Mistral 14B               → ${c.ok ? "OK ✅" : "KO ❌"}  (HTTP ${c.status})  réponse="${c.content ?? c.raw}"`);
 
   // 4. Scénario FALLBACK réel : OpenAI en échec (clé bidon) → Mistral prend le relais
   line(`\n[4] Test du FALLBACK (OpenAI KO -> Mistral) :`);

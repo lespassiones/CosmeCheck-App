@@ -12,7 +12,7 @@
  *   - "Suivant" passe à l'item suivant. Après le 10ème : écran "Reviens demain".
  */
 
-import { type FC, Fragment, useEffect, useRef, useState } from 'react'
+import { type FC, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useQuery } from '@tanstack/react-query'
@@ -25,8 +25,21 @@ import { radius, spacing } from '@/constants/spacing'
 import { db } from '@/lib/supabase/client'
 import { pickTodaysItems, todayKey, type DailyPickItem } from '@/lib/dailyPicks/select'
 import { getLocalCatalog } from '@/lib/dailyPicks/local'
+import { PickQuestion } from '@/components/home/PickQuestion'
 
 const STORAGE_PREFIX = 'cw:dailyPicks'
+
+/** Catalogue serveur du quiz, partagé avec la page /quiz/[id]. */
+export const DAILY_PICKS_QUERY_KEY = ['dailyPicksCatalog'] as const
+
+export async function fetchDailyPicksCatalog(): Promise<DailyPickItem[]> {
+  const { data: rows, error } = await db()
+    .from('daily_picks')
+    .select('id, kind, order_index, question, options, correct_index, reveal, category')
+    .order('order_index', { ascending: true })
+  if (error) throw error
+  return (rows as DailyPickItem[] | null) ?? []
+}
 
 /** Catalogue serveur suivi des 1000 questions embarquées (100 jours).
  *  Référence stable : react-query ne recalcule la sélection que si les
@@ -111,16 +124,9 @@ export const DailyPicksCard: FC<Props> = ({ onReveal }) => {
   // « 10 items du jour » est dérivé en local via `select`, donc la rotation
   // quotidienne ne déclenche aucun nouveau fetch.
   const { data: serverData, isLoading, error } = useQuery<DailyPickItem[], Error, DailyPickItem[]>({
-    queryKey: ['dailyPicksCatalog'],
+    queryKey: DAILY_PICKS_QUERY_KEY,
     staleTime: 24 * 60 * 60 * 1000, // 24h — catalogue quasi-statique
-    queryFn: async () => {
-      const { data: rows, error: e } = await db()
-        .from('daily_picks')
-        .select('id, kind, order_index, question, options, correct_index, reveal, category')
-        .order('order_index', { ascending: true })
-      if (e) throw e
-      return (rows as DailyPickItem[] | null) ?? []
-    },
+    queryFn: fetchDailyPicksCatalog,
     select: selectToday,
   })
   // Hors ligne ou serveur en erreur : le quiz tourne sur les questions
@@ -219,7 +225,6 @@ export const DailyPicksCard: FC<Props> = ({ onReveal }) => {
   const isQuiz = item.kind === 'quiz'
   const correctIdx = item.correct_index
   const total = data.length
-  const showResult = picked !== null
   const progressPct = ((index + (picked !== null ? 1 : 0)) / total) * 100
 
   return (
@@ -237,76 +242,15 @@ export const DailyPicksCard: FC<Props> = ({ onReveal }) => {
         <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
       </View>
 
-      {/* Question */}
-      <Text style={styles.question}>
-        {isQuiz ? '❓' : '⚖️'} {item.question}
-      </Text>
-
-      {/* Options */}
-      <View style={styles.options}>
-        {item.options.map((opt, i) => {
-          const isPicked = picked === i
-          const isCorrect = i === correctIdx
-          const optStyle = !showResult
-            ? styles.optionDefault
-            : isCorrect
-              ? styles.optionCorrect
-              : isPicked
-                ? styles.optionWrong
-                : styles.optionFaded
-          const textStyle = !showResult
-            ? styles.optionText
-            : isCorrect
-              ? styles.optionTextCorrect
-              : isPicked
-                ? styles.optionTextWrong
-                : styles.optionText
-          return (
-            <Fragment key={i}>
-              {/* Trait hors de la ligne : il ne s'estompe pas avec les réponses grisées. */}
-              {i > 0 ? <View style={styles.optionDivider} /> : null}
-              <Pressable
-                disabled={showResult}
-                onPress={() => setPicked(i)}
-                haptic="selection"
-                style={({ pressed }) => [
-                  styles.option,
-                  optStyle,
-                  pressed && !showResult && styles.btnPressed,
-                ]}
-              >
-                <Text style={textStyle}>
-                  {showResult && isCorrect ? '✓ ' : ''}
-                  {showResult && isPicked && !isCorrect ? '✗ ' : ''}
-                  {opt}
-                </Text>
-              </Pressable>
-            </Fragment>
-          )
-        })}
-      </View>
-
-      {/* Reveal panel (après réponse) */}
-      {showResult ? (
-        <View style={styles.reveal}>
-          <Text style={styles.revealKicker}>RÉPONSE</Text>
-          <Text style={styles.revealText}>{item.reveal}</Text>
-          <Pressable
-            onPress={() => next(picked === correctIdx)}
-            haptic="primary"
-            style={({ pressed }) => [styles.nextBtn, pressed && styles.btnPressed]}
-            accessibilityRole="button"
-          >
-            <Text style={styles.nextBtnText}>
-              {index + 1 < total ? 'Suivant →' : 'Voir mon score'}
-            </Text>
-          </Pressable>
-        </View>
-      ) : null}
-
-      {item.category && !showResult ? (
-        <Text style={styles.category}>{item.category}</Text>
-      ) : null}
+      <PickQuestion
+        item={item}
+        picked={picked}
+        onPick={setPicked}
+        action={{
+          label: index + 1 < total ? 'Suivant →' : 'Voir mon score',
+          onPress: () => next(picked === correctIdx),
+        }}
+      />
     </WhiteCard>
   )
 }
@@ -358,93 +302,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.rose,
     borderRadius: 2,
   },
-  question: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 15,
-    lineHeight: 21,
-    color: colors.ink,
-    marginBottom: spacing.base,
-  },
-  // Réponses sans bloc de fond (28/09/2026) : de simples lignes séparées par un
-  // trait noir. Après la réponse, toute la ligne se colore : verte pour la
-  // bonne réponse, rouge pour la mauvaise si c'est celle qui a été choisie.
-  options: {},
-  option: {
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    borderRadius: 10,
-  },
-  optionDivider: {
-    height: 1,
-    backgroundColor: colors.ink,
-  },
-  optionDefault: {},
-  optionCorrect: {
-    backgroundColor: colors.rating.vert.bg,
-  },
-  optionWrong: {
-    backgroundColor: colors.rating.rouge.bg,
-  },
-  optionFaded: {
-    opacity: 0.45,
-  },
-  optionText: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 14,
-    color: colors.ink,
-  },
-  optionTextCorrect: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 14,
-    color: colors.rating.vert.ink,
-  },
-  optionTextWrong: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 14,
-    color: colors.rating.rouge.ink,
-  },
-  reveal: {
-    marginTop: spacing.base,
-    padding: spacing.base,
-    borderRadius: radius.md,
-    backgroundColor: '#F0F9FF',
-  },
-  revealKicker: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 11,
-    letterSpacing: 1.1,
-    color: '#0284C7',
-    marginBottom: 4,
-  },
-  revealText: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 13,
-    lineHeight: 19,
-    color: colors.ink,
-  },
-  nextBtn: {
-    marginTop: spacing.base,
-    backgroundColor: colors.ink,
-    borderRadius: radius.full,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  nextBtnText: {
-    fontFamily: fontFamilies.semiBold,
-    fontSize: 13,
-    color: '#FFFFFF',
-  },
   btnPressed: {
     opacity: 0.85,
-  },
-  category: {
-    fontFamily: fontFamilies.regular,
-    fontSize: 10,
-    color: '#9CA3AF',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    textAlign: 'right',
-    marginTop: spacing.md,
   },
   // Fin de série
   endCenter: {

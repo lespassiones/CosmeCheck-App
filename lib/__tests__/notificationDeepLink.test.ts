@@ -42,6 +42,23 @@ describe('routeForNotificationData : refus strict', () => {
     expect(routeForNotificationData({ url: '/offre' })).toBe('/offre')
   })
 
+  it('accepte les destinations du 26/10/2026 (quiz, scan caméra, slug finissant par un tiret)', () => {
+    const uuid = '70cdc507-f4c3-4c0d-8013-42d5edd99627'
+    expect(routeForNotificationData({ url: `/quiz/${uuid}` })).toBe(`/quiz/${uuid}`)
+    expect(routeForNotificationData({ url: '/(tabs)/scan?mode=barcode' })).toBe('/(tabs)/scan?mode=barcode')
+    // Slug réel de la base : l'ancien motif le refusait, le tap restait sur l'accueil.
+    expect(routeForNotificationData({ url: '/ingredient/alcohol-denat-' })).toBe('/ingredient/alcohol-denat-')
+  })
+
+  it('refuse les variantes du quiz et du scan hors motif exact', () => {
+    expect(routeForNotificationData({ url: '/quiz/' })).toBeNull()
+    expect(routeForNotificationData({ url: '/quiz/abc' })).toBeNull()
+    expect(routeForNotificationData({ url: '/quiz/70cdc507-f4c3-4c0d-8013-42d5edd99627/x' })).toBeNull()
+    expect(routeForNotificationData({ url: '/(tabs)/scan?mode=link' })).toBeNull()
+    expect(routeForNotificationData({ url: '/(tabs)/scan?mode=barcode&x=1' })).toBeNull()
+    expect(routeForNotificationData({ url: '/ingredient/-x' })).toBeNull()
+  })
+
   it('refuse les routes dynamiques mal formées', () => {
     expect(routeForNotificationData({ url: '/analyse/123' })).toBeNull()
     expect(routeForNotificationData({ url: '/analyse/16acc76b-7a3c-4fb0-9e9e-a51cc49938f2/edit' })).toBeNull()

@@ -35,7 +35,7 @@ import { normalizeRoutineRows } from "./routineNormalize.ts";
 import { normalizeRecoBlock } from "./normalizeAdvisorForm.ts";
 
 const MODEL = "gpt-4o-mini";
-const MISTRAL_MODEL = "mistral-small-latest";
+const MISTRAL_MODEL = "ministral-14b-latest";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 

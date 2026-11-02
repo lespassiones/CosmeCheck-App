@@ -9,7 +9,7 @@ async function mistralJson(system, user) {
     method: "POST",
     headers: { Authorization: `Bearer ${K}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "mistral-small-latest", temperature: 0,
+      model: "ministral-14b-latest", temperature: 0,
       response_format: { type: "json_object" },
       messages: [{ role: "system", content: system }, { role: "user", content: user }],
     }),

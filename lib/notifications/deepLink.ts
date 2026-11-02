@@ -9,8 +9,8 @@
  * On ne navigue JAMAIS vers une route arbitraire : seule une correspondance
  * EXACTE avec l'allowlist autorise la navigation, tout le reste renvoie null
  * (pas d'URL externe, pas de préfixe malin type '/peau/../offre', pas de
- * query string). Si la route du bilan change, mettre à jour l'allowlist ET la
- * data `url` posée par le scheduler.
+ * query string hors des entrées exactes de l'allowlist). Si la route du bilan
+ * change, mettre à jour l'allowlist ET la data `url` posée par le scheduler.
  */
 
 /** Routes internes autorisées au tap d'une notification. Correspondance exacte. */
@@ -18,18 +18,23 @@ export const NOTIFICATION_ROUTE_ALLOWLIST = [
   '/(tabs)/routine',
   '/(tabs)',
   '/(tabs)/history',
+  // « Scanne un produit » (premier scan, relances, crédits du jour) : caméra ouverte.
+  '/(tabs)/scan?mode=barcode',
   '/advisor',
   '/offre',
 ] as const
 
 /**
- * Routes dynamiques posées par le planner serveur (notifications_planner_v2) :
- * fiche d'une analyse (UUID) et fiche ingrédient (slug). Motifs ancrés, sans
- * query string ni segment supplémentaire.
+ * Routes dynamiques posées par le planner serveur (notifications_planner_v2 et
+ * notifications_deeplinks) : fiche d'une analyse (UUID), fiche ingrédient
+ * (slug, dont certains finissent par un tiret : « alcohol-denat- ») et
+ * question du quiz du jour (UUID). Motifs ancrés, sans query string ni
+ * segment supplémentaire.
  */
 const NOTIFICATION_ROUTE_PATTERNS: readonly RegExp[] = [
   /^\/analyse\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-  /^\/ingredient\/[a-z0-9]+(?:-[a-z0-9]+)*$/,
+  /^\/ingredient\/[a-z0-9][a-z0-9-]{0,119}$/,
+  /^\/quiz\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
 ]
 
 /**

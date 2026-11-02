@@ -63,6 +63,10 @@ supabase/
 - `cosme_check_cleanup_rate_limits` — chaque 15 min (TTL 1h)
 - `cosme_check_cleanup_ai_logs` — 03:00 UTC (TTL 30j)
 - `cosme_check_cleanup_error_log` — 03:05 UTC (TTL 14j)
+- `cosme_check_ai_credits_watch` : chaque heure à :40 → Edge `ai-credits-watch` : ping OpenAI 1 token, état dans `ai_credit_watch`. Mail Brevo (clarkybrian@outlook.fr + contact@) UNIQUEMENT au changement d'état : 2 `insufficient_quota` d'affilée → « épuisés », 1er ping OK → « rétablis ». Erreurs autres (panne, réseau) ignorées. `POST {test:true}` = mail de test.
+
+### Mistral (fallback) = `ministral-14b-latest` (26 oct 2026)
+`mistral-small-latest` répond 429 en permanence sur notre clé (offre gratuite) ; `ministral-14b-latest` passe. Constante `MISTRAL_MODEL` dans `_shared/aiClient.ts` + 6 copies en dur (analyser, synthesis, advisor-chat, product-*/lib/extract.ts).
 
 ### RPCs maison utilisées par l'app
 - `cosme_check_get_credits` — retourne le solde du jour (latest `daily_limit` de `user_credits`, fallback 60).
@@ -101,7 +105,7 @@ Remplace le carrousel `PreOnboardingCarousel`, l'ancien wizard 12 étapes et l'�
 - **Brouillon** `lib/onboarding/draft.ts` (mémoire + AsyncStorage, TTL 7 j) → écrit dans `preferences` par `OnboardingDraftFlusher` (racine) dès qu'une session apparaît. `resolveAuthRoute` reçoit `draftPending` et s'abstient pendant l'écriture. Plus de cible `consent`.
 - **Logique pure testée** (`lib/__tests__/onboardingPerle.test.ts`) : `steps.ts` (visibilité, consentement refusé = aucune question santé), `content.ts` (textes/réactions), `buildPreferences.ts` (aucune donnée peau sans consentement, union des restrictions), `verdict.ts` (étoiles = `applyColorCap` + `verdictToneFromScore`, comme l'aperçu de scan).
 - **Sans compte**, lectures publiques uniquement : `catalog` par EAN, `cosme_check_search_catalog`, `cosme_check_match_inci_batch`, `credit_tiers`. Produits « rien sous la main » = une requête `ean=in.(...)` (`POPULAR_EANS`), pas 6 recherches parallèles (échouaient sur base froide, délai du rôle anon).
-- **Paywall** : tableau Gratuit/Premium mode clair, chiffres LUS dans `credit_tiers` (`hooks/useCreditTiers.ts`, 5/j gratuit vs 50/j Premium au 28/09). Aucune fonction n'est réservée à Premium : ne jamais mettre de croix côté Gratuit. Logique d'achat partagée avec /offre : `hooks/usePaywallCheckout.ts`. Rappel de fin d'essai local (`lib/notifications/trialReminder.ts`) seulement si notifs autorisées.
+- **Paywall** : tableau Gratuit/Premium mode clair, chiffres LUS dans `credit_tiers` (`hooks/useCreditTiers.ts`, 5 par semaine en gratuit (depuis le 24/10/2026) vs 50/j Premium). Aucune fonction n'est réservée à Premium : ne jamais mettre de croix côté Gratuit. Logique d'achat partagée avec /offre : `hooks/usePaywallCheckout.ts`. Rappel de fin d'essai local (`lib/notifications/trialReminder.ts`) seulement si notifs autorisées.
 - **Un seul paywall depuis le 28 sept 2026** : `/offre` rend `OnboardingPaywall` partout (pastille crédits, crédits épuisés, profil, menu ; « Plus tard » = retour arrière hors onboarding). L'ancienne vue « Plans » (jauge, « 100 crédits/mois » faux) est supprimée. Membre Premium (hors compte review Apple) : vue « Mon abonnement » (statut, renouvellement, résiliation via le magasin).
 - **Essai sur iOS** : `introPrice` ne dit PAS si la personne y a droit (ancien abonné). `usePurchases` appelle `checkTrialOrIntroductoryPriceEligibility` (iOS seulement, 4 s max) et `applyTrialEligibility` retire l'essai si le statut n'est pas « éligible » (inconnu ou sans réponse compris, consigne du SDK). Android : Google Play ne renvoie déjà que les offres accessibles.
 - Émulateur Android : prix « indicatifs » + « Recharger les tarifs » = normal (« In-app billing API version 3 is not supported on this device », pas de compte Play). Tester l'achat sur un vrai téléphone.

@@ -33,6 +33,12 @@ import {
 import { colors } from '@/constants/colors'
 import { ROUTES } from '@/constants/routes'
 import { resolveAuthRoute } from '@/lib/navigation/authRoute'
+import {
+  canOpenNotificationRoute,
+  getPendingNotificationRoute,
+  subscribePendingNotificationRoute,
+  takePendingNotificationRoute,
+} from '@/lib/notifications/pendingRoute'
 import { isDraftPendingFlush, subscribeDraft } from '@/lib/onboarding/draft'
 import { OnboardingDraftFlusher } from '@/components/onboarding/flow/DraftFlusher'
 import { useAuth } from '@/hooks/useAuth'
@@ -188,6 +194,13 @@ function AuthGuard() {
     hasSeenPreOnboardingThisLaunch,
     hasSeenPreOnboardingThisLaunch,
   )
+  // Destination d'une notification tapée (lib/notifications/pendingRoute) :
+  // ouverte ici, une fois l'app posée, pour ne pas être perdue au démarrage.
+  const pendingNotifRoute = useSyncExternalStore(
+    subscribePendingNotificationRoute,
+    getPendingNotificationRoute,
+    getPendingNotificationRoute,
+  )
 
   // Le navigateur racine est-il monté ? Une navigation émise avant l'est en
   // pure perte : expo-router la refuse silencieusement. Comme cette clé change
@@ -241,6 +254,27 @@ function AuthGuard() {
       default:
         break // null → on laisse passer / on attend
     }
+
+    if (
+      pendingNotifRoute &&
+      canOpenNotificationRoute({
+        navReady: true,
+        authLoading,
+        signInPending,
+        isAuthenticated,
+        profileLoading,
+        draftPending,
+        paywallShown,
+        guardTarget: target,
+        group,
+      })
+    ) {
+      const route = takePendingNotificationRoute()
+      // Onglet : revenir à l'onglet EXISTANT. push/navigate/replace vers /(tabs)/…
+      // depuis un écran situé au-dessus empilent une 2e copie complète des onglets.
+      if (route?.startsWith('/(tabs)')) router.dismissTo(route as never)
+      else if (route) router.push(route as never)
+    }
   }, [
     navKey,
     authLoading,
@@ -253,6 +287,7 @@ function AuthGuard() {
     paywallShown,
     draftPending,
     preOnbSeen,
+    pendingNotifRoute,
     group,
     router,
   ])
@@ -332,6 +367,7 @@ function RootNavigator() {
       <Stack.Screen name="profile/credits" />
       <Stack.Screen name="ingredient/index" />
       <Stack.Screen name="ingredient/[slug]" />
+      <Stack.Screen name="quiz/[id]" />
       <Stack.Screen name="offre/index" options={{ presentation: 'modal' }} />
       {/* Bienvenue Premium : plein écran, sans geste de retour. Revenir en
           arrière ramènerait sur le paywall qu'on vient d'acheter. */}

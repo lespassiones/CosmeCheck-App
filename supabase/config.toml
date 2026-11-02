@@ -96,6 +96,8 @@ verify_jwt = false
 verify_jwt = false
 [functions.admin-health-alert]
 verify_jwt = false
+[functions.ai-credits-watch]
+verify_jwt = false
 
 # ── Fonctions ADMIN : durcissement sécurité (juil 2026) ──────────────────────
 # verify_jwt=true (était false) : la plateforme rejette tout Bearer non signé,
