@@ -35,6 +35,7 @@ import { colors } from '@/constants/colors'
 import { fontFamilies } from '@/constants/typography'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
+import { useFirstLaunchUpdateHold } from '@/hooks/useFirstLaunchUpdateHold'
 
 // ── Paramètres de l'animation ──────────────────────────────────────────
 const DOT_COLORS = ['#F6099B', '#54D41D', '#5F1EE1'] as const // rose, vert, violet (cf. LogoMark)
@@ -106,8 +107,12 @@ export function AnimatedSplash({ onFinish }: { onFinish: () => void }) {
   const { isLoading: authLoading, isAuthenticated } = useAuth()
   const { isLoading: profileLoading } = useProfile()
 
+  // Premier lancement : on attend l'OTA déjà publiée (3 s max), pour que
+  // l'onboarding s'affiche sur la dernière version et pas sur celle du store.
+  const holdForUpdate = useFirstLaunchUpdateHold()
+
   // Auth résolue : plus de chargement auth et (invité, ou profil chargé).
-  const ready = !authLoading && (!isAuthenticated || !profileLoading)
+  const ready = !authLoading && (!isAuthenticated || !profileLoading) && !holdForUpdate
 
   const [typed, setTyped] = useState(0)
   const [animDone, setAnimDone] = useState(false)

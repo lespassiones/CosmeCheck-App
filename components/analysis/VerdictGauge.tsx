@@ -49,7 +49,7 @@ const SLOTS: Slot[] = [
     inactiveBg: '#DCFCE7', // green-100
     inactiveIcon: '#16A34A',
     shadow: '#16A34A',
-    srLabel: 'Formule très douce',
+    srLabel: 'Composition très douce',
   },
   {
     key: 'safe',
@@ -59,7 +59,7 @@ const SLOTS: Slot[] = [
     inactiveBg: '#DCFCE7',
     inactiveIcon: '#16A34A',
     shadow: '#16A34A',
-    srLabel: 'Formule globalement saine',
+    srLabel: 'Composition globalement saine',
   },
   {
     key: 'caution',
@@ -69,7 +69,7 @@ const SLOTS: Slot[] = [
     inactiveBg: '#FEF3C7', // amber-100
     inactiveIcon: '#F59E0B', // amber-500
     shadow: '#FBBF24',
-    srLabel: 'Formule à surveiller',
+    srLabel: 'Composition à surveiller',
   },
   {
     key: 'warning',
@@ -79,7 +79,7 @@ const SLOTS: Slot[] = [
     inactiveBg: '#FFEDD5', // orange-100
     inactiveIcon: '#F97316', // orange-500
     shadow: '#F97316',
-    srLabel: 'Formule moyenne',
+    srLabel: 'Composition moyenne',
   },
   {
     key: 'danger',
@@ -89,7 +89,7 @@ const SLOTS: Slot[] = [
     inactiveBg: '#FFE4E6', // rose-100
     inactiveIcon: '#F43F5E', // rose-500
     shadow: '#F43F5E',
-    srLabel: 'Formule à examiner attentivement',
+    srLabel: 'Composition à examiner attentivement',
   },
 ]
 
@@ -128,7 +128,7 @@ export const VerdictGauge = memo(function VerdictGauge({
   return (
     <View
       accessibilityRole="adjustable"
-      accessibilityLabel="Niveau global de la formule"
+      accessibilityLabel="Niveau global de la composition"
       accessibilityValue={{
         min: 1,
         max: 5,

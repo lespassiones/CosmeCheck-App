@@ -53,7 +53,7 @@ const WelcomeScreen: FC = () => {
           </Text>
           <Text style={styles.subtitle}>
             {purchased
-              ? `Ton essai Premium est activé${name ? `, ${name}` : ''}. Crée ton compte pour le garder avec ta carte de peau.`
+              ? `Ton abonnement Premium est activé${name ? `, ${name}` : ''}. Crée ton compte pour le garder avec ta carte de peau.`
               : hasCard
                 ? `Ta carte de peau t'attend${name ? `, ${name}` : ''}.`
                 : 'Connecte-toi pour retrouver tes analyses et ta routine.'}

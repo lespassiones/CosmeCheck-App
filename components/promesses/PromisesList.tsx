@@ -168,7 +168,7 @@ const PromiseRow: FC<{
       {open ? (
         <View style={styles.body}>
           <Text style={styles.coverage}>
-            Couverture par la formule : <Text style={[styles.coverageStrong, { color: tone.text }]}>{promise.score} %</Text>
+            Couverture par la composition : <Text style={[styles.coverageStrong, { color: tone.text }]}>{promise.score} %</Text>
           </Text>
           {promise.excerpt ? <Text style={styles.excerpt}>« {promise.excerpt} »</Text> : null}
           <FoundList promise={promise} colorMap={colorMap} />

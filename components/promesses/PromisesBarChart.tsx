@@ -45,7 +45,7 @@ export const PromisesBarChart: FC<{ promises: CoherencePromise[] }> = ({ promise
     <WhiteCard style={styles.card} padding={spacing.lg}>
       <Text style={styles.title}>Détail par promesse</Text>
       <Text style={styles.subtitle}>
-        Plus la barre est remplie, plus la promesse est documentée par les ingrédients de la formule.
+        Plus la barre est remplie, plus la promesse est documentée par les ingrédients de la composition.
       </Text>
 
       <View style={styles.list}>

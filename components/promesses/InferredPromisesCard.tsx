@@ -31,10 +31,10 @@ export const InferredPromisesCard: FC<{ promises: CoherencePromise[] }> = ({ pro
         </View>
         <View style={styles.headerText}>
           <Text style={styles.title}>
-            Promesses déduites de la formule <Text style={styles.count}>({inferred.length})</Text>
+            Promesses déduites de la composition <Text style={styles.count}>({inferred.length})</Text>
           </Text>
           <Text style={styles.intro}>
-            Des ingrédients de la formule soutiennent ces effets, et la description en parle. On les a
+            Des ingrédients de la composition soutiennent ces effets, et la description en parle. On les a
             ajoutés pour renforcer l&apos;analyse.
           </Text>
         </View>

@@ -399,7 +399,7 @@ export function detectConflicts(
         'alcohol-dry-skin',
         'medium',
         `Alcool et peau ${word}`,
-        'Alcool en tête de formule, dessèche.',
+        'Alcool en tête de liste, dessèche.',
         'Usage ponctuel ou version sans alcool.',
         [a.input.analysisId],
         null,

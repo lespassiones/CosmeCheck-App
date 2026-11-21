@@ -104,3 +104,16 @@ Tableau par produit : publiés (score + note + ★ + V/J/O/R) / brouillons (rais
 select ean, brand, name, score, score_label, count_total, count_orange, is_active, (image_url is not null) as has_image
 from cosme_check.catalog where ean in ('<ean1>','<ean2>');
 ```
+
+---
+
+# Fiches des MARQUES (table `cosme_check.brand_product_submissions`)
+
+Depuis le 21 nov 2026, cosme-check.com/marques laisse une marque proposer un produit (une fiche par produit). Le site ne note RIEN et ne publie RIEN : il enregistre la fiche, prévient l'équipe (contact@ + clarkybrian@outlook.fr) et envoie un accusé à la marque. La décision se prend dans l'admin, onglet **Retours > Marques** (`CosmeCheckAdmin/app/(dashboard)/feedback/brands`).
+
+Quand Brian demande de vérifier les fiches des marques :
+1. Lire la file : `select id, brand, product_name, ean, volume, zones, inci, product_url, brand_website, photo_front_path, photo_inci_path, check_note from cosme_check.brand_product_submissions where status = 'pending' order by created_at;`
+2. Pour chaque fiche, vérifier : la page `product_url` (WebFetch) existe et montre le même produit ; la composition de la marque = celle de la page / de la photo des ingrédients (ordre compris) ; l'EAN correspond (recherche web, OpenBeautyFacts) ; la marque existe (site officiel). Regarder les photos (URL publique du bucket `cosmetwiki-products`).
+3. Calculer la note en dry-run avec `scripts/scorer.mts` (même moteur que l'admin et `admin-score-upsert`). Si l'EAN est déjà au catalogue avec une note, c'est CETTE note qui sera gardée (règle note unique) : le signaler si la composition diffère.
+4. Écrire le résultat dans `check_note` (PATCH, texte court : « Page OK, INCI identique, EAN vérifié, 4/5 » ou les écarts). Ne PAS passer la fiche en approved soi-même : Brian clique « Mettre dans l'app et prévenir » dans l'admin (c'est ce bouton qui publie via `admin-score-upsert` et envoie le mail avec le badge).
+5. Bilan à Brian : par fiche, OK à publier / à refuser (raison proposée pour le mail de refus).

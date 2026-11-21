@@ -47,7 +47,7 @@ const SECTIONS: Section[] = [
       {
         icon: 'barcode-outline',
         label: 'Scanner et analyser un produit',
-        desc: 'Analyse de la composition et note de qualité de la formule.',
+        desc: 'Analyse de la composition et note de sa qualité.',
       },
       {
         icon: 'albums-outline',

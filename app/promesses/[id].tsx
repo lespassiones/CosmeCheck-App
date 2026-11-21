@@ -166,9 +166,9 @@ const PromesseDetailScreen: FC = () => {
         <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <Reveal>
             <View style={styles.intro}>
-              <Text style={styles.h1}>Promesses vs formule réelle</Text>
+              <Text style={styles.h1}>Promesses vs composition réelle</Text>
               <Text style={styles.introSub}>
-                Nous comparons les promesses de <Text style={styles.introStrong}>{state.productName}</Text> à sa formule réelle.
+                Nous comparons les promesses de <Text style={styles.introStrong}>{state.productName}</Text> à sa composition réelle.
               </Text>
             </View>
           </Reveal>

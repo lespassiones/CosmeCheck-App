@@ -91,12 +91,12 @@ const BREVE_PLAY = champ(
 )
 
 const NOUVEAUTES = champ(
-  'nouveautés 1.0.5 (Apple)',
-  `Parle à Perle, et vois tout de suite ce qu'un produit fait pour toi.
+  'nouveautés 1.0.6 (Apple)',
+  `Un départ encore plus personnel, pensé pour ta peau.
 
-• Dicte tes questions à Perle, ta conseillère beauté : appuie sur le micro et parle, elle écrit pour toi.
-• Dès ton premier scan, découvre ton score de compatibilité personnel et ce que le produit fait pour chacun de tes objectifs.
-• Questionnaire de départ plus clair : cases à cocher, textes plus lisibles, clavier qui ne cache plus rien.
+• À la fin du questionnaire, Perle te montre la routine qu'elle va chercher pour toi, d'après tes soucis de peau et tes objectifs.
+• Tes objectifs sont mieux mis en avant : tu vois d'un coup d'œil ce que ton produit couvre et ce qui reste à trouver.
+• Un vocabulaire plus juste : on parle de la composition d'un produit.
 • Corrections et améliorations de performance.`,
   4000,
 )
@@ -342,7 +342,7 @@ function ecrireDoc() {
   bloc('sous-titre (Apple)', 'Sous-titre')
   bloc('mots-clés (Apple)', 'Mots-clés')
   bloc('texte promotionnel (Apple)', 'Texte promotionnel (modifiable sans vérification)')
-  bloc('nouveautés 1.0.5 (Apple)', 'Nouveautés de la 1.0.5 (à relire)')
+  bloc('nouveautés 1.0.6 (Apple)', 'Nouveautés de la 1.0.6 (à relire)')
   bloc('description (Apple)', 'Description')
   A('> ⚠️ **Aucun prix dans la description.** Les prix vivent dans les magasins et')
   A('> changent sans republication ; un montant recopié finit faux. La règle 3.1.2')

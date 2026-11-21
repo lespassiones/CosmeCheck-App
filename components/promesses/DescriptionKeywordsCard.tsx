@@ -27,7 +27,7 @@ export const DescriptionKeywordsCard: FC<{
     <WhiteCard padding={spacing.lg}>
       <Text style={styles.title}>Ce qu&apos;on a lu sur l&apos;emballage</Text>
       <Text style={styles.subtitle}>
-        Les promesses extraites (avec leur verdict) et les mentions non analysables côté formule.
+        Les promesses extraites (avec leur verdict) et les mentions non analysables côté composition.
       </Text>
 
       <Text style={styles.sectionLabel}>PROMESSES ANALYSÉES</Text>

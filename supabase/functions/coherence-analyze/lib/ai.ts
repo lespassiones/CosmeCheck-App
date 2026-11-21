@@ -818,13 +818,15 @@ function buildConclusionPrompt(
   const non = promises.filter((p) => p.verdict === "non_demontree").map((p) => p.label);
   const contredite = promises.filter((p) => p.verdict === "contredite").map((p) => p.label);
 
-  const baseSystem = `Tu rédiges UNE phrase de conclusion (50-120 mots maximum) pour une analyse de cohérence entre les promesses d'un produit cosmétique et sa formule.
+  const baseSystem = `Tu rédiges UNE phrase de conclusion (50-120 mots maximum) pour une analyse de cohérence entre les promesses d'un produit cosmétique et sa composition.
 
-Style : direct, factuel, accessible à un consommateur français lambda. Pas de jugement moral, pas d'emoji, pas de marketing inversé ("trompeur"). Tu décris ce que la formule fait probablement vs ce qui est promis.
+Vocabulaire : dis « composition », JAMAIS « formule » (on connaît la liste des ingrédients, pas leurs dosages).
+
+Style : direct, factuel, accessible à un consommateur français lambda. Pas de jugement moral, pas d'emoji, pas de marketing inversé ("trompeur"). Tu décris ce que la composition fait probablement vs ce qui est promis.
 
 Si des promesses sont CONTREDITES (le produit dit "sans X" mais contient X), mentionne-les en priorité - c'est l'info la plus actionnable pour l'utilisateur.
 
-Structure attendue : "[ce que la formule tient] mais [ce qu'elle ne tient pas / ce qui est contredit]. Effet attendu : [ce que l'utilisateur peut réellement ressentir]."
+Structure attendue : "[ce que la composition tient] mais [ce qu'elle ne tient pas / ce qui est contredit]. Effet attendu : [ce que l'utilisateur peut réellement ressentir]."
 
 NE CITE QUE LES VERDICTS QUE JE TE DONNE. N'invente jamais d'ingrédient ni de verdict.
 
@@ -832,14 +834,14 @@ ${NO_LONG_DASHES_RULE}`;
   let system = baseSystem;
   if (profileBlock) {
     system += `\n\n${profileBlock}\n\nIMPORTANT — Personnalisation :
-1. Repère les promesses NON TENUES, PARTIELLES ou CONTREDITES qui correspondent DIRECTEMENT à une préoccupation du profil ci-dessus (ex : profil "cheveux secs, longueur affectée" + promesse "hydratation" non tenue, OU profil "rougeurs / sensibilité" + promesse "apaisant" non démontrée, OU une allergie listée présente dans la formule).
+1. Repère les promesses NON TENUES, PARTIELLES ou CONTREDITES qui correspondent DIRECTEMENT à une préoccupation du profil ci-dessus (ex : profil "cheveux secs, longueur affectée" + promesse "hydratation" non tenue, OU profil "rougeurs / sensibilité" + promesse "apaisant" non démontrée, OU une allergie listée présente dans la composition).
 2. Si tu en trouves une, AJOUTE EN FIN DE CONCLUSION une phrase courte de rappel doux à la 2e personne : "Sachant que tu cherches X, cette promesse de Y n'est pas vraiment tenue ici." (adapte au profil et au verdict).
 3. Reste factuel : tu signales, tu ne juges pas le produit en bloc. PAS de "à éviter", "déconseillé", "pas pour toi" — préfère "ne répond pas à ton besoin de Y", "ne couvre pas ta préoccupation Z".
 4. Si AUCUNE promesse négative ne touche le profil, n'ajoute RIEN. Ne fabrique pas un lien forcé.
 5. Si une promesse TENUE répond exactement à une préoccupation, tu peux le souligner en positif au lieu : "Bon point pour toi : la promesse de Y est tenue, ce qui correspond à ce que tu cherches."`;
   }
   if (restrictionsBlock) {
-    system += `\n\n${restrictionsBlock}\n\nSi la formule de ce produit contient un ingrédient présent dans les restrictions ci-dessus, signale-le clairement en fin de conclusion à la 2e personne, en une phrase courte (ex : "À noter, ce produit contient X que tu as choisi d'éviter.").`;
+    system += `\n\n${restrictionsBlock}\n\nSi la composition de ce produit contient un ingrédient présent dans les restrictions ci-dessus, signale-le clairement en fin de conclusion à la 2e personne, en une phrase courte (ex : "À noter, ce produit contient X que tu as choisi d'éviter.").`;
   }
 
   const user = `${productLabel ? `Produit : ${productLabel}\n\n` : ""}Verdicts (déjà calculés mécaniquement) :
@@ -847,7 +849,7 @@ ${NO_LONG_DASHES_RULE}`;
 - Cohérence PARTIELLE : ${partielle.length ? partielle.join(", ") : "(aucune)"}
 - Effet MARKETING uniquement : ${marketing.length ? marketing.join(", ") : "(aucun)"}
 - Promesses NON DÉMONTRÉES : ${non.length ? non.join(", ") : "(aucune)"}
-- Promesses CONTREDITES par la formule : ${contredite.length ? contredite.join(", ") : "(aucune)"}
+- Promesses CONTREDITES par la composition : ${contredite.length ? contredite.join(", ") : "(aucune)"}
 
 Écris la phrase de conclusion. Pas de préambule, juste la phrase.`;
 
@@ -884,12 +886,12 @@ function fallbackConclusion(promises: CoherencePromise[]): string {
     return "Aucune promesse d'effet n'a été détectée dans la description fournie.";
   }
   if (tenue === total) {
-    return "Toutes les promesses détectées sont soutenues par des actifs documentés dans la formule.";
+    return "Toutes les promesses détectées sont soutenues par des actifs documentés dans la composition.";
   }
   if (tenue === 0) {
-    return "Aucune des promesses détectées n'est soutenue par un actif documenté dans la formule.";
+    return "Aucune des promesses détectées n'est soutenue par un actif documenté dans la composition.";
   }
-  return `${tenue} promesse${tenue > 1 ? "s sont tenues" : " est tenue"} sur ${total}, les autres manquent d'actifs documentés dans la formule.`;
+  return `${tenue} promesse${tenue > 1 ? "s sont tenues" : " est tenue"} sur ${total}, les autres manquent d'actifs documentés dans la composition.`;
 }
 
 export async function generateConclusion(

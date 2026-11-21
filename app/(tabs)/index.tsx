@@ -251,7 +251,7 @@ const DashboardScreen: FC = () => {
 
             <DashboardTile
               theme="green"
-              title={'Promesses\nvs Formule'}
+              title={'Promesses\nvs Composition'}
               onPress={() => setChooserOpen(true)}
             >
               <Image

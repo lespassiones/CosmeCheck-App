@@ -670,7 +670,7 @@ const BreakdownCard: FC<{
       <Text style={styles.bdTitle}>Le calcul de ton score</Text>
 
       {/* 1. Le point de départ : la qualité de la formule (note du produit). */}
-      <BdBullet dot={colors.ink} label="Point de départ : la qualité de la formule" />
+      <BdBullet dot={colors.ink} label="Point de départ : la qualité de la composition" />
 
       {/* 2. Pourquoi rien ne bouge, quand rien ne bouge. La puce « aucun actif »
           n'apparaît QUE si AUCUNE ligne ne suit (sinon elle contredirait la
@@ -678,7 +678,7 @@ const BreakdownCard: FC<{
       {relevance === 'product_only' ? (
         <BdBullet
           dot={colors.gray300}
-          label="Produit du quotidien : le score suit la qualité de la formule"
+          label="Produit du quotidien : le score suit la qualité de la composition"
         />
       ) : breakdown.lines.length === 0 ? (
         <BdBullet

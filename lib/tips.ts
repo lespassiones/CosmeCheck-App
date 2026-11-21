@@ -9,7 +9,7 @@
  */
 export const DAILY_TIPS: string[] = [
   // Lire l'étiquette
-  "Les 5 premiers ingrédients d'un produit représentent environ 75 % de la formule. Le reste, c'est surtout du détail.",
+  "Les 5 premiers ingrédients d'un produit représentent environ 75 % de la composition. Le reste, c'est surtout du détail.",
   "Sur une étiquette, les ingrédients sont rangés du plus présent au moins présent. Plus c'est haut, plus il y en a.",
   "Si « Aqua » (l'eau) est en 1er, le produit est avant tout… de l'eau. Normal pour une crème, plus surprenant pour un sérum « ultra concentré ».",
   "Quand un ingrédient arrive après le 1er conservateur, il y en a en général moins de 1 % dans le produit.",

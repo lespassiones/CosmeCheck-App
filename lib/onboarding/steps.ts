@@ -4,8 +4,9 @@
  * Deux modes partagent le même parcours :
  *   - `guest`  : personne non connectée. Le parcours commence par l'accroche,
  *     se termine par le montage, puis l'écran de compte (/(auth)/welcome)
- *     enregistre les réponses. Le paywall vient APRÈS le compte (choix produit
- *     du 28/09/2026 : l'achat est ainsi rattaché au bon compte dès le départ).
+ *     enregistre les réponses. Le paywall (/offre) s'affiche JUSTE APRÈS
+ *     l'inscription (demande de Brian du 10/11/2026) : l'achat est rattaché au
+ *     bon compte dès le départ.
  *   - `member` : personne déjà connectée qui n'a pas de profil (ancien compte,
  *     compte de démonstration Apple rejoué). Pas d'accroche, pas de prénom si
  *     on l'a déjà, et les réponses sont écrites directement à la fin.
@@ -73,10 +74,9 @@ export const STEP_ORDER: readonly StepId[] = [
   // Couverture des objectifs par ce produit, puis le paywall : le bouton de
   // cet écran est l'élan vers l'abonnement (demande du 24/10/2026).
   'goalsCoverage',
-  // Paywall au pic de motivation, AVANT le compte (mode invité seulement,
-  // choix du 28/09/2026, comme MemoryPilot). Un achat fait ici part sous
-  // l'identifiant anonyme de RevenueCat, puis `loginUser` (app/_layout.tsx)
-  // le rattache au compte créé juste après.
+  // Ancien paywall invité, AVANT le compte (28/09/2026). Retiré du parcours le
+  // 10/11/2026 : le paywall vient désormais juste APRÈS l'inscription, par
+  // /offre. L'identifiant reste pour relire un brouillon enregistré dessus.
   'paywall',
 ]
 
@@ -133,8 +133,9 @@ export function visibleSteps(ctx: StepContext): StepId[] {
     if (id === 'verdict' && !ctx.hasScannedProduct) return false
     if (id === 'compat' && (!ctx.hasScannedProduct || !ctx.hasProductScore)) return false
     if (id === 'goalsCoverage' && (!ctx.hasScannedProduct || !ctx.hasGoalBasis)) return false
-    // Connecté : le paywall vient après, via /offre (layout du groupe onboarding).
-    if (id === 'paywall' && ctx.mode !== 'guest') return false
+    // Le paywall n'est plus une étape du parcours : il vient après le compte,
+    // via /offre (AuthGuard), dans les deux modes (10/11/2026).
+    if (id === 'paywall') return false
     return true
   })
 }

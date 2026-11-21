@@ -362,8 +362,8 @@ describe('negativeSubtitle — sous 60, on parle du danger, jamais du bénéfice
 
   it('couleurs à risque → message générique ; sinon qualité insuffisante', () => {
     expect(negativeSubtitle({ ...base, score: 45, restrictionLabels: [], orange: 2 }))
-      .toBe('formule pénalisée par des ingrédients à risque')
+      .toBe('composition pénalisée par des ingrédients à risque')
     expect(negativeSubtitle({ ...base, score: 30, restrictionLabels: [] }))
-      .toBe('la qualité de la formule est insuffisante')
+      .toBe('la qualité de la composition est insuffisante')
   })
 })

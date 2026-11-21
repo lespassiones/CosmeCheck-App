@@ -288,7 +288,7 @@ export function buildAnalysisCore(input: { tokens: ParsedToken[]; rows: MatchRow
       const display = (first.name ?? first.input_raw ?? "Aqua").trim();
       const displayCased = display.charAt(0).toUpperCase() + display.slice(1).toLowerCase();
       observations.push({
-        tag: "water-based", label: "Formule à base d'eau", status: "info", count: 0, items: [],
+        tag: "water-based", label: "Composition à base d'eau", status: "info", count: 0, items: [],
         message: `${displayCased} en première position`,
       });
     }

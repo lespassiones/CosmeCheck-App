@@ -185,7 +185,7 @@ function enforceInvariants(
     blocks.watch.title = "Ingrédients à surveiller";
     blocks.watch.description = signalCats.length
       ? `Surveille : ${signalCats.join(", ")}.`
-      : `Surveille ${orange + red} ingrédient(s) de cette formule.`;
+      : `Surveille ${orange + red} ingrédient(s) de cette composition.`;
   }
 
   if (red > 0 || orange >= 3) blocks.goals.tone = "rouge";
@@ -202,8 +202,8 @@ function enforceInvariants(
     blocks.watch.description = concerns
       ? signalCats.length
         ? `Surveille : ${signalCats.join(", ")}.`
-        : "Garde un œil sur certains ingrédients de cette formule."
-      : "Rien d'inquiétant pour toi dans cette formule.";
+        : "Garde un œil sur certains ingrédients de cette composition."
+      : "Rien d'inquiétant pour toi dans cette composition.";
   }
   return blocks;
 }
@@ -373,12 +373,12 @@ function enforceCompatibility(
       ? compat.subtitle
       : relevance === "personal"
         ? "d'après ton profil"
-        : "d'après la qualité de la formule");
+        : "d'après la qualité de la composition");
   // FILET product_only : l'IA n'a pas le droit d'attribuer un besoin personnel
   // à un produit hors profil (« ton besoin d'hydratation buccale » sur profil
   // vide, vu en campagne E2E). Le sous-titre négatif (<60), lui, est légitime.
   if (!negative && relevance === "product_only" && /\b(ton|ta|tes)\b/i.test(subtitle)) {
-    subtitle = "d'après la qualité de la formule";
+    subtitle = "d'après la qualité de la composition";
   }
   // FILET allergie : si une contre-indication forcée vient d'une allergie
   // déclarée, elle PRIME sur un sous-titre IA positif (même à score ≥ 60).

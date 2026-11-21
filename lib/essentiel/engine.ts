@@ -73,23 +73,23 @@ function pickPhrase(tone: VerdictTone, counts: AnalyseResponse["counts"]): strin
   const flagged = counts.jaune + counts.orange + counts.rouge;
   switch (tone) {
     case "very-safe":
-      return "Formule très douce, rien à signaler.";
+      return "Composition très douce, rien à signaler.";
     case "safe":
       return counts.jaune <= 1
-        ? "Formule globalement saine, un ingrédient à connaître."
-        : `Formule globalement saine, ${counts.jaune} ingrédients à connaître.`;
+        ? "Composition globalement saine, un ingrédient à connaître."
+        : `Composition globalement saine, ${counts.jaune} ingrédients à connaître.`;
     case "caution":
-      return `Formule correcte, ${counts.jaune} ingrédients à surveiller.`;
+      return `Composition correcte, ${counts.jaune} ingrédients à surveiller.`;
     case "warning":
       return counts.orange === 1
-        ? "Formule moyenne, un ingrédient pénalisant."
-        : `Formule moyenne, ${counts.orange} ingrédients pénalisants.`;
+        ? "Composition moyenne, un ingrédient pénalisant."
+        : `Composition moyenne, ${counts.orange} ingrédients pénalisants.`;
     case "danger":
-      return "Formule à examiner attentivement.";
+      return "Composition à examiner attentivement.";
     case "high-risk":
       return `Plusieurs ingrédients à risque (${flagged} au total). À considérer avec attention.`;
     case "unknown":
-      return "On n'a pas réussi à analyser cette formule.";
+      return "On n'a pas réussi à analyser cette composition.";
   }
 }
 
@@ -195,8 +195,8 @@ const FUNCTION_VERBS: Record<string, VerbConfig> = {
   "Agent émulsifiant": "lie l'eau et les corps gras",
   "Agent parfumant": "donne son odeur au produit",
   "Agent masquant": "masque les odeurs des autres actifs",
-  "Agent de contrôle de la viscosité": "donne sa texture à la formule",
-  "Antioxydant": "protège la formule de l'oxydation",
+  "Agent de contrôle de la viscosité": "donne sa texture au produit",
+  "Antioxydant": "protège le produit de l'oxydation",
   "Agent de protection de la peau": "renforce la barrière cutanée",
   "Humectant": "attire l'eau dans la peau",
   "Agent filmogène": "forme un film protecteur en surface",
@@ -208,7 +208,7 @@ const FUNCTION_VERBS: Record<string, VerbConfig> = {
     },
   },
   "Antimicrobien": "limite la prolifération bactérienne",
-  "Solvant": "dissout les autres ingrédients de la formule",
+  "Solvant": "dissout les autres ingrédients de la composition",
   "Astringent": "resserre les pores et tonifie la peau",
   "Stabilisateur d'émulsion": "garde le mélange eau/huile homogène",
   "Tonifiant": "apporte un effet tonifiant immédiat",
@@ -223,13 +223,13 @@ const FUNCTION_VERBS: Record<string, VerbConfig> = {
     },
   },
   "Régulateur de pH": "équilibre le pH au plus près de la peau",
-  "Opacifiant": "rend la formule opaque visuellement",
+  "Opacifiant": "rend le produit opaque visuellement",
   "Agent de foisonnement": "épaissit pour stabiliser la texture",
-  "Conservateur": "protège la formule des micro-organismes",
+  "Conservateur": "protège le produit des micro-organismes",
   "Agent apaisant": "calme les rougeurs et tiraillements",
   "Agent Absorbant": "absorbe l'excès de sébum et l'humidité",
   "Agent arômatisant": "donne son arôme au produit",
-  "Agent stabilisant": "garde la formule stable dans le temps",
+  "Agent stabilisant": "garde le produit stable dans le temps",
   "Non classé": "rôle non documenté dans la base",
   "Agent de chélation": "neutralise les métaux de l'eau du robinet",
   "Agent plastifiant": "assouplit les films cosmétiques",

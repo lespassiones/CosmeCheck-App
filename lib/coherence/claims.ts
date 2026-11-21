@@ -105,7 +105,7 @@ export const CLAIM_CATEGORIES: ClaimCategory[] = [
       { slug: "polyquaternium-10", name: "Polyquaternium-10", evidence: "marketing" },
       { slug: "algae-extract", name: "Polysaccharides d'algues", evidence: "marketing" },
     ],
-    hint: "Densification biologique non démontrée - la formule peut donner un effet visuel/sensoriel sans agir sur l'épaisseur réelle de la fibre.",
+    hint: "Densification biologique non démontrée - la composition peut donner un effet visuel/sensoriel sans agir sur l'épaisseur réelle de la fibre.",
   },
   {
     slug: "hydratation",
@@ -296,7 +296,7 @@ export const CLAIM_CATEGORIES: ClaimCategory[] = [
     keywords: ["sans sulfate", "sans sulfates", "sulfate-free", "no sulfate"],
     actives: [],
     forbiddenTag: "sulfate",
-    hint: "Aucun sulfate détecté dans la formule - promesse tenue.",
+    hint: "Aucun sulfate détecté dans la composition - promesse tenue.",
   },
   {
     slug: "absence_silicone",
@@ -304,7 +304,7 @@ export const CLAIM_CATEGORIES: ClaimCategory[] = [
     keywords: ["sans silicone", "sans silicones", "silicone-free", "no silicone"],
     actives: [],
     forbiddenTag: "silicone",
-    hint: "Aucun silicone détecté dans la formule - promesse tenue.",
+    hint: "Aucun silicone détecté dans la composition - promesse tenue.",
   },
   {
     slug: "absence_paraben",
@@ -312,7 +312,7 @@ export const CLAIM_CATEGORIES: ClaimCategory[] = [
     keywords: ["sans paraben", "sans parabens", "paraben-free", "no paraben"],
     actives: [],
     forbiddenTag: "paraben",
-    hint: "Aucun paraben détecté dans la formule - promesse tenue.",
+    hint: "Aucun paraben détecté dans la composition - promesse tenue.",
   },
   {
     slug: "absence_huile_minerale",
@@ -320,7 +320,7 @@ export const CLAIM_CATEGORIES: ClaimCategory[] = [
     keywords: ["sans huile minérale", "sans huiles minérales", "sans paraffine", "sans petrolatum"],
     actives: [],
     forbiddenTag: "huile-minerale",
-    hint: "Aucune huile minérale détectée dans la formule - promesse tenue.",
+    hint: "Aucune huile minérale détectée dans la composition - promesse tenue.",
   },
   {
     slug: "absence_colorant_synthese",
@@ -328,7 +328,7 @@ export const CLAIM_CATEGORIES: ClaimCategory[] = [
     keywords: ["sans colorant", "sans colorants", "sans colorant de synthèse", "sans colorants synthétiques"],
     actives: [],
     forbiddenTag: "colorant-synthese",
-    hint: "Aucun colorant de synthèse détecté dans la formule - promesse tenue.",
+    hint: "Aucun colorant de synthèse détecté dans la composition - promesse tenue.",
   },
   {
     slug: "absence_parfum_synthese",
@@ -336,7 +336,7 @@ export const CLAIM_CATEGORIES: ClaimCategory[] = [
     keywords: ["sans parfum", "sans parfum de synthèse", "sans parfum synthétique", "fragrance-free"],
     actives: [],
     forbiddenTag: "parfum-synthese",
-    hint: "Aucun parfum de synthèse détecté dans la formule - promesse tenue.",
+    hint: "Aucun parfum de synthèse détecté dans la composition - promesse tenue.",
   },
   {
     slug: "absence_allergene_parfumant",

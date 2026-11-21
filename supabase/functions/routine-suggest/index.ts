@@ -102,7 +102,7 @@ async function generateRoutineSuggestions(
   if (metrics.allergenOverlap.length >= 2) {
     const top = metrics.allergenOverlap.slice(0, 2).map((a) => a.label).join(" et ");
     engineSuggestions.push({
-      text: `Réduire l'exposition à **${top}** en cherchant des formules sans parfum.`,
+      text: `Réduire l'exposition à **${top}** en cherchant des compositions sans parfum.`,
     });
   }
 

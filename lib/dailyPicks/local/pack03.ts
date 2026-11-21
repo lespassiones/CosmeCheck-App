@@ -87,15 +87,15 @@ export const PACK_03: LocalPick[] = [
 
   // Jour 8
   q('Quelle texture solaire convient souvent aux peaux grasses ?', 'Un fluide léger', ['Une huile épaisse', 'Un baume très riche', 'Une pâte grasse'], 'Les fluides et gels légers pénètrent vite et laissent moins de brillance sur les peaux grasses.', 'peau grasse'),
-  m('La crème solaire donne forcément des boutons.', FAUX, 'Faux. Certaines textures riches peuvent gêner, mais il existe des formules légères adaptées aux peaux à imperfections.', 'idées reçues'),
+  m('La crème solaire donne forcément des boutons.', FAUX, 'Faux. Certaines textures riches peuvent gêner, mais il existe des compositions légères adaptées aux peaux à imperfections.', 'idées reçues'),
   q('Quelle texture solaire pour une peau sèche ?', 'Une crème plus nourrissante', ['Un gel alcoolisé', 'Une poudre seule', 'Une eau parfumée'], 'Une peau sèche aime les crèmes plus riches, qui protègent tout en hydratant.', 'peau sèche'),
-  q('Pour une peau sensible, quelle crème solaire choisir ?', 'Une formule sans parfum', ['Une formule très parfumée', 'Une huile sans filtre', 'Un spray alcoolisé'], 'Le parfum peut irriter. Une crème solaire sans parfum, pour peau sensible, limite les réactions.', 'peau sensible'),
+  q('Pour une peau sensible, quelle crème solaire choisir ?', 'Une composition sans parfum', ['Une composition très parfumée', 'Une huile sans filtre', 'Un spray alcoolisé'], 'Le parfum peut irriter. Une crème solaire sans parfum, pour peau sensible, limite les réactions.', 'peau sensible'),
   m('Un verre de vitre de bureau laisse passer une partie des UVA.', VRAI, 'Vrai. Le verre bloque les UVB mais laisse passer une partie des UVA. Ils jouent sur le vieillissement de la peau.', 'idées reçues'),
   q('Que peut provoquer le soleil sur les cheveux ?', 'Les dessécher et ternir la couleur', ['Les faire pousser deux fois plus', 'Les rendre imperméables', 'Les boucler'], 'Le soleil, le sel et le chlore dessèchent les cheveux. Chapeau et soins adaptés aident.', 'cheveux'),
   m('Mettre du parfum avant d’aller au soleil est sans risque.', NUANCE, 'Nuancé. Certains parfums peuvent laisser des taches brunes au soleil. Mieux vaut le mettre sur les vêtements ou éviter les zones exposées.', 'idées reçues'),
   q('Que faire après une baignade en piscine ou mer ?', 'Se rincer à l’eau douce', ['Laisser sécher le sel', 'Se frotter au sable', 'Mettre de l’alcool'], 'Rincer le sel ou le chlore évite de dessécher la peau et les cheveux. Puis on remet de la crème.', 'hygiène'),
   q('Quelle partie du pied brûle souvent ?', 'Le dessus du pied', ['La plante du pied', 'Le talon', 'Entre les orteils uniquement'], 'Le dessus des pieds est très exposé en sandales ou allongé. On pense à y mettre de la crème.', 'solaire'),
-  m('Les crèmes solaires minérales laissent parfois un voile blanc.', VRAI, 'Vrai. L’oxyde de zinc et le dioxyde de titane peuvent blanchir la peau. Les formules récentes sont souvent plus discrètes.', 'idées reçues'),
+  m('Les crèmes solaires minérales laissent parfois un voile blanc.', VRAI, 'Vrai. L’oxyde de zinc et le dioxyde de titane peuvent blanchir la peau. Les compositions récentes sont souvent plus discrètes.', 'idées reçues'),
 
   // Jour 9
   q('Quelle phrase sur le SPF est juste ?', 'Il ne dit pas combien de temps rester au soleil', ['Il donne le nombre d’heures', 'Il indique la couleur du bronzage', 'Il mesure l’hydratation'], 'Le SPF compare la protection à une peau nue, mais ne donne pas un temps d’exposition sûr.', 'étiquette'),
@@ -119,5 +119,5 @@ export const PACK_03: LocalPick[] = [
   m('On peut prendre un coup de soleil en faisant du vélo ou du jardinage.', VRAI, 'Vrai. Toute activité dehors expose aux UV. Nuque, bras et visage brûlent vite si on ne les protège pas.', 'idées reçues'),
   q('Où appliquer la crème avec un maillot ?', 'Aussi sur les bords du maillot', ['Seulement sur le visage', 'Sous le maillot uniquement', 'Juste sur les mains'], 'Les bords du maillot bougent et laissent apparaître de la peau. Couvre-les pour éviter les marques rouges.', 'solaire'),
   q('Que faire d’une crème qui s’est séparée en huile et eau ?', 'Ne plus l’utiliser', ['La mettre au soleil', 'La chauffer', 'N’utiliser que l’huile'], 'Une crème déphasée est abîmée. Les filtres ne sont plus bien répartis, donc la protection n’est plus fiable.', 'conservation'),
-  m('Il faut une protection solaire différente pour chaque membre de la famille.', NUANCE, 'Nuancé. Une même crème haute protection peut convenir à tous. Les peaux sensibles ou les bébés peuvent demander des formules adaptées.', 'idées reçues'),
+  m('Il faut une protection solaire différente pour chaque membre de la famille.', NUANCE, 'Nuancé. Une même crème haute protection peut convenir à tous. Les peaux sensibles ou les bébés peuvent demander des compositions adaptées.', 'idées reçues'),
 ]

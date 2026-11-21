@@ -43,7 +43,7 @@ function MedicalDisclaimer() {
         professionnel. Aucun ingrédient « rouge » ne signifie qu'il sera nécessairement
         problématique pour toi, et aucun « vert » ne garantit qu'il sera bien toléré.
         L'analyse repose sur des données publiques sur les ingrédients et ne tient
-        pas compte de la concentration réelle dans la formule ni de ta sensibilité
+        pas compte de la concentration réelle dans le produit ni de ta sensibilité
         individuelle.
       </Text>
     </View>
@@ -85,7 +85,7 @@ export default function AboutScreen() {
           title: 'Méthode de notation',
           paragraphs: [
             "Chaque ingrédient reçoit une « tolérance » indicative (Vert / Jaune / Orange / Rouge) basée sur les données publiques disponibles : statut réglementaire, listes d'allergènes encadrés, controverses documentées et profil environnemental connu.",
-            "Le score global d'un produit est une moyenne pondérée des tolérances, qui donne plus de poids aux ingrédients en début de liste (présents en plus grande quantité dans la formule).",
+            "Le score global d'un produit est une moyenne pondérée des tolérances, qui donne plus de poids aux ingrédients en début de liste (présents en plus grande quantité dans le produit).",
             "Cette note est une INDICATION pédagogique, pas un verdict. Voir l'avertissement médical ci-dessous.",
           ],
         },

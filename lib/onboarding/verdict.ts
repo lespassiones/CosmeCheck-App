@@ -118,7 +118,7 @@ const POSITIVES: { match: RegExp; fr: string; does: string }[] = [
 const CLAIMS: { match: RegExp; label: string }[] = [
   { match: /peaux? sensibles?|sensitive/i, label: 'Peaux sensibles' },
   { match: /hypoallerg/i, label: 'Hypoallergénique' },
-  { match: /\bdouce?s?\b|douceur|gentle/i, label: 'Formule douce' },
+  { match: /\bdouce?s?\b|douceur|gentle/i, label: 'Composition douce' },
   { match: /apais|calm|sooth/i, label: 'Apaisant' },
   { match: /hydrat|moistur/i, label: 'Hydratant' },
   { match: /nourri/i, label: 'Nourrissant' },

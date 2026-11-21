@@ -154,7 +154,7 @@ export const ScoreExplainerSheet: FC<Props> = ({
                   </Text>
                 ) : null}
                 Chaque produit reçoit un badge coloré, du rouge (à éviter) au vert
-                (très bien) : plus il est vert, plus la formule est jugée sûre au
+                (très bien) : plus il est vert, plus la composition est jugée sûre au
                 regard de ses ingrédients.
               </Text>
             </View>
@@ -220,7 +220,7 @@ export const ScoreExplainerSheet: FC<Props> = ({
           <Section title="Sur quoi repose ce classement">
             <Text style={styles.paragraph}>
               Le classement reflète les ingrédients réellement présents dans la
-              formule et la place qu'ils occupent dans la liste.
+              composition et la place qu'ils occupent dans la liste.
             </Text>
             <Text style={styles.paragraph}>
               Chaque ingrédient est apprécié au regard de la réglementation
@@ -231,7 +231,7 @@ export const ScoreExplainerSheet: FC<Props> = ({
             </Text>
             <Text style={styles.paragraph}>
               Plus un ingrédient est encadré, discuté ou signalé comme préoccupant
-              par ces sources, plus il pèse sur le classement. Une formule composée
+              par ces sources, plus il pèse sur le classement. Une composition faite
               d'ingrédients bien tolérés s'en sort donc mieux.
             </Text>
             <Text style={styles.footnote}>

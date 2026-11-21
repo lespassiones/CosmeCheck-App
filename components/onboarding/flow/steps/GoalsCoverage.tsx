@@ -140,13 +140,9 @@ export const GoalsCoverageStep: FC<StepProps> = ({ draft, next, firstName }) => 
     <StepLayout
       key="couverture"
       animate={false}
+      fill
       footerDelay={endAt + 300}
-      footer={
-        <>
-          <Text style={styles.pitch}>{pitch}</Text>
-          <PrimaryButton label={ctaLabel(incomplete)} iconRight="arrow-forward" onPress={next} />
-        </>
-      }
+      footer={<PrimaryButton label={ctaLabel(incomplete)} iconRight="arrow-forward" onPress={next} />}
     >
       <Gap h={14} />
       <RevealAt delay={0}>
@@ -184,6 +180,12 @@ export const GoalsCoverageStep: FC<StepProps> = ({ draft, next, firstName }) => 
       <Animated.View entering={fade(endAt, 400)}>
         <Text style={styles.note}>Calculé d'après les actifs du produit et sa qualité, comme dans l'app.</Text>
       </Animated.View>
+      {/* La phrase d'appel, en vert au milieu de la place libre (03/11/2026). */}
+      <Animated.View entering={fade(endAt + 200, 400)} style={styles.pitchZone}>
+        <View style={styles.pitchCard}>
+          <Text style={styles.pitch}>{pitch}</Text>
+        </View>
+      </Animated.View>
     </StepLayout>
   )
 }
@@ -201,11 +203,21 @@ const styles = StyleSheet.create({
   rowPct: { fontFamily: fontFamilies.bold, fontVariant: ['tabular-nums'] },
   track: { borderRadius: 999, backgroundColor: colors.gray200, overflow: 'hidden' },
   note: { fontFamily: fontFamilies.regular, fontSize: 12.5, lineHeight: 17, color: colors.inkLight, textAlign: 'center' },
+  pitchZone: { flex: 1, justifyContent: 'center', paddingVertical: 16 },
+  // Bloc vert arrondi (vert unique de l'app : fond #F0FDF4, liseré #BBF7D0).
+  pitchCard: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1.5,
+    borderColor: '#BBF7D0',
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
   pitch: {
-    fontFamily: fontFamilies.medium,
-    fontSize: 14.5,
-    lineHeight: 20,
-    color: colors.ink,
+    fontFamily: fontFamilies.bold,
+    fontSize: 18,
+    lineHeight: 25,
+    color: colors.success,
     textAlign: 'center',
   },
 })

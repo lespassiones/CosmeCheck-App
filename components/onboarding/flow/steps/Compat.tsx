@@ -191,7 +191,7 @@ export const CompatStep: FC<StepProps> = ({ draft, next, firstName }) => {
         <PerleBubble>
           {compat.personal
             ? `Voilà le plus important${who} : ton score de compatibilité.`
-            : `Voilà le score de sa formule${who}.`}
+            : `Voilà le score de sa composition${who}.`}
         </PerleBubble>
       </RevealAt>
       <Gap h={20} />

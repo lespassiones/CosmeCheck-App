@@ -18,7 +18,7 @@ export const PACK_09: LocalPick[] = [
   m('Raser les poils les fait repousser plus épais.', FAUX, 'Faux. Le rasage coupe le poil sans toucher la racine. La pointe coupée paraît juste plus drue au toucher.', 'idées reçues'),
   q('Qu’aime-t-on retrouver dans une crème pour pieds secs ?', 'De l’urée', ['Du sucre', 'De l’alcool pur', 'Du vinaigre'], 'L’urée hydrate et assouplit les zones épaisses comme les talons. On la trouve souvent dans les crèmes pour pieds.', 'pieds'),
   q('Un après-rasage sert surtout à…', 'Apaiser la peau', ['Faire pousser la barbe', 'Blanchir les dents', 'Remplacer la douche'], 'Après le passage de la lame, la peau est sensibilisée. Un soin après-rasage doux l’apaise et l’hydrate.', 'rasage'),
-  m('Un après-rasage très alcoolisé est ce qu’il y a de plus doux.', FAUX, 'Faux. L’alcool en grande quantité pique et peut dessécher. Une formule sans alcool ou un baume est plus doux.', 'rasage'),
+  m('Un après-rasage très alcoolisé est ce qu’il y a de plus doux.', FAUX, 'Faux. L’alcool en grande quantité pique et peut dessécher. Une composition sans alcool ou un baume est plus doux.', 'rasage'),
   q('Pour l’épilation à la cire, les poils doivent mesurer environ…', 'Quelques millimètres', ['Plusieurs centimètres', 'Zéro millimètre', 'Un mètre'], 'La cire a besoin d’une petite longueur, autour de quelques millimètres, pour bien attraper le poil.', 'épilation'),
   q('Quel est le rôle d’un gel douche ?', 'Laver la peau', ['La bronzer', 'La protéger du soleil', 'Faire maigrir'], 'Un gel douche contient des agents lavants qui retirent sueur, sébum et impuretés. Il ne soigne pas au-delà de ça.', 'hygiène'),
   m('Les coudes secs ont besoin d’une crème plus riche.', VRAI, 'Vrai. La peau des coudes est épaisse et sèche. Une crème riche, parfois avec de l’urée, aide à l’assouplir.', 'corps'),
@@ -74,7 +74,7 @@ export const PACK_09: LocalPick[] = [
   m('Bien sécher entre les orteils après la douche est utile.', VRAI, 'Vrai. L’humidité entre les orteils favorise les champignons. Un séchage soigneux est un geste simple de prévention.', 'pieds'),
 
   // Jour 7
-  q('Que choisir si l’on a la peau sensible sous les bras ?', 'Un déodorant sans alcool', ['Un parfum pur', 'Un gel à la menthe forte', 'Un vinaigre'], 'L’alcool et le parfum peuvent piquer une peau sensible. Une formule douce, sans alcool, est mieux tolérée.', 'corps'),
+  q('Que choisir si l’on a la peau sensible sous les bras ?', 'Un déodorant sans alcool', ['Un parfum pur', 'Un gel à la menthe forte', 'Un vinaigre'], 'L’alcool et le parfum peuvent piquer une peau sensible. Une composition douce, sans alcool, est mieux tolérée.', 'corps'),
   m('Les sels d’aluminium des anti-transpirants sont interdits en Europe.', FAUX, 'Faux. Ils sont autorisés, avec des concentrations encadrées. Il est conseillé de ne pas en mettre sur une peau lésée.', 'sécurité'),
   q('Le baume à lèvres idéal en hiver est plutôt…', 'Riche et gras', ['Très mentholé', 'Pailleté', 'À base d’alcool'], 'Le froid assèche les lèvres. Un baume riche protège mieux. Le menthol en excès peut au contraire irriter.', 'lèvres'),
   q('Qu’indique « pH neutre » sur un gel douche ?', 'Une douceur recherchée', ['Un effet bronzant', 'Une odeur forte', 'Un produit solaire'], 'Cette mention vise à indiquer un lavage doux. En pratique, la peau préfère un pH légèrement acide, autour de 5.', 'étiquette'),
@@ -90,7 +90,7 @@ export const PACK_09: LocalPick[] = [
   m('Un gommage juste avant l’épilation à la cire est conseillé.', NUANCE, 'Nuancé. Un gommage doux un ou deux jours avant aide. Le jour même, la peau serait trop sensibilisée pour la cire.', 'épilation'),
   q('Pour un bébé, le bain dure idéalement…', 'Quelques minutes', ['Une heure', 'Toute la matinée', 'Trente minutes minimum'], 'Un bain court, à eau tiède autour de 37 °C, suffit et évite de dessécher la peau fragile du bébé.', 'bébé'),
   q('Qu’est-ce qui dessèche le plus les lèvres ?', 'Le froid et le vent', ['Le sommeil', 'Boire de l’eau', 'Le baume'], 'Froid, vent et air sec assèchent les lèvres. Un baume protecteur limite ces effets.', 'lèvres'),
-  m('Un gel douche parfumé convient toujours aux peaux sensibles.', FAUX, 'Faux. Le parfum est une cause fréquente d’irritation. Les peaux sensibles tolèrent mieux les formules sans parfum.', 'peau sensible'),
+  m('Un gel douche parfumé convient toujours aux peaux sensibles.', FAUX, 'Faux. Le parfum est une cause fréquente d’irritation. Les peaux sensibles tolèrent mieux les compositions sans parfum.', 'peau sensible'),
   q('Quel est l’intérêt d’une huile de douche ?', 'Laver sans trop dessécher', ['Bronzer sous la douche', 'Faire fondre la graisse', 'Colorer la peau'], 'L’huile lavante laisse un léger film sur la peau. Elle convient bien aux peaux sèches.', 'peau sèche'),
   q('Qu’utiliser pour adoucir des coudes rugueux ?', 'Un gommage doux puis crème', ['Une râpe métallique', 'De l’alcool', 'Rien du tout'], 'Un gommage doux retire les peaux mortes, puis une crème riche les assouplit. Pas besoin d’outil agressif.', 'corps'),
   m('La pierre ponce s’utilise sur les talons secs.', VRAI, 'Vrai. Utilisée doucement sur peau humide, elle affine la corne. On évite de frotter trop fort ni trop souvent.', 'pieds'),

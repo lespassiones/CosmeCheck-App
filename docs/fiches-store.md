@@ -127,14 +127,14 @@ cosmecheck,routine,crème,visage,beauté,peau,bio,naturelle,allergène,ingrédie
 Une crème, un shampoing, un déo : scanne-le, lis sa composition INCI en clair, et vois s'il convient à ta peau et si ses promesses tiennent.
 ```
 
-### Nouveautés de la 1.0.5 (à relire)  ·  457 / 4000
+### Nouveautés de la 1.0.6 (à relire)  ·  421 / 4000
 
 ```
-Parle à Perle, et vois tout de suite ce qu'un produit fait pour toi.
+Un départ encore plus personnel, pensé pour ta peau.
 
-• Dicte tes questions à Perle, ta conseillère beauté : appuie sur le micro et parle, elle écrit pour toi.
-• Dès ton premier scan, découvre ton score de compatibilité personnel et ce que le produit fait pour chacun de tes objectifs.
-• Questionnaire de départ plus clair : cases à cocher, textes plus lisibles, clavier qui ne cache plus rien.
+• À la fin du questionnaire, Perle te montre la routine qu'elle va chercher pour toi, d'après tes soucis de peau et tes objectifs.
+• Tes objectifs sont mieux mis en avant : tu vois d'un coup d'œil ce que ton produit couvre et ce qui reste à trouver.
+• Un vocabulaire plus juste : on parle de la composition d'un produit.
 • Corrections et améliorations de performance.
 ```
 

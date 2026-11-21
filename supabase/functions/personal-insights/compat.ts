@@ -114,8 +114,8 @@ export function negativeSubtitle(ctx: {
   if (!ctx.productOnly && ctx.against.length > 0) {
     return `${ctx.against[0].name.toLowerCase()} déconseillé pour ${ctx.against[0].need}`;
   }
-  if (ctx.red > 0 || ctx.orange > 0) return "formule pénalisée par des ingrédients à risque";
-  return "la qualité de la formule est insuffisante";
+  if (ctx.red > 0 || ctx.orange > 0) return "composition pénalisée par des ingrédients à risque";
+  return "la qualité de la composition est insuffisante";
 }
 
 export type ContributorInput = { name: string };

@@ -177,19 +177,19 @@ export const VerdictStep: FC<StepProps> = ({ draft, next }) => {
       : verdict.kind === 'alerts'
         ? personalized
           ? "Voilà ce que personne ne t'avait dit sur ce produit."
-          : 'Voilà ce que sa formule cache. Complète ton profil beauté pour une lecture faite pour ta peau.'
+          : 'Voilà ce que sa composition cache. Complète ton profil beauté pour une lecture faite pour ta peau.'
         : clean
           ? personalized
             ? 'Ce produit te convient. Tu vois, je ne dis pas que du mal des produits.'
-            : "Sa formule est plutôt propre. Complète ton profil beauté et je te dirai s'il convient à ta peau."
+            : "Sa composition est plutôt propre. Complète ton profil beauté et je te dirai s'il convient à ta peau."
           : personalized
-            ? "Rien de ce que tu évites, mais sa formule reste moyenne. Je t'aiderai à trouver mieux."
-            : "Rien d'alarmant, mais sa formule reste moyenne. Je t'aiderai à trouver mieux."
+            ? "Rien de ce que tu évites, mais sa composition reste moyenne. Je t'aiderai à trouver mieux."
+            : "Rien d'alarmant, mais sa composition reste moyenne. Je t'aiderai à trouver mieux."
   const title = clean
     ? personalized
       ? 'Bonne pioche !'
-      : 'Plutôt une bonne formule.'
-    : "Ce que dit l'étiquette.\nCe que dit la formule."
+      : 'Plutôt une bonne composition.'
+    : "Ce que dit l'étiquette.\nCe que dit la composition."
 
   return (
     // Le verdict arrive après la lecture de la liste : l'écran se remet en page

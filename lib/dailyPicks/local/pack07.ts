@@ -7,7 +7,7 @@ export const PACK_07: LocalPick[] = [
   q('Quelle vitamine est connue pour donner de l’éclat au teint ?', 'La vitamine C', ['La vitamine D', 'La vitamine B12', 'La vitamine K'], 'La vitamine C est un antioxydant qui aide à unifier le teint et à lui redonner de l’éclat.', 'actifs'),
   m('L’acide hyaluronique est un acide qui brûle la peau.', FAUX, 'Faux. Malgré son nom, c’est une molécule hydratante très douce, déjà présente naturellement dans notre peau.', 'idées reçues'),
   q('Quel actif est souvent conseillé contre les points noirs ?', 'L’acide salicylique', ['Le beurre de karité', 'L’huile de coco', 'La vaseline'], 'L’acide salicylique se mêle au sébum et désobstrue les pores, ce qui aide contre les points noirs.', 'peau grasse'),
-  q('Que signifie SPF sur une crème de jour ?', 'Protection contre les UVB', ['Crème pour peau sèche', 'Produit sans parfum', 'Formule très hydratante'], 'Le SPF indique le niveau de protection contre les UVB, responsables des coups de soleil.', 'solaire'),
+  q('Que signifie SPF sur une crème de jour ?', 'Protection contre les UVB', ['Crème pour peau sèche', 'Produit sans parfum', 'Composition très hydratante'], 'Le SPF indique le niveau de protection contre les UVB, responsables des coups de soleil.', 'solaire'),
   m('Le panthénol est aussi appelé provitamine B5.', VRAI, 'Vrai. Le panthénol est la provitamine B5 : il apaise et aide la peau abîmée à se réparer.', 'actifs'),
   q('Dans quel type de crème trouve-t-on souvent de l’urée ?', 'Crème pour peau très sèche', ['Gel pour peau grasse', 'Démaquillant pour les yeux', 'Shampoing antipelliculaire'], 'L’urée hydrate et assouplit la peau rugueuse : on la retrouve surtout dans les crèmes pour pieds et peaux très sèches.', 'peau sèche'),
   m('Mettre du collagène sur la peau remplace celui qu’on a perdu.', FAUX, 'Faux. Le collagène en crème est trop gros pour pénétrer dans le derme. Il hydrate en surface mais ne remplace pas le nôtre.', 'idées reçues'),
@@ -58,7 +58,7 @@ export const PACK_07: LocalPick[] = [
   q('Quel actif est souvent associé aux boutons ?', 'L’acide salicylique', ['Le collagène', 'Le beurre de cacao', 'La cire d’abeille'], 'L’acide salicylique aide à désobstruer les pores et à limiter les imperfections.', 'peau grasse'),
   m('On peut mélanger niacinamide et vitamine C.', NUANCE, 'Nuancé. Cette vieille crainte est surtout théorique. Beaucoup les utilisent ensemble, mais on peut aussi les séparer matin et soir si ça picote.', 'routine'),
   q('Quel ingrédient donne souvent une texture riche aux crèmes aux céramides ?', 'Des lipides nourrissants', ['Des bulles de gaz', 'Du sable fin', 'De l’eau gazeuse'], 'Les céramides sont souvent associées à d’autres lipides, comme le cholestérol, pour une barrière complète.', 'ingrédients'),
-  m('La glycérine peut coller si elle est très concentrée.', VRAI, 'Vrai. À forte dose, la glycérine peut laisser un fini un peu collant. Les formules bien dosées l’évitent.', 'ingrédients'),
+  m('La glycérine peut coller si elle est très concentrée.', VRAI, 'Vrai. À forte dose, la glycérine peut laisser un fini un peu collant. Les produits bien dosés l’évitent.', 'ingrédients'),
   q('Quel indice SPF est souvent conseillé au quotidien ?', 'Au moins 30', ['Seulement 2', 'Exactement 5', 'Aucun indice'], 'Un SPF 30 ou plus est souvent conseillé pour une bonne protection au quotidien, surtout en extérieur.', 'solaire'),
 
   // Jour 6

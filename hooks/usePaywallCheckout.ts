@@ -24,6 +24,7 @@ import { usePurchases } from '@/hooks/usePurchases'
 import { useRestorePurchases } from '@/hooks/useRestorePurchases'
 import { useProfile } from '@/hooks/useProfile'
 import {
+  annualPerDayLabel,
   annualPerMonthLabel,
   legalDisclosure,
   planPriceLabel,
@@ -59,6 +60,8 @@ export function usePaywallCheckout(options?: {
     monthlyPrice: planPriceLabel(monthly),
     yearlyPrice: planPriceLabel(yearly),
     yearlyPerMonth: annualPerMonthLabel(yearly),
+    /** Annuel ramené à la journée (« 0,16 € »), mis en avant sur sa carte. */
+    yearlyPerDay: annualPerDayLabel(yearly),
     savePercent: savingsPercent(monthly, yearly),
     priceLine: renewLine(selected, selectedPkg),
     /** « 3 jours », ou `null` si la personne n'a pas droit à l'essai. */

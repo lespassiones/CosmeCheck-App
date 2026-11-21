@@ -238,7 +238,7 @@ export const PromessesList: FC = () => {
         <Ionicons name="shield-checkmark-outline" size={44} color={colors.inkLight} />
         <Text style={styles.emptyTitle}>Aucune analyse de cohérence</Text>
         <Text style={styles.emptyText}>
-          Compare les promesses marketing d&apos;un produit avec sa formule réelle. On te dit ce qui est
+          Compare les promesses marketing d&apos;un produit avec sa composition réelle. On te dit ce qui est
           tenu et ce qui relève du marketing.
         </Text>
         <Pressable style={styles.emptyCta} onPress={() => setChooserOpen(true)}>
@@ -252,7 +252,7 @@ export const PromessesList: FC = () => {
   return (
     <View style={styles.root}>
       <View style={styles.subHeader}>
-        <Text style={styles.subtitle}>Promesses du produit vs formule réelle</Text>
+        <Text style={styles.subtitle}>Promesses du produit vs composition réelle</Text>
       </View>
       {/* La carte du haut n'apparaît qu'une fois au moins une analyse faite :
           sur un compte neuf, seul le CTA « Lancer ma première analyse » de

@@ -271,7 +271,7 @@ function AllClearCard() {
         <HaloIcon name="checkmark" iconColor={colors.rating.vert.text} bg={colors.rating.vert.bg} />
         <View style={styles.cardBody}>
           <Text style={styles.eyebrow}>TOUT VA BIEN</Text>
-          <Text style={styles.verdictPhrase}>Aucun ingrédient à signaler dans cette formule.</Text>
+          <Text style={styles.verdictPhrase}>Aucun ingrédient à signaler dans cette composition.</Text>
         </View>
       </View>
     </WhiteCard>

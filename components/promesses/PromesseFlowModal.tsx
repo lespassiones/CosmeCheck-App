@@ -89,7 +89,7 @@ const FETCH_STEPS = [
 
 const COHERENCE_STEPS = [
   'Lecture des promesses',
-  'Confrontation à la formule',
+  'Confrontation à la composition',
   'Calcul de la cohérence',
 ] as const
 
@@ -449,7 +449,7 @@ export const PromesseFlowModal: FC<Props> = ({
             value={manualDescription}
             onChangeText={(t) => setManualDescription(t.slice(0, MAX_MANUAL_DESC))}
             placeholder={
-              'Ex : Cette crème densifiante anti-chute booste la pousse, renforce l’ancrage du cheveu et hydrate intensément. Formule à base d’huile d’argan, panthénol et caféine.'
+              'Ex : Cette crème densifiante anti-chute booste la pousse, renforce l’ancrage du cheveu et hydrate intensément. Composition à base d’huile d’argan, panthénol et caféine.'
             }
             placeholderTextColor={colors.inkLight}
             selectionColor={colors.textSelection}

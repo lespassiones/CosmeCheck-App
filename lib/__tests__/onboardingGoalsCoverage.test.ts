@@ -154,9 +154,9 @@ describe('écran et bouton', () => {
     hasScannedProduct: true,
     hasProductScore: true,
   }
-  it('après le score de compatibilité, avant le paywall', () => {
+  it('après le score de compatibilité, en dernier (paywall après le compte)', () => {
     const steps = visibleSteps({ ...ctx, hasGoalBasis: true })
-    expect(steps.slice(-3)).toEqual(['compat', 'goalsCoverage', 'paywall'])
+    expect(steps.slice(-3)).toEqual(['montage', 'compat', 'goalsCoverage'])
   })
   it('caché sans base d’objectif, sans produit, ou sans consentement santé', () => {
     expect(visibleSteps({ ...ctx, hasGoalBasis: false })).not.toContain('goalsCoverage')

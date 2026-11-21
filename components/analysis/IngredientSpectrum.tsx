@@ -158,7 +158,7 @@ export const IngredientSpectrum = memo(function IngredientSpectrum({
         </View>
       ) : allGreenTop5 ? (
         <Text style={styles.okHint}>
-          Top 5 entièrement vert - la majorité de la formule est sans risque connu.
+          Top 5 entièrement vert - la majorité de la composition est sans risque connu.
         </Text>
       ) : null}
 

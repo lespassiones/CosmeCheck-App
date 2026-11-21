@@ -80,42 +80,12 @@ import { MontageStep, NotificationsStep } from '@/components/onboarding/flow/ste
 import { CompatStep } from '@/components/onboarding/flow/steps/Compat'
 import { GoalsCoverageStep } from '@/components/onboarding/flow/steps/GoalsCoverage'
 import { hasGoalBasis } from '@/lib/onboarding/goalsCoverage'
-import { OnboardingPaywall, PREMIUM_CREAM } from '@/components/onboarding/flow/OnboardingPaywall'
-import { usePaywallCheckout } from '@/hooks/usePaywallCheckout'
-import { draftRestrictionFamilies } from '@/lib/onboarding/buildPreferences'
 import type { StepProps } from '@/components/onboarding/flow/types'
 
 type Direction = 'forward' | 'back'
 
 /** Délai minimal entre deux avances (anti double appui sur « Continuer »). */
 const ADVANCE_LOCK_MS = 400
-
-/**
- * Paywall du parcours invité, au pic de motivation, AVANT le compte (comme
- * MemoryPilot). Acheter ou « Plus tard » mènent tous deux à la création du
- * compte ; l'achat anonyme y est rattaché par `loginUser` à l'inscription.
- */
-const GuestPaywall: FC<{
-  draft: OnboardingDraft
-  firstName: string
-  onDone: (purchased: boolean) => void
-}> = ({ draft, firstName, onDone }) => {
-  const checkout = usePaywallCheckout({ guest: true, onPurchased: () => onDone(true) })
-  const personalized = draft.consent?.granted === true
-  return (
-    <OnboardingPaywall
-      embedded
-      checkout={checkout}
-      onLater={() => onDone(false)}
-      person={{
-        firstName: firstName || null,
-        skinTypeFace: personalized && draft.skinTest && draft.skinTest !== 'inconnu' ? draft.skinTest : undefined,
-        concerns: personalized ? draft.concerns : [],
-        restrictionFamilies: personalized ? draftRestrictionFamilies(draft) : [],
-      }}
-    />
-  )
-}
 
 function readConsent(prefs: unknown): OnboardingDraft['consent'] | undefined {
   if (!prefs || typeof prefs !== 'object') return undefined
@@ -184,6 +154,15 @@ export const OnboardingFlow: FC<{ mode: FlowMode }> = ({ mode }) => {
     void (async () => {
       const loaded = (await loadDraft()) ?? emptyDraft()
       if (!alive) return
+      // Brouillon d'une version précédente arrêté sur l'ancien paywall invité
+      // (retiré le 10/11/2026) : le parcours est fini, on passe au compte, et
+      // le paywall s'affichera juste après l'inscription.
+      if (mode === 'guest' && !loaded.completed && loaded.step === 'paywall') {
+        saveDraft({ ...loaded, completed: true })
+        markPreOnboardingDone()
+        router.replace(ROUTES.AUTH.WELCOME)
+        return
+      }
       if (mode === 'guest' && loaded.completed) {
         // Réponses déjà données, compte pas encore créé : on reprend au compte.
         markPreOnboardingDone()
@@ -254,8 +233,8 @@ export const OnboardingFlow: FC<{ mode: FlowMode }> = ({ mode }) => {
   const back = useCallback((): boolean => {
     const current = stepRef.current
     if (!current) return false
-    // Montage, score et paywall ne se rejouent pas en arrière : « Plus tard » est la sortie.
-    if (current === 'paywall' || current === 'montage' || current === 'compat' || current === 'goalsCoverage') return true
+    // Montage et score ne se rejouent pas en arrière.
+    if (current === 'montage' || current === 'compat' || current === 'goalsCoverage') return true
     const steps = visibleSteps(contextFor(draftRef.current))
     const target = previousStep(current, steps)
     if (!target) return false
@@ -348,17 +327,6 @@ export const OnboardingFlow: FC<{ mode: FlowMode }> = ({ mode }) => {
         return <CompatStep {...props} />
       case 'goalsCoverage':
         return <GoalsCoverageStep {...props} />
-      case 'paywall':
-        return (
-          <GuestPaywall
-            draft={draft}
-            firstName={firstName}
-            onDone={(purchased) => {
-              update({ paywallSeen: true, purchased: purchased || draft.purchased === true })
-              void finish()
-            }}
-          />
-        )
       default:
         return null
     }
@@ -369,7 +337,7 @@ export const OnboardingFlow: FC<{ mode: FlowMode }> = ({ mode }) => {
     .reduceMotion(ReduceMotion.System)
 
   return (
-    <View style={[styles.root, step === 'paywall' && { backgroundColor: PREMIUM_CREAM }]}>
+    <View style={styles.root}>
       <StatusBar style="dark" />
       {/* Le clavier est géré par chaque écran (StepLayout) : il remonte la barre
           du bas et fait défiler vers le champ actif. */}

@@ -267,7 +267,9 @@ export const PrimaryButton: FC<{
   icon?: keyof typeof Ionicons.glyphMap
   iconRight?: keyof typeof Ionicons.glyphMap
   leading?: ReactNode
-}> = ({ label, onPress, disabled = false, loading = false, icon, iconRight, leading }) => {
+  /** Hauteur réduite (pied du paywall). */
+  compact?: boolean
+}> = ({ label, onPress, disabled = false, loading = false, icon, iconRight, leading, compact = false }) => {
   const off = disabled || loading
   return (
     <View>
@@ -281,7 +283,7 @@ export const PrimaryButton: FC<{
         accessibilityRole="button"
         accessibilityState={{ disabled: off, busy: loading }}
         accessibilityLabel={label}
-        style={[styles.primary, off && !loading && styles.primaryOff]}
+        style={[styles.primary, compact && styles.primaryCompact, off && !loading && styles.primaryOff]}
       >
         {loading ? (
           <ActivityIndicator color={colors.surface} />
@@ -616,7 +618,9 @@ export const StepLayout: FC<{
   focusSpace?: number
   /** Moment d'entrée de la barre du bas, quand l'écran règle lui-même son ordre. */
   footerDelay?: number
-}> = ({ children, footer, contentStyle, animate = true, focusSpace = 28, footerDelay: footerAt }) => {
+  /** La colonne occupe toute la hauteur : un enfant en `flex: 1` prend la place libre. */
+  fill?: boolean
+}> = ({ children, footer, contentStyle, animate = true, focusSpace = 28, footerDelay: footerAt, fill = false }) => {
   const insets = useSafeAreaInsets()
   const { scrollRef, keyboardHeight, onScroll, onContentSizeChange, prepareFocus, prepareTouch } =
     useKeyboardAwareScroll(focusSpace)
@@ -735,6 +739,7 @@ export const StepLayout: FC<{
               pointerEvents={fit.hidden ? 'none' : 'auto'}
               style={[
                 styles.column,
+                fill && styles.flexGrow,
                 fit.hidden && styles.hidden,
                 // Dernier recours : réduit depuis le haut, la marge négative rend la place gagnée.
                 fit.zoom < 1 && {
@@ -771,6 +776,7 @@ export const Gap: FC<{ h: number }> = ({ h }) => <View style={{ height: fitSize(
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  flexGrow: { flexGrow: 1 },
   hidden: { opacity: 0 },
   fill: { width: '100%' },
   column: { width: '100%', maxWidth: FLOW_MAX_WIDTH, alignSelf: 'center' },
@@ -880,6 +886,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 3,
   },
+  primaryCompact: { height: 50 },
   primaryOff: { backgroundColor: colors.border, shadowOpacity: 0, elevation: 0 },
   primaryText: { fontFamily: fontFamilies.semiBold, fontSize: 17, color: colors.surface },
   primaryTextOff: { color: colors.inkLight },

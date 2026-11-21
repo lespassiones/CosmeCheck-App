@@ -249,7 +249,7 @@ export const CoherenceWizard: FC<{ options: AnalysisOption[] }> = ({ options }) 
             value={description}
             onChangeText={(t) => setDescription(t.slice(0, MAX_DESCRIPTION))}
             multiline
-            placeholder="Ex : Cette crème densifiante anti-chute booste la pousse, renforce l'ancrage du cheveu et hydrate intensément. Formule à base d'huile d'argan, panthénol et caféine. Naturel à 96 %."
+            placeholder="Ex : Cette crème densifiante anti-chute booste la pousse, renforce l'ancrage du cheveu et hydrate intensément. Composition à base d'huile d'argan, panthénol et caféine. Naturel à 96 %."
             placeholderTextColor={colors.inkLight}
             selectionColor={colors.textSelection}
             style={[styles.input, styles.textArea]}
@@ -447,7 +447,7 @@ export const CoherenceWizard: FC<{ options: AnalysisOption[] }> = ({ options }) 
             <ActivityIndicator size="large" color={colors.rose} />
             <Text style={styles.runningTitle}>Analyse en cours…</Text>
             <Text style={styles.runningSub}>
-              On lit la description, on identifie les promesses, on vérifie la formule.
+              On lit la description, on identifie les promesses, on vérifie la composition.
             </Text>
           </View>
         </GlassCard>

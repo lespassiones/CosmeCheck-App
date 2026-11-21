@@ -192,7 +192,7 @@ export const PromesseChooserSheet: FC<Props> = ({ visible, onClose, returnTo }) 
             Vérifier une promesse
           </Text>
           <Text style={styles.subtitle}>
-            Compare ce que promet l’emballage avec la vraie formule.
+            Compare ce que promet l’emballage avec la vraie composition.
           </Text>
 
           <View style={styles.card}>

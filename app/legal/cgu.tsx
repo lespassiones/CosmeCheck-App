@@ -16,7 +16,7 @@ const CGU_SECTIONS: LegalSection[] = [
         {
           title: '1. Objet du service',
           paragraphs: [
-            "Cosme Check est une application d'analyse de produits cosmétiques destinée au grand public. Elle te permet : de scanner le code-barres d'un produit ou de saisir sa liste d'ingrédients (INCI), d'obtenir une décomposition pédagogique de la formule, de constituer une routine, de comparer des produits et de poser des questions à un assistant IA.",
+            "Cosme Check est une application d'analyse de produits cosmétiques destinée au grand public. Elle te permet : de scanner le code-barres d'un produit ou de saisir sa liste d'ingrédients (INCI), d'obtenir une décomposition pédagogique de la composition, de constituer une routine, de comparer des produits et de poser des questions à un assistant IA.",
             "L'Application ne remplace en aucun cas l'avis d'un professionnel de santé (médecin, dermatologue, pharmacien). Voir l'avertissement médical dans la rubrique « À propos ».",
           ],
         },

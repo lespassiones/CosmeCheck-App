@@ -89,16 +89,16 @@ describe('personal-insights buildPrompt : zone du produit', () => {
 
 describe('ton de la note globale : tons STOCKÉS green/amber/orange/rose', () => {
   it('mappe chaque ton réel (plus de test sur un "red" jamais stocké)', () => {
-    expect(scoreToneLabel('green')).toBe('VERT (bonne formule)')
-    expect(scoreToneLabel('amber')).toBe('AMBRE (formule moyenne)')
-    expect(scoreToneLabel('orange')).toBe('ORANGE (formule faible)')
-    expect(scoreToneLabel('rose')).toBe('ROUGE (formule très faible)')
+    expect(scoreToneLabel('green')).toBe('VERT (bonne composition)')
+    expect(scoreToneLabel('amber')).toBe('AMBRE (composition moyenne)')
+    expect(scoreToneLabel('orange')).toBe('ORANGE (composition faible)')
+    expect(scoreToneLabel('rose')).toBe('ROUGE (composition très faible)')
     expect(scoreToneLabel(null)).toBeNull()
   })
 
   it('le message utilisateur affiche le libellé, jamais le code brut', () => {
     const { user } = buildPrompt(makeInput({ scoreTone: 'rose', score: 3, scoreLabel: 'Faible' }))
-    expect(user).toContain('ton ROUGE (formule très faible)')
+    expect(user).toContain('ton ROUGE (composition très faible)')
     expect(user).not.toMatch(/ton rose\b/)
   })
 })

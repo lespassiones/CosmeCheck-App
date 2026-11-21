@@ -14,7 +14,7 @@ export const PACK_01: LocalPick[] = [
   m('Il faut frotter fort sa peau pour bien la nettoyer.', FAUX, 'Faux. Frotter irrite et abîme la barrière cutanée. Un geste doux avec un nettoyant adapté suffit.', 'idées reçues'),
 
   // Jour 2
-  m('Une peau sensible réagit plus facilement aux produits.', VRAI, 'Vrai. Elle picote, rougit ou chauffe plus vite. Mieux vaut des formules courtes, sans parfum, et tester avant.', 'idées reçues'),
+  m('Une peau sensible réagit plus facilement aux produits.', VRAI, 'Vrai. Elle picote, rougit ou chauffe plus vite. Mieux vaut des compositions courtes, sans parfum, et tester avant.', 'idées reçues'),
   q('Que produit la peau pour se protéger naturellement ?', 'Du sébum', ['Du collagène liquide', 'De la kératine en gel', 'Du fluor'], 'Le sébum, produit par les glandes sébacées, forme avec la sueur un film qui protège et assouplit la peau.', 'peau grasse'),
   q('Quel geste aide la crème à mieux faire effet ?', 'L’appliquer sur une peau propre', ['L’appliquer sur le maquillage', 'La rincer après une minute', 'La mettre sur peau sale'], 'Sur une peau propre, la crème se répartit mieux et n’emprisonne pas les impuretés de la journée.', 'routine'),
   m('Une peau normale n’a besoin d’aucun soin.', NUANCE, 'Nuancé. Elle est plutôt équilibrée, mais un nettoyage doux, une crème légère et une protection solaire restent utiles.', 'idées reçues'),
@@ -82,7 +82,7 @@ export const PACK_01: LocalPick[] = [
   q('Pourquoi la peau des lèvres se dessèche vite ?', 'Elle n’a pas de glandes sébacées', ['Elle est trop épaisse', 'Elle produit trop de sébum', 'Elle est couverte de poils'], 'Les lèvres n’ont presque pas de sébum pour se protéger. Un baume les aide, surtout par temps froid.', 'lèvres'),
   q('Quelle est la plus grande fonction de la peau ?', 'Protéger le corps de l’extérieur', ['Digérer les aliments', 'Faire circuler le sang', 'Produire des hormones de croissance'], 'La peau est une enveloppe protectrice : elle limite les pertes d’eau et freine microbes, UV et irritants.', 'routine'),
   m('Il faut changer de produits dès qu’on s’y habitue.', FAUX, 'Faux. La peau ne devient pas « insensible » à un soin qui lui convient. Pas besoin d’en changer sans raison.', 'idées reçues'),
-  q('Qu’est-ce qui aggrave souvent une peau sensible ?', 'Les parfums et les gommages répétés', ['L’eau tiède', 'Une crème neutre', 'Un nettoyant doux'], 'Parfums et frottements répétés irritent facilement. Les peaux sensibles préfèrent des gestes doux et des formules simples.', 'peau sensible'),
+  q('Qu’est-ce qui aggrave souvent une peau sensible ?', 'Les parfums et les gommages répétés', ['L’eau tiède', 'Une crème neutre', 'Un nettoyant doux'], 'Parfums et frottements répétés irritent facilement. Les peaux sensibles préfèrent des gestes doux et des compositions simples.', 'peau sensible'),
   m('On peut avoir la peau sèche et des boutons en même temps.', VRAI, 'Vrai. Sécheresse et imperfections peuvent coexister, par exemple avec certains traitements anti-acné.', 'idées reçues'),
 
   // Jour 8

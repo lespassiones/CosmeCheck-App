@@ -855,7 +855,7 @@ const THINKING_PHRASES = [
   'On déchiffre les étiquettes…',
   'On traque les ingrédients…',
   'On interroge le web…',
-  'On compare les formules…',
+  'On compare les compositions…',
   'On lit les listes INCI…',
   'On décode les promesses…',
   'On fouille les rayons…',

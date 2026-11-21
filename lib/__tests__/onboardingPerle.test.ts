@@ -68,15 +68,17 @@ function draft(patch: Partial<OnboardingDraft> = {}): OnboardingDraft {
 const NOW = '2026-09-28T10:05:00.000Z'
 
 describe('étapes visibles', () => {
-  it('parcours invité complet : accroche, consentement, questions, scan, montage, paywall', () => {
+  it('parcours invité complet : accroche, consentement, questions, scan, montage (paywall après le compte)', () => {
     const steps = visibleSteps({ ...guest, consentGranted: true, hasScannedProduct: true, hasProductScore: true, hasGoalBasis: true })
     expect(steps[0]).toBe('hook1')
     expect(steps).toContain('consent')
     expect(steps).toContain('bodySkin')
     expect(steps).toContain('goals')
-    // Score de compatibilité juste après le montage, puis le paywall, AVANT le compte.
-    expect(steps.slice(-4)).toEqual(['montage', 'compat', 'goalsCoverage', 'paywall'])
-    expect(steps).toEqual(STEP_ORDER)
+    // Score de compatibilité juste après le montage ; le paywall vient APRÈS
+    // l'inscription, par /offre (10/11/2026), plus dans le parcours.
+    expect(steps.slice(-3)).toEqual(['montage', 'compat', 'goalsCoverage'])
+    expect(steps).not.toContain('paywall')
+    expect(steps).toEqual(STEP_ORDER.filter((s) => s !== 'paywall'))
   })
 
   it("le score de compatibilité n'apparaît qu'avec un produit noté", () => {
@@ -134,8 +136,7 @@ describe('étapes visibles', () => {
     expect(nextStep('hook1', steps)).toBe('hook2')
     expect(previousStep('hook2', steps)).toBe('hook1')
     expect(previousStep('hook1', steps)).toBeNull()
-    expect(nextStep('montage', steps)).toBe('paywall')
-    expect(nextStep('paywall', steps)).toBeNull()
+    expect(nextStep('montage', steps)).toBeNull()
   })
 })
 
@@ -386,7 +387,7 @@ describe('verdict express', () => {
     expect(v.starTone).toBe('caution')
     expect(v.tone).toBe('orange')
     expect(v.kind).toBe('alerts')
-    expect(v.claims).toEqual(expect.arrayContaining(['Peaux sensibles', 'Formule douce', 'Apaisant']))
+    expect(v.claims).toEqual(expect.arrayContaining(['Peaux sensibles', 'Composition douce', 'Apaisant']))
     expect(v.counts).toEqual({ vert: 3, jaune: 3, orange: 0, rouge: 1, total: 27 })
   })
 

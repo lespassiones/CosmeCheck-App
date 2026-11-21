@@ -85,7 +85,7 @@ export const CoherenceTable: FC<{ promises: CoherencePromise[]; items?: AnalyseI
     <WhiteCard padding={spacing.lg}>
       <Text style={styles.title}>Tableau de cohérence</Text>
       <Text style={styles.subtitle}>
-        Pour chaque promesse : le verdict de la formule et les ingrédients trouvés.
+        Pour chaque promesse : le verdict de la composition et les ingrédients trouvés.
       </Text>
       <View style={styles.list}>
         {directPromises.map((p) => (

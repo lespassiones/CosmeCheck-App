@@ -122,6 +122,52 @@ export function annualPerMonthLabel(
 }
 
 /**
+ * Réécrit un montant dans le format exact d'un prix du magasin.
+ *
+ * `priceString` (« 59,99 € », « $59.99 », « CHF 59.00 ») dit où va la devise,
+ * quel séparateur décimal on emploie et combien de décimales : on y remplace
+ * le nombre, sans rien supposer de la langue de l'appareil. `null` si la
+ * chaîne ne contient pas de nombre lisible.
+ */
+export function formatLikeStorePrice(priceString: string | null | undefined, value: number): string | null {
+  const s = priceString?.trim()
+  if (!s || !Number.isFinite(value) || value < 0) return null
+  const m = s.match(/\d(?:[\d\s.,  ']*\d)?/)
+  if (!m) return null
+  const num = m[0]
+  // Séparateur décimal : la dernière virgule ou le dernier point suivi de 1 à 3
+  // chiffres en fin de nombre (« 1.234,56 » → virgule, « 1,234.56 » → point).
+  const dec = num.match(/([.,])(\d{1,2})$/)
+  const decimals = dec ? dec[2].length : 0
+  const sep = dec ? dec[1] : ','
+  const factor = 10 ** decimals
+  const rounded = Math.round(value * factor) / factor
+  const [ent, frac] = rounded.toFixed(decimals).split('.')
+  const out = decimals > 0 ? `${ent}${sep}${frac}` : ent
+  return s.slice(0, m.index) + out + s.slice((m.index ?? 0) + num.length)
+}
+
+/**
+ * Prix de l'abonnement **annuel** ramené à la journée (« 0,16 € »), sur le
+ * modèle « $0.22 per day » : prix annuel / 365, arrondi à l'unité la plus
+ * petite affichée par le magasin (le centime), dans le format du magasin.
+ * `null` sans prix exploitable : l'appelant affiche alors le prix annuel.
+ */
+export function annualPerDayLabel(pkg: PackageLike | null | undefined): string | null {
+  const product = pkg?.product
+  if (!product || !Number.isFinite(product.price) || product.price <= 0) return null
+  const perDay = product.price / 365
+  const fromStore = formatLikeStorePrice(product.priceString, perDay)
+  if (fromStore) return fromStore
+  if (!product.currencyCode) return null
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency: product.currencyCode }).format(perDay)
+  } catch {
+    return null
+  }
+}
+
+/**
  * Économie de l'annuel face à douze mensuels, en pourcentage entier.
  *
  * `null` si l'un des deux prix manque, si les devises diffèrent (comparer des

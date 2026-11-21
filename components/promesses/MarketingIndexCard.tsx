@@ -38,17 +38,17 @@ export const MarketingIndexCard: FC<{ metrics: CoherenceResult['metrics'] }> = (
       <Text style={styles.big}>{idx} %</Text>
       <Text style={styles.subCount}>
         {unsupportedCount} promesse{unsupportedCount > 1 ? 's' : ''} sur {total} non soutenue
-        {unsupportedCount > 1 ? 's' : ''} par la formule
+        {unsupportedCount > 1 ? 's' : ''} par la composition
       </Text>
 
       <Text style={styles.body}>
         {total === 0
           ? "La description ne contient aucune promesse d'effet vérifiable, uniquement des mentions générales."
           : unsupportedCount === 0
-            ? 'Toutes les promesses détectées ont au moins un actif documenté dans la formule pour les soutenir. C’est cohérent.'
+            ? 'Toutes les promesses détectées ont au moins un actif documenté dans la composition pour les soutenir. C’est cohérent.'
             : `${unsupportedCount} promesse${unsupportedCount > 1 ? 's' : ''} sur ${total} n’${
                 unsupportedCount > 1 ? 'ont ' : 'a '
-              }pas d’ingrédient clair dans la formule pour ${
+              }pas d’ingrédient clair dans la composition pour ${
                 unsupportedCount > 1 ? 'les' : 'la'
               } soutenir. Cela ne veut pas forcément dire que c’est faux.`}
       </Text>

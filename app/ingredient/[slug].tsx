@@ -68,7 +68,7 @@ const RATING_DESCRIPTION: Record<ColorRating, (n: string) => string> = {
   jaune: (n) =>
     `${n} présente une tolérance variable selon la concentration ou le profil cutané. Souvent réglementé en Annexe III pour limiter sa concentration. À surveiller en cas de peau sensible.`,
   orange: (n) =>
-    `${n} fait l'objet d'une pénalité moyenne. Souvent issu de la pétrochimie ou de la chimie lourde, avec un impact non négligeable sur l'environnement. Préférer des alternatives quand la formule le permet.`,
+    `${n} fait l'objet d'une pénalité moyenne. Souvent issu de la pétrochimie ou de la chimie lourde, avec un impact non négligeable sur l'environnement. Préférer des alternatives quand la composition le permet.`,
   rouge: (n) =>
     `${n} est fortement déconseillé ou réglementé. Une controverse sérieuse existe autour de cet ingrédient : à éviter dans la mesure du possible.`,
 }
