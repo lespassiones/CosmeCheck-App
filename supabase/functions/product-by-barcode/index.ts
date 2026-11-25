@@ -109,7 +109,19 @@ Deno.serve(async (req: Request) => {
       { status: 503 },
     );
   }
-  const row = lookup.row;
+  let row = lookup.row;
+
+  // UPC-A (12 chiffres) : Android le rend sur 12 chiffres, iOS et OBF sur 13
+  // avec un 0 devant, forme sous laquelle le catalogue range la plupart des
+  // produits américains. Sans ce repli, un scan Android de Sol de Janeiro ou
+  // Fenty Hair répondait « pas dans notre base » alors que la fiche existe
+  // (9 produits touchés au 25 nov 2026, l'utilisateur les reproposait en photo).
+  if (barcode.length === 12 && !(row?.ingredients_text && looksLikeInci(row.ingredients_text))) {
+    const padded = await getCatalogByEan(`0${barcode}`);
+    if (padded.ok && padded.row?.ingredients_text && looksLikeInci(padded.row.ingredients_text)) {
+      row = padded.row;
+    }
+  }
 
   if (row && row.ingredients_text && looksLikeInci(row.ingredients_text)) {
     const payload = {
